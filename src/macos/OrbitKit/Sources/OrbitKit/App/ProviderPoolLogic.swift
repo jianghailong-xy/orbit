@@ -20,12 +20,6 @@ public struct PoolAccount: Equatable, Sendable {
 /// run at all (`ProviderPool.unavailable`) are the server's answers, the claim's own selector asked
 /// the way the claim asks it, so nothing here re-derives them.
 public enum ProviderPools {
-    /// The picker row the pools' own accounts fold away under (web's `NewSessionProviderHero`).
-    public static let pinAccountLabel = "Pin a specific account"
-    /// The picker's section of pools, in the words the /providers page heads its pools with (web's
-    /// `AccountPools`).
-    public static let sectionTitle = "Account pools"
-    public static let sectionFooter = ProvidersOverview.accountPoolsDetail
 
     /// The pools as providers the pickers and the composer resolve like any configured one: an
     /// account pool runs on its members' Claude subscriptions, whose models are the Claude CLI's own

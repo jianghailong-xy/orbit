@@ -24,7 +24,6 @@ final class SharedPoolCopyParityTests: XCTestCase {
     private static let sharedPools = "src/web/src/lib/sharedPools.ts"
     private static let providerPools = "src/web/src/lib/providerPools.ts"
     private static let sessionProviderChoices = "src/web/src/lib/sessionProviderChoices.ts"
-    private static let hero = "src/web/src/components/NewSessionProviderHero.tsx"
 
     private enum ParityError: Error, CustomStringConvertible {
         case missing(String)
@@ -272,14 +271,9 @@ final class SharedPoolCopyParityTests: XCTestCase {
                    in: Self.sessionProviderChoices)
         assertSays(choicesSource, "poolUnit: 'key' as const", in: Self.sessionProviderChoices)
         assertSays(choicesSource, "poolUnit?: 'key';", in: Self.sessionProviderChoices)
-        assertSays(try web(Self.hero),
-                   "aria-label={`${choice.poolSize} ${choice.poolUnit ?? 'account'}${choice.poolSize === 1 ? '' : 's'}`}",
-                   in: Self.hero)
         XCTAssertEqual(tile.brandKey, "openai")
         XCTAssertEqual(tile.poolUnit, "key")
         XCTAssertEqual(tile.poolSize, 1)
-        XCTAssertEqual(SessionProviderChoices.poolBadgeLabel(size: tile.poolSize ?? 0, unit: tile.poolUnit), "1 key")
-        XCTAssertEqual(SessionProviderChoices.poolBadgeLabel(size: 2, unit: nil), "2 accounts")
 
         // The composer: the key beside the quota is the one the pool picks for the viewer.
         let account = PoolAccount(member: drawn.members[0], current: false)

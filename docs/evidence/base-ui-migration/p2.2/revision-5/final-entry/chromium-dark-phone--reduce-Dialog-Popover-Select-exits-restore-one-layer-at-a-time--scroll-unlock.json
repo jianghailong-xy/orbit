@@ -1,0 +1,109 @@
+{
+  "limitMs": 100,
+  "exitStartedAfterMs": 52.10000002384186,
+  "exitTransitionDuration": "0s",
+  "closedAfterMs": 55.400000005960464,
+  "closeRead": {
+    "phase": "dom-change",
+    "afterEscapeMs": 55.400000005960464,
+    "connected": false,
+    "hidden": false,
+    "overflow": [
+      "visible",
+      "hidden"
+    ],
+    "locked": true
+  },
+  "unlockedAfterMs": 63.5,
+  "readyAfterCloseMs": 8.099999994039536,
+  "firstRead": {
+    "phase": "first-read-after-hidden-and-focus",
+    "afterEscapeMs": 71.5,
+    "connected": false,
+    "hidden": false,
+    "overflow": [
+      "visible",
+      "auto"
+    ],
+    "locked": false
+  },
+  "finalRead": {
+    "phase": "final-read",
+    "afterEscapeMs": 71.5,
+    "connected": false,
+    "hidden": false,
+    "overflow": [
+      "visible",
+      "auto"
+    ],
+    "locked": false
+  },
+  "samples": [
+    {
+      "phase": "final-escape",
+      "afterEscapeMs": 0.10000002384185791,
+      "connected": true,
+      "hidden": false,
+      "overflow": [
+        "visible",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "dom-change",
+      "afterEscapeMs": 52.10000002384186,
+      "connected": true,
+      "hidden": false,
+      "overflow": [
+        "visible",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "dom-change",
+      "afterEscapeMs": 55.400000005960464,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "visible",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "dom-change",
+      "afterEscapeMs": 63.5,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "visible",
+        "auto"
+      ],
+      "locked": false
+    },
+    {
+      "phase": "first-read-after-hidden-and-focus",
+      "afterEscapeMs": 71.5,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "visible",
+        "auto"
+      ],
+      "locked": false
+    },
+    {
+      "phase": "final-read",
+      "afterEscapeMs": 71.5,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "visible",
+        "auto"
+      ],
+      "locked": false
+    }
+  ]
+}

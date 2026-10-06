@@ -31,7 +31,7 @@ final class GeminiEntryParityTests: XCTestCase {
         XCTAssertTrue(native.contains("agent.antigravityKeyAvailableByRunner?[draft.runnerID"))
         XCTAssertTrue(native.contains("Text(detail)"), "the hero renders the choice's small label")
         let rows = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/AgentIdentity.swift")
-        XCTAssertTrue(rows.contains("choice.labelDetail"), "picker rows render the same small label")
+        XCTAssertTrue(rows.contains("engine.providerDetail"), "picker rows render the same small label")
     }
 
     func testRepairCopyMatchesWeb() throws {

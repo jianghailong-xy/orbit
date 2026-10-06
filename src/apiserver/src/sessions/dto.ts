@@ -150,6 +150,21 @@ export interface SessionArmRetryDto {
   retryAt: string;
 }
 
+/** Which provider identity the re-send behind `POST /sessions/:id/retry-message` runs on, when the
+ *  caller has a pick pending in its composer — the pair `SessionResumeDto` carries, under the same
+ *  rule and with the same rejection. Omitted, the re-send runs on the identity the session already
+ *  has, which is what a Retry pressed with nothing chosen must do.
+ *
+ *  Without this the button could not do what the person asking for it meant: the composer's pick is
+ *  a client-side choice that only travels on a message you SEND, while Retry re-sends the last one —
+ *  so choosing a provider and then pressing Retry ran on the provider the session was already on. */
+export interface RetryIdentityDto {
+  provider?: string;
+  /** With `provider` naming the built-in Codex or Claude engine: which of the runner's accounts of
+   *  it, as SessionResumeDto.account. Ignored without a provider, as it is there. */
+  account?: string;
+}
+
 export interface SessionRenameDto {
   /** New display title for the session. Trimmed; must be non-empty. Renaming works on any
    *  session regardless of status and never touches the runner. */

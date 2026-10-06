@@ -6,16 +6,19 @@ import {
   ForbiddenException,
   Get,
   Header,
+  Headers,
   MessageEvent,
   Param,
   Patch,
   Post,
   Put,
   Query,
+  Res,
   Sse,
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { PublicIdPipe } from '../common/public-id';
 import { Prisma } from '@prisma/client';
 import { concatMap, defer, from, interval, map, merge, Observable, switchMap, throwError } from 'rxjs';
@@ -33,6 +36,7 @@ import {
   MergeRepairDto,
   MergeToMainDto,
   MoveSessionDto,
+  RetryIdentityDto,
   SessionArmRetryDto,
   SessionConfigDto,
   SessionAccountDto,
@@ -45,6 +49,7 @@ import {
 import { AutoRetryService } from './auto-retry.service';
 import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsService } from './sessions.service';
+import { ifNoneMatchHits, isOpenListView, openListEtag } from './open-list-version';
 import { assertClientTurnIdNotReserved } from './watch-turn-key';
 import { parseMaxPayload, truncatePayload } from './truncate-payload';
 import { coalesceDeltas, isStreamingDelta } from './coalesce-deltas';
@@ -346,7 +351,7 @@ export class SessionsController {
   }
 
   @Get()
-  list(
+  async list(
     @CurrentUser() user: AuthUser,
     @Query('runnerId', PublicIdPipe) runnerId?: string,
     @Query('workspaceId', PublicIdPipe) workspaceId?: string,
@@ -359,15 +364,51 @@ export class SessionsController {
     view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system',
     // Page size. Omitted (every native client) means the whole list, as before.
     @Query('limit') limit?: string,
+    @Query('projectId', PublicIdPipe) projectId?: string,
+    // The Open list as a delta against the cursor of the copy already held (see
+    // SessionsService.listOpenSince). Present at all — even empty — asks for the delta shape, which
+    // is how a client gets its first cursor; absent keeps the plain array every older client reads.
+    @Query('since') since?: string,
+    @Headers('if-none-match') ifNoneMatch?: string,
+    @Res({ passthrough: true }) res?: Response,
   ) {
+    if (since !== undefined && (view === undefined || view === 'open' || view === 'active')) {
+      return this.sessions.listOpenSince(
+        user.userId,
+        { runnerId, workspaceId: workspaceId ?? agentId, tagId, projectId },
+        since,
+      );
+    }
     const parsed = Number(limit);
-    return this.sessions.list(user.userId, {
+    const filters = {
       runnerId,
       workspaceId: workspaceId ?? agentId,
       tagId,
+      projectId,
       view,
       limit: Number.isFinite(parsed) && parsed > 0 ? parsed : undefined,
-    });
+    };
+    // The Open list is polled every few seconds with the last ETag. Answer that from the data
+    // version (open-list-version.ts) before building anything: on a hit nothing is read or
+    // serialized. The 304 is ended here rather than left to Express's `req.fresh`, which refuses
+    // any request carrying `Cache-Control: no-cache` (as fetch() adds to every conditional one);
+    // what Nest sends after it is a no-op on a finished response. Other views keep Express's
+    // body-hash ETag.
+    if (res && isOpenListView(view)) {
+      const etag = openListEtag(await this.sessions.openListVersion(user.userId), {
+        runnerId: filters.runnerId,
+        workspaceId: filters.workspaceId,
+        tagId,
+        projectId,
+        limit: filters.limit,
+      });
+      res.setHeader('ETag', etag);
+      if (ifNoneMatchHits(ifNoneMatch, etag)) {
+        res.status(304).end();
+        return undefined;
+      }
+    }
+    return this.sessions.list(user.userId, filters);
   }
 
   // Per-workspace Open-session tallies for the nav sidebar's attention badges. Also above
@@ -611,8 +652,14 @@ export class SessionsController {
    *  carrying `clientTurnId` from a client that predates that is ignored, not refused — the key it
    *  chose is simply not the one the re-send goes out under. */
   @Post(':id/retry-message')
-  resendRetryMessage(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
-    return this.autoRetry.resendRetryMessage(user.userId, id);
+  resendRetryMessage(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    // The composer's pending pick, when the person pressed Retry after choosing one: the re-send is
+    // a resume, and what they chose has to travel with it. Absent, the retry runs where it did.
+    @Body() dto: RetryIdentityDto,
+  ) {
+    return this.autoRetry.resendRetryMessage(user.userId, id, dto);
   }
 
   /** Turn off the pending auto-retry on this session. Arming happens by itself when a quota or a

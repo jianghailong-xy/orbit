@@ -51,6 +51,16 @@ func probeEngineHealth() []EngineHealthReport {
 	return probeEngines(engineSpecs, serviceLoginPath())
 }
 
+// probeEngineHealthOf is probeEngineHealth for one engine: empty when no spec names it.
+func probeEngineHealthOf(engine string) []EngineHealthReport {
+	for _, spec := range engineSpecs {
+		if spec.bin == engine {
+			return probeEngines([]engineSpec{spec}, serviceLoginPath())
+		}
+	}
+	return nil
+}
+
 func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
 	// What the updater last managed to do here, read fresh each probe: the update loop and
 	// `orbit engine-update` both write it, and neither can reach into this snapshot.
@@ -59,12 +69,17 @@ func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
 	for _, spec := range specs {
 		h := checkEngine(spec, servicePath)
 		report := EngineHealthReport{
-			Engine:     spec.bin,
-			Installed:  h.installed,
-			Version:    h.version,
-			Auth:       authWord(h.auth),
-			AuthSource: h.authSource,
-			PlanUsage:  h.planUsage,
+			Engine:            spec.bin,
+			Installed:         h.installed,
+			Version:           h.version,
+			Auth:              authWord(h.auth),
+			AuthSource:        h.authSource,
+			PlanUsage:         h.planUsage,
+			InstallationError: h.installError,
+		}
+		if spec.bin == providerDsh {
+			report.Auth = "unknown"
+			report.Dsh = dshRuntimeHealth(h.version, false, h.installed && h.installError == "" && dshCatalogReadable())
 		}
 		// An engine that isn't here has no update state worth reporting — the record is about
 		// a binary, and a stale one left by an uninstall would describe something gone.
@@ -208,6 +223,8 @@ type engineHealthProbe struct {
 	refreshMu sync.Mutex
 	// What a refresh runs: probeEngineHealth, unless a test stands in for the machine's CLIs.
 	probe func() []EngineHealthReport
+	// What refreshEngine runs: probeEngineHealthOf, unless a test stands in for the machine's CLIs.
+	probeOne func(engine string) []EngineHealthReport
 	// Told when a refresh finds an engine signed in that the probe last found signed out. A
 	// signed-out engine can be empty in the model catalog (readModelCatalog), so without this the
 	// models of an engine someone just signed into would stay out of the picker until the hourly
@@ -222,6 +239,10 @@ type engineHealthProbe struct {
 func (p *engineHealthProbe) refresh() {
 	p.refreshMu.Lock()
 	defer p.refreshMu.Unlock()
+	p.refreshLocked()
+}
+
+func (p *engineHealthProbe) refreshLocked() {
 	probe := p.probe
 	if probe == nil {
 		probe = probeEngineHealth
@@ -232,6 +253,46 @@ func (p *engineHealthProbe) refresh() {
 	p.mu.Unlock()
 	// Only now, so the refresh this asks for already reads the engine as signed in.
 	if p.signedInSinceLastProbe(next) && p.onSignIn != nil {
+		p.onSignIn()
+	}
+}
+
+// refreshEngine re-probes one engine and puts its answer in place of the one the snapshot had,
+// leaving every other engine's as it was. A sign-in that just landed changes one engine, and a full
+// refresh asks every CLI on the machine one after another — seconds, more on a loaded box — before
+// the heartbeat can say the engine is signed in. Serialised with refresh, for the reason given there.
+// Before the first full probe there is nothing to put it into, so that one runs instead.
+func (p *engineHealthProbe) refreshEngine(engine string) {
+	p.refreshMu.Lock()
+	defer p.refreshMu.Unlock()
+	probeOne := p.probeOne
+	if probeOne == nil {
+		probeOne = probeEngineHealthOf
+	}
+	p.mu.Lock()
+	known := false
+	for _, r := range p.snapshot {
+		known = known || r.Engine == engine
+	}
+	p.mu.Unlock()
+	if !known {
+		p.refreshLocked()
+		return
+	}
+	reports := probeOne(engine)
+	if len(reports) != 1 || reports[0].Engine != engine {
+		return
+	}
+	p.mu.Lock()
+	next := append([]EngineHealthReport(nil), p.snapshot...)
+	for i := range next {
+		if next[i].Engine == engine {
+			next[i] = reports[0]
+		}
+	}
+	p.snapshot = next
+	p.mu.Unlock()
+	if p.signedInSinceLastProbe(reports) && p.onSignIn != nil {
 		p.onSignIn()
 	}
 }

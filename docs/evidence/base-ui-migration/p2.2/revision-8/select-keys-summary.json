@@ -1,0 +1,181 @@
+{
+ "select-keys-throttle": {
+  "scope": "merged 38947755e, Chromium CPU throttling 1x/6x/20x, 5 samples per test",
+  "playwright": {
+   "expected": 9,
+   "unexpected": 0,
+   "skipped": 0,
+   "flaky": 0
+  },
+  "targets": {
+   "antd-sample@1x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 5,
+    "lost": []
+   },
+   "antd-sample@20x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 1,
+    "lost": []
+   },
+   "antd-sample@6x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "lost": []
+   },
+   "orbit-field@1x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "lost": []
+   },
+   "orbit-field@20x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "lost": []
+   },
+   "orbit-field@6x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "lost": []
+   },
+   "orbit-sample@1x": {
+    "samples": 5,
+    "valueUnchanged": 1,
+    "secondArrowAtTriggerWithListboxShown": 1,
+    "lost": [
+     {
+      "file": "chromium-dark-desktop--orbit-sample-ArrowDown-ArrowDown-Enter-at-1x-CPU-throttling--select-keys.json",
+      "run": 0,
+      "keys": [
+       {
+        "key": "ArrowDown",
+        "t": 16.7,
+        "target": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 31,
+        "target": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 33.8,
+        "target": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     }
+    ]
+   },
+   "orbit-sample@20x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "lost": []
+   },
+   "orbit-sample@6x": {
+    "samples": 5,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "lost": []
+   }
+  }
+ },
+ "select-keys-repeat-merged": {
+  "scope": "merged 38947755e, unthrottled, 40 samples per target",
+  "playwright": {
+   "expected": 120,
+   "unexpected": 0,
+   "skipped": 0,
+   "flaky": 0
+  },
+  "targets": {
+   "antd-sample@1x": {
+    "samples": 40,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 19,
+    "lost": []
+   },
+   "orbit-field@1x": {
+    "samples": 40,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "lost": []
+   },
+   "orbit-sample@1x": {
+    "samples": 40,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "lost": []
+   }
+  }
+ },
+ "select-keys-repeat-accepted": {
+  "scope": "accepted 45bb56928, unthrottled, 40 samples per target",
+  "playwright": {
+   "expected": 119,
+   "unexpected": 1,
+   "skipped": 0,
+   "flaky": 0
+  },
+  "targets": {
+   "antd-sample@1x": {
+    "samples": 40,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 29,
+    "lost": []
+   },
+   "orbit-field@1x": {
+    "samples": 40,
+    "valueUnchanged": 0,
+    "secondArrowAtTriggerWithListboxShown": 0,
+    "lost": []
+   },
+   "orbit-sample@1x": {
+    "samples": 39,
+    "valueUnchanged": 1,
+    "secondArrowAtTriggerWithListboxShown": 1,
+    "lost": [
+     {
+      "file": "chromium-dark-desktop--orbit-sample-ArrowDown-ArrowDown-Enter-sample-14--select-keys.json",
+      "run": 14,
+      "keys": [
+       {
+        "key": "ArrowDown",
+        "t": 17.2,
+        "target": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 32.1,
+        "target": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 36.2,
+        "target": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ }
+}

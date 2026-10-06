@@ -24,6 +24,17 @@ public enum ToastLevel: Equatable, Sendable {
     case attention
 }
 
+/// The same branch and target the worktree bar hands to the session to resolve a failed merge.
+public struct ToastMergeConflict: Equatable, Sendable {
+    public let branch: String
+    public let target: String
+
+    public init(branch: String, target: String) {
+        self.branch = branch
+        self.target = target
+    }
+}
+
 /// One toast, as the host draws it.
 public struct ToastItem: Identifiable, Equatable, Sendable {
     public var id: UUID
@@ -44,6 +55,8 @@ public struct ToastItem: Identifiable, Equatable, Sendable {
     /// Stands in for a foreground approval banner. The approval it names can be answered anywhere,
     /// including on another device, so the snapshot that notices has to clear it.
     public var awaitsApproval: Bool
+    /// A merge conflict's primary action resolves it in the session instead of only opening it.
+    public var mergeConflict: ToastMergeConflict?
     /// One operation's toasts share a key — "Merging into main…" and the merge's result — so the
     /// result takes the progress pill's place instead of arriving as a second toast.
     public var key: String?
@@ -53,7 +66,7 @@ public struct ToastItem: Identifiable, Equatable, Sendable {
     public init(id: UUID = UUID(), message: String, subtitle: String? = nil, detail: String? = nil,
                 tone: ToastTone = .success, icon: String? = nil, sessionID: String? = nil,
                 canUndo: Bool = false, awaitsApproval: Bool = false, key: String? = nil,
-                inProgress: Bool = false) {
+                inProgress: Bool = false, mergeConflict: ToastMergeConflict? = nil) {
         self.id = id
         self.message = message
         self.subtitle = subtitle
@@ -63,6 +76,7 @@ public struct ToastItem: Identifiable, Equatable, Sendable {
         self.sessionID = sessionID
         self.canUndo = canUndo
         self.awaitsApproval = awaitsApproval
+        self.mergeConflict = mergeConflict
         self.key = key
         self.inProgress = inProgress
     }

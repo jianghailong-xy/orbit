@@ -43,7 +43,7 @@ final class NavigationTests: XCTestCase {
             nav.push(page)
             XCTAssertEqual(nav.path, [.console(sessionID: "s1", origin: .list), page])
             XCTAssertNotEqual(nav.focusedConsoleSessionID, "s1", "the console is under the page, not on screen")
-            XCTAssertFalse(nav.consoleFromRecents, "the left edge on the page is a plain back")
+            XCTAssertFalse(nav.atDestinationRoot, "the left edge on the page is a plain back")
 
             nav.pop()
 
@@ -97,38 +97,69 @@ final class NavigationTests: XCTestCase {
         XCTAssertEqual(nav.path, [.taskDetail(taskID: "t1")], "and so does Tasks")
     }
 
-    /// Where a console came from rides the frame that needs it, replacing the shadow variable and
-    /// its "set this *before* the selection" convention.
-    func testAConsoleCarriesHowItWasOpened() {
+    /// The drawer row a screen belongs to. The Agents stack is the workspace's until a project's
+    /// sessions page is on it — then it is the project's, with whatever was pushed over that page —
+    /// and every other section's stack is the section's own, at any depth.
+    func testTheDrawerDestinationIsReadOffTheStack() {
+        let address = SessionProjectAddress(projectID: "p1", agentID: "a1", view: .open)
+        let folder = SessionFolderAddress(folderID: "f1", agentID: "a1", view: .open)
         var nav = NavState(section: .agents)
-        nav.push(.console(sessionID: "s1", origin: .drawer))
-        XCTAssertTrue(nav.consoleFromRecents, "a drawer-opened console yields the edge to the drawer")
+        XCTAssertEqual(nav.drawerDestination(agentID: "a1"), .workspace(agentID: "a1"))
+        XCTAssertEqual(nav.drawerDestination(agentID: nil), .section(.agents), "no workspace picked yet")
 
-        nav.pop()
-        XCTAssertFalse(nav.consoleFromRecents, "the list page has no console to yield anything")
-
+        nav.enterFolder(folder)
         nav.push(.console(sessionID: "s1", origin: .list))
-        XCTAssertFalse(nav.consoleFromRecents,
-                       "the same session opened from the list keeps the system back-swipe")
+        XCTAssertEqual(nav.drawerDestination(agentID: "a1"), .workspace(agentID: "a1"),
+                       "a folder and its consoles are the workspace's")
+
+        nav.popToRoot()
+        nav.enterProjectSessions(address)
+        XCTAssertEqual(nav.drawerDestination(agentID: "a1"), .project(projectID: "p1"))
+        XCTAssertNotEqual(nav.drawerDestination(agentID: "a1"), .workspace(agentID: "a1"),
+                          "the workspace row is not the selected one on a project's page")
+        nav.push(.console(sessionID: "s1", origin: .list))
+        nav.push(.projectDetail(projectID: "p1"))
+        XCTAssertEqual(nav.drawerDestination(agentID: "a1"), .project(projectID: "p1"),
+                       "a member's console and the project's page pushed over it stay the project's")
+
+        nav.section = .projects
+        nav.path = [.projectDetail(projectID: "p1")]
+        XCTAssertEqual(nav.drawerDestination(agentID: "a1"), .section(.projects),
+                       "a project opened from the Projects list is the Projects row's")
     }
 
-    /// A project's page carries it the same way: opened from one of the drawer's project rows, its
-    /// left edge goes back to the drawer instead of to the Projects list under it (the owner's
-    /// report, 2026-09-29).
-    func testAProjectPageCarriesHowItWasOpened() {
-        var nav = NavState(section: .projects)
-        nav.path = [.projectDetail(projectID: "p1", origin: .drawer)]
-        XCTAssertTrue(nav.projectFromDrawer, "a drawer-opened project page yields the edge to the drawer")
-        XCTAssertEqual(nav.selectedProjectID, "p1", "and it is still the project showing")
+    /// A project's two id spellings are one destination, so its drawer row matches the page whichever
+    /// spelling put the page up.
+    func testAProjectDestinationIgnoresTheIdsSpelling() {
+        let uuid = "8f6c2a52-41a6-4c1e-9d55-2f4f3c9b8a10"
+        let publicID = PublicID.toPublic(uuid)
+        XCTAssertNotEqual(publicID, uuid)
+        XCTAssertEqual(DrawerDestination.project(projectID: publicID), .project(projectID: uuid))
+        XCTAssertEqual(Set([DrawerDestination.project(projectID: publicID), .project(projectID: uuid)]).count, 1)
+        XCTAssertNotEqual(DrawerDestination.project(projectID: uuid), .workspace(agentID: uuid))
+    }
 
-        nav.pop()
-        XCTAssertFalse(nav.projectFromDrawer, "the list page has no project to yield anything")
-        XCTAssertTrue(nav.sectionAtRoot)
+    /// The left edge opens the drawer on a destination's own page — a section's root or a project's
+    /// sessions page — and is the system back-swipe on any page pushed over one.
+    func testTheLeftEdgeBelongsToTheDrawerOnlyOnADestinationsOwnPage() {
+        var nav = NavState(section: .agents)
+        XCTAssertTrue(nav.atDestinationRoot, "the workspace's list")
+        nav.push(.console(sessionID: "s1", origin: .list))
+        XCTAssertFalse(nav.atDestinationRoot, "a console over it")
 
+        nav.popToRoot()
+        nav.enterFolder(SessionFolderAddress(folderID: "f1", agentID: "a1", view: .open))
+        XCTAssertFalse(nav.atDestinationRoot, "a folder's page is pushed over the list")
+        nav.enterProjectSessions(SessionProjectAddress(projectID: "p1", agentID: "a1", view: .open))
+        XCTAssertTrue(nav.atDestinationRoot, "a project's sessions page, wherever it was opened")
         nav.push(.projectDetail(projectID: "p1"))
-        XCTAssertFalse(nav.projectFromDrawer,
-                       "the same project opened from the list keeps the system back-swipe")
-        XCTAssertEqual(nav.selectedProjectID, "p1")
+        XCTAssertFalse(nav.atDestinationRoot, "the project's page pushed over it")
+        nav.pop()
+        XCTAssertTrue(nav.atDestinationRoot)
+
+        nav.section = .projects
+        nav.path = [.projectDetail(projectID: "p1")]
+        XCTAssertFalse(nav.atDestinationRoot, "a project's page over the Projects list")
     }
 
     /// A three-column shell means "replace what the detail pane shows", not "go deeper" — which is
@@ -159,7 +190,7 @@ final class NavigationTests: XCTestCase {
         XCTAssertEqual(nav.path.count, 1, "the page you were on is the page you stay on")
         XCTAssertEqual(nav.focusedConsoleSessionID, "s1", "and it streams now")
         XCTAssertEqual(nav.highlightedSessionID, "s1")
-        XCTAssertFalse(nav.consoleFromRecents, "a console you created is not one you came back to")
+        XCTAssertFalse(nav.atDestinationRoot, "a console keeps the system back-swipe")
     }
 
     /// A session that is completed / trashed / purged takes its console off the stack — wherever on
@@ -483,7 +514,7 @@ final class NavigationTests: XCTestCase {
         XCTAssertEqual(nav.selectedProjectID, "p1", "the project stays the one showing")
         XCTAssertEqual(nav.projectBeneathTask, "p1")
         XCTAssertEqual(nav.taskDetailOnTop, "t1", "the task is the page on top")
-        XCTAssertFalse(nav.projectFromDrawer, "the task page keeps the system back-swipe")
+        XCTAssertFalse(nav.atDestinationRoot, "the task page keeps the system back-swipe")
 
         nav.pop()
         XCTAssertEqual(nav.path, [.projectDetail(projectID: "p1")], "back is the project's page")

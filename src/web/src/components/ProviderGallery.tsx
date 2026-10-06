@@ -134,7 +134,7 @@ export function ProviderGallery() {
                 {count === 0
                   ? (signedInOn.get(p.slug)
                       ? `Already signed in on ${signedInOn.get(p.slug)}`
-                      : runtimeSummary(p.runtime))
+                      : runtimeSummary(p.runtime, p.slug))
                   : count === 1
                     ? 'Connected'
                     : `Connected · ${count} keys`}

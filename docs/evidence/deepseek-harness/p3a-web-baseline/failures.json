@@ -1,0 +1,215 @@
+{
+  "baselineCommit": "06ca960964d7803f5cc0918294720b26d421cf20",
+  "initialProjectCommit": "b489cca63ea80cc66fdece0a00d8cce64c780316",
+  "upstreamCommit": "182fa7832a52df7bcefceeb359f71191f6c4f238",
+  "previewCommit": "9198bdfd45cc197308c19ceb1f7c84fdba5e7ae7",
+  "nodeVersion": "v26.10.0",
+  "beforeCommand": "NO_COLOR=1 npm test -w @orbit/web",
+  "beforeExitCode": 1,
+  "beforeSummary": {
+    "files": 295,
+    "failedFiles": 6,
+    "passedFiles": 289,
+    "tests": 3655,
+    "failedTests": 30,
+    "passedTests": 3625
+  },
+  "failures": [
+    {
+      "file": "src/components/CriteriaDecisionCard.receipt.test.tsx",
+      "test": "a criteria card answered in this window > hands the door’s answer on, and gives way to the receipt the read publishes",
+      "classification": "test_contract_not_migrated",
+      "reason": "approveButton(node) sought a full form action in the host before opening the preview; actions now live in the portal."
+    },
+    {
+      "file": "src/components/CriteriaDecisionCard.receipt.test.tsx",
+      "test": "a criteria card answered from the keyboard > approves on ⌘/Ctrl + Enter, says so on the button, and leaves the bare key alone",
+      "classification": "test_contract_not_migrated",
+      "reason": "approveButton(node) sought a full form action in the host before opening the preview; actions now live in the portal."
+    },
+    {
+      "file": "src/components/CriteriaDecisionCard.sessionSwitch.test.tsx",
+      "test": "the criteria card when the view moves from one project’s conversation to another’s > draws P1’s held proposal in P1’s coordinator conversation",
+      "classification": "test_contract_not_migrated",
+      "reason": "drawn(node) sought .criteria-decision within the host; visible address and heading now belong to the preview wrapper."
+    },
+    {
+      "file": "src/components/CriteriaDecisionCard.sessionSwitch.test.tsx",
+      "test": "the criteria card when the view moves from one project’s conversation to another’s > draws none of P1’s proposals in P2’s conversation, only P2’s own",
+      "classification": "test_contract_not_migrated",
+      "reason": "drawn(node) sought .criteria-decision within the host; visible address and heading now belong to the preview wrapper."
+    },
+    {
+      "file": "src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx",
+      "test": "the start card in WorkspaceView > is drawn once in a coordinator conversation, beside the criteria card, through every re-read",
+      "classification": "test_contract_not_migrated",
+      "reason": "Counts and action queries sought .settlement-card/.criteria-decision/criteria-change-card inside mounted(); forms now require opening the preview and querying the portal. Closed-review keyboard semantics also changed intentionally."
+    },
+    {
+      "file": "src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx",
+      "test": "the start card in WorkspaceView > is drawn in no conversation that coordinates no project, which reads nothing for one",
+      "classification": "test_contract_not_migrated",
+      "reason": "Counts and action queries sought .settlement-card/.criteria-decision/criteria-change-card inside mounted(); forms now require opening the preview and querying the portal. Closed-review keyboard semantics also changed intentionally."
+    },
+    {
+      "file": "src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx",
+      "test": "the start card in WorkspaceView > is drawn on the coordinator’s request only: a plan with work and no request draws nothing",
+      "classification": "test_contract_not_migrated",
+      "reason": "Counts and action queries sought .settlement-card/.criteria-decision/criteria-change-card inside mounted(); forms now require opening the preview and querying the portal. Closed-review keyboard semantics also changed intentionally."
+    },
+    {
+      "file": "src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx",
+      "test": "the start card in WorkspaceView > is named Ready to start on the pinned line",
+      "classification": "test_contract_not_migrated",
+      "reason": "Counts and action queries sought .settlement-card/.criteria-decision/criteria-change-card inside mounted(); forms now require opening the preview and querying the portal. Closed-review keyboard semantics also changed intentionally."
+    },
+    {
+      "file": "src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx",
+      "test": "the start card in WorkspaceView > starts the project with the settings on the card, and leaves the record — with them — where it happened",
+      "classification": "test_contract_not_migrated",
+      "reason": "Counts and action queries sought .settlement-card/.criteria-decision/criteria-change-card inside mounted(); forms now require opening the preview and querying the portal. Closed-review keyboard semantics also changed intentionally."
+    },
+    {
+      "file": "src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx",
+      "test": "the change card in WorkspaceView > confirms the new criteria, and the record says what the confirmation changed",
+      "classification": "test_contract_not_migrated",
+      "reason": "Counts and action queries sought .settlement-card/.criteria-decision/criteria-change-card inside mounted(); forms now require opening the preview and querying the portal. Closed-review keyboard semantics also changed intentionally."
+    },
+    {
+      "file": "src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx",
+      "test": "Chat about this on the start card > arms the composer with this plan, keeps the card up with Start the project live, and reaches no door",
+      "classification": "test_contract_not_migrated",
+      "reason": "Counts and action queries sought .settlement-card/.criteria-decision/criteria-change-card inside mounted(); forms now require opening the preview and querying the portal. Closed-review keyboard semantics also changed intentionally."
+    },
+    {
+      "file": "src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx",
+      "test": "Chat about this on the start card > sends what was typed on Enter without starting the project, and Enter on the emptied box starts it",
+      "classification": "test_contract_not_migrated",
+      "reason": "Counts and action queries sought .settlement-card/.criteria-decision/criteria-change-card inside mounted(); forms now require opening the preview and querying the portal. Closed-review keyboard semantics also changed intentionally."
+    },
+    {
+      "file": "src/components/WorkspaceView.criteriaDecisionCard.test.tsx",
+      "test": "the criteria decision card in an open coordinator conversation > is on the page once for its intent, through every re-read and after the answer elsewhere",
+      "classification": "test_contract_not_migrated",
+      "reason": "cardsOnPage() sought .criteria-decision in mounted(); visible preview and open portal are separate surfaces."
+    },
+    {
+      "file": "src/components/WorkspaceView.criteriaDecisionCard.test.tsx",
+      "test": "the criteria decision card in an open coordinator conversation > offers no answer once settled — from any card on the page — and sends nothing to the door",
+      "classification": "test_contract_not_migrated",
+      "reason": "cardsOnPage() sought .criteria-decision in mounted(); visible preview and open portal are separate surfaces."
+    },
+    {
+      "file": "src/components/WorkspaceView.criteriaDecisionCard.test.tsx",
+      "test": "the criteria decision card in an open coordinator conversation > leaves no card behind on New session, which has no project",
+      "classification": "test_contract_not_migrated",
+      "reason": "cardsOnPage() sought .criteria-decision in mounted(); visible preview and open portal are separate surfaces."
+    },
+    {
+      "file": "src/components/WorkspaceView.promotionPlacement.test.tsx",
+      "test": "the record a merge leaves, in the conversation it happened in > still says its own merge once the project has moved on to the next candidate",
+      "classification": "test_contract_not_migrated",
+      "reason": "READY/BLOCKED full bodies moved to portals; state counts and placement must use previews, resolving details require opening. MERGED receipts remain inline."
+    },
+    {
+      "file": "src/components/WorkspaceView.promotionPlacement.test.tsx",
+      "test": "the card a blocked candidate leaves, in the conversation it happened in > is drawn among the events, at the moment it was blocked, and not in the pane’s card strip",
+      "classification": "test_contract_not_migrated",
+      "reason": "READY/BLOCKED full bodies moved to portals; state counts and placement must use previews, resolving details require opening. MERGED receipts remain inline."
+    },
+    {
+      "file": "src/components/WorkspaceView.promotionPlacement.test.tsx",
+      "test": "the card a blocked candidate leaves, in the conversation it happened in > keeps saying who is on it, from the item read, rather than only what was true when it was blocked",
+      "classification": "test_contract_not_migrated",
+      "reason": "READY/BLOCKED full bodies moved to portals; state counts and placement must use previews, resolving details require opening. MERGED receipts remain inline."
+    },
+    {
+      "file": "src/components/WorkspaceView.promotionPlacement.test.tsx",
+      "test": "the card a blocked candidate leaves, in the conversation it happened in > goes once the branch is offered again, which the strip draws as the question it is",
+      "classification": "test_contract_not_migrated",
+      "reason": "READY/BLOCKED full bodies moved to portals; state counts and placement must use previews, resolving details require opening. MERGED receipts remain inline."
+    },
+    {
+      "file": "src/components/WorkspaceView.promotionPlacement.test.tsx",
+      "test": "the card a blocked candidate leaves, in the conversation it happened in > keeps the strip’s card when the stamp is one nothing can parse",
+      "classification": "test_contract_not_migrated",
+      "reason": "READY/BLOCKED full bodies moved to portals; state counts and placement must use previews, resolving details require opening. MERGED receipts remain inline."
+    },
+    {
+      "file": "src/components/WorkspaceView.promotionPlacement.test.tsx",
+      "test": "what is not a record > draws no card, and leaves the events as themselves, when nothing has merged",
+      "classification": "test_contract_not_migrated",
+      "reason": "READY/BLOCKED full bodies moved to portals; state counts and placement must use previews, resolving details require opening. MERGED receipts remain inline."
+    },
+    {
+      "file": "src/components/WorkspaceView.settlementPointer.test.tsx",
+      "test": "the settlement question on the pinned line > is one more in the count while the card is on screen and still a question, and opens no list",
+      "classification": "test_contract_not_migrated",
+      "reason": "settlementCards() sought .settlement-card in mounted(); count and scroll target must use the preview, answer/stale details the opened portal."
+    },
+    {
+      "file": "src/components/WorkspaceView.settlementPointer.test.tsx",
+      "test": "the settlement question on the pinned line > stops counting it once the set is confirmed at another end, while the card stays where it was",
+      "classification": "test_contract_not_migrated",
+      "reason": "settlementCards() sought .settlement-card in mounted(); count and scroll target must use the preview, answer/stale details the opened portal."
+    },
+    {
+      "file": "src/components/WorkspaceView.settlementPointer.test.tsx",
+      "test": "the settlement question on the pinned line > counts nothing for it in a conversation that coordinates no project, straight after one that did",
+      "classification": "test_contract_not_migrated",
+      "reason": "settlementCards() sought .settlement-card in mounted(); count and scroll target must use the preview, answer/stale details the opened portal."
+    },
+    {
+      "file": "src/components/WorkspaceView.settlementPointer.test.tsx",
+      "test": "the settlement question on the pinned line > leaves no line on New session, and counts the card again on the way back",
+      "classification": "test_contract_not_migrated",
+      "reason": "settlementCards() sought .settlement-card in mounted(); count and scroll target must use the preview, answer/stale details the opened portal."
+    },
+    {
+      "file": "src/components/WorkspaceView.settlementPointer.test.tsx",
+      "test": "the settlement question on the pinned line > reaches the card after the weakening drawn above it, one press each, and says which it went to",
+      "classification": "test_contract_not_migrated",
+      "reason": "settlementCards() sought .settlement-card in mounted(); count and scroll target must use the preview, answer/stale details the opened portal."
+    },
+    {
+      "file": "src/components/WorkspaceView.settlementPointer.test.tsx",
+      "test": "the settlement question on the pinned line > offers no answer to the settlement question on the strip, only the way to its card",
+      "classification": "test_contract_not_migrated",
+      "reason": "settlementCards() sought .settlement-card in mounted(); count and scroll target must use the preview, answer/stale details the opened portal."
+    },
+    {
+      "file": "src/components/WorkspaceView.settlementPointer.test.tsx",
+      "test": "the settlement question on the pinned line > counts nothing for the card while it has not been drawn, and counts it once it is",
+      "classification": "test_contract_not_migrated",
+      "reason": "settlementCards() sought .settlement-card in mounted(); count and scroll target must use the preview, answer/stale details the opened portal."
+    },
+    {
+      "file": "src/components/WorkspaceView.settlementPointer.test.tsx",
+      "test": "the settlement question on the pinned line > takes the reader to the card with one press when it is the only question, and asks the server nothing",
+      "classification": "test_contract_not_migrated",
+      "reason": "settlementCards() sought .settlement-card in mounted(); count and scroll target must use the preview, answer/stale details the opened portal."
+    },
+    {
+      "file": "src/components/WorkspaceView.settlementPointer.test.tsx",
+      "test": "the settlement question on the pinned line on a phone > is the same one line, and the line itself takes the reader to the card",
+      "classification": "test_contract_not_migrated",
+      "reason": "settlementCards() sought .settlement-card in mounted(); count and scroll target must use the preview, answer/stale details the opened portal."
+    }
+  ],
+  "notes": [
+    "No test filters or skips were used for the full baseline run.",
+    "Edits to completed test files began after their workers had finished, while the rest of the baseline suite continued. Vitest prints source frames at final reporting time; some frames in the raw log therefore reflect subsequent edits. Failure names, loaded test behavior and baseline commit identify the original tests; use the baseline commit for original line contents.",
+    "The first overlay startup failed on a read-only Prisma cache and is retained as exit 2; the retry succeeded before any test ran.",
+    "This task does not run P2/P3a acceptance or retry their integration; the coordinator must validate those combined trees after landing."
+  ],
+  "relatedTasks": [
+    {
+      "name": "P2：安装 dsh 并隔离会话配置与凭据",
+      "ref": "orbit-task:34ZvIDTgFuGenQmSXYzuO"
+    },
+    {
+      "name": "P3a：实现 DeepSeek Harness ACP 基础驱动与事件映射",
+      "ref": "orbit-task:34ZvIDnT3iRaFjYtk61oM"
+    }
+  ]
+}

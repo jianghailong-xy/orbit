@@ -11,6 +11,7 @@ import {
   WIKI_REJECT_REASONS,
   WIKI_REVIEW_RULES,
   WIKI_SOURCE_KINDS,
+  WIKI_SOURCE_REFS,
   WIKI_VERIFICATION_VERDICTS,
   WIKI_VOUCHED_TRUST,
   validateWikiEntryChanges,
@@ -228,7 +229,8 @@ function refuse(code: WikiRefusalCode, message: string, errors?: WikiFieldError[
  * A request that recorded something is a 200. A request none of whose ops was recorded answers with
  * the status of its FIRST failure — a refusal's own code's status, or 409 for a compare-and-set that
  * no longer held — and carries every op's outcome in the body, so a batch whose first op was refused
- * and whose second was recorded is still a 200.
+ * and whose second was recorded is still a 200. A dry run is answered with the status the request
+ * would be (contract `refusalRules.dryRun`).
  */
 export function answerFor(result: Record<string, unknown>): Record<string, unknown> {
   const status = submissionStatus(result);
@@ -253,11 +255,13 @@ export function answerForVerifications<T extends { outcomes: WikiVerificationOut
 
 /** The status behind {@link answerFor}, so a caller that wants the number rather than the answer has it. */
 export function submissionStatus(result: { changesetId?: unknown; dryRun?: unknown; ops?: unknown }): number {
-  // A dry run records nothing BY CONSTRUCTION, so "nothing was recorded" says nothing about it: it
-  // answered as the request would, and what it would refuse is in the body.
-  if (result.dryRun === true) return 200;
   if (result.changesetId !== null && result.changesetId !== undefined) return 200;
   const ops = Array.isArray(result.ops) ? (result.ops as WikiOpOutcome[]) : [];
+  // A dry run records nothing BY CONSTRUCTION, so "nothing was recorded" says nothing about it. What it
+  // is answered with is what the request would be: 200 when one of its ops would be recorded, and the
+  // first failure's status when none would — so a caller that checks before it proposes is told then
+  // what the proposal will be told, a ref that names nothing included.
+  if (result.dryRun === true && ops.some((op) => op.status !== 'refused' && op.status !== 'conflict')) return 200;
   const first = ops.find((op) => op.status === 'refused' || op.status === 'conflict');
   if (!first) return 200;
   if (first.status === 'conflict') return 409;
@@ -1421,7 +1425,10 @@ export class WikiService {
     }
 
     // 3. Every source resolves among the owner's own rows, and every quote is in the text it cites.
-    const found = await this.resolveSources(tx, principal, rawOpSources(op), { required: requiresSource(opName, principal) });
+    const found = await this.resolveSources(tx, principal, rawOpSources(op), {
+      required: requiresSource(opName, principal),
+      path: `ops[${seq}].sources`,
+    });
 
     // 4. Redaction: nothing stored carries a credential, and a field it changed is marked. The quotes
     //    are redacted with the payload, because what is stored is the redacted text and a quote that
@@ -3768,12 +3775,14 @@ export class WikiService {
    * record whose text this database does not hold — a turn of the calling session that has not been
    * stored yet, a commit the apiserver never sees — keeps its quote unverified, and the review card
    * says so (§4.3).
+   *
+   * `path` is where the sources sit in the request, which is how a refusal names the one it is about.
    */
   private async resolveSources(
     tx: Tx,
     principal: WikiPrincipal,
     sources: unknown[],
-    options: { required: boolean },
+    options: { required: boolean; path?: string },
   ): Promise<{ resolved: ResolvedSource[] }> {
     if (sources.length === 0) {
       if (options.required) {
@@ -3796,10 +3805,15 @@ export class WikiService {
       };
       const found = await this.sourceText(tx, principal, source);
       if (found === null) {
+        // Named by its path, and told what its kind's ref is (contract `sourceInput.refs`): citing it
+        // the way its kind is cited is the one thing the proposer can do about it.
+        const at = `${options.path ?? 'sources'}[${index}]`;
         return refuse(
           'WIKI_SOURCE_UNRESOLVED',
-          `sources[${index}] does not resolve among this account's own records: ${String(source.kind)} `
-            + `${source.ref ?? '(the calling session)'} is not one of them`,
+          `${at} does not resolve among this account's own records: ${String(source.kind)} `
+            + `${source.ref ?? '(the calling session)'} is not one of them; a ${source.kind} source's ref is `
+            + WIKI_SOURCE_REFS[source.kind],
+          [{ path: source.ref === undefined ? `${at}.session` : `${at}.ref`, message: `names no ${source.kind} of this account's` }],
         );
       }
       const quote = source.quote ?? null;
@@ -3863,7 +3877,10 @@ export class WikiService {
   } | null> {
     if (!(WIKI_SOURCE_KINDS as readonly string[]).includes(source.kind)) return null;
     const ownerScoped = { session: { ownerId: principal.ownerId } };
-    const ref = source.ref === undefined ? undefined : refAsUuid(source.ref);
+    // A row is named by its id, in either spelling, and a ref that is neither names no row of this account's.
+    // It never reaches a query as it came: every row below is keyed by a uuid column, and the database answers a
+    // value that is not a uuid with an error (P2007), not with no row. A commit names a sha, and is read as written.
+    const ref = source.ref === undefined ? null : rowIdOf(source.ref);
     /** What tells the owner's own turn from anybody else's (`isOwnerTurn`). */
     const turnAuthor = { kind: true, sendIntent: true, clientTurnId: true } as const;
     switch (source.kind) {
@@ -3917,11 +3934,7 @@ export class WikiService {
         };
       }
       case 'tool_call': {
-        if (!ref) return null;
-        const call = await tx.toolCall.findFirst({
-          where: { id: ref, ...ownerScoped },
-          select: { id: true, name: true, input: true, output: true, sessionId: true },
-        });
+        const call = source.ref === undefined ? null : await this.citedToolCall(tx, principal, source.ref, ref);
         if (!call) return null;
         return {
           ref: call.id,
@@ -3995,24 +4008,25 @@ export class WikiService {
         };
       }
       case 'commit': {
-        if (!ref) return null;
+        const sha = source.ref;
+        if (!sha) return null;
         // The repository is not this database's to read, so a commit resolves through the record that
         // named it: a merge receipt of this owner's that carried that sha.
         const receipt = await tx.sessionMergeReceipt.findFirst({
           where: {
             ownerId: principal.ownerId,
-            OR: [{ sourceSha: ref }, { targetShaAfter: ref }],
+            OR: [{ sourceSha: sha }, { targetShaAfter: sha }],
           },
           select: { id: true },
         });
         if (!receipt) return null;
-        return { ref, text: null, tainted: false, ownerWords: false, sessionId: null };
+        return { ref: sha, text: null, tainted: false, ownerWords: false, sessionId: null };
       }
       case 'note': {
         // A file `orbit wiki import` registered (contract `import.source`), among this owner's notes
         // alone: its stored text — redacted before it was kept — and the file it came from. Agent-written
         // second-hand content, never the owner's own words.
-        if (!ref || !isDecodableId(ref)) return null;
+        if (!ref) return null;
         const note = await tx.wikiNote.findFirst({
           where: { id: ref, ownerId: principal.ownerId },
           select: { id: true, path: true, text: true },
@@ -4023,6 +4037,46 @@ export class WikiService {
       default:
         return null;
     }
+  }
+
+  /**
+   * The tool call a `tool_call` source names (contract `sourceInput.toolUseId`): the row with that id, or
+   * else the call its engine gave that tool_use_id — the id a session reads in its own transcript, and the
+   * one task_evidence_submit takes. A tool_use_id is the calling session's own call first, and otherwise
+   * the call of the ONE session of this owner's that carries it. A call recorded twice in one session is
+   * still one call, read from its first row; carried by two sessions, it names neither.
+   *
+   * The calling session's lookup is one probe of (session_id, tool_use_id). The owner-wide one walks the
+   * owner's sessions through that same index, since none has tool_use_id first — 0.14 s over 5.5k
+   * sessions on production on 10-06 — and is only reached for a call the calling session never made.
+   */
+  private async citedToolCall(tx: Tx, principal: WikiPrincipal, ref: string, id: string | null) {
+    const select = { id: true, name: true, input: true, output: true, sessionId: true } as const;
+    const ownerScoped = { session: { ownerId: principal.ownerId } };
+    if (id) {
+      const call = await tx.toolCall.findFirst({ where: { id, ...ownerScoped }, select });
+      if (call) return call;
+    }
+    if (principal.sessionId) {
+      const own = await tx.toolCall.findFirst({
+        where: { sessionId: principal.sessionId, toolUseId: ref, ...ownerScoped },
+        orderBy: { id: 'asc' },
+        select,
+      });
+      if (own) return own;
+    }
+    const carriers = await tx.toolCall.groupBy({
+      by: ['sessionId'],
+      where: { toolUseId: ref, ...ownerScoped },
+      orderBy: { sessionId: 'asc' },
+      take: 2,
+    });
+    if (carriers.length !== 1) return null;
+    return tx.toolCall.findFirst({
+      where: { sessionId: carriers[0].sessionId, toolUseId: ref },
+      orderBy: { id: 'asc' },
+      select,
+    });
   }
 
   /** Was this session reading the web? A tool call that fetched or searched is the mark (§4.1 step 9). */
@@ -4812,17 +4866,15 @@ function isDecodableId(value: string): boolean {
 }
 
 /**
- * A cited record's id, as a caller may have spelled it.
- *
- * The short form decodes; anything else is left exactly as it came, because a `commit` source names a
- * sha and not a row. A value left as it was simply resolves to nothing, which is the answer a source
- * that names no record of this account's gets.
+ * A cited record's id, as a caller may have spelled it: either spelling decodes, and anything else is
+ * null — never the value as it came, which a uuid column answers with an error (P2007) rather than with
+ * no row. A `commit` names a sha, not a row, and is read without this.
  */
-function refAsUuid(ref: string): string {
+function rowIdOf(ref: string): string | null {
   try {
     return toUuid(ref);
   } catch {
-    return ref;
+    return null;
   }
 }
 

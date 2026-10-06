@@ -1,0 +1,61 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs choices-open-value.browser.mjs --project=chromium-light-desktop --grep expiry
+
+[WebServer] (node:3641239) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:3641326) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [chromium-light-desktop] › ui-migration/choices-open-value.browser.mjs:12:53 › expiry dims the current value while open and restores it on Escape (1.5s)
+
+
+  1) [chromium-light-desktop] › ui-migration/choices-open-value.browser.mjs:12:53 › expiry dims the current value while open and restores it on Escape 
+
+    Error: locator.evaluate: Error: strict mode violation: getByRole('region', { name: 'Appearance sample' }).getByText('Never', { exact: true }) resolved to 2 elements:
+        1) <span aria-live="polite">Never</span> aka locator('span').filter({ hasText: 'Never' })
+        2) <div title="Never" class="ant-select-content ant-select-content-has-value">…</div> aka getByTestId('neutral').getByTitle('Never')
+
+    Call log:
+      - waiting for getByRole('region', { name: 'Appearance sample' }).getByText('Never', { exact: true })
+
+
+      2 |
+      3 | async function appearance(label) {
+    > 4 |   return label.evaluate((node) => {
+        |                ^
+      5 |     const style = getComputedStyle(node);
+      6 |     let opacity = 1;
+      7 |     for (let parent = node; parent; parent = parent.parentElement) opacity *= Number(getComputedStyle(parent).opacity);
+        at appearance (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-open-value.browser.mjs:4:16)
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-open-value.browser.mjs:31:38
+
+    Error Context: .choices-results/choices-open-value.browser-522b6-n-and-restores-it-on-Escape-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices-open-value.browser-522b6-n-and-restores-it-on-Escape-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices-open-value.browser-522b6-n-and-restores-it-on-Escape-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium-light-desktop] › ui-migration/choices-open-value.browser.mjs:12:53 › expiry dims the current value while open and restores it on Escape 
+npm error Lifecycle script `test:ui-choices` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/choices.config.mjs choices-open-value.browser.mjs --project=chromium-light-desktop --grep expiry

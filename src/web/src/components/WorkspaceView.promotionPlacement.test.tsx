@@ -32,6 +32,11 @@ import { MERGED_HEADING, RESOLVING } from './ProjectPromotionCard';
  * A blocked candidate is the one that is still LIVE there — the row says who is on it and for how
  * long — so it is the card itself, rebuilt on every poll, where the merge leaves a read-only
  * receipt. The strip keeps what is asking (READY) and what is under way (CONFIRMED, RECHECKING).
+ *
+ * AS ONE LINE (owner decision 2026-10-06). The merge's card lives on the project's sessions view;
+ * the conversation keeps, at each of these places, one line that says the card's state and opens
+ * the card itself as its review. What is asserted below is where the LINE sits, and what the card
+ * it opens says.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -217,9 +222,15 @@ const mounted = (): HTMLDivElement => {
   return container;
 };
 const count = (selector: string): number => mounted().querySelectorAll(selector).length;
+/** The merge's record in the conversation: its line, which is the row drawn in the flow. */
 const record = (): HTMLElement | null =>
-  mounted().querySelector<HTMLElement>('.project-promotion-receipt');
-/** The candidate's visible preview stays in the transcript; its full card lives in a portal. */
+  mounted().querySelector<HTMLElement>('[id^="promotion-receipt-"]');
+/** How many records the conversation draws — lines, since the receipt is the review each opens. */
+const recordLines = (): number => count('.promotion-line.is-receipt');
+/** The receipt a record's line opens, kept mounted behind it. */
+const receiptOpened = (): HTMLElement | null =>
+  document.querySelector<HTMLElement>('.project-promotion-receipt');
+/** The candidate's line in the conversation; the full card is the review it opens. */
 const promotionPreview = (): HTMLElement | null =>
   mounted().querySelector<HTMLElement>(`#promotion-${NEXT_PROMOTION_ID}`);
 /** Every promotion form or receipt, including the form opened from a compact preview. */
@@ -247,22 +258,25 @@ const waitForUi = async (assertion: () => void): Promise<void> => {
   await act(async () => {});
 };
 
+/** The candidate's line, pressed: the conversation draws one line on every width, and the card it
+ *  stands for is the review that line opens. */
 async function openPromotion(state: ProjectPromotionView['state']): Promise<HTMLElement> {
+  const selector = `.project-promotion[data-state="${state}"]`;
+  const opened = (): HTMLElement | null =>
+    document.querySelector<HTMLElement>(`.review-card-dialog[data-open] ${selector}`);
   await waitForUi(() => {
     expect(count(`.review-card#promotion-${NEXT_PROMOTION_ID}`)).toBe(1);
-    // A re-offer moves this id from the blocked transcript card to the strip's new mount.
-    // Wait for that preview to update before pressing, rather than opening the old card.
-    expect(promotionPreview()!.querySelector('.review-card-meta')?.textContent).toBe(
-      state === 'READY' ? 'Ready to merge · review checks and included work' : state.toLowerCase(),
-    );
+    // A re-offer moves this id from the blocked transcript line to the strip's new mount.
+    expect(promotionPreview()!.querySelector('.review-card-preview.promotion-line')).not.toBeNull();
+    // The line's own state, not the one before it: a re-offer redraws the same id.
+    expect(document.querySelector(selector), `no ${state} candidate stands behind the line`).not.toBeNull();
   });
-  const trigger = promotionPreview()!.querySelector<HTMLButtonElement>('.review-card-preview')!;
-  await act(async () => trigger.click());
-  const selector = `.review-card-dialog[data-open] .project-promotion[data-state="${state}"]`;
+  expect(promotionPreview()!.querySelector(selector), 'the card was drawn whole in the conversation').toBeNull();
+  await act(async () => promotionPreview()!.querySelector<HTMLButtonElement>('.promotion-line')!.click());
   await waitForUi(() => {
-    expect(document.querySelector(selector), `the preview did not open the ${state} candidate`).not.toBeNull();
+    expect(opened(), 'the line did not open the card').not.toBeNull();
   });
-  return document.querySelector<HTMLElement>(selector)!;
+  return opened()!;
 }
 
 beforeEach(() => {
@@ -439,7 +453,7 @@ describe('the record a merge leaves, in the conversation it happened in', { time
     mergesOnRecord = [merged()];
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
-      expect(count('.project-promotion-receipt')).toBe(1);
+      expect(recordLines()).toBe(1);
     });
     // A merge is not a question, so the strip that holds the questions draws nothing for it.
     expect(count('.project-promotion-actions'), 'the receipt was drawn with the merge button').toBe(0);
@@ -448,6 +462,7 @@ describe('the record a merge leaves, in the conversation it happened in', { time
     const receipt = record()!;
     expect(receipt.textContent, 'the record is not the merge that happened').toContain(MERGED_HEADING);
     expect(receipt.textContent, 'the record does not name the commit it put on main').toContain(MERGED_SHA.slice(0, 7));
+    expect(receiptOpened()?.getAttribute('data-state'), 'the line opens no receipt').toBe('MERGED');
 
     // It is IN the flow: the thing after it is an event of the conversation, not the strip.
     expect(receipt.nextElementSibling?.hasAttribute('data-seq')).toBe(true);
@@ -463,7 +478,7 @@ describe('the record a merge leaves, in the conversation it happened in', { time
     mergesOnRecord = [merged()];
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
-      expect(count('.project-promotion-receipt')).toBe(1);
+      expect(recordLines()).toBe(1);
     });
 
     // The next candidate is offered: `/promotions/current` moves on to a different commit, which is
@@ -477,14 +492,14 @@ describe('the record a merge leaves, in the conversation it happened in', { time
       // The record too, and in the same window: it is drawn from its own read of the merges on
       // record, and reading it synchronously right after the window is how a loaded host took a
       // null where a receipt was asserted.
-      expect(count('.project-promotion-receipt'), 'the merge stopped being drawn at all').toBe(1);
+      expect(recordLines(), 'the merge stopped being drawn at all').toBe(1);
     });
     const receipt = record()!;
-    expect(receipt.getAttribute('data-state'), 'the record followed the new candidate').toBe('MERGED');
+    expect(receiptOpened()?.getAttribute('data-state'), 'the record followed the new candidate').toBe('MERGED');
     expect(receipt.textContent, 'the record now names a commit that never landed').toContain(MERGED_SHA.slice(0, 7));
     expect(receipt.textContent, 'the record took the next candidate’s commit').not.toContain(NEXT_SOURCE_SHA.slice(0, 7));
     // One record and one question: the merge is not redrawn as the thing being asked about.
-    expect(count('.project-promotion-receipt')).toBe(1);
+    expect(recordLines()).toBe(1);
   });
 
   it('leads at the head of a conversation whose window begins after the merge', async () => {
@@ -516,7 +531,7 @@ describe('the record a merge leaves, in the conversation it happened in', { time
     await waitForUi(() => {
       expect(mounted().textContent).toContain(`${NOTE[ORDINARY_PUBLIC]}, opening`);
     });
-    expect(count('.project-promotion-receipt')).toBe(0);
+    expect(recordLines()).toBe(0);
     expect(
       requested.filter((path) => path.endsWith('/promotions/merged')),
       'a conversation with no project read the merges of one',
@@ -614,14 +629,14 @@ describe('what is not a record', { timeout: 60_000 }, () => {
     await waitForUi(() => {
       expect(cardsOfState('READY'), 'no candidate is being asked about').toBe(1);
     });
-    expect(count('.project-promotion-receipt'), 'a receipt was drawn for a project that merged nothing').toBe(0);
+    expect(recordLines(), 'a receipt was drawn for a project that merged nothing').toBe(0);
   });
 
   it('draws a message about merging as a message, not as a card made out of it', async () => {
     mergesOnRecord = [merged()];
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
-      expect(count('.project-promotion-receipt')).toBe(1);
+      expect(recordLines()).toBe(1);
     });
     // An event that mentions the merge in its text and carries junk shaped like a promotion
     // payload: read off its own fields it is an ordinary reply, and drawing it as a card would be
@@ -639,7 +654,7 @@ describe('what is not a record', { timeout: 60_000 }, () => {
     await waitForUi(() => {
       expect(mounted().textContent).toContain(text);
     });
-    expect(count('.project-promotion-receipt'), 'an event with a promotion-shaped payload became a card').toBe(1);
+    expect(recordLines(), 'an event with a promotion-shaped payload became a card').toBe(1);
     expect(cardsOfState('MERGED'), 'the merge was drawn twice').toBe(1);
   });
 });
@@ -650,7 +665,7 @@ describe('the card strip', { timeout: 60_000 }, () => {
     mergesOnRecord = [merged()];
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
-      expect(count('.project-promotion-receipt')).toBe(1);
+      expect(recordLines()).toBe(1);
     });
     expect(
       cardsOfState('MERGED'),

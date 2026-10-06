@@ -1,0 +1,5302 @@
+{
+  "summary": {
+    "static": {
+      "pairs": 184,
+      "identical": 114,
+      "differentSize": 0,
+      "sameSizeWithDifferences": 70
+    },
+    "motion": {
+      "pairs": 96,
+      "identical": 6,
+      "differentSize": 0,
+      "sameSizeWithDifferences": 90
+    }
+  },
+  "pairs": [
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--access-matches-the-current-surface-density-and-option-states--antd-access-open.png",
+      "new": "full-matrix/chromium-dark-desktop--access-matches-the-current-surface-density-and-option-states--orbit-access-open.png",
+      "oldSize": [
+        201,
+        110
+      ],
+      "newSize": [
+        201,
+        110
+      ],
+      "differentPixels": 8,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        0,
+        2,
+        201,
+        108
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--account-matches-the-current-surface-density-and-option-states--antd-account-closed.png",
+      "new": "full-matrix/chromium-dark-desktop--account-matches-the-current-surface-density-and-option-states--orbit-account-closed.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 42,
+      "maxChannelDelta": 2,
+      "boundingBox": [
+        0,
+        0,
+        250,
+        32
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--account-matches-the-current-surface-density-and-option-states--antd-account-open.png",
+      "new": "full-matrix/chromium-dark-desktop--account-matches-the-current-surface-density-and-option-states--orbit-account-open.png",
+      "oldSize": [
+        250,
+        162
+      ],
+      "newSize": [
+        250,
+        162
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--attachment-matches-the-current-surface-density-and-option-states--antd-attachment-open.png",
+      "new": "full-matrix/chromium-dark-desktop--attachment-matches-the-current-surface-density-and-option-states--orbit-attachment-open.png",
+      "oldSize": [
+        131,
+        177
+      ],
+      "newSize": [
+        131,
+        177
+      ],
+      "differentPixels": 8,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        0,
+        2,
+        130,
+        175
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-disabled.png",
+      "new": "full-matrix/chromium-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-disabled.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 27,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        0,
+        0,
+        250,
+        24
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-empty.png",
+      "new": "full-matrix/chromium-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-empty.png",
+      "oldSize": [
+        250,
+        99
+      ],
+      "newSize": [
+        250,
+        99
+      ],
+      "differentPixels": 33,
+      "maxChannelDelta": 2,
+      "boundingBox": [
+        98,
+        18,
+        152,
+        47
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-focus.png",
+      "new": "full-matrix/chromium-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-focus.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-disabled.png",
+      "new": "full-matrix/chromium-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-disabled.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-empty.png",
+      "new": "full-matrix/chromium-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-empty.png",
+      "oldSize": [
+        250,
+        99
+      ],
+      "newSize": [
+        250,
+        99
+      ],
+      "differentPixels": 33,
+      "maxChannelDelta": 2,
+      "boundingBox": [
+        98,
+        18,
+        152,
+        47
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-focus.png",
+      "new": "full-matrix/chromium-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-focus.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--expiry-matches-the-current-surface-density-and-option-states--antd-expiry-closed.png",
+      "new": "full-matrix/chromium-dark-desktop--expiry-matches-the-current-surface-density-and-option-states--orbit-expiry-closed.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 20,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        0,
+        0,
+        250,
+        24
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--expiry-matches-the-current-surface-density-and-option-states--antd-expiry-open.png",
+      "new": "full-matrix/chromium-dark-desktop--expiry-matches-the-current-surface-density-and-option-states--orbit-expiry-open.png",
+      "oldSize": [
+        250,
+        104
+      ],
+      "newSize": [
+        250,
+        104
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-default.png",
+      "new": "full-matrix/chromium-dark-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-default.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 10,
+      "maxChannelDelta": 3,
+      "boundingBox": [
+        56,
+        5,
+        178,
+        19
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-disabled.png",
+      "new": "full-matrix/chromium-dark-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-disabled.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 10,
+      "maxChannelDelta": 3,
+      "boundingBox": [
+        46,
+        5,
+        158,
+        19
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-options.png",
+      "new": "full-matrix/chromium-dark-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-options.png",
+      "oldSize": [
+        250,
+        136
+      ],
+      "newSize": [
+        250,
+        136
+      ],
+      "differentPixels": 8,
+      "maxChannelDelta": 2,
+      "boundingBox": [
+        221,
+        48,
+        232,
+        56
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-attachment--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-attachment--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 7925,
+      "maxChannelDelta": 115,
+      "boundingBox": [
+        24,
+        24,
+        179,
+        360
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-attachment--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-attachment--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 913,
+      "maxChannelDelta": 55,
+      "boundingBox": [
+        24,
+        148,
+        154,
+        357
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-expiry--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-expiry--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 4991,
+      "maxChannelDelta": 125,
+      "boundingBox": [
+        23,
+        24,
+        275,
+        183
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-expiry--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-expiry--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 1882,
+      "maxChannelDelta": 56,
+      "boundingBox": [
+        22,
+        146,
+        276,
+        212
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-multiple--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-multiple--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 2040,
+      "maxChannelDelta": 31,
+      "boundingBox": [
+        22,
+        146,
+        276,
+        265
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-multiple--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-multiple--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 2086,
+      "maxChannelDelta": 30,
+      "boundingBox": [
+        22,
+        146,
+        276,
+        264
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 1080,
+      "maxChannelDelta": 46,
+      "boundingBox": [
+        20,
+        148,
+        227,
+        276
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 807,
+      "maxChannelDelta": 54,
+      "boundingBox": [
+        24,
+        148,
+        202,
+        259
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-search--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-search--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 5699,
+      "maxChannelDelta": 80,
+      "boundingBox": [
+        22,
+        24,
+        276,
+        191
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-search--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-search--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 2078,
+      "maxChannelDelta": 43,
+      "boundingBox": [
+        22,
+        146,
+        276,
+        220
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 11,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        65,
+        24,
+        177,
+        27
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 447,
+      "maxChannelDelta": 5,
+      "boundingBox": [
+        24,
+        148,
+        96,
+        180
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--popover-matches-the-current-surface-density-and-option-states--antd-popover-context.png",
+      "new": "full-matrix/chromium-dark-desktop--popover-matches-the-current-surface-density-and-option-states--orbit-popover-context.png",
+      "oldSize": [
+        281,
+        156
+      ],
+      "newSize": [
+        281,
+        156
+      ],
+      "differentPixels": 2,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        24,
+        44,
+        25,
+        112
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--popover-matches-the-current-surface-density-and-option-states--antd-popover-open.png",
+      "new": "full-matrix/chromium-dark-desktop--popover-matches-the-current-surface-density-and-option-states--orbit-popover-open.png",
+      "oldSize": [
+        201,
+        76
+      ],
+      "newSize": [
+        201,
+        76
+      ],
+      "differentPixels": 2,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        0,
+        4,
+        1,
+        72
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--search-matches-the-current-surface-density-and-option-states--antd-search-closed.png",
+      "new": "full-matrix/chromium-dark-desktop--search-matches-the-current-surface-density-and-option-states--orbit-search-closed.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 42,
+      "maxChannelDelta": 2,
+      "boundingBox": [
+        0,
+        0,
+        250,
+        32
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--search-matches-the-current-surface-density-and-option-states--antd-search-open.png",
+      "new": "full-matrix/chromium-dark-desktop--search-matches-the-current-surface-density-and-option-states--orbit-search-open.png",
+      "oldSize": [
+        250,
+        104
+      ],
+      "newSize": [
+        250,
+        104
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--tags-chip-appearance-matches-current-labels-and-email-fields--antd-tags-default.png",
+      "new": "full-matrix/chromium-dark-desktop--tags-chip-appearance-matches-current-labels-and-email-fields--orbit-tags-default.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--tags-chip-appearance-matches-current-labels-and-email-fields--antd-tags-disabled.png",
+      "new": "full-matrix/chromium-dark-desktop--tags-chip-appearance-matches-current-labels-and-email-fields--orbit-tags-disabled.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--tooltip-matches-the-current-surface-density-and-option-states--antd-tooltip-context.png",
+      "new": "full-matrix/chromium-dark-desktop--tooltip-matches-the-current-surface-density-and-option-states--orbit-tooltip-context.png",
+      "oldSize": [
+        246,
+        114
+      ],
+      "newSize": [
+        246,
+        114
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-desktop--tooltip-matches-the-current-surface-density-and-option-states--antd-tooltip-open.png",
+      "new": "full-matrix/chromium-dark-desktop--tooltip-matches-the-current-surface-density-and-option-states--orbit-tooltip-open.png",
+      "oldSize": [
+        167,
+        34
+      ],
+      "newSize": [
+        167,
+        34
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--access-matches-the-current-surface-density-and-option-states--antd-access-open.png",
+      "new": "full-matrix/chromium-dark-phone--access-matches-the-current-surface-density-and-option-states--orbit-access-open.png",
+      "oldSize": [
+        201,
+        110
+      ],
+      "newSize": [
+        201,
+        110
+      ],
+      "differentPixels": 8,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        0,
+        2,
+        201,
+        108
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--account-matches-the-current-surface-density-and-option-states--antd-account-closed.png",
+      "new": "full-matrix/chromium-dark-phone--account-matches-the-current-surface-density-and-option-states--orbit-account-closed.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 42,
+      "maxChannelDelta": 2,
+      "boundingBox": [
+        0,
+        0,
+        250,
+        32
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--account-matches-the-current-surface-density-and-option-states--antd-account-open.png",
+      "new": "full-matrix/chromium-dark-phone--account-matches-the-current-surface-density-and-option-states--orbit-account-open.png",
+      "oldSize": [
+        250,
+        162
+      ],
+      "newSize": [
+        250,
+        162
+      ],
+      "differentPixels": 1,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        65,
+        141,
+        66,
+        142
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--attachment-matches-the-current-surface-density-and-option-states--antd-attachment-open.png",
+      "new": "full-matrix/chromium-dark-phone--attachment-matches-the-current-surface-density-and-option-states--orbit-attachment-open.png",
+      "oldSize": [
+        250,
+        241
+      ],
+      "newSize": [
+        250,
+        241
+      ],
+      "differentPixels": 1920,
+      "maxChannelDelta": 158,
+      "boundingBox": [
+        55,
+        24,
+        133,
+        215
+      ],
+      "differentPixelsOutsideLabelRows": 0
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-disabled.png",
+      "new": "full-matrix/chromium-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-disabled.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 27,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        0,
+        0,
+        250,
+        24
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-empty.png",
+      "new": "full-matrix/chromium-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-empty.png",
+      "oldSize": [
+        250,
+        99
+      ],
+      "newSize": [
+        250,
+        99
+      ],
+      "differentPixels": 33,
+      "maxChannelDelta": 2,
+      "boundingBox": [
+        98,
+        18,
+        152,
+        47
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-focus.png",
+      "new": "full-matrix/chromium-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-focus.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-disabled.png",
+      "new": "full-matrix/chromium-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-disabled.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 34,
+      "maxChannelDelta": 2,
+      "boundingBox": [
+        0,
+        0,
+        250,
+        32
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-empty.png",
+      "new": "full-matrix/chromium-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-empty.png",
+      "oldSize": [
+        250,
+        99
+      ],
+      "newSize": [
+        250,
+        99
+      ],
+      "differentPixels": 33,
+      "maxChannelDelta": 2,
+      "boundingBox": [
+        98,
+        18,
+        152,
+        47
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-focus.png",
+      "new": "full-matrix/chromium-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-focus.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 34,
+      "maxChannelDelta": 2,
+      "boundingBox": [
+        226,
+        10,
+        238,
+        22
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--expiry-matches-the-current-surface-density-and-option-states--antd-expiry-closed.png",
+      "new": "full-matrix/chromium-dark-phone--expiry-matches-the-current-surface-density-and-option-states--orbit-expiry-closed.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 20,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        0,
+        0,
+        250,
+        24
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--expiry-matches-the-current-surface-density-and-option-states--antd-expiry-open.png",
+      "new": "full-matrix/chromium-dark-phone--expiry-matches-the-current-surface-density-and-option-states--orbit-expiry-open.png",
+      "oldSize": [
+        250,
+        104
+      ],
+      "newSize": [
+        250,
+        104
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-default.png",
+      "new": "full-matrix/chromium-dark-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-default.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 43,
+      "maxChannelDelta": 3,
+      "boundingBox": [
+        56,
+        5,
+        242,
+        19
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-disabled.png",
+      "new": "full-matrix/chromium-dark-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-disabled.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 10,
+      "maxChannelDelta": 3,
+      "boundingBox": [
+        46,
+        5,
+        158,
+        19
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-options.png",
+      "new": "full-matrix/chromium-dark-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-options.png",
+      "oldSize": [
+        250,
+        136
+      ],
+      "newSize": [
+        250,
+        136
+      ],
+      "differentPixels": 8,
+      "maxChannelDelta": 2,
+      "boundingBox": [
+        221,
+        48,
+        232,
+        56
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-attachment--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-attachment--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 3047,
+      "maxChannelDelta": 152,
+      "boundingBox": [
+        23,
+        148,
+        273,
+        424
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-attachment--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-attachment--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 3043,
+      "maxChannelDelta": 149,
+      "boundingBox": [
+        23,
+        148,
+        273,
+        423
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-expiry--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-expiry--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 2551,
+      "maxChannelDelta": 125,
+      "boundingBox": [
+        23,
+        147,
+        275,
+        286
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-expiry--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-expiry--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 2675,
+      "maxChannelDelta": 60,
+      "boundingBox": [
+        22,
+        24,
+        276,
+        280
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-multiple--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-multiple--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 3451,
+      "maxChannelDelta": 39,
+      "boundingBox": [
+        22,
+        24,
+        276,
+        318
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-multiple--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-multiple--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 3243,
+      "maxChannelDelta": 37,
+      "boundingBox": [
+        22,
+        146,
+        276,
+        317
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-popover--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-popover--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 1091,
+      "maxChannelDelta": 74,
+      "boundingBox": [
+        20,
+        24,
+        227,
+        276
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-popover--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-popover--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 808,
+      "maxChannelDelta": 82,
+      "boundingBox": [
+        24,
+        148,
+        202,
+        259
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-search--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-search--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 6852,
+      "maxChannelDelta": 63,
+      "boundingBox": [
+        22,
+        24,
+        276,
+        294
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-search--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-search--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 2773,
+      "maxChannelDelta": 46,
+      "boundingBox": [
+        22,
+        146,
+        276,
+        288
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-dark-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 447,
+      "maxChannelDelta": 9,
+      "boundingBox": [
+        24,
+        148,
+        96,
+        180
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--popover-matches-the-current-surface-density-and-option-states--antd-popover-context.png",
+      "new": "full-matrix/chromium-dark-phone--popover-matches-the-current-surface-density-and-option-states--orbit-popover-context.png",
+      "oldSize": [
+        281,
+        156
+      ],
+      "newSize": [
+        281,
+        156
+      ],
+      "differentPixels": 2,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        24,
+        44,
+        25,
+        112
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--popover-matches-the-current-surface-density-and-option-states--antd-popover-open.png",
+      "new": "full-matrix/chromium-dark-phone--popover-matches-the-current-surface-density-and-option-states--orbit-popover-open.png",
+      "oldSize": [
+        201,
+        76
+      ],
+      "newSize": [
+        201,
+        76
+      ],
+      "differentPixels": 2,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        0,
+        4,
+        1,
+        72
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--search-matches-the-current-surface-density-and-option-states--antd-search-closed.png",
+      "new": "full-matrix/chromium-dark-phone--search-matches-the-current-surface-density-and-option-states--orbit-search-closed.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 35,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        226,
+        10,
+        238,
+        22
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--search-matches-the-current-surface-density-and-option-states--antd-search-open.png",
+      "new": "full-matrix/chromium-dark-phone--search-matches-the-current-surface-density-and-option-states--orbit-search-open.png",
+      "oldSize": [
+        250,
+        104
+      ],
+      "newSize": [
+        250,
+        104
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--tags-chip-appearance-matches-current-labels-and-email-fields--antd-tags-default.png",
+      "new": "full-matrix/chromium-dark-phone--tags-chip-appearance-matches-current-labels-and-email-fields--orbit-tags-default.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 35,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        226,
+        10,
+        238,
+        22
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--tags-chip-appearance-matches-current-labels-and-email-fields--antd-tags-disabled.png",
+      "new": "full-matrix/chromium-dark-phone--tags-chip-appearance-matches-current-labels-and-email-fields--orbit-tags-disabled.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--tooltip-matches-the-current-surface-density-and-option-states--antd-tooltip-context.png",
+      "new": "full-matrix/chromium-dark-phone--tooltip-matches-the-current-surface-density-and-option-states--orbit-tooltip-context.png",
+      "oldSize": [
+        246,
+        114
+      ],
+      "newSize": [
+        246,
+        114
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-dark-phone--tooltip-matches-the-current-surface-density-and-option-states--antd-tooltip-open.png",
+      "new": "full-matrix/chromium-dark-phone--tooltip-matches-the-current-surface-density-and-option-states--orbit-tooltip-open.png",
+      "oldSize": [
+        167,
+        34
+      ],
+      "newSize": [
+        167,
+        34
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--access-matches-the-current-surface-density-and-option-states--antd-access-open.png",
+      "new": "full-matrix/chromium-light-desktop--access-matches-the-current-surface-density-and-option-states--orbit-access-open.png",
+      "oldSize": [
+        201,
+        110
+      ],
+      "newSize": [
+        201,
+        110
+      ],
+      "differentPixels": 9,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        0,
+        2,
+        200,
+        108
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--account-matches-the-current-surface-density-and-option-states--antd-account-closed.png",
+      "new": "full-matrix/chromium-light-desktop--account-matches-the-current-surface-density-and-option-states--orbit-account-closed.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--account-matches-the-current-surface-density-and-option-states--antd-account-open.png",
+      "new": "full-matrix/chromium-light-desktop--account-matches-the-current-surface-density-and-option-states--orbit-account-open.png",
+      "oldSize": [
+        250,
+        162
+      ],
+      "newSize": [
+        250,
+        162
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--attachment-matches-the-current-surface-density-and-option-states--antd-attachment-open.png",
+      "new": "full-matrix/chromium-light-desktop--attachment-matches-the-current-surface-density-and-option-states--orbit-attachment-open.png",
+      "oldSize": [
+        131,
+        177
+      ],
+      "newSize": [
+        131,
+        177
+      ],
+      "differentPixels": 9,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        0,
+        2,
+        129,
+        175
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-disabled.png",
+      "new": "full-matrix/chromium-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-disabled.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-empty.png",
+      "new": "full-matrix/chromium-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-empty.png",
+      "oldSize": [
+        250,
+        99
+      ],
+      "newSize": [
+        250,
+        99
+      ],
+      "differentPixels": 28,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        97,
+        18,
+        153,
+        49
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-focus.png",
+      "new": "full-matrix/chromium-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-focus.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-disabled.png",
+      "new": "full-matrix/chromium-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-disabled.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-empty.png",
+      "new": "full-matrix/chromium-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-empty.png",
+      "oldSize": [
+        250,
+        99
+      ],
+      "newSize": [
+        250,
+        99
+      ],
+      "differentPixels": 28,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        97,
+        18,
+        153,
+        49
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-focus.png",
+      "new": "full-matrix/chromium-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-focus.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--expiry-matches-the-current-surface-density-and-option-states--antd-expiry-closed.png",
+      "new": "full-matrix/chromium-light-desktop--expiry-matches-the-current-surface-density-and-option-states--orbit-expiry-closed.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--expiry-matches-the-current-surface-density-and-option-states--antd-expiry-open.png",
+      "new": "full-matrix/chromium-light-desktop--expiry-matches-the-current-surface-density-and-option-states--orbit-expiry-open.png",
+      "oldSize": [
+        250,
+        104
+      ],
+      "newSize": [
+        250,
+        104
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-default.png",
+      "new": "full-matrix/chromium-light-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-default.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-disabled.png",
+      "new": "full-matrix/chromium-light-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-disabled.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-options.png",
+      "new": "full-matrix/chromium-light-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-options.png",
+      "oldSize": [
+        250,
+        136
+      ],
+      "newSize": [
+        250,
+        136
+      ],
+      "differentPixels": 8,
+      "maxChannelDelta": 2,
+      "boundingBox": [
+        221,
+        48,
+        232,
+        56
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-attachment--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-attachment--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 1031,
+      "maxChannelDelta": 150,
+      "boundingBox": [
+        24,
+        148,
+        154,
+        360
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-attachment--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-attachment--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 912,
+      "maxChannelDelta": 72,
+      "boundingBox": [
+        24,
+        148,
+        154,
+        357
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-expiry--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-expiry--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 1314,
+      "maxChannelDelta": 167,
+      "boundingBox": [
+        23,
+        147,
+        275,
+        183
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-expiry--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-expiry--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 1872,
+      "maxChannelDelta": 10,
+      "boundingBox": [
+        22,
+        146,
+        276,
+        212
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-multiple--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-multiple--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 1530,
+      "maxChannelDelta": 46,
+      "boundingBox": [
+        23,
+        147,
+        275,
+        265
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-multiple--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-multiple--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 2086,
+      "maxChannelDelta": 50,
+      "boundingBox": [
+        22,
+        146,
+        276,
+        264
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 2914,
+      "maxChannelDelta": 104,
+      "boundingBox": [
+        3,
+        148,
+        254,
+        310
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 1359,
+      "maxChannelDelta": 71,
+      "boundingBox": [
+        6,
+        148,
+        215,
+        282
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-search--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-search--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 1468,
+      "maxChannelDelta": 42,
+      "boundingBox": [
+        23,
+        147,
+        275,
+        191
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-search--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-search--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 2070,
+      "maxChannelDelta": 55,
+      "boundingBox": [
+        22,
+        146,
+        276,
+        220
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 453,
+      "maxChannelDelta": 12,
+      "boundingBox": [
+        24,
+        148,
+        96,
+        180
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--popover-matches-the-current-surface-density-and-option-states--antd-popover-context.png",
+      "new": "full-matrix/chromium-light-desktop--popover-matches-the-current-surface-density-and-option-states--orbit-popover-context.png",
+      "oldSize": [
+        281,
+        156
+      ],
+      "newSize": [
+        281,
+        156
+      ],
+      "differentPixels": 1,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        245,
+        61,
+        246,
+        62
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--popover-matches-the-current-surface-density-and-option-states--antd-popover-open.png",
+      "new": "full-matrix/chromium-light-desktop--popover-matches-the-current-surface-density-and-option-states--orbit-popover-open.png",
+      "oldSize": [
+        201,
+        76
+      ],
+      "newSize": [
+        201,
+        76
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--search-matches-the-current-surface-density-and-option-states--antd-search-closed.png",
+      "new": "full-matrix/chromium-light-desktop--search-matches-the-current-surface-density-and-option-states--orbit-search-closed.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--search-matches-the-current-surface-density-and-option-states--antd-search-open.png",
+      "new": "full-matrix/chromium-light-desktop--search-matches-the-current-surface-density-and-option-states--orbit-search-open.png",
+      "oldSize": [
+        250,
+        104
+      ],
+      "newSize": [
+        250,
+        104
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--tags-chip-appearance-matches-current-labels-and-email-fields--antd-tags-default.png",
+      "new": "full-matrix/chromium-light-desktop--tags-chip-appearance-matches-current-labels-and-email-fields--orbit-tags-default.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--tags-chip-appearance-matches-current-labels-and-email-fields--antd-tags-disabled.png",
+      "new": "full-matrix/chromium-light-desktop--tags-chip-appearance-matches-current-labels-and-email-fields--orbit-tags-disabled.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--tooltip-matches-the-current-surface-density-and-option-states--antd-tooltip-context.png",
+      "new": "full-matrix/chromium-light-desktop--tooltip-matches-the-current-surface-density-and-option-states--orbit-tooltip-context.png",
+      "oldSize": [
+        246,
+        114
+      ],
+      "newSize": [
+        246,
+        114
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-desktop--tooltip-matches-the-current-surface-density-and-option-states--antd-tooltip-open.png",
+      "new": "full-matrix/chromium-light-desktop--tooltip-matches-the-current-surface-density-and-option-states--orbit-tooltip-open.png",
+      "oldSize": [
+        167,
+        34
+      ],
+      "newSize": [
+        167,
+        34
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-phone--access-matches-the-current-surface-density-and-option-states--antd-access-open.png",
+      "new": "full-matrix/chromium-light-phone--access-matches-the-current-surface-density-and-option-states--orbit-access-open.png",
+      "oldSize": [
+        201,
+        110
+      ],
+      "newSize": [
+        201,
+        110
+      ],
+      "differentPixels": 9,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        0,
+        2,
+        200,
+        108
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-phone--attachment-matches-the-current-surface-density-and-option-states--antd-attachment-open.png",
+      "new": "full-matrix/chromium-light-phone--attachment-matches-the-current-surface-density-and-option-states--orbit-attachment-open.png",
+      "oldSize": [
+        250,
+        241
+      ],
+      "newSize": [
+        250,
+        241
+      ],
+      "differentPixels": 1928,
+      "maxChannelDelta": 224,
+      "boundingBox": [
+        55,
+        24,
+        133,
+        215
+      ],
+      "differentPixelsOutsideLabelRows": 0
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-disabled.png",
+      "new": "full-matrix/chromium-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-disabled.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-empty.png",
+      "new": "full-matrix/chromium-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-empty.png",
+      "oldSize": [
+        250,
+        99
+      ],
+      "newSize": [
+        250,
+        99
+      ],
+      "differentPixels": 28,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        97,
+        18,
+        153,
+        49
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-focus.png",
+      "new": "full-matrix/chromium-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-focus.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-disabled.png",
+      "new": "full-matrix/chromium-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-disabled.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-empty.png",
+      "new": "full-matrix/chromium-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-empty.png",
+      "oldSize": [
+        250,
+        99
+      ],
+      "newSize": [
+        250,
+        99
+      ],
+      "differentPixels": 28,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        97,
+        18,
+        153,
+        49
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-focus.png",
+      "new": "full-matrix/chromium-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-focus.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-phone--expiry-matches-the-current-surface-density-and-option-states--antd-expiry-closed.png",
+      "new": "full-matrix/chromium-light-phone--expiry-matches-the-current-surface-density-and-option-states--orbit-expiry-closed.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-phone--expiry-matches-the-current-surface-density-and-option-states--antd-expiry-open.png",
+      "new": "full-matrix/chromium-light-phone--expiry-matches-the-current-surface-density-and-option-states--orbit-expiry-open.png",
+      "oldSize": [
+        250,
+        104
+      ],
+      "newSize": [
+        250,
+        104
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-default.png",
+      "new": "full-matrix/chromium-light-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-default.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 6,
+      "maxChannelDelta": 3,
+      "boundingBox": [
+        230,
+        9,
+        231,
+        15
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-disabled.png",
+      "new": "full-matrix/chromium-light-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-disabled.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-options.png",
+      "new": "full-matrix/chromium-light-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-options.png",
+      "oldSize": [
+        250,
+        136
+      ],
+      "newSize": [
+        250,
+        136
+      ],
+      "differentPixels": 8,
+      "maxChannelDelta": 2,
+      "boundingBox": [
+        221,
+        48,
+        232,
+        56
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-attachment--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-attachment--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 3069,
+      "maxChannelDelta": 217,
+      "boundingBox": [
+        23,
+        148,
+        274,
+        424
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-attachment--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-attachment--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 3072,
+      "maxChannelDelta": 211,
+      "boundingBox": [
+        24,
+        148,
+        274,
+        423
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-expiry--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-expiry--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 8447,
+      "maxChannelDelta": 167,
+      "boundingBox": [
+        2,
+        146,
+        296,
+        311
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-expiry--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-expiry--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 5735,
+      "maxChannelDelta": 11,
+      "boundingBox": [
+        2,
+        146,
+        296,
+        296
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-multiple--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-multiple--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 7328,
+      "maxChannelDelta": 46,
+      "boundingBox": [
+        2,
+        147,
+        296,
+        328
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-multiple--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-multiple--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 7727,
+      "maxChannelDelta": 45,
+      "boundingBox": [
+        2,
+        146,
+        296,
+        342
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-popover--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-popover--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 2914,
+      "maxChannelDelta": 104,
+      "boundingBox": [
+        3,
+        148,
+        254,
+        310
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-popover--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-popover--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 1359,
+      "maxChannelDelta": 69,
+      "boundingBox": [
+        6,
+        148,
+        215,
+        282
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-search--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-search--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 8183,
+      "maxChannelDelta": 11,
+      "boundingBox": [
+        2,
+        147,
+        296,
+        319
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-search--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-search--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 5804,
+      "maxChannelDelta": 54,
+      "boundingBox": [
+        2,
+        146,
+        296,
+        304
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip--antd-enter-midpoint.png",
+      "new": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip--antd-exit-midpoint.png",
+      "new": "final-motion/chromium-light-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 453,
+      "maxChannelDelta": 12,
+      "boundingBox": [
+        24,
+        148,
+        96,
+        180
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-phone--popover-matches-the-current-surface-density-and-option-states--antd-popover-context.png",
+      "new": "full-matrix/chromium-light-phone--popover-matches-the-current-surface-density-and-option-states--orbit-popover-context.png",
+      "oldSize": [
+        281,
+        156
+      ],
+      "newSize": [
+        281,
+        156
+      ],
+      "differentPixels": 1,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        245,
+        61,
+        246,
+        62
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-phone--popover-matches-the-current-surface-density-and-option-states--antd-popover-open.png",
+      "new": "full-matrix/chromium-light-phone--popover-matches-the-current-surface-density-and-option-states--orbit-popover-open.png",
+      "oldSize": [
+        201,
+        76
+      ],
+      "newSize": [
+        201,
+        76
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "network-repeat/chromium-light-phone--search-matches-the-current-surface-density-and-option-states--antd-search-closed.png",
+      "new": "network-repeat/chromium-light-phone--search-matches-the-current-surface-density-and-option-states--orbit-search-closed.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 3,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        231,
+        14,
+        235,
+        18
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "network-repeat/chromium-light-phone--search-matches-the-current-surface-density-and-option-states--antd-search-open.png",
+      "new": "network-repeat/chromium-light-phone--search-matches-the-current-surface-density-and-option-states--orbit-search-open.png",
+      "oldSize": [
+        250,
+        104
+      ],
+      "newSize": [
+        250,
+        104
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-phone--tags-chip-appearance-matches-current-labels-and-email-fields--antd-tags-default.png",
+      "new": "full-matrix/chromium-light-phone--tags-chip-appearance-matches-current-labels-and-email-fields--orbit-tags-default.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 3,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        231,
+        14,
+        235,
+        18
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-phone--tags-chip-appearance-matches-current-labels-and-email-fields--antd-tags-disabled.png",
+      "new": "full-matrix/chromium-light-phone--tags-chip-appearance-matches-current-labels-and-email-fields--orbit-tags-disabled.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-phone--tooltip-matches-the-current-surface-density-and-option-states--antd-tooltip-context.png",
+      "new": "full-matrix/chromium-light-phone--tooltip-matches-the-current-surface-density-and-option-states--orbit-tooltip-context.png",
+      "oldSize": [
+        246,
+        114
+      ],
+      "newSize": [
+        246,
+        114
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/chromium-light-phone--tooltip-matches-the-current-surface-density-and-option-states--antd-tooltip-open.png",
+      "new": "full-matrix/chromium-light-phone--tooltip-matches-the-current-surface-density-and-option-states--orbit-tooltip-open.png",
+      "oldSize": [
+        167,
+        34
+      ],
+      "newSize": [
+        167,
+        34
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--access-matches-the-current-surface-density-and-option-states--antd-access-open.png",
+      "new": "full-matrix/webkit-dark-desktop--access-matches-the-current-surface-density-and-option-states--orbit-access-open.png",
+      "oldSize": [
+        201,
+        110
+      ],
+      "newSize": [
+        201,
+        110
+      ],
+      "differentPixels": 44,
+      "maxChannelDelta": 41,
+      "boundingBox": [
+        0,
+        2,
+        201,
+        108
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--account-matches-the-current-surface-density-and-option-states--antd-account-closed.png",
+      "new": "full-matrix/webkit-dark-desktop--account-matches-the-current-surface-density-and-option-states--orbit-account-closed.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--account-matches-the-current-surface-density-and-option-states--antd-account-open.png",
+      "new": "full-matrix/webkit-dark-desktop--account-matches-the-current-surface-density-and-option-states--orbit-account-open.png",
+      "oldSize": [
+        250,
+        162
+      ],
+      "newSize": [
+        250,
+        162
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--attachment-matches-the-current-surface-density-and-option-states--antd-attachment-open.png",
+      "new": "full-matrix/webkit-dark-desktop--attachment-matches-the-current-surface-density-and-option-states--orbit-attachment-open.png",
+      "oldSize": [
+        131,
+        177
+      ],
+      "newSize": [
+        131,
+        177
+      ],
+      "differentPixels": 12,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        0,
+        2,
+        130,
+        175
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-disabled.png",
+      "new": "full-matrix/webkit-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-disabled.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-empty.png",
+      "new": "full-matrix/webkit-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-empty.png",
+      "oldSize": [
+        250,
+        99
+      ],
+      "newSize": [
+        250,
+        99
+      ],
+      "differentPixels": 33,
+      "maxChannelDelta": 2,
+      "boundingBox": [
+        98,
+        18,
+        152,
+        47
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-focus.png",
+      "new": "full-matrix/webkit-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-focus.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-disabled.png",
+      "new": "full-matrix/webkit-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-disabled.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-empty.png",
+      "new": "full-matrix/webkit-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-empty.png",
+      "oldSize": [
+        250,
+        99
+      ],
+      "newSize": [
+        250,
+        99
+      ],
+      "differentPixels": 33,
+      "maxChannelDelta": 2,
+      "boundingBox": [
+        98,
+        18,
+        152,
+        47
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-focus.png",
+      "new": "full-matrix/webkit-dark-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-focus.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--expiry-matches-the-current-surface-density-and-option-states--antd-expiry-closed.png",
+      "new": "full-matrix/webkit-dark-desktop--expiry-matches-the-current-surface-density-and-option-states--orbit-expiry-closed.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--expiry-matches-the-current-surface-density-and-option-states--antd-expiry-open.png",
+      "new": "full-matrix/webkit-dark-desktop--expiry-matches-the-current-surface-density-and-option-states--orbit-expiry-open.png",
+      "oldSize": [
+        250,
+        104
+      ],
+      "newSize": [
+        250,
+        104
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-default.png",
+      "new": "full-matrix/webkit-dark-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-default.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-disabled.png",
+      "new": "full-matrix/webkit-dark-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-disabled.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-options.png",
+      "new": "full-matrix/webkit-dark-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-options.png",
+      "oldSize": [
+        250,
+        136
+      ],
+      "newSize": [
+        250,
+        136
+      ],
+      "differentPixels": 8,
+      "maxChannelDelta": 2,
+      "boundingBox": [
+        221,
+        48,
+        232,
+        56
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-attachment--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-attachment--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 998,
+      "maxChannelDelta": 10,
+      "boundingBox": [
+        24,
+        161,
+        154,
+        373
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-attachment--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-attachment--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 904,
+      "maxChannelDelta": 23,
+      "boundingBox": [
+        24,
+        161,
+        154,
+        370
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-expiry--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-expiry--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 766,
+      "maxChannelDelta": 125,
+      "boundingBox": [
+        24,
+        161,
+        274,
+        185
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-expiry--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-expiry--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 1104,
+      "maxChannelDelta": 35,
+      "boundingBox": [
+        23,
+        160,
+        275,
+        186
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-multiple--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-multiple--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 1973,
+      "maxChannelDelta": 49,
+      "boundingBox": [
+        23,
+        160,
+        275,
+        289
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-multiple--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-multiple--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 2278,
+      "maxChannelDelta": 44,
+      "boundingBox": [
+        22,
+        159,
+        276,
+        257
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 6216,
+      "maxChannelDelta": 46,
+      "boundingBox": [
+        24,
+        37,
+        179,
+        193
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 524,
+      "maxChannelDelta": 42,
+      "boundingBox": [
+        24,
+        161,
+        104,
+        193
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-search--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-search--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 1467,
+      "maxChannelDelta": 22,
+      "boundingBox": [
+        23,
+        160,
+        275,
+        194
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-search--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-search--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 1838,
+      "maxChannelDelta": 37,
+      "boundingBox": [
+        22,
+        159,
+        276,
+        195
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-dark-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 462,
+      "maxChannelDelta": 26,
+      "boundingBox": [
+        24,
+        161,
+        96,
+        193
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--popover-matches-the-current-surface-density-and-option-states--antd-popover-context.png",
+      "new": "full-matrix/webkit-dark-desktop--popover-matches-the-current-surface-density-and-option-states--orbit-popover-context.png",
+      "oldSize": [
+        281,
+        156
+      ],
+      "newSize": [
+        281,
+        156
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--popover-matches-the-current-surface-density-and-option-states--antd-popover-open.png",
+      "new": "full-matrix/webkit-dark-desktop--popover-matches-the-current-surface-density-and-option-states--orbit-popover-open.png",
+      "oldSize": [
+        201,
+        76
+      ],
+      "newSize": [
+        201,
+        76
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--search-matches-the-current-surface-density-and-option-states--antd-search-closed.png",
+      "new": "full-matrix/webkit-dark-desktop--search-matches-the-current-surface-density-and-option-states--orbit-search-closed.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--search-matches-the-current-surface-density-and-option-states--antd-search-open.png",
+      "new": "full-matrix/webkit-dark-desktop--search-matches-the-current-surface-density-and-option-states--orbit-search-open.png",
+      "oldSize": [
+        250,
+        104
+      ],
+      "newSize": [
+        250,
+        104
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--tags-chip-appearance-matches-current-labels-and-email-fields--antd-tags-default.png",
+      "new": "full-matrix/webkit-dark-desktop--tags-chip-appearance-matches-current-labels-and-email-fields--orbit-tags-default.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--tags-chip-appearance-matches-current-labels-and-email-fields--antd-tags-disabled.png",
+      "new": "full-matrix/webkit-dark-desktop--tags-chip-appearance-matches-current-labels-and-email-fields--orbit-tags-disabled.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--tooltip-matches-the-current-surface-density-and-option-states--antd-tooltip-context.png",
+      "new": "full-matrix/webkit-dark-desktop--tooltip-matches-the-current-surface-density-and-option-states--orbit-tooltip-context.png",
+      "oldSize": [
+        246,
+        114
+      ],
+      "newSize": [
+        246,
+        114
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-desktop--tooltip-matches-the-current-surface-density-and-option-states--antd-tooltip-open.png",
+      "new": "full-matrix/webkit-dark-desktop--tooltip-matches-the-current-surface-density-and-option-states--orbit-tooltip-open.png",
+      "oldSize": [
+        167,
+        34
+      ],
+      "newSize": [
+        167,
+        34
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--access-matches-the-current-surface-density-and-option-states--antd-access-open.png",
+      "new": "full-matrix/webkit-dark-phone--access-matches-the-current-surface-density-and-option-states--orbit-access-open.png",
+      "oldSize": [
+        201,
+        110
+      ],
+      "newSize": [
+        201,
+        110
+      ],
+      "differentPixels": 44,
+      "maxChannelDelta": 41,
+      "boundingBox": [
+        0,
+        2,
+        201,
+        108
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--account-matches-the-current-surface-density-and-option-states--antd-account-closed.png",
+      "new": "full-matrix/webkit-dark-phone--account-matches-the-current-surface-density-and-option-states--orbit-account-closed.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--account-matches-the-current-surface-density-and-option-states--antd-account-open.png",
+      "new": "full-matrix/webkit-dark-phone--account-matches-the-current-surface-density-and-option-states--orbit-account-open.png",
+      "oldSize": [
+        250,
+        162
+      ],
+      "newSize": [
+        250,
+        162
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--attachment-matches-the-current-surface-density-and-option-states--antd-attachment-open.png",
+      "new": "full-matrix/webkit-dark-phone--attachment-matches-the-current-surface-density-and-option-states--orbit-attachment-open.png",
+      "oldSize": [
+        250,
+        241
+      ],
+      "newSize": [
+        250,
+        241
+      ],
+      "differentPixels": 1894,
+      "maxChannelDelta": 158,
+      "boundingBox": [
+        0,
+        5,
+        250,
+        237
+      ],
+      "differentPixelsOutsideLabelRows": 31
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-disabled.png",
+      "new": "full-matrix/webkit-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-disabled.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-empty.png",
+      "new": "full-matrix/webkit-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-empty.png",
+      "oldSize": [
+        250,
+        99
+      ],
+      "newSize": [
+        250,
+        99
+      ],
+      "differentPixels": 33,
+      "maxChannelDelta": 2,
+      "boundingBox": [
+        98,
+        18,
+        152,
+        47
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-focus.png",
+      "new": "full-matrix/webkit-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-focus.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-disabled.png",
+      "new": "full-matrix/webkit-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-disabled.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-empty.png",
+      "new": "full-matrix/webkit-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-empty.png",
+      "oldSize": [
+        250,
+        99
+      ],
+      "newSize": [
+        250,
+        99
+      ],
+      "differentPixels": 33,
+      "maxChannelDelta": 2,
+      "boundingBox": [
+        98,
+        18,
+        152,
+        47
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-focus.png",
+      "new": "full-matrix/webkit-dark-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-focus.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 33,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        226,
+        10,
+        238,
+        22
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--expiry-matches-the-current-surface-density-and-option-states--antd-expiry-closed.png",
+      "new": "full-matrix/webkit-dark-phone--expiry-matches-the-current-surface-density-and-option-states--orbit-expiry-closed.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--expiry-matches-the-current-surface-density-and-option-states--antd-expiry-open.png",
+      "new": "full-matrix/webkit-dark-phone--expiry-matches-the-current-surface-density-and-option-states--orbit-expiry-open.png",
+      "oldSize": [
+        250,
+        104
+      ],
+      "newSize": [
+        250,
+        104
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-default.png",
+      "new": "full-matrix/webkit-dark-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-default.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 33,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        230,
+        6,
+        242,
+        18
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-disabled.png",
+      "new": "full-matrix/webkit-dark-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-disabled.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-options.png",
+      "new": "full-matrix/webkit-dark-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-options.png",
+      "oldSize": [
+        250,
+        136
+      ],
+      "newSize": [
+        250,
+        136
+      ],
+      "differentPixels": 8,
+      "maxChannelDelta": 2,
+      "boundingBox": [
+        221,
+        48,
+        232,
+        56
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-attachment--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-attachment--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 9907,
+      "maxChannelDelta": 152,
+      "boundingBox": [
+        23,
+        37,
+        270,
+        437
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-attachment--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-attachment--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 2992,
+      "maxChannelDelta": 150,
+      "boundingBox": [
+        23,
+        161,
+        273,
+        436
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-expiry--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-expiry--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 1039,
+      "maxChannelDelta": 125,
+      "boundingBox": [
+        24,
+        161,
+        275,
+        186
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-expiry--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-expiry--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 1104,
+      "maxChannelDelta": 40,
+      "boundingBox": [
+        23,
+        160,
+        275,
+        186
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-multiple--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-multiple--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 4951,
+      "maxChannelDelta": 13,
+      "boundingBox": [
+        24,
+        37,
+        274,
+        289
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-multiple--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-multiple--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 2185,
+      "maxChannelDelta": 41,
+      "boundingBox": [
+        22,
+        159,
+        276,
+        257
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-popover--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-popover--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 521,
+      "maxChannelDelta": 53,
+      "boundingBox": [
+        24,
+        161,
+        104,
+        193
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-popover--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-popover--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 499,
+      "maxChannelDelta": 10,
+      "boundingBox": [
+        24,
+        161,
+        104,
+        193
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-search--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-search--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 1091,
+      "maxChannelDelta": 13,
+      "boundingBox": [
+        24,
+        161,
+        275,
+        194
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-search--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-search--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 1745,
+      "maxChannelDelta": 41,
+      "boundingBox": [
+        22,
+        159,
+        276,
+        195
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 447,
+      "maxChannelDelta": 9,
+      "boundingBox": [
+        24,
+        161,
+        96,
+        193
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--popover-matches-the-current-surface-density-and-option-states--antd-popover-context.png",
+      "new": "full-matrix/webkit-dark-phone--popover-matches-the-current-surface-density-and-option-states--orbit-popover-context.png",
+      "oldSize": [
+        281,
+        156
+      ],
+      "newSize": [
+        281,
+        156
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--popover-matches-the-current-surface-density-and-option-states--antd-popover-open.png",
+      "new": "full-matrix/webkit-dark-phone--popover-matches-the-current-surface-density-and-option-states--orbit-popover-open.png",
+      "oldSize": [
+        201,
+        76
+      ],
+      "newSize": [
+        201,
+        76
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--search-matches-the-current-surface-density-and-option-states--antd-search-closed.png",
+      "new": "full-matrix/webkit-dark-phone--search-matches-the-current-surface-density-and-option-states--orbit-search-closed.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 33,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        226,
+        10,
+        238,
+        22
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--search-matches-the-current-surface-density-and-option-states--antd-search-open.png",
+      "new": "full-matrix/webkit-dark-phone--search-matches-the-current-surface-density-and-option-states--orbit-search-open.png",
+      "oldSize": [
+        250,
+        104
+      ],
+      "newSize": [
+        250,
+        104
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--tags-chip-appearance-matches-current-labels-and-email-fields--antd-tags-default.png",
+      "new": "full-matrix/webkit-dark-phone--tags-chip-appearance-matches-current-labels-and-email-fields--orbit-tags-default.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 33,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        226,
+        10,
+        238,
+        22
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--tags-chip-appearance-matches-current-labels-and-email-fields--antd-tags-disabled.png",
+      "new": "full-matrix/webkit-dark-phone--tags-chip-appearance-matches-current-labels-and-email-fields--orbit-tags-disabled.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--tooltip-matches-the-current-surface-density-and-option-states--antd-tooltip-context.png",
+      "new": "full-matrix/webkit-dark-phone--tooltip-matches-the-current-surface-density-and-option-states--orbit-tooltip-context.png",
+      "oldSize": [
+        246,
+        114
+      ],
+      "newSize": [
+        246,
+        114
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-dark-phone--tooltip-matches-the-current-surface-density-and-option-states--antd-tooltip-open.png",
+      "new": "full-matrix/webkit-dark-phone--tooltip-matches-the-current-surface-density-and-option-states--orbit-tooltip-open.png",
+      "oldSize": [
+        167,
+        34
+      ],
+      "newSize": [
+        167,
+        34
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--access-matches-the-current-surface-density-and-option-states--antd-access-open.png",
+      "new": "full-matrix/webkit-light-desktop--access-matches-the-current-surface-density-and-option-states--orbit-access-open.png",
+      "oldSize": [
+        201,
+        110
+      ],
+      "newSize": [
+        201,
+        110
+      ],
+      "differentPixels": 38,
+      "maxChannelDelta": 58,
+      "boundingBox": [
+        0,
+        2,
+        201,
+        108
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--account-matches-the-current-surface-density-and-option-states--antd-account-closed.png",
+      "new": "full-matrix/webkit-light-desktop--account-matches-the-current-surface-density-and-option-states--orbit-account-closed.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--account-matches-the-current-surface-density-and-option-states--antd-account-open.png",
+      "new": "full-matrix/webkit-light-desktop--account-matches-the-current-surface-density-and-option-states--orbit-account-open.png",
+      "oldSize": [
+        250,
+        162
+      ],
+      "newSize": [
+        250,
+        162
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--attachment-matches-the-current-surface-density-and-option-states--antd-attachment-open.png",
+      "new": "full-matrix/webkit-light-desktop--attachment-matches-the-current-surface-density-and-option-states--orbit-attachment-open.png",
+      "oldSize": [
+        131,
+        177
+      ],
+      "newSize": [
+        131,
+        177
+      ],
+      "differentPixels": 7,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        0,
+        2,
+        130,
+        175
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-disabled.png",
+      "new": "full-matrix/webkit-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-disabled.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-empty.png",
+      "new": "full-matrix/webkit-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-empty.png",
+      "oldSize": [
+        250,
+        99
+      ],
+      "newSize": [
+        250,
+        99
+      ],
+      "differentPixels": 28,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        97,
+        18,
+        153,
+        49
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-focus.png",
+      "new": "full-matrix/webkit-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-focus.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-disabled.png",
+      "new": "full-matrix/webkit-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-disabled.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-empty.png",
+      "new": "full-matrix/webkit-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-empty.png",
+      "oldSize": [
+        250,
+        99
+      ],
+      "newSize": [
+        250,
+        99
+      ],
+      "differentPixels": 28,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        97,
+        18,
+        153,
+        49
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-focus.png",
+      "new": "full-matrix/webkit-light-desktop--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-focus.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--expiry-matches-the-current-surface-density-and-option-states--antd-expiry-closed.png",
+      "new": "full-matrix/webkit-light-desktop--expiry-matches-the-current-surface-density-and-option-states--orbit-expiry-closed.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--expiry-matches-the-current-surface-density-and-option-states--antd-expiry-open.png",
+      "new": "full-matrix/webkit-light-desktop--expiry-matches-the-current-surface-density-and-option-states--orbit-expiry-open.png",
+      "oldSize": [
+        250,
+        104
+      ],
+      "newSize": [
+        250,
+        104
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-default.png",
+      "new": "full-matrix/webkit-light-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-default.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-disabled.png",
+      "new": "full-matrix/webkit-light-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-disabled.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-options.png",
+      "new": "full-matrix/webkit-light-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-options.png",
+      "oldSize": [
+        250,
+        136
+      ],
+      "newSize": [
+        250,
+        136
+      ],
+      "differentPixels": 8,
+      "maxChannelDelta": 2,
+      "boundingBox": [
+        221,
+        48,
+        232,
+        56
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-attachment--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-attachment--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 1037,
+      "maxChannelDelta": 46,
+      "boundingBox": [
+        24,
+        161,
+        154,
+        373
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-attachment--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-attachment--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 913,
+      "maxChannelDelta": 36,
+      "boundingBox": [
+        24,
+        161,
+        154,
+        370
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-expiry--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-expiry--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 767,
+      "maxChannelDelta": 167,
+      "boundingBox": [
+        24,
+        161,
+        274,
+        185
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-expiry--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-expiry--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 1104,
+      "maxChannelDelta": 12,
+      "boundingBox": [
+        23,
+        160,
+        275,
+        186
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-multiple--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-multiple--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 1975,
+      "maxChannelDelta": 28,
+      "boundingBox": [
+        23,
+        160,
+        275,
+        289
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-multiple--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-multiple--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 2274,
+      "maxChannelDelta": 53,
+      "boundingBox": [
+        22,
+        159,
+        276,
+        257
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 526,
+      "maxChannelDelta": 89,
+      "boundingBox": [
+        24,
+        161,
+        104,
+        193
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 518,
+      "maxChannelDelta": 18,
+      "boundingBox": [
+        24,
+        161,
+        104,
+        193
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-search--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-search--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 1463,
+      "maxChannelDelta": 28,
+      "boundingBox": [
+        23,
+        160,
+        275,
+        194
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-search--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-search--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 1821,
+      "maxChannelDelta": 50,
+      "boundingBox": [
+        22,
+        159,
+        276,
+        195
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--orbit-enter-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 450,
+      "maxChannelDelta": 15,
+      "boundingBox": [
+        24,
+        161,
+        96,
+        193
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--orbit-exit-midpoint.png",
+      "oldSize": [
+        1280,
+        900
+      ],
+      "newSize": [
+        1280,
+        900
+      ],
+      "differentPixels": 463,
+      "maxChannelDelta": 19,
+      "boundingBox": [
+        24,
+        161,
+        96,
+        193
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--popover-matches-the-current-surface-density-and-option-states--antd-popover-context.png",
+      "new": "full-matrix/webkit-light-desktop--popover-matches-the-current-surface-density-and-option-states--orbit-popover-context.png",
+      "oldSize": [
+        281,
+        156
+      ],
+      "newSize": [
+        281,
+        156
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--popover-matches-the-current-surface-density-and-option-states--antd-popover-open.png",
+      "new": "full-matrix/webkit-light-desktop--popover-matches-the-current-surface-density-and-option-states--orbit-popover-open.png",
+      "oldSize": [
+        201,
+        76
+      ],
+      "newSize": [
+        201,
+        76
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--search-matches-the-current-surface-density-and-option-states--antd-search-closed.png",
+      "new": "full-matrix/webkit-light-desktop--search-matches-the-current-surface-density-and-option-states--orbit-search-closed.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--search-matches-the-current-surface-density-and-option-states--antd-search-open.png",
+      "new": "full-matrix/webkit-light-desktop--search-matches-the-current-surface-density-and-option-states--orbit-search-open.png",
+      "oldSize": [
+        250,
+        104
+      ],
+      "newSize": [
+        250,
+        104
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--tags-chip-appearance-matches-current-labels-and-email-fields--antd-tags-default.png",
+      "new": "full-matrix/webkit-light-desktop--tags-chip-appearance-matches-current-labels-and-email-fields--orbit-tags-default.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--tags-chip-appearance-matches-current-labels-and-email-fields--antd-tags-disabled.png",
+      "new": "full-matrix/webkit-light-desktop--tags-chip-appearance-matches-current-labels-and-email-fields--orbit-tags-disabled.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--tooltip-matches-the-current-surface-density-and-option-states--antd-tooltip-context.png",
+      "new": "full-matrix/webkit-light-desktop--tooltip-matches-the-current-surface-density-and-option-states--orbit-tooltip-context.png",
+      "oldSize": [
+        246,
+        114
+      ],
+      "newSize": [
+        246,
+        114
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-desktop--tooltip-matches-the-current-surface-density-and-option-states--antd-tooltip-open.png",
+      "new": "full-matrix/webkit-light-desktop--tooltip-matches-the-current-surface-density-and-option-states--orbit-tooltip-open.png",
+      "oldSize": [
+        167,
+        34
+      ],
+      "newSize": [
+        167,
+        34
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--access-matches-the-current-surface-density-and-option-states--antd-access-open.png",
+      "new": "full-matrix/webkit-light-phone--access-matches-the-current-surface-density-and-option-states--orbit-access-open.png",
+      "oldSize": [
+        201,
+        110
+      ],
+      "newSize": [
+        201,
+        110
+      ],
+      "differentPixels": 38,
+      "maxChannelDelta": 58,
+      "boundingBox": [
+        0,
+        2,
+        201,
+        108
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--account-matches-the-current-surface-density-and-option-states--antd-account-closed.png",
+      "new": "full-matrix/webkit-light-phone--account-matches-the-current-surface-density-and-option-states--orbit-account-closed.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--account-matches-the-current-surface-density-and-option-states--antd-account-open.png",
+      "new": "full-matrix/webkit-light-phone--account-matches-the-current-surface-density-and-option-states--orbit-account-open.png",
+      "oldSize": [
+        250,
+        162
+      ],
+      "newSize": [
+        250,
+        162
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--attachment-matches-the-current-surface-density-and-option-states--antd-attachment-open.png",
+      "new": "full-matrix/webkit-light-phone--attachment-matches-the-current-surface-density-and-option-states--orbit-attachment-open.png",
+      "oldSize": [
+        250,
+        241
+      ],
+      "newSize": [
+        250,
+        241
+      ],
+      "differentPixels": 1892,
+      "maxChannelDelta": 224,
+      "boundingBox": [
+        2,
+        5,
+        246,
+        237
+      ],
+      "differentPixelsOutsideLabelRows": 21
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-disabled.png",
+      "new": "full-matrix/webkit-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-disabled.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-empty.png",
+      "new": "full-matrix/webkit-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-empty.png",
+      "oldSize": [
+        250,
+        99
+      ],
+      "newSize": [
+        250,
+        99
+      ],
+      "differentPixels": 28,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        97,
+        18,
+        153,
+        49
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-expiry-focus.png",
+      "new": "full-matrix/webkit-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-expiry-focus.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-disabled.png",
+      "new": "full-matrix/webkit-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-disabled.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-empty.png",
+      "new": "full-matrix/webkit-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-empty.png",
+      "oldSize": [
+        250,
+        99
+      ],
+      "newSize": [
+        250,
+        99
+      ],
+      "differentPixels": 28,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        97,
+        18,
+        153,
+        49
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--antd-search-focus.png",
+      "new": "full-matrix/webkit-light-phone--empty-disabled-hover-and-focus-choice-surfaces-match-the-existing-states--orbit-search-focus.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--expiry-matches-the-current-surface-density-and-option-states--antd-expiry-closed.png",
+      "new": "full-matrix/webkit-light-phone--expiry-matches-the-current-surface-density-and-option-states--orbit-expiry-closed.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--expiry-matches-the-current-surface-density-and-option-states--antd-expiry-open.png",
+      "new": "full-matrix/webkit-light-phone--expiry-matches-the-current-surface-density-and-option-states--orbit-expiry-open.png",
+      "oldSize": [
+        250,
+        104
+      ],
+      "newSize": [
+        250,
+        104
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-default.png",
+      "new": "full-matrix/webkit-light-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-default.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-disabled.png",
+      "new": "full-matrix/webkit-light-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-disabled.png",
+      "oldSize": [
+        250,
+        24
+      ],
+      "newSize": [
+        250,
+        24
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--antd-multiple-options.png",
+      "new": "full-matrix/webkit-light-phone--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-options.png",
+      "oldSize": [
+        250,
+        136
+      ],
+      "newSize": [
+        250,
+        136
+      ],
+      "differentPixels": 8,
+      "maxChannelDelta": 2,
+      "boundingBox": [
+        221,
+        48,
+        232,
+        56
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-attachment--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-attachment--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 3013,
+      "maxChannelDelta": 217,
+      "boundingBox": [
+        23,
+        161,
+        274,
+        437
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-attachment--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-attachment--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 3008,
+      "maxChannelDelta": 212,
+      "boundingBox": [
+        24,
+        161,
+        274,
+        436
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-expiry--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-expiry--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 767,
+      "maxChannelDelta": 167,
+      "boundingBox": [
+        24,
+        161,
+        274,
+        185
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-expiry--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-expiry--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 1104,
+      "maxChannelDelta": 10,
+      "boundingBox": [
+        23,
+        160,
+        275,
+        186
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-multiple--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-multiple--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 740,
+      "maxChannelDelta": 6,
+      "boundingBox": [
+        28,
+        224,
+        270,
+        289
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-multiple--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-multiple--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 2145,
+      "maxChannelDelta": 17,
+      "boundingBox": [
+        22,
+        159,
+        276,
+        257
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-popover--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-popover--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 514,
+      "maxChannelDelta": 29,
+      "boundingBox": [
+        24,
+        161,
+        104,
+        193
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-popover--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-popover--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 499,
+      "maxChannelDelta": 8,
+      "boundingBox": [
+        24,
+        161,
+        104,
+        193
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-search--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-search--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 765,
+      "maxChannelDelta": 10,
+      "boundingBox": [
+        24,
+        161,
+        274,
+        193
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-search--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-search--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 1710,
+      "maxChannelDelta": 54,
+      "boundingBox": [
+        22,
+        159,
+        276,
+        195
+      ]
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip--antd-enter-midpoint.png",
+      "new": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip--orbit-enter-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "motion",
+      "old": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip--antd-exit-midpoint.png",
+      "new": "final-motion/webkit-light-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip--orbit-exit-midpoint.png",
+      "oldSize": [
+        390,
+        844
+      ],
+      "newSize": [
+        390,
+        844
+      ],
+      "differentPixels": 450,
+      "maxChannelDelta": 11,
+      "boundingBox": [
+        24,
+        161,
+        96,
+        193
+      ]
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--popover-matches-the-current-surface-density-and-option-states--antd-popover-context.png",
+      "new": "full-matrix/webkit-light-phone--popover-matches-the-current-surface-density-and-option-states--orbit-popover-context.png",
+      "oldSize": [
+        281,
+        156
+      ],
+      "newSize": [
+        281,
+        156
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--popover-matches-the-current-surface-density-and-option-states--antd-popover-open.png",
+      "new": "full-matrix/webkit-light-phone--popover-matches-the-current-surface-density-and-option-states--orbit-popover-open.png",
+      "oldSize": [
+        201,
+        76
+      ],
+      "newSize": [
+        201,
+        76
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--search-matches-the-current-surface-density-and-option-states--antd-search-closed.png",
+      "new": "full-matrix/webkit-light-phone--search-matches-the-current-surface-density-and-option-states--orbit-search-closed.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--search-matches-the-current-surface-density-and-option-states--antd-search-open.png",
+      "new": "full-matrix/webkit-light-phone--search-matches-the-current-surface-density-and-option-states--orbit-search-open.png",
+      "oldSize": [
+        250,
+        104
+      ],
+      "newSize": [
+        250,
+        104
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--tags-chip-appearance-matches-current-labels-and-email-fields--antd-tags-default.png",
+      "new": "full-matrix/webkit-light-phone--tags-chip-appearance-matches-current-labels-and-email-fields--orbit-tags-default.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--tags-chip-appearance-matches-current-labels-and-email-fields--antd-tags-disabled.png",
+      "new": "full-matrix/webkit-light-phone--tags-chip-appearance-matches-current-labels-and-email-fields--orbit-tags-disabled.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--tooltip-matches-the-current-surface-density-and-option-states--antd-tooltip-context.png",
+      "new": "full-matrix/webkit-light-phone--tooltip-matches-the-current-surface-density-and-option-states--orbit-tooltip-context.png",
+      "oldSize": [
+        246,
+        114
+      ],
+      "newSize": [
+        246,
+        114
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "full-matrix/webkit-light-phone--tooltip-matches-the-current-surface-density-and-option-states--antd-tooltip-open.png",
+      "new": "full-matrix/webkit-light-phone--tooltip-matches-the-current-surface-density-and-option-states--orbit-tooltip-open.png",
+      "oldSize": [
+        167,
+        34
+      ],
+      "newSize": [
+        167,
+        34
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "network-repeat/chromium-light-phone--account-matches-the-current-surface-density-and-option-states--antd-account-closed.png",
+      "new": "network-repeat/chromium-light-phone--account-matches-the-current-surface-density-and-option-states--orbit-account-closed.png",
+      "oldSize": [
+        250,
+        32
+      ],
+      "newSize": [
+        250,
+        32
+      ],
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "boundingBox": null
+    },
+    {
+      "kind": "static",
+      "old": "network-repeat/chromium-light-phone--account-matches-the-current-surface-density-and-option-states--antd-account-open.png",
+      "new": "network-repeat/chromium-light-phone--account-matches-the-current-surface-density-and-option-states--orbit-account-open.png",
+      "oldSize": [
+        250,
+        162
+      ],
+      "newSize": [
+        250,
+        162
+      ],
+      "differentPixels": 1,
+      "maxChannelDelta": 1,
+      "boundingBox": [
+        65,
+        141,
+        66,
+        142
+      ]
+    }
+  ]
+}

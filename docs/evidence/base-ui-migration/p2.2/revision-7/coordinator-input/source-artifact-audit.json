@@ -1,0 +1,134 @@
+{
+  "delivery": "ea9191d8165f827c83584087a59f4dfd0cfc2bcd",
+  "tested": "f096a2bc73db87ffcc242a5493f567a414c9ae71",
+  "ancestors": {
+    "acceptedP22": true,
+    "notification": true,
+    "project": true,
+    "main": true,
+    "tested": true
+  },
+  "merges": [
+    {
+      "commit": "f5fc726d43ebf80fe60c04b6508e8de73643cbbd",
+      "parents": [
+        "d71afc686760eb4a37c84822bf1ea478dbe8fcf1",
+        "59c439e47515f15f581a76318df0ecad6b23e53e"
+      ],
+      "cleanMergePreviewEqualsActualTree": "9cc00f7defdf0a705f74ff14e29e66f0ba8daff7",
+      "combinedPaths": [],
+      "deltaFromFirstParent": 2758
+    },
+    {
+      "commit": "baec95275814fdeb6a6530fefeb533338a426787",
+      "parents": [
+        "f5fc726d43ebf80fe60c04b6508e8de73643cbbd",
+        "1970483d2da30c17372c681958a44d1b3da77694"
+      ],
+      "cleanMergePreviewEqualsActualTree": "21be9ff8e89d47c952cba734590ae5a987ad2027",
+      "combinedPaths": [
+        "src/web/src/index.css"
+      ],
+      "deltaFromFirstParent": 74
+    },
+    {
+      "commit": "f096a2bc73db87ffcc242a5493f567a414c9ae71",
+      "parents": [
+        "baec95275814fdeb6a6530fefeb533338a426787",
+        "235787f548d1f49c410f69fdea8c9d27091369b6"
+      ],
+      "cleanMergePreviewEqualsActualTree": "7ecc7bc990c57af294b44ce7f8d37eb573a9be92",
+      "combinedPaths": [],
+      "deltaFromFirstParent": 9
+    }
+  ],
+  "evidenceOnlyDeliveryFiles": 443,
+  "historicalFilesUnchanged": 16191,
+  "reusableInputPaths": {
+    "src/web/src/components/ui": "c7c7cc308ee8ed43e6a79bb43998e9bc3bcad21b",
+    "src/web/ui-migration": "f0783e310f61575836d76c690ace106dd8c7f681",
+    "src/shared": "d14c23f47e7fcf26292b7abe441850f34a2f1074",
+    "src/web/src/components/ToastViewport.tsx": "e80950ddb9754fb6550a5fab5253d46da186d4ed",
+    "src/web/src/index.css": "c9230d87b334faef17f1f5caba78da2016c4b9dc",
+    "src/web/src/lib/toast.tsx": "f4d07aa1c4a3f088ea17ecd78afb556d5ed26e8b",
+    "src/web/src/lib/toastStore.ts": "7be0351056188e42b7635fa9ee997c4199257235",
+    "src/web/src/lib/toastFeed.ts": "c7a3f10444e733a53534bc4e9e9d45283072328f",
+    "src/web/vite.config.ts": "3b29a99e591c1d3f585608ddb239053ebde4c87e",
+    "src/web/package.json": "dfdff1c309da2726975b780e3f6542f86eed7f1a",
+    "package.json": "67c035cd8293242f5f56f2f06fee812c4d334128",
+    "package-lock.json": "cfef4f0cbb6231906be27eb7e01755ffa7c369f7"
+  },
+  "newArtifactsVerified": 442,
+  "runs": [
+    {
+      "directory": "choices-entry",
+      "stats": {
+        "startTime": "2026-10-04T13:01:42.533Z",
+        "duration": 70149.36,
+        "expected": 32,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "attachments": 88
+    },
+    {
+      "directory": "notification-combinations",
+      "stats": {
+        "startTime": "2026-10-04T13:03:12.966Z",
+        "duration": 150343.904,
+        "expected": 88,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "attachments": 232
+    },
+    {
+      "directory": "production-notifications",
+      "stats": {
+        "startTime": "2026-10-04T13:06:14.478Z",
+        "duration": 27209.344999999998,
+        "expected": 8,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "attachments": 24
+    },
+    {
+      "directory": "delivery-production-notifications",
+      "stats": {
+        "startTime": "2026-10-04T13:14:18.823Z",
+        "duration": 26856.656,
+        "expected": 8,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "attachments": 24
+    }
+  ],
+  "sourceRecords": {
+    "r6-choices-entry": {
+      "source": "baec95275814fdeb6a6530fefeb533338a426787",
+      "sourceHashesVerified": 98
+    },
+    "r6-notification-combinations": {
+      "source": "baec95275814fdeb6a6530fefeb533338a426787",
+      "sourceHashesVerified": 98
+    },
+    "r6-delivery-production-notifications": {
+      "source": "f096a2bc73db87ffcc242a5493f567a414c9ae71",
+      "sourceHashesVerified": 98
+    },
+    "r6-fixture-types": {
+      "source": "baec95275814fdeb6a6530fefeb533338a426787",
+      "sourceHashesVerified": 98
+    },
+    "r6-delivery-build-test": {
+      "source": "f096a2bc73db87ffcc242a5493f567a414c9ae71",
+      "sourceHashesVerified": 98
+    }
+  }
+}

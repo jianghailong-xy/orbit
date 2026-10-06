@@ -197,6 +197,7 @@ public enum RunnerAttention {
         ("kimi", LoginEngine.kimi.displayName),
         ("opencode", "OpenCode"),
         ("antigravity", "Antigravity CLI"),
+        ("dsh", "DeepSeek Harness"),
     ]
 
     /// The login a built-in engine runs on, as a sign-in or a quota sentence names it.
@@ -205,6 +206,7 @@ public enum RunnerAttention {
         case .claude: return RunnerPageCopy.RUNNER_LOGIN_CLAUDE
         case .codex: return RunnerPageCopy.RUNNER_LOGIN_CODEX
         case .kimi: return RunnerPageCopy.RUNNER_LOGIN_KIMI
+        case .antigravity: return "Antigravity"
         }
     }
 

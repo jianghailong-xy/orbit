@@ -1879,7 +1879,43 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // device_token only. No existing token, user FK, task, project, acceptance row, fence,
       // function or trigger is changed, and there is no DML or preserved object in its scope.
       // Renumbered before landing because the delivery-review migration already occupies 0375.
-      '0376_android_push_installation'],
+      '0376_android_push_installation',
+      // DeepSeek Harness runner admission (0377): one new session acquisition trigger and its
+      // function, plus a replacement of 0367/0372's Antigravity claim function that excludes
+      // discriminator-marked native dsh sessions from a colliding configured provider lookup.
+      // The new function reads model_provider and locks the authorized runner FOR SHARE NOWAIT;
+      // neither function writes another relation or touches a preserved ledger, task, project,
+      // criterion, enum, acceptance object or DONE fence. No stored row is rewritten, and no
+      // existing trigger, table, column, constraint, index or type is dropped or altered.
+      '0377_dsh_runner_gate',
+      // Open-item hand-over history (0378): three nullable columns and two checks on
+      // project_open_item only. No existing rows are rewritten, and the session id deliberately
+      // has no foreign key so purging a conversation cannot erase the owner's explanation.
+      '0378_open_item_hand_over',
+      // A task's concrete fix for an exception item (0379): one nullable task FK to
+      // project_open_item, SET NULL on item deletion and an index for the read/escalation paths.
+      // No existing row is backfilled, and no preserved completion/fence object is touched.
+      '0379_open_item_fix_link',
+      // Owner integration retry attribution (0380): one nullable requester column on
+      // project_integration_job and one nullable owner-attribution column on project_open_item;
+      // the two existing all-or-none CHECKs are replaced with XOR checks. Existing coordinator
+      // retries satisfy the widened constraints, and no task, project, acceptance, DONE fence,
+      // trigger or function is rewritten; nothing is backfilled.
+      '0380_owner_integration_retry',
+      // Reopen landing intent (0381): one task-keyed marker row records the explicit task_reopen
+      // door until the next DONE queues its LAND_TASK generation. It is consumed transactionally;
+      // no existing task, project, acceptance, DONE fence, trigger or function is rewritten.
+      '0381_task_reopen_landing_intent',
+      // Credential throttle (0382): one nullable `throttled_until` on pool_codex_login and one on
+      // pool_api_key, written by the pool gateways when a 429 outlasts the wait they may hold open.
+      // Two ADD COLUMN of a nullable timestamp and nothing else — no task, project, acceptance, DONE
+      // fence, trigger or function is touched, and no existing row is backfilled.
+      '0382_pool_credential_throttle',
+      // Personal access tokens (0383): one new table, personal_access_token, with its own CHECKs,
+      // indexes and one foreign key to `user` (ON DELETE CASCADE). No existing table, column,
+      // constraint, function, trigger or type is altered or dropped; no task, project, acceptance
+      // or DONE fence object is named, and no row is written.
+      '0383_personal_access_token'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

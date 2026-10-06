@@ -16,3 +16,5 @@ export const PROVIDER_GLYPHS: Record<string, string> = {
 // The configured Moonshot provider uses the vendor slug while the native runtime is named Kimi.
 // Both surfaces share the same official mark.
 PROVIDER_GLYPHS.moonshot = PROVIDER_GLYPHS.kimi;
+// DeepSeek Harness is DeepSeek's own agent: the same mark as the Claude-borrowing DeepSeek preset.
+PROVIDER_GLYPHS['deepseek-harness'] = PROVIDER_GLYPHS.deepseek;

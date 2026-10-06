@@ -42,7 +42,8 @@ import {
   type CoordinatorCardLayout,
 } from '../components/ProjectCoordinatorCard';
 import { BranchMark, ProjectIntegrationLine } from '../components/ProjectIntegrationLine';
-import { ProjectOpenItems } from '../components/ProjectProgressStatus';
+import { ProjectOpenItems, useOpenDoneRequest } from '../components/ProjectProgressStatus';
+import { ProjectDoneDialog } from '../components/ProjectSettlementCard';
 import { ProjectRunSettings } from '../components/ProjectRunSettings';
 import { ProjectStartDialog } from '../components/StartProjectCard';
 import { ProjectCrossingsCard } from '../components/ProjectCrossingsCard';
@@ -98,6 +99,12 @@ import { useOpenProjectTask } from '../lib/projectTaskRoute';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import { useToast } from '../lib/toast';
 import { useMediaQuery } from '../lib/useMediaQuery';
+import {
+  doneProvenance,
+  PROJECT_DONE_COPY,
+  type ProjectDerivedDone,
+  type ProjectDoneDocument,
+} from '../lib/projectDone';
 
 // The panel a task opens in over this page — TaskDetailPanel, and the transcript and editors it
 // draws — is needed only once a task is open, so it is not on the page's own import path: the
@@ -135,6 +142,9 @@ interface Project {
    *  server that predates the field, null on a project that has not decided and not integrated. */
   integration?: ProjectListIntegration | null;
   coordinatorActivity?: ProjectListCoordinatorActivity | null;
+  doneBy?: 'OWNER' | 'DERIVED' | null;
+  doneAt?: string | null;
+  acceptedGaps?: readonly Record<string, unknown>[] | null;
 }
 
 /** One stated criterion, plus the two facts the server offers about the work filed under it.
@@ -191,6 +201,7 @@ interface ProjectDetail extends Omit<Project, 'integration'> {
    *  one name is what the two endpoints do, and a type that picked one of them would be describing
    *  the other endpoint's payload. */
   integration?: ProjectIntegrationSettings;
+  derivedDone?: ProjectDerivedDone;
 }
 
 export const STATUS_COLOR: Record<Project['status'], string> = {
@@ -596,6 +607,9 @@ export function ProjectsPage() {
                       {filter === 'OPEN' && !phone ? (
                         <Tag color={STATUS_COLOR[p.status]}>{p.status}</Tag>
                       ) : null}
+                      {p.status === 'DONE' ? (
+                        <span className="project-row-done-provenance">{doneProvenance(p)}</span>
+                      ) : null}
                     </div>
                     <div className="project-row-goal">{goal}</div>
                   </div>
@@ -852,9 +866,11 @@ const STATUS_PRESS: Record<
 function ProjectStatusActions({
   projectId,
   project,
+  onRecordDone,
 }: {
   projectId: string;
   project: ProjectDetail;
+  onRecordDone?: () => void;
 }) {
   const [press, setPress] = useState<ProjectStatusPress | null>(null);
   const qc = useQueryClient();
@@ -876,19 +892,28 @@ function ProjectStatusActions({
   // Null, not 0, when the document carried no tally at all: "no unfinished work" is a claim of its
   // own, and a project being abandoned is the last place to invent one.
   const unfinished = project.tasksByStatus ? unfinishedTasks(project.tasksByStatus) : null;
+  // Current servers expose the unified derivedDone read.  Keep the old PATCH dialog only for
+  // pre-DONE_REQUEST payloads so an older deployment remains usable during a rolling upgrade.
+  const hasDoneGate = project.derivedDone != null && 'counts' in project.derivedDone;
 
   return (
     <>
       {project.status === 'OPEN' ? (
         <>
-          <Button
-            size="small"
-            type="text"
-            aria-label={`Record ${project.title} as done`}
-            onClick={() => setPress('DONE')}
-          >
-            {STATUS_PRESS.DONE.entry}
-          </Button>
+          {hasDoneGate && onRecordDone ? (
+            <Button size="small" type="text" aria-label={`${PROJECT_DONE_COPY.recordAsDone} ${project.title}`} onClick={onRecordDone}>
+              {STATUS_PRESS.DONE.entry}
+            </Button>
+          ) : (
+            <Button
+              size="small"
+              type="text"
+              aria-label={`Record ${project.title} as done`}
+              onClick={() => setPress('DONE')}
+            >
+              {STATUS_PRESS.DONE.entry}
+            </Button>
+          )}
           <Button
             size="small"
             type="text"
@@ -1017,6 +1042,9 @@ export function ProjectDetailPage() {
     enabled: Boolean(id),
   });
   const p = project.data;
+  // The header's Ready to close is the coordinator's live DONE_REQUEST, read off the open-items
+  // entry the Open items card polls — not the unified done read every OPEN project carries.
+  const doneRequest = useOpenDoneRequest(id);
   const narrow = useMediaQuery(PROJECT_COMMAND_NARROW_QUERY);
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -1048,6 +1076,7 @@ export function ProjectDetailPage() {
   });
   // "Start…" while nobody has asked: the same card, over this page.
   const [starting, setStarting] = useState(false);
+  const [doneDialogOpen, setDoneDialogOpen] = useState(false);
 
   return (
     // 1040 rather than the list page's 900: the panorama's middle row is two cards side by side,
@@ -1099,13 +1128,19 @@ export function ProjectDetailPage() {
               ) : (
                 <Tag color={STATUS_COLOR[p.status]}>{STATUS_LABEL[p.status]}</Tag>
               )}
+              {p.status === 'OPEN' && doneRequest ? (
+                <Tag color="gold">{PROJECT_DONE_COPY.readyToClose}</Tag>
+              ) : null}
+              {p.status === 'DONE' ? (
+                <span className="project-done-provenance">{doneProvenance(p)}</span>
+              ) : null}
               <span>
                 {p._count.tasks} task{p._count.tasks === 1 ? '' : 's'}
               </span>
               {/* Beside the status it writes, because that tag is the only place on this page the
                   status is stated — and until now the only place it could be READ, with every way
                   to change it living behind the API, the CLI or an agent. */}
-              <ProjectStatusActions projectId={id!} project={p} />
+              <ProjectStatusActions projectId={id!} project={p} onRecordDone={() => setDoneDialogOpen(true)} />
               {/* Whether the project is public, beside the status it stands in: the Share pill
                   (Shared · Live while a link is open) and Copy link — the signed-in address — with
                   the ⋯ menu that adds Copy as Markdown (docs/share-links-design.md §8). */}
@@ -1173,8 +1208,18 @@ export function ProjectDetailPage() {
               onReviewStart={() => reviewStart.mutate()}
               reviewingStart={reviewStart.isPending}
               onStartProject={() => setStarting(true)}
+              onReviewDone={p.status === 'OPEN' && p.derivedDone && 'counts' in p.derivedDone ? () => setDoneDialogOpen(true) : undefined}
+              onRecordDone={p.status === 'OPEN' && p.derivedDone && 'counts' in p.derivedDone ? () => setDoneDialogOpen(true) : undefined}
             />
           </ProjectPageBlock>
+          {doneDialogOpen ? (
+            <ProjectDoneDialog
+              projectId={id!}
+              open
+              onClose={() => setDoneDialogOpen(false)}
+              project={p as unknown as ProjectDoneDocument}
+            />
+          ) : null}
           <ProjectStartDialog
             projectId={id!}
             open={starting && started === false}

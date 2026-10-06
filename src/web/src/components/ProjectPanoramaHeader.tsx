@@ -253,7 +253,7 @@ export interface LandingLine {
   updated: string | null;
 }
 
-const JOB_WORDS = {
+export const JOB_WORDS = {
   LAND_TASK: 'Landing',
   CHECK_PROMOTION: 'Merge check',
   LAND_PROMOTION: 'Merge to main',
@@ -335,7 +335,7 @@ export function landingLine(
  * follows the same two states — but neither is the only channel: `checking` and `queued` are the
  * words, and `prefers-reduced-motion` takes the spin away without touching them.
  */
-function LandingRow({ line }: { line: LandingLine }) {
+export function LandingRow({ line }: { line: LandingLine }) {
   return (
     <div className={line.running ? 'project-landing project-landing-running' : 'project-landing'}>
       <div className="project-landing-heading">

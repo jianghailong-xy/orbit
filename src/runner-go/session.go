@@ -245,7 +245,7 @@ func runtimeProvider(job *ClaimedSession) string {
 		p = strings.ToLower(strings.TrimSpace(job.Agent.Provider))
 	}
 	switch p {
-	case providerCodex, providerKimi, providerOpenCode, providerAntigravity:
+	case providerCodex, providerKimi, providerOpenCode, providerAntigravity, providerDsh:
 		return p
 	}
 	return providerClaude
@@ -1449,11 +1449,12 @@ func envWithAgent(agentEnv map[string]string) []string {
 	// New provider processes must not inherit a stale orchestration credential from
 	// launchd/the runner or from agent-configured environment. Their MCP child reads
 	// the private session file and refreshes it lazily instead. Already-running
-	// providers retain the environment fallback for compatibility.
+	// providers retain the environment fallback for compatibility. A person's own
+	// credential (userCredentialEnvKey) is dropped from both sources too.
 	env := make([]string, 0, len(os.Environ())+len(agentEnv))
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")
-		if !sessionContextEnvKey(key) {
+		if !sessionContextEnvKey(key) && !userCredentialEnvKey(key) {
 			env = append(env, entry)
 		}
 	}
@@ -1462,7 +1463,7 @@ func envWithAgent(agentEnv map[string]string) []string {
 		// credential store. It is runner context, not an agent-customizable value.
 		// EqualFold also preserves this rule on Windows, whose environment keys are
 		// case-insensitive.
-		if sessionContextEnvKey(k) || strings.EqualFold(k, "ORBIT_HOME") {
+		if sessionContextEnvKey(k) || userCredentialEnvKey(k) || strings.EqualFold(k, "ORBIT_HOME") {
 			continue
 		}
 		env = append(env, k+"="+v)
@@ -1485,6 +1486,16 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 		return stFailed, true, false
 	}
 	provider := runtimeProvider(job)
+	// The dsh preparer owns fixed-version installation and credential preflight.
+	// Its ACP handshake alone cannot validate an API key.
+	if provider == providerDsh {
+		return providerRuntimeFor(provider).run(sessionProcessArgs{
+			ctx: ctx, shutdownCtx: shutdownCtx, t: t, job: job, leaseGeneration: leaseGeneration,
+			execDir: execDir, scratchDir: scratchDir, emit: emit, emitFor: emitFor, setTurn: setTurn,
+			firstSpawn: firstSpawn, bg: bg, completeTurn: completeTurn,
+			waitTurnPermit: waitTurnPermit, onLeaseLost: onLeaseLost,
+		})
+	}
 	// The engine CLI is installed on demand, so this is where a runner that has never
 	// run this provider gets it — and where a machine that can't (no consent, install
 	// failed, installed but signed out) fails with something actionable instead of a

@@ -1,0 +1,45 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs choices-motion.browser.mjs --project=webkit-dark-phone --max-failures=1
+
+[WebServer] (node:3231929) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 24 tests using 1 worker
+
+(node:3232650) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches attachment (1.8s)
+  ✓   2 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches attachment (2.0s)
+  ✓   3 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches attachment (1.9s)
+  ✓   4 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches expiry (1.6s)
+  ✓   5 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches expiry (2.0s)
+  ✓   6 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches expiry (2.2s)
+  ✓   7 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches search (1.8s)
+  ✓   8 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches search (2.0s)
+  ✓   9 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches search (2.0s)
+  ✓  10 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches multiple (1.6s)
+  ✓  11 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches multiple (2.1s)
+  ✓  12 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches multiple (2.0s)
+  ✓  13 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches popover (1.6s)
+  ✓  14 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches popover (2.0s)
+  ✓  15 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches popover (2.0s)
+  ✓  16 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches tooltip (1.9s)
+  ✓  17 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches tooltip (2.0s)
+  ✓  18 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches tooltip (2.0s)
+  ✓  19 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:136:83 › popover center zoom origin matches (2.1s)
+  ✓  20 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:136:83 › popover end zoom origin matches (2.1s)
+  ✓  21 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:136:83 › tooltip center zoom origin matches (2.1s)
+  ✓  22 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:136:83 › tooltip end zoom origin matches (2.0s)
+  ✓  23 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:155:41 › submenu left edge zoom matches and stays in view (2.9s)
+  ✓  24 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:155:41 › submenu right edge zoom matches and stays in view (3.2s)
+
+  24 passed (49.9s)

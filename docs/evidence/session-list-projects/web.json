@@ -1,0 +1,65 @@
+{
+  "source": "Real AppShell and WorkspaceView with REST display fixtures; no DOM or CSS replacement",
+  "browser": "153.0.8010.12",
+  "viewport": {
+    "width": 1280,
+    "height": 900
+  },
+  "errors": [],
+  "measured": [
+    {
+      "title": "Background job lifecycle",
+      "height": 64,
+      "lines": 2,
+      "status": "needs-you",
+      "progress": "27/34",
+      "preview": "Approve merge to main"
+    },
+    {
+      "title": "Review the component migration",
+      "height": 64,
+      "lines": 2,
+      "status": null,
+      "preview": "The interface checks are ready."
+    },
+    {
+      "title": "Background indexing",
+      "height": 64,
+      "lines": 2,
+      "status": "jobs",
+      "progress": "4/6",
+      "preview": "Background process running…"
+    },
+    {
+      "title": "Wiki maintenance",
+      "height": 64,
+      "lines": 2,
+      "status": null,
+      "progress": "7/10",
+      "preview": "Resolving a merge conflict · 18m"
+    },
+    {
+      "title": "Codex quota reset",
+      "height": 64,
+      "lines": 2,
+      "status": "needs-you",
+      "progress": "9/12",
+      "preview": "Waiting for your confirmation · Resume after quota recovery"
+    },
+    {
+      "title": "Orbit Watch",
+      "height": 64,
+      "lines": 2,
+      "status": "running",
+      "progress": "5/11",
+      "preview": "Running task_get…"
+    },
+    {
+      "title": "Release notes",
+      "height": 64,
+      "lines": 2,
+      "status": null,
+      "preview": "The release notes are ready to review."
+    }
+  ]
+}

@@ -16,6 +16,8 @@
     "pretest:ui-controls": "npm run build -w @orbit/shared",
     "test:ui-overlays": "playwright test --config ui-migration/overlays.config.mjs",
     "pretest:ui-overlays": "npm run build -w @orbit/shared",
+    "test:ui-choices": "playwright test --config ui-migration/choices.config.mjs",
+    "pretest:ui-choices": "npm run build -w @orbit/shared",
     "test:ui-toasts": "playwright test --config ui-migration/toasts.config.mjs",
     "pretest:ui-toasts": "npm run build -w @orbit/shared"
   },

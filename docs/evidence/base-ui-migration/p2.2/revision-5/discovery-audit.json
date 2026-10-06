@@ -1,0 +1,3646 @@
+{
+  "count": 520,
+  "sameProjectFileTitlesAsR4": true,
+  "tests": [
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 51,
+      "column": 51,
+      "title": "no-preference Dialog Popover Select exits restore one layer at a time"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 51,
+      "column": 51,
+      "title": "reduce Dialog Popover Select exits restore one layer at a time"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion attachment has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion expiry has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion search has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion multiple has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion popover has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion tooltip has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal attachment can reopen during exit without stale unmount"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal expiry can reopen during exit without stale unmount"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal search can reopen during exit without stale unmount"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal popover can reopen during exit without stale unmount"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches attachment"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches attachment"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches attachment"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches expiry"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches expiry"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches expiry"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches search"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches search"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches search"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches multiple"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches multiple"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches multiple"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches popover"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches popover"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches popover"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "popover center zoom origin matches"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "popover end zoom origin matches"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "tooltip center zoom origin matches"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "tooltip end zoom origin matches"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 160,
+      "column": 41,
+      "title": "submenu left edge zoom matches and stays in view"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 160,
+      "column": 41,
+      "title": "submenu right edge zoom matches and stays in view"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "expiry dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "account dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "search dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "attachment matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "access matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "expiry matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "account matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "search matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "popover matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "tooltip matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 158,
+      "column": 1,
+      "title": "empty, disabled, hover and focus choice surfaces match the existing states"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 198,
+      "column": 1,
+      "title": "menu arrows, disabled items, submenu, checkbox and focus return work"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 231,
+      "column": 1,
+      "title": "touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 263,
+      "column": 1,
+      "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 292,
+      "column": 1,
+      "title": "search preserves selection, filters groups, handles no results, composition and explicit clear"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 323,
+      "column": 1,
+      "title": "remote search accepts server labels and resets an action picker without local filtering"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 343,
+      "column": 37,
+      "title": "Dialog owns choices, top-layer Escape, Tab and theme"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 343,
+      "column": 37,
+      "title": "legacy Modal owns choices, top-layer Escape, Tab and theme"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 381,
+      "column": 1,
+      "title": "legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 400,
+      "column": 1,
+      "title": "popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 435,
+      "column": 1,
+      "title": "open choices follow the live system theme without losing selection"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 453,
+      "column": 1,
+      "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 486,
+      "column": 42,
+      "title": "multiple chip appearance matches current labels and email fields"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 486,
+      "column": 42,
+      "title": "tags chip appearance matches current labels and email fields"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 515,
+      "column": 1,
+      "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 552,
+      "column": 1,
+      "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 592,
+      "column": 1,
+      "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 631,
+      "column": 1,
+      "title": "search option touch selects once and preserves input focus"
+    },
+    {
+      "project": "chromium-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 642,
+      "column": 1,
+      "title": "disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 51,
+      "column": 51,
+      "title": "no-preference Dialog Popover Select exits restore one layer at a time"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 51,
+      "column": 51,
+      "title": "reduce Dialog Popover Select exits restore one layer at a time"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion attachment has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion expiry has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion search has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion multiple has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion popover has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion tooltip has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal attachment can reopen during exit without stale unmount"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal expiry can reopen during exit without stale unmount"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal search can reopen during exit without stale unmount"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal popover can reopen during exit without stale unmount"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches attachment"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches attachment"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches attachment"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches expiry"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches expiry"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches expiry"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches search"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches search"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches search"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches multiple"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches multiple"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches multiple"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches popover"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches popover"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches popover"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "popover center zoom origin matches"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "popover end zoom origin matches"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "tooltip center zoom origin matches"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "tooltip end zoom origin matches"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 160,
+      "column": 41,
+      "title": "submenu left edge zoom matches and stays in view"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 160,
+      "column": 41,
+      "title": "submenu right edge zoom matches and stays in view"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "expiry dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "account dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "search dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "attachment matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "access matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "expiry matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "account matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "search matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "popover matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "tooltip matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 158,
+      "column": 1,
+      "title": "empty, disabled, hover and focus choice surfaces match the existing states"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 198,
+      "column": 1,
+      "title": "menu arrows, disabled items, submenu, checkbox and focus return work"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 231,
+      "column": 1,
+      "title": "touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 263,
+      "column": 1,
+      "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 292,
+      "column": 1,
+      "title": "search preserves selection, filters groups, handles no results, composition and explicit clear"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 323,
+      "column": 1,
+      "title": "remote search accepts server labels and resets an action picker without local filtering"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 343,
+      "column": 37,
+      "title": "Dialog owns choices, top-layer Escape, Tab and theme"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 343,
+      "column": 37,
+      "title": "legacy Modal owns choices, top-layer Escape, Tab and theme"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 381,
+      "column": 1,
+      "title": "legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 400,
+      "column": 1,
+      "title": "popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 435,
+      "column": 1,
+      "title": "open choices follow the live system theme without losing selection"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 453,
+      "column": 1,
+      "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 486,
+      "column": 42,
+      "title": "multiple chip appearance matches current labels and email fields"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 486,
+      "column": 42,
+      "title": "tags chip appearance matches current labels and email fields"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 515,
+      "column": 1,
+      "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 552,
+      "column": 1,
+      "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 592,
+      "column": 1,
+      "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 631,
+      "column": 1,
+      "title": "search option touch selects once and preserves input focus"
+    },
+    {
+      "project": "chromium-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 642,
+      "column": 1,
+      "title": "disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 51,
+      "column": 51,
+      "title": "no-preference Dialog Popover Select exits restore one layer at a time"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 51,
+      "column": 51,
+      "title": "reduce Dialog Popover Select exits restore one layer at a time"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion attachment has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion expiry has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion search has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion multiple has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion popover has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion tooltip has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal attachment can reopen during exit without stale unmount"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal expiry can reopen during exit without stale unmount"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal search can reopen during exit without stale unmount"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal popover can reopen during exit without stale unmount"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches attachment"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches attachment"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches attachment"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches expiry"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches expiry"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches expiry"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches search"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches search"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches search"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches multiple"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches multiple"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches multiple"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches popover"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches popover"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches popover"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "popover center zoom origin matches"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "popover end zoom origin matches"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "tooltip center zoom origin matches"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "tooltip end zoom origin matches"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 160,
+      "column": 41,
+      "title": "submenu left edge zoom matches and stays in view"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 160,
+      "column": 41,
+      "title": "submenu right edge zoom matches and stays in view"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "expiry dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "account dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "search dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "attachment matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "access matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "expiry matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "account matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "search matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "popover matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "tooltip matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 158,
+      "column": 1,
+      "title": "empty, disabled, hover and focus choice surfaces match the existing states"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 198,
+      "column": 1,
+      "title": "menu arrows, disabled items, submenu, checkbox and focus return work"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 231,
+      "column": 1,
+      "title": "touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 263,
+      "column": 1,
+      "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 292,
+      "column": 1,
+      "title": "search preserves selection, filters groups, handles no results, composition and explicit clear"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 323,
+      "column": 1,
+      "title": "remote search accepts server labels and resets an action picker without local filtering"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 343,
+      "column": 37,
+      "title": "Dialog owns choices, top-layer Escape, Tab and theme"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 343,
+      "column": 37,
+      "title": "legacy Modal owns choices, top-layer Escape, Tab and theme"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 381,
+      "column": 1,
+      "title": "legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 400,
+      "column": 1,
+      "title": "popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 435,
+      "column": 1,
+      "title": "open choices follow the live system theme without losing selection"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 453,
+      "column": 1,
+      "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 486,
+      "column": 42,
+      "title": "multiple chip appearance matches current labels and email fields"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 486,
+      "column": 42,
+      "title": "tags chip appearance matches current labels and email fields"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 515,
+      "column": 1,
+      "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 552,
+      "column": 1,
+      "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 592,
+      "column": 1,
+      "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 631,
+      "column": 1,
+      "title": "search option touch selects once and preserves input focus"
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 642,
+      "column": 1,
+      "title": "disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 51,
+      "column": 51,
+      "title": "no-preference Dialog Popover Select exits restore one layer at a time"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 51,
+      "column": 51,
+      "title": "reduce Dialog Popover Select exits restore one layer at a time"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion attachment has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion expiry has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion search has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion multiple has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion popover has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion tooltip has no transition and dismisses cleanly"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal attachment can reopen during exit without stale unmount"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal expiry can reopen during exit without stale unmount"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal search can reopen during exit without stale unmount"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal popover can reopen during exit without stale unmount"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches attachment"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches attachment"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches attachment"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches expiry"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches expiry"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches expiry"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches search"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches search"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches search"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches multiple"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches multiple"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches multiple"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches popover"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches popover"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches popover"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "popover center zoom origin matches"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "popover end zoom origin matches"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "tooltip center zoom origin matches"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "tooltip end zoom origin matches"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 160,
+      "column": 41,
+      "title": "submenu left edge zoom matches and stays in view"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 160,
+      "column": 41,
+      "title": "submenu right edge zoom matches and stays in view"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "expiry dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "account dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "search dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "attachment matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "access matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "expiry matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "account matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "search matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "popover matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "tooltip matches the current surface, density and option states"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 158,
+      "column": 1,
+      "title": "empty, disabled, hover and focus choice surfaces match the existing states"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 198,
+      "column": 1,
+      "title": "menu arrows, disabled items, submenu, checkbox and focus return work"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 231,
+      "column": 1,
+      "title": "touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 263,
+      "column": 1,
+      "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 292,
+      "column": 1,
+      "title": "search preserves selection, filters groups, handles no results, composition and explicit clear"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 323,
+      "column": 1,
+      "title": "remote search accepts server labels and resets an action picker without local filtering"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 343,
+      "column": 37,
+      "title": "Dialog owns choices, top-layer Escape, Tab and theme"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 343,
+      "column": 37,
+      "title": "legacy Modal owns choices, top-layer Escape, Tab and theme"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 381,
+      "column": 1,
+      "title": "legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 400,
+      "column": 1,
+      "title": "popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 435,
+      "column": 1,
+      "title": "open choices follow the live system theme without losing selection"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 453,
+      "column": 1,
+      "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 486,
+      "column": 42,
+      "title": "multiple chip appearance matches current labels and email fields"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 486,
+      "column": 42,
+      "title": "tags chip appearance matches current labels and email fields"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 515,
+      "column": 1,
+      "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 552,
+      "column": 1,
+      "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 592,
+      "column": 1,
+      "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 631,
+      "column": 1,
+      "title": "search option touch selects once and preserves input focus"
+    },
+    {
+      "project": "chromium-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 642,
+      "column": 1,
+      "title": "disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 51,
+      "column": 51,
+      "title": "no-preference Dialog Popover Select exits restore one layer at a time"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 51,
+      "column": 51,
+      "title": "reduce Dialog Popover Select exits restore one layer at a time"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion attachment has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion expiry has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion search has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion multiple has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion popover has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion tooltip has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal attachment can reopen during exit without stale unmount"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal expiry can reopen during exit without stale unmount"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal search can reopen during exit without stale unmount"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal popover can reopen during exit without stale unmount"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches attachment"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches attachment"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches attachment"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches expiry"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches expiry"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches expiry"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches search"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches search"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches search"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches multiple"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches multiple"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches multiple"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches popover"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches popover"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches popover"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "popover center zoom origin matches"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "popover end zoom origin matches"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "tooltip center zoom origin matches"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "tooltip end zoom origin matches"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 160,
+      "column": 41,
+      "title": "submenu left edge zoom matches and stays in view"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 160,
+      "column": 41,
+      "title": "submenu right edge zoom matches and stays in view"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "expiry dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "account dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "search dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "attachment matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "access matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "expiry matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "account matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "search matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "popover matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "tooltip matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 158,
+      "column": 1,
+      "title": "empty, disabled, hover and focus choice surfaces match the existing states"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 198,
+      "column": 1,
+      "title": "menu arrows, disabled items, submenu, checkbox and focus return work"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 231,
+      "column": 1,
+      "title": "touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 263,
+      "column": 1,
+      "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 292,
+      "column": 1,
+      "title": "search preserves selection, filters groups, handles no results, composition and explicit clear"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 323,
+      "column": 1,
+      "title": "remote search accepts server labels and resets an action picker without local filtering"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 343,
+      "column": 37,
+      "title": "Dialog owns choices, top-layer Escape, Tab and theme"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 343,
+      "column": 37,
+      "title": "legacy Modal owns choices, top-layer Escape, Tab and theme"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 381,
+      "column": 1,
+      "title": "legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 400,
+      "column": 1,
+      "title": "popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 435,
+      "column": 1,
+      "title": "open choices follow the live system theme without losing selection"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 453,
+      "column": 1,
+      "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 486,
+      "column": 42,
+      "title": "multiple chip appearance matches current labels and email fields"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 486,
+      "column": 42,
+      "title": "tags chip appearance matches current labels and email fields"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 515,
+      "column": 1,
+      "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 552,
+      "column": 1,
+      "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 592,
+      "column": 1,
+      "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 631,
+      "column": 1,
+      "title": "search option touch selects once and preserves input focus"
+    },
+    {
+      "project": "webkit-light-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 642,
+      "column": 1,
+      "title": "disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 51,
+      "column": 51,
+      "title": "no-preference Dialog Popover Select exits restore one layer at a time"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 51,
+      "column": 51,
+      "title": "reduce Dialog Popover Select exits restore one layer at a time"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion attachment has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion expiry has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion search has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion multiple has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion popover has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion tooltip has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal attachment can reopen during exit without stale unmount"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal expiry can reopen during exit without stale unmount"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal search can reopen during exit without stale unmount"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal popover can reopen during exit without stale unmount"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches attachment"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches attachment"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches attachment"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches expiry"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches expiry"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches expiry"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches search"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches search"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches search"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches multiple"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches multiple"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches multiple"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches popover"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches popover"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches popover"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "popover center zoom origin matches"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "popover end zoom origin matches"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "tooltip center zoom origin matches"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "tooltip end zoom origin matches"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 160,
+      "column": 41,
+      "title": "submenu left edge zoom matches and stays in view"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 160,
+      "column": 41,
+      "title": "submenu right edge zoom matches and stays in view"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "expiry dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "account dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "search dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "attachment matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "access matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "expiry matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "account matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "search matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "popover matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "tooltip matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 158,
+      "column": 1,
+      "title": "empty, disabled, hover and focus choice surfaces match the existing states"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 198,
+      "column": 1,
+      "title": "menu arrows, disabled items, submenu, checkbox and focus return work"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 231,
+      "column": 1,
+      "title": "touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 263,
+      "column": 1,
+      "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 292,
+      "column": 1,
+      "title": "search preserves selection, filters groups, handles no results, composition and explicit clear"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 323,
+      "column": 1,
+      "title": "remote search accepts server labels and resets an action picker without local filtering"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 343,
+      "column": 37,
+      "title": "Dialog owns choices, top-layer Escape, Tab and theme"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 343,
+      "column": 37,
+      "title": "legacy Modal owns choices, top-layer Escape, Tab and theme"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 381,
+      "column": 1,
+      "title": "legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 400,
+      "column": 1,
+      "title": "popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 435,
+      "column": 1,
+      "title": "open choices follow the live system theme without losing selection"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 453,
+      "column": 1,
+      "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 486,
+      "column": 42,
+      "title": "multiple chip appearance matches current labels and email fields"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 486,
+      "column": 42,
+      "title": "tags chip appearance matches current labels and email fields"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 515,
+      "column": 1,
+      "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 552,
+      "column": 1,
+      "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 592,
+      "column": 1,
+      "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 631,
+      "column": 1,
+      "title": "search option touch selects once and preserves input focus"
+    },
+    {
+      "project": "webkit-light-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 642,
+      "column": 1,
+      "title": "disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 51,
+      "column": 51,
+      "title": "no-preference Dialog Popover Select exits restore one layer at a time"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 51,
+      "column": 51,
+      "title": "reduce Dialog Popover Select exits restore one layer at a time"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion attachment has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion expiry has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion search has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion multiple has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion popover has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion tooltip has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal attachment can reopen during exit without stale unmount"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal expiry can reopen during exit without stale unmount"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal search can reopen during exit without stale unmount"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal popover can reopen during exit without stale unmount"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches attachment"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches attachment"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches attachment"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches expiry"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches expiry"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches expiry"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches search"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches search"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches search"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches multiple"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches multiple"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches multiple"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches popover"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches popover"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches popover"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "popover center zoom origin matches"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "popover end zoom origin matches"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "tooltip center zoom origin matches"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "tooltip end zoom origin matches"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 160,
+      "column": 41,
+      "title": "submenu left edge zoom matches and stays in view"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 160,
+      "column": 41,
+      "title": "submenu right edge zoom matches and stays in view"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "expiry dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "account dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "search dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "attachment matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "access matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "expiry matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "account matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "search matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "popover matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "tooltip matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 158,
+      "column": 1,
+      "title": "empty, disabled, hover and focus choice surfaces match the existing states"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 198,
+      "column": 1,
+      "title": "menu arrows, disabled items, submenu, checkbox and focus return work"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 231,
+      "column": 1,
+      "title": "touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 263,
+      "column": 1,
+      "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 292,
+      "column": 1,
+      "title": "search preserves selection, filters groups, handles no results, composition and explicit clear"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 323,
+      "column": 1,
+      "title": "remote search accepts server labels and resets an action picker without local filtering"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 343,
+      "column": 37,
+      "title": "Dialog owns choices, top-layer Escape, Tab and theme"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 343,
+      "column": 37,
+      "title": "legacy Modal owns choices, top-layer Escape, Tab and theme"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 381,
+      "column": 1,
+      "title": "legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 400,
+      "column": 1,
+      "title": "popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 435,
+      "column": 1,
+      "title": "open choices follow the live system theme without losing selection"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 453,
+      "column": 1,
+      "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 486,
+      "column": 42,
+      "title": "multiple chip appearance matches current labels and email fields"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 486,
+      "column": 42,
+      "title": "tags chip appearance matches current labels and email fields"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 515,
+      "column": 1,
+      "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 552,
+      "column": 1,
+      "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 592,
+      "column": 1,
+      "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 631,
+      "column": 1,
+      "title": "search option touch selects once and preserves input focus"
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 642,
+      "column": 1,
+      "title": "disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 51,
+      "column": 51,
+      "title": "no-preference Dialog Popover Select exits restore one layer at a time"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 51,
+      "column": 51,
+      "title": "reduce Dialog Popover Select exits restore one layer at a time"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion attachment has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion expiry has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion search has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion multiple has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion popover has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 115,
+      "column": 90,
+      "title": "reduced motion tooltip has no transition and dismisses cleanly"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal attachment can reopen during exit without stale unmount"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal expiry can reopen during exit without stale unmount"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal search can reopen during exit without stale unmount"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+      "line": 132,
+      "column": 67,
+      "title": "normal popover can reopen during exit without stale unmount"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches attachment"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches attachment"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches attachment"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches expiry"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches expiry"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches expiry"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches search"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches search"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches search"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches multiple"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches multiple"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches multiple"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches popover"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches popover"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches popover"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal bottom entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal top entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 104,
+      "column": 3,
+      "title": "normal flipped entrance and exit motion matches tooltip"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "popover center zoom origin matches"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "popover end zoom origin matches"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "tooltip center zoom origin matches"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 141,
+      "column": 83,
+      "title": "tooltip end zoom origin matches"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 160,
+      "column": 41,
+      "title": "submenu left edge zoom matches and stays in view"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-motion.browser.mjs",
+      "line": 160,
+      "column": 41,
+      "title": "submenu right edge zoom matches and stays in view"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "expiry dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "account dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices-open-value.browser.mjs",
+      "line": 31,
+      "column": 53,
+      "title": "search dims the current value while open and restores it on Escape"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "attachment matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "access matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "expiry matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "account matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "search matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "popover matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 83,
+      "column": 3,
+      "title": "tooltip matches the current surface, density and option states"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 158,
+      "column": 1,
+      "title": "empty, disabled, hover and focus choice surfaces match the existing states"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 198,
+      "column": 1,
+      "title": "menu arrows, disabled items, submenu, checkbox and focus return work"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 231,
+      "column": 1,
+      "title": "touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 263,
+      "column": 1,
+      "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 292,
+      "column": 1,
+      "title": "search preserves selection, filters groups, handles no results, composition and explicit clear"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 323,
+      "column": 1,
+      "title": "remote search accepts server labels and resets an action picker without local filtering"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 343,
+      "column": 37,
+      "title": "Dialog owns choices, top-layer Escape, Tab and theme"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 343,
+      "column": 37,
+      "title": "legacy Modal owns choices, top-layer Escape, Tab and theme"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 381,
+      "column": 1,
+      "title": "legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 400,
+      "column": 1,
+      "title": "popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 435,
+      "column": 1,
+      "title": "open choices follow the live system theme without losing selection"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 453,
+      "column": 1,
+      "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 486,
+      "column": 42,
+      "title": "multiple chip appearance matches current labels and email fields"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 486,
+      "column": 42,
+      "title": "tags chip appearance matches current labels and email fields"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 515,
+      "column": 1,
+      "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 552,
+      "column": 1,
+      "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 592,
+      "column": 1,
+      "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 631,
+      "column": 1,
+      "title": "search option touch selects once and preserves input focus"
+    },
+    {
+      "project": "webkit-dark-phone",
+      "file": "src/web/ui-migration/choices.browser.mjs",
+      "line": 642,
+      "column": 1,
+      "title": "disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen"
+    }
+  ]
+}

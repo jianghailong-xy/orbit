@@ -1,0 +1,16 @@
+{
+  "command": [
+    "node",
+    "node_modules/@playwright/test/cli.js",
+    "test",
+    "--config",
+    "src/web/ui-migration/coordinator-choices-repeat.config.mjs",
+    "--project=chromium-dark-phone",
+    "--grep",
+    "multiple chip appearance",
+    "--repeat-each=3"
+  ],
+  "exitCode": 0,
+  "seconds": 17.78,
+  "reason": "Original full run failed at fixture load: net::ERR_NETWORK_CHANGED. No product or test assertion changes."
+}

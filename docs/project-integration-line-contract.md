@@ -680,7 +680,7 @@ interface ProjectPromotionView {
 }
 ```
 
-`GET /projects/:id/promotions/merged` → `ProjectPromotionView[]`，最近的合入在前（上限 20 条）：这次合入留下的**记录**，会话把它画在**它发生的那一刻**（`ProjectPromotionReceipt`，`WorkspaceView` 用 `decisionReceiptAnchor` 按 `merged.at` 落位）。
+`GET /projects/:id/promotions/merged` → `ProjectPromotionView[]`，最近的合入在前（上限 20 条）：这次合入留下的**记录**，画在**它发生的那一刻**：项目 sessions 页的时间线上一行（`ProjectTimeline` / `projectTimelineSections`，按 `merged.at` 排进会话之间），协调会话里一行（`ProjectPromotionReceipt` 的单行形态，`WorkspaceView` 用 `decisionReceiptAnchor` 按 `merged.at` 落位）；两处点开都是同一份回执（修订 10）。
 
 自己的读接口而不是 `current` 的加宽：`current` 是**现在在问**的那个候选，下一个候选一出现它就换人——从它画出来的回执，每次分支再被提议都会说成另一次合入；而在它换人之前，同一张卡就一直待在会话底部，压在之后每一条消息下面（owner 2026-09-21 的报告）。`MERGED` 行是终态且不可变（`project_promotion_terminal_guard`），自带 `merged_sha` / `merged_at`，所以它读回来永远是它当时那次合入。项目页没有转录可以落位，仍按 `current` 画 C 状态那一张。
 
@@ -871,6 +871,7 @@ RETURNING id, project_id;
 | 交给 owner | MCP `open_item_hand_over { itemId, note }`；web「Hand to owner」 | 协调会话或 owner | OWNER / `HANDED_OVER`，推送 |
 | 让协调会话再看一次 | web「Ask the coordinator again」：`POST …/open-items/:itemId/return-to-coordinator` | owner | COORDINATOR / `DEFAULT`，重置 `waiting_since` 与 `escalate_at`，走 X-D4 第 1 条；**要求存在活着的协调会话，不要求 `coordinator_enabled`**——开关约束的是自动交付（附录 B 修订 2） |
 | 列表 | MCP `open_item_list { projectId }`；`GET /projects/:id/open-items?state=` | 项目内会话或 owner | 读 |
+| 就此对话 | web「Chat about this」：异常卡（任务的、晋升的，处理中 / 已结束的同样有）与 BLOCKED 晋升卡；不在协调会话里时经 `/sessions/:id?intent=chat-about&item=…`（或 `&promotion=…`）打开它 | owner；可否由读模型的 `chat` 决定（§4.8） | 一条普通轮次进项目的协调会话，卡上的事实（项目、待办、失败原因、处理状态、各 id）排在 owner 打的字前面，按发送那一刻的读模型写（按下后条目已离开读模型、或候选已不再 BLOCKED 的，按按下时的样子发出并注明已变）；**不是门**：不重跑、不合并、不交回、不关闭，卡上原有的门与权限不变 |
 
 **协调会话处理中的生命周期（H1–H5，迁移 0368，2026-10-03）**。同一套规则管任务落地卡与晋升卡（项目分支合入 main 的卡，没有 taskId）。缘由：晋升的 `MERGE_CHECK` 红了时，那条待办没有 taskId，协调会话无门可走（消息原文「今天也没有一条属于协调会话的重试门」），只能等时钟把它升级成 owner 待办；任务落地卡的重排又在发起那一刻就被写成 `SUPERSEDED / RETRIED`，「处理中」和「处理完」在记录里分不开，成功也没有统一、可审计的 HANDLED。TASK_FAILED 不在此列，仍按 §4.2 的事实关闭。
 
@@ -894,8 +895,13 @@ interface OpenItemRow {
               sessionId: string | null; at: Date | null };
   actions: Array<'REVIEW' | 'ANSWER' | 'OPEN' | 'OPEN_COORDINATOR' | 'OPEN_TASK_SESSION'
                | 'VIEW_LOG' | 'RETRY' | 'CANCEL_TASK' | 'HAND_TO_OWNER' | 'ASK_COORDINATOR_AGAIN' | 'RESUME'>;
+  chat: { sessionId: string | null;
+          stage: 'HANDLING' | 'WITH_COORDINATOR' | 'WITH_OWNER' | 'HANDLED' | 'SUPERSEDED';
+          refusal: 'NO_COORDINATOR' | 'COORDINATOR_UNAVAILABLE' | 'SUPERSEDED' | null };
 }
 ```
+
+`chat`（修订 9，`openItemChat`）：`sessionId` 是项目此刻的协调会话；`stage` 依次取 outcome（`RETRIED` → SUPERSEDED、`HANDLED` → HANDLED）、在途的 `handling`、`assignee`；`refusal` 只在三种情况下非空——已被新待办取代、项目没有协调会话、协调会话此刻收不了消息（与会话的 `canSend` 同一判据，`SessionsService.receiveBlockedReasonFor`；已结束但可恢复的会话**可以**收，与只管平台轮次的 `sessionHasEnded` 不同）。`settled` 的行同样带 `chat`。
 
 `GET /projects/:id/open-items` 返回 `{ needsYou: OpenItemRow[]; withCoordinator: OpenItemRow[] }`，两组各按 `waitingSince` 升序（效果图 2「oldest first」）。
 
@@ -1239,7 +1245,9 @@ interface ProjectListAttention {
 
 会话页卡片区（`WorkspaceView` 的 `<Transcript>` 之后）按既有模式挂 `Session*Card({ projectId })`，React key 带前缀，查询 `['project', id, …]`，每 20 秒轮询，只在项目协调会话里渲染。项目页 Open items 的 `Review` / `Answer` 展开同一组件。
 
-**卡片区只放"现在为真"的东西**（2026-09-21，2026-09-24 扩到被拦下的候选）：已经发生的合入是**记录**，画在它发生的那一刻（§3.6 的 `merged` + `ProjectPromotionReceipt`）；被检查拦下的候选（`decided_at`）同样是既成事实，那张卡自己画在那一刻（web `promotionRecordMoment`、原生 `DeliveryAnchor.promotion`）。卡片区那一张传 `drawRecords={false}` 不再画这两者——留在卡片区的记录会压在之后每条消息下面直到项目结束，而下一个候选出现时，同一张卡会改口说另一次合入。另外四条回执（criteria / evidence / owner / settlement）已经按同一条规则落位。
+**合入 main 的卡在项目 sessions 页**（修订 10）：`ProjectPromotionCard` 的家是项目 sessions 页进度条下面那张卡（iOS `ProjectMergeCardView`，web `ProjectMergeStrip`）：检查中（`CHECK_PROMOTION` 在途，进度条里那行合入状态挪进来）、A、B、D 四个时刻都在这张卡上，按钮就是卡的三扇门，Details 打开完整的卡；C 不在卡上，是时间线上的一行。协调会话里每个时刻只留**一行**（iOS `PromotionEventLine` / `PromotionReceiptLine`，web `asLine`），说卡的状态（`PromotionCards.eventLine` / `promotionEventLine`），点开就是完整的卡或回执；等你时那一行是橙色，needs-you 计数照旧。macOS 没有项目 sessions 页，靠这一行和项目页 Open items 的 `Review` 进同一个审阅。
+
+**卡片区只放"现在为真"的东西**（2026-09-21，2026-09-24 扩到被拦下的候选；修订 10 起这些都只画成一行）：已经发生的合入是**记录**，画在它发生的那一刻（§3.6 的 `merged` + `ProjectPromotionReceipt`）；被检查拦下的候选（`decided_at`）同样是既成事实，那张卡自己画在那一刻（web `promotionRecordMoment`、原生 `DeliveryAnchor.promotion`）。卡片区那一张传 `drawRecords={false}` 不再画这两者——留在卡片区的记录会压在之后每条消息下面直到项目结束，而下一个候选出现时，同一张卡会改口说另一次合入。另外四条回执（criteria / evidence / owner / settlement）已经按同一条规则落位。
 
 | 组件 | 负责任务 | 状态与文案（英文，取自效果图） |
 |---|---|---|
@@ -1262,7 +1270,7 @@ interface ProjectListAttention {
 | `escalated-to-you` | X-E1、X-C3、X-D5、X-D6、交给 owner | `Now yours — no one acted on this for <duration>`（按 `assignee_reason` 变化） | `<item title> · <project>` |
 | `fuse-paused` | F-T1 | `The coordinator paused itself` | `<why> · <project>` |
 
-载荷：`category: 'ORBIT_OWNER_ITEM'`、`kind`、`sessionID`（项目协调会话，客户端据此打开会话里的同一张卡）、`projectID`、`openItemID`、`thread-id: projectID`、`apns-collapse-id: owner-item-<itemId>`。协调会话自己能处理的例外（负责人仍是 COORDINATOR）不推送（owner 决定 7）。
+载荷：`category: 'ORBIT_OWNER_ITEM'`、`kind`、`sessionID`（项目协调会话，客户端据此打开会话里的同一张卡）、`projectID`、`openItemID`、`thread-id: projectID`、`apns-collapse-id: owner-item-<itemId>`。`approve-merge-to-main` 的点按在 iOS 打开项目 sessions 页（卡在那里，`AppIntent.openProjectMerge`），应用内横幅同样；其余三类照旧打开协调会话（修订 10）。协调会话自己能处理的例外（负责人仍是 COORDINATOR）不推送（owner 决定 7）。
 
 **V13（Needs-you）**：`owner-decision-signal.ts` 的计数加上负责人为 OWNER 的 OPEN 待办（按项目协调会话归集），于是会话列表的 `pendingApprovals` 与 macOS 菜单栏 `need you` 计数都包含四类（判据 13）。会话摘要增加 `ownerItems: Array<{ kind, title, since }>`，OrbitKit `NeedsYouLogic.banner` 按最早等待取一条，横幅文案 `Approve merge to main · <project>` / `Question from coordinator · <project>` / `Escalated to you · <project>` / `Paused · <project>`。`PushService.needsYouSessions`（APNs 角标）同样计入四类。
 
@@ -1496,3 +1504,5 @@ SELECT count(*) FROM project_coordinator_wake
 - **v1 修订 6**（2026-10-01）：J-T1b 落地为协调会话的 `integration_retry`（理由必填），§4.7 的 owner 门暂不实现。缘由：2026-10-01 项目 `34Y7My8sqhKLWtmCQYv1l` 的三条 DONE 任务（③ `34Y7Utvsd47A14DjMzIzD`、Automatic 路由修复、合并检查基线修复）各只有第 1 代 `LAND_TASK`，都以 `CHECK_FAILED` 结束（合并检查在 main 上本来就红；基线那条是 TASK_ACCEPTANCE 里 `go test` 撞上 10 分钟默认超时），项目分支从未建立；其中两条的待办已被协调会话手工 `HANDLED`，没有在途作业，也没有 owner blocker。`task_start` 只会再跑一遍任务、开新分支，从不重新排落地；契约里写的 J-T1b 一直没有实现，于是没有任何一扇门能让这些成果重新上线，下游全被依赖链挡住。取舍：（1）理由必填、记在新一代作业上（迁移 0344 的四列），因为「平台从不自己重跑」只有在每次重跑都有人说明为什么这次会不同时才成立；（2）权限按待办归属判，没有 OPEN 待办时才看 Automatic——这样协调会话手工关掉的待办（③ 的状态）在 Automatic 下仍可重跑，而 owner 的待办（升级、非 Automatic）只有 owner 交回后才归协调会话，与修订 2 对那次按压的读法一致；（3）冲突不在可重跑之列：同样的提交原样重放只会再冲突；（4）分支取「此刻一次 DONE 会交给线」的那条而不是失败那一代的 `source_ref`：基线任务第 1 代落地的分支 `orbit/transcript-runner-go-5-e1acaf` 已与新的 main 冲突，它的成果在后来那次运行的分支上；（5）再失败的那一代照常开分类待办给协调会话，不加链上限——普通的落地去留不是 owner 的问题（§0 的 COORDINATOR_BOUNDED）。
 - **v1 修订 7**（2026-10-03）：§4.4 X-D5、X-D6 区分协调会话「挂了」与「结束了」。运行失败（会话 FAILED、没有 `end_reason`、仍在 Open——API 错误、登录过期、runner 掉线，`conversationIsDown`）不算结束：新开的例外待办照常归 COORDINATOR；投递时 `createTurn` 拒绝 FAILED 会话，就先不投；失败轮次的排空退回的待办也不再转给 owner，只换 `assigned_at`，好让下一次投递是一条新轮次。会话被重试后，下一轮结束时由 X-D4 第 3 条补投；窗口内没回来，由 X-E1 升级。被人结束、归档、删除的会话照旧交给 owner。缘由：2026-10-02 项目 `34VR0RwUSIcaoO7ZZqv52` 的协调会话从 07:53 起每一轮都被账号限流（429）当场拒掉，runner 把这种轮次判为失败，会话停在 FAILED；09:46 一次 `LAND_TASK` 冲突开出的待办因此一出生就是 OWNER / `COORDINATOR_ENDED`，没有投给任何会话，owner 在 15:50 先重试协调会话、再按「Ask the coordinator again」才把它交回去。代价：协调会话真起不来时，owner 要等窗口走完（默认 2 小时）才收到卡，而不是立刻。`sessionHasEnded` 的其他读者（唤醒投递、§0.3 G6 的钩子、looks-finished）不变。
 - **v1 修订 8**（2026-10-03）：§4.7 增 H1–H5（迁移 0368），改写修订 6 落地 J-T1b 时「重排当场把待办写成 `SUPERSEDED` / `RETRIED`」那一步。协调会话用 `integration_retry` 重排任务落地，或带 `promotionId` 重检 BLOCKED 候选（新入口：runner 门 `POST /runner/projects/:id/promotions/:promotionId/integration/retry`）时，它处理着的集成类待办不在发起那一刻关闭，而是仍 OPEN、记上 `handling_*`、读作「处理中」；由那次作业的终态收口——落地或检查通过 → `RESOLVED / HANDLED`（`resolved_by = COORDINATOR`、发起会话、理由、`resolved_by_job_id`），再失败 → `SUPERSEDED / RETRIED`，`superseded_by_item_id` 指向新开的待办。§4.1 的列表加五列，§4.2 表里三种集成类 kind 的终态一列、§4.7「重试集成」一行随之改写。缘由：2026-10-01 与 10-02，项目 `34Y7My8sqhKLWtmCQYv1l` 的晋升 `MERGE_CHECK` 两次红了，那条待办没有 taskId，协调会话无门可走，只能等时钟把它升级成 owner 待办；任务落地卡又在重排发起时就被写成已取代，「处理中」与「处理完」在记录里分不开，成功也没有统一、可审计的 HANDLED（任务 `34ZJpy6byYg8kiVbUmazX`）。取舍：（1）重检只到「候选回到可合并」为止，合并照旧由 owner 的卡或 M-T11 确认，这扇门从不合并；（2）处理中照常走 §4.6 的时钟，被升级给 owner 的待办不以协调会话的名义关闭，再失败的新待办继承 owner 的归属（H4）；（3）冲突仍不可重跑；（4）TASK_FAILED 不在此列，仍按 §4.2 的事实关闭。
+- **v1 修订 9**（2026-10-03）：§4.7 增「就此对话」，§4.8 每行加 `chat`。缘由：项目 `34Y7My8sqhKLWtmCQYv1l` 的晋升卡停在「It is yours · waiting」——一个禁用按钮，旁边什么都没有：升级给 owner 的待办 `delivery.sessionId` 为空，卡上连 Open coordinator 都画不出来；异常卡也没有一处能就这条待办跟协调会话说话（原生端早有，web 没有）。做法：web 的异常卡与 BLOCKED 晋升卡加「Chat about this」，在协调会话里装填 composer，在别处打开协调会话并在到达时装填；可否、为何不可由服务端给（`chat.refusal`），卡上照写原因而不是只留一个灰按钮。取舍：（1）它不是 `actions` 的一员——那是写的门，各有归属；对话不写任何东西，所以每个阶段都给，只在无处可送或会说错对象（已取代）时拒绝；（2）重跑、合并、交回、关闭的权限一字不动，H4 下协调会话对升级待办的 `integration_retry` 照旧被拒；（3）晋升卡在没有待办时用项目文档的 `coordinatorSessionId`（任务 `34ZNP0XRLAnAreGEOvKuw`）。
+- **v1 修订 10**（2026-10-06）：合入 main 的卡从协调会话挪到项目 sessions 页（§3.6、§7.5、§7.6）。项目 sessions 页进度条下面一张合入卡，检查中、等你确认、合入中、暂时合不了都在这张卡上变，按钮就是 M-F3 的三扇门；合完卡片收起，记录作为一行排进页面的时间线（按 `merged.at`），点开是回执，回执的 Now on main 按名字列出任务（读 `tasks`，原生端开始解码）。协调会话里不再画卡，每个时刻只留一行（等你时橙色，点开是同一张卡）；应用内横幅和 `approve-merge-to-main` 推送在 iOS 打开项目 sessions 页。数据与门一字未动：仍读 `promotions/current`、`promotions/merged`，确认、拒绝、取消还是那三扇门，needs-you 计数仍按协调会话归集。缘由：owner 2026-10-06 看着一张夹在对话中间的「✓ Merged into main」回执问，合入的请求和回执是不是放在项目 sessions 页更好——从会话列表点项目落在这一页，这里却看不到合入；要合入得进协调会话、找到卡、打开详情，回执又像一条消息夹在聊天里。owner 看了效果图（`docs/mocks/project-merge-sessions-page/`）后确认按建议做：卡上直接按 Merge to main（推送前都能 Cancel，不加确认框）、协调会话留一行而不是什么都不留、合完的记录进时间线而不是单开一区。取舍：（1）macOS 没有项目 sessions 页，靠协调会话那一行和项目页 Open items 的 Review 进同一个审阅 sheet；（2）项目 sessions 页上协调会话那一行仍会因合入请求显示待你处理——计数归在协调会话是服务端的事实，客户端不改写它；（3）项目页（Project）的卡与 Open items 照旧。

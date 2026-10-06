@@ -189,7 +189,7 @@ test('OpenCode is reported like any other engine, and sign-in stays a narrower q
   assert.equal(sanitizeRunnerEngines([{ engine: 'aider', installed: true, auth: 'yes' }]), null);
 });
 
-test('Antigravity is a sign-in engine with one login per runner, still listed last', () => {
+test('Antigravity retains one sign-in and existing display order when dsh is reported', () => {
   const engines = sanitizeRunnerEngines([
     { engine: 'antigravity', installed: true, auth: 'unknown', version: ' 1.2.15 ' },
     { engine: 'opencode', installed: true, auth: 'unknown', version: '1.18.16' },
@@ -213,7 +213,7 @@ test('Antigravity is a sign-in engine with one login per runner, still listed la
   assert.equal(isInstallEngine('antigravity'), true);
   assert.equal(isReportedEngine('antigravity'), true);
   assert.deepEqual(LOGIN_ENGINES, ['claude', 'codex', 'kimi', 'antigravity']);
-  assert.deepEqual(REPORTED_ENGINES, ['claude', 'codex', 'kimi', 'opencode', 'antigravity']);
+  assert.deepEqual(REPORTED_ENGINES, ['claude', 'codex', 'kimi', 'opencode', 'antigravity', 'dsh']);
   assert.equal(isInstallEngine('opencode'), false);
 });
 

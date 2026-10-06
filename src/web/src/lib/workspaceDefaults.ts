@@ -1,6 +1,7 @@
 import {
   AgentProvider,
   autoAvailable,
+  DSH_PERMISSION_MODES,
   isRetiredModel,
   type PlanUsageSnapshot,
   type RunnerModelCatalog,
@@ -65,6 +66,7 @@ export const runtimeForProvider = (
     if (custom.runtime === AgentProvider.CODEX) return AgentProvider.CODEX;
     if (custom.runtime === AgentProvider.KIMI) return AgentProvider.KIMI;
     if (custom.runtime === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
+    if (custom.runtime === AgentProvider.DSH) return AgentProvider.DSH;
     return AgentProvider.CLAUDE;
   }
   const value = provider;
@@ -72,6 +74,7 @@ export const runtimeForProvider = (
   if (value === AgentProvider.KIMI) return AgentProvider.KIMI;
   if (value === AgentProvider.OPENCODE) return AgentProvider.OPENCODE;
   if (value === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
+  if (value === AgentProvider.DSH) return AgentProvider.DSH;
   return AgentProvider.CLAUDE;
 };
 
@@ -197,6 +200,8 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
   kimi: 'kimi-code/kimi-for-coding',
   opencode: '',
   antigravity: '',
+  // Harness's model values are opaque ACP tokens from the runner's catalogue; none is shipped.
+  dsh: '',
 };
 
 export const modelOptionsForProvider = (
@@ -274,6 +279,8 @@ export const defaultModelForProvider = (
         catalogOptionsForProvider(customRuntime, modelCatalog)?.[0]?.value;
       if (live) return live;
     }
+    // Harness has no static model space: until a runner reports its catalogue the runtime picks.
+    if (customRuntime === AgentProvider.DSH) return '';
     return (
       custom.defaultModel ||
       custom.models.find((model) => model.value && model.label)?.value ||
@@ -494,12 +501,22 @@ const effortWithinDeclaredLevels = (effort: string, levels: string[]): string =>
   return levels.reduce((nearest, level) => (distance(level) <= distance(nearest) ? level : nearest));
 };
 
+/** Harness's thinking levels are its catalogue row's `reasoningLevels` (ACP `reasoning_effort`),
+ *  opaque like its model values. A model the runner hasn't reported offers Default only: there is
+ *  no static list to fall back on, and a guessed level would be refused at dispatch. */
+const dshEffortOptions = (model?: string | null, modelCatalog?: RunnerModelCatalog | null) => {
+  const row = modelCatalog?.[AgentProvider.DSH]?.find((entry) => entry.value === model);
+  const levels = [...new Set((row?.reasoningLevels ?? []).filter(Boolean))];
+  return [{ value: '', label: 'Default' }, ...levels.map((level) => ({ value: level, label: effortLabel(level) }))];
+};
+
 export const effortOptionsForProvider = (
   provider?: string | null,
   model?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
   configured?: ConfiguredProvider[] | null,
 ) => {
+  if (runtimeForProvider(provider, configured) === AgentProvider.DSH) return dshEffortOptions(model, modelCatalog);
   const declared = declaredEffortLevels(provider, model, configured);
   if (declared) {
     return CLAUDE_EFFORT_OPTIONS.filter(
@@ -538,6 +555,9 @@ export const normalizeEffortForProvider = (
   modelCatalog?: RunnerModelCatalog | null,
   configured?: ConfiguredProvider[] | null,
 ): string => {
+  if (runtimeForProvider(provider, configured) === AgentProvider.DSH) {
+    return dshEffortOptions(model, modelCatalog).some((option) => option.value === effort) ? effort : '';
+  }
   // A level the declaring model lacks is not dropped but moved, exactly as dispatch moves it, so
   // the pill names the level the session actually runs at.
   const declared = declaredEffortLevels(provider, model, configured);
@@ -634,6 +654,17 @@ export const supportsAuto = (
     !!configuredProvider(provider, configured),
     modelCatalog,
   );
+/** Whether the runtime behind a provider identity accepts this permission mode at all. Only
+ *  DeepSeek Harness refuses modes outright (DSH_PERMISSION_MODES, which the server enforces at
+ *  admission): those are not offered rather than caveated, since the session would be rejected. */
+export const permissionModeSupported = (
+  mode: string,
+  provider?: string | null,
+  configured?: ConfiguredProvider[] | null,
+): boolean =>
+  runtimeForProvider(provider, configured) !== AgentProvider.DSH ||
+  (DSH_PERMISSION_MODES as readonly string[]).includes(mode);
+
 export const clampPermissionModeForModel = (
   mode: string,
   model: string,
@@ -641,7 +672,11 @@ export const clampPermissionModeForModel = (
   configured?: ConfiguredProvider[] | null,
   modelCatalog?: RunnerModelCatalog | null,
 ): string =>
-  mode === 'auto' && !supportsAuto(model, provider, configured, modelCatalog) ? 'default' : mode;
+  !permissionModeSupported(mode, provider, configured)
+    ? 'default'
+    : mode === 'auto' && !supportsAuto(model, provider, configured, modelCatalog)
+      ? 'default'
+      : mode;
 
 // App defaults used when the user has set no preference of their own.
 export const DEFAULT_MODEL = 'claude-opus-5';

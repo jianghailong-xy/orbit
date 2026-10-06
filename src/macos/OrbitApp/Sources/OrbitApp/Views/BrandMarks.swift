@@ -94,7 +94,7 @@ enum AgentBrand {
         case "codex", "openai":            return .codex
         case "claude", "anthropic", nil:   return .claude
         case "gemini", "google":           return .gemini
-        case "deepseek":                   return .deepseek
+        case "deepseek", "deepseek-harness": return .deepseek
         case "kimi", "moonshot":           return .kimi
         case "glm", "zai", "z.ai":         return .glm
         case "minimax":                    return .minimax

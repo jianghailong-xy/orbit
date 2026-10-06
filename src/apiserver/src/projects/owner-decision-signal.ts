@@ -8,8 +8,9 @@ import {
 import { readWaitingOwnerConfirmations } from '../tasks/owner-confirmation-read';
 import { CRITERIA_WEAKENING_EFFECT_CLASS } from './criteria-weakening-intent';
 import { stillUnanswered } from './criteria-pending-decisions';
-import { openItemsNoLongerOwed, ownerItemKind } from './project-open-item';
+import { openItemsNoLongerOwed, ownerItemKind, ownerItemNeed } from './project-open-item';
 import { projectsToRecordAsDone } from './project-looks-finished';
+import { projectsReadyToClose } from './project-done-request';
 import {
   projectsAwaitingStandardSetConfirmation,
   projectsReadyToStart,
@@ -104,6 +105,12 @@ import {
  * Nor is the row one of the sessions that need you: nothing is blocked on the start, so the
  * per-workspace tally (`workspaceSessionCounts`) and the clients' bar leave out a row whose only
  * wait is this one, and the count here is what lets the row say its words.
+ *
+ * `DONE_REQUEST` is its counterpart at the other end: an OPEN project whose coordinator has asked its
+ * owner to record it done (`project_request_done`) — the "Is this project done?" card, and a row that
+ * says "Ready to close". Apart from the others for the same two reasons. `RECORD_AS_DONE` is the same
+ * question when nobody asked it: a project that looks finished, past its escalation window with no
+ * request, and a row that says "Record as done…".
  */
 export type OwnerDecisionKind =
   | 'PROJECT_DECISION'
@@ -232,6 +239,12 @@ async function readProjectDecisionSignals(
     ownerId,
     coordinated.map((project) => project.id),
   );
+  // And the done card's, for an OPEN project whose coordinator asked to record it done.
+  const readyToClose = await projectsReadyToClose(
+    tx,
+    ownerId,
+    coordinated.map((project) => project.id),
+  );
 
   const signals: OwnerDecisionSignal[] = [];
   for (const project of coordinated) {
@@ -253,6 +266,14 @@ async function readProjectDecisionSignals(
         projectId: project.id,
         count: 1,
         kind: 'START_REQUEST',
+      });
+    }
+    if (readyToClose.has(project.id)) {
+      signals.push({
+        sessionId: project.coordinatorSessionId,
+        projectId: project.id,
+        count: 1,
+        kind: 'DONE_REQUEST',
       });
     }
   }
@@ -355,7 +376,15 @@ async function readOwnerItemSignals(
       items: [],
     };
     signal.count += 1;
-    signal.items?.push({ itemId: row.id, kind, title: row.title, since: row.waitingSince });
+    signal.items?.push({
+      itemId: row.id,
+      kind,
+      title: row.title,
+      since: row.waitingSince,
+      // `row.kind` is already in this read; do not issue a second item/facts query just to name
+      // the short reason beside an escalated item in the session list.
+      need: ownerItemNeed(row.kind),
+    });
     bySession.set(sessionId, signal);
   }
   return [...bySession.values()];
@@ -431,6 +460,7 @@ export function ownerItemsForRow(
     kind: item.kind,
     title: item.title,
     since: item.since.toISOString(),
+    ...(item.need == null ? {} : { need: item.need }),
   }));
 }
 
@@ -441,7 +471,7 @@ export type { SessionWaitingKind };
 
 /**
  * What a session row's `pendingApprovals` is counting, when one word says it better than
- * "approval". Three of the four kinds do:
+ * "approval". Every kind but `PROJECT_DECISION` does:
  *
  *   * `OWNER_CONFIRMATION` — everything counted is an OWNER_CONFIRMED task's run waiting for its
  *     owner to confirm it done, and the row says so in the confirmation card's words. Nobody is
@@ -455,6 +485,11 @@ export type { SessionWaitingKind };
  *   * `START_REQUEST` — everything counted is a project waiting to be started on its coordinator's
  *     request, and the row says "Ready to start": the card it opens is "Start this project?", and
  *     nothing about it is an approval.
+ *   * `DONE_REQUEST` — everything counted is a project its coordinator asked to record done, and
+ *     the row says "Ready to close": the card it opens is "Is this project done?".
+ *   * `RECORD_AS_DONE` — a project that looks finished, whose coordinator did not ask to have it
+ *     recorded done within the project's escalation window: the row says "Record as done…", over the
+ *     same "Is this project done?" card, filled in by Orbit rather than by a request.
  *
  * Null otherwise — a blocked tool call on the same row, which holds a turn open and is the more
  * urgent thing to say; a kind with no words of its own (`PROJECT_DECISION` really is a proposal

@@ -1,0 +1,26 @@
+[
+  {
+    "stage": "failure",
+    "count": 1,
+    "sameSlot": true,
+    "leaving": false,
+    "opacity": "1",
+    "running": 0
+  },
+  {
+    "stage": "result",
+    "count": 1,
+    "sameSlot": true,
+    "leaving": false,
+    "opacity": "1",
+    "running": 0
+  },
+  {
+    "stage": "failure",
+    "count": 1,
+    "sameSlot": true,
+    "leaving": false,
+    "opacity": "1",
+    "running": 0
+  }
+]

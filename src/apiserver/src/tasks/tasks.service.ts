@@ -45,6 +45,7 @@ import {
   type TransactionRetryOptions,
 } from '../common/transaction-retry';
 import { SingleFlight } from '../common/single-flight';
+import { modelRoutingEnabledSql } from '../common/model-routing-switch';
 import {
   DEFAULT_AGENT_PROVIDER,
   agentProviderSeed,
@@ -60,7 +61,10 @@ import {
   applyTaskAggregations,
   collectAggregationScope,
 } from '../projects/task-aggregation-writer';
-import { recordTaskFailure } from '../projects/project-open-item';
+import {
+  INTEGRATION_ITEM_KINDS,
+  recordTaskFailure,
+} from '../projects/project-open-item';
 import { projectAwaitingStart, projectNotStartedRefusal } from '../projects/project-started';
 import {
   cancelledProjectOf,
@@ -256,7 +260,7 @@ import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { accountEnvVar } from '../providers/account';
 import { readOwnerConfirmationRows } from './owner-confirmation-read';
-import { accountPoolRuntime } from '../providers/custom-provider';
+import { accountPoolRuntime, isBuiltinProvider } from '../providers/custom-provider';
 import {
   criterionNeedsProjectRefusal,
   deriveTaskCompletionStatus,
@@ -269,6 +273,7 @@ import {
   verificationSubjectNeedsVerifierRefusal,
   type TaskCompletionCriterionValue,
 } from './task-completion-criterion';
+import { buildTaskExecutionPrompt } from './task-execution-prompt';
 import {
   MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS,
   normaliseTaskCriterionOverrideReason,
@@ -418,6 +423,8 @@ type IdempotentTaskWrite = {
   acceptanceExpectedExitCode?: number | null;
   completionCriterion?: TaskCompletionCriterionValue | null;
   completionCriterionOverrideReason?: string | null;
+  /** Optional concrete fix link; omitted keeps pre-link idempotency rows replayable. */
+  fixesOpenItemId?: string | null;
 };
 
 export type IdempotentTaskOperation = 'CREATE_TASK';
@@ -498,68 +505,7 @@ function boundRunTask(
   };
 }
 
-export function buildTaskExecutionPrompt(task: {
-  title: string;
-  description?: string | null;
-  acceptanceCriteria?: string | null;
-  acceptanceCommand?: string | null;
-  acceptanceExpectedExitCode?: number | null;
-  completionCriterion?: TaskCompletionCriterionValue | null;
-  isForeman?: boolean;
-  verifiesTaskId?: string | null;
-  list?: { instructions?: string | null } | null;
-}): string {
-  const systemRun = task.isForeman === true || task.verifiesTaskId != null;
-  const instructions = systemRun ? undefined : task.list?.instructions?.trim();
-  // What would PROVE this task done, handed to the run that has to argue it is. It used to be
-  // left out, which asked every run to answer "am I finished?" against criteria it had to go and
-  // fetch with `task_get` — so a run that did not fetch them answered against the description
-  // instead, and the description says what to DO and never what would settle it. Not suppressed
-  // for a foreman or a verifier the way the list's instructions are: those describe how the
-  // LIST's work is done and neither of those runs is doing it, whereas a task's own acceptance
-  // criteria are about that task whoever is running it.
-  const acceptance = task.acceptanceCriteria?.trim();
-  const executableAcceptance =
-    task.acceptanceCommand != null && task.acceptanceExpectedExitCode != null;
-  // OWNER_CONFIRMED is settled only by the account owner pressing Confirm done in the app, so a run
-  // of such a task has nothing to submit. Handed the evidence envelope like every other task, its
-  // runs did as told and filed evidence that criterion never reads — often for a task in no
-  // project, with no project_get criterion to copy.
-  const ownerConfirmed = task.completionCriterion === 'OWNER_CONFIRMED';
-  return (
-    `请开始执行任务「${task.title}」。\n\n` +
-    (task.description ? `任务描述：\n${task.description}\n\n` : '') +
-    (acceptance ? `验收标准（判定本任务是否完成的依据）：\n${acceptance}\n\n` : '') +
-    (instructions ? `作业指导（本任务列表通用）：\n${instructions}\n\n` : '') +
-    `请按以下步骤进行：\n` +
-    `1. 先用 task_get 查看该任务的完整信息与历史评论。\n` +
-    `2. 执行任务。\n` +
-    (executableAcceptance
-      ? `3. 完成本次回复后，系统会在本执行会话的工作区自动运行任务声明的唯一 EXECUTABLE 验收命令` +
-        `（期望退出码 ${task.acceptanceExpectedExitCode}），并把命令、原始输出和实际退出码写入` +
-        `任务评论；退出码相等则推导 DONE，否则推导 FAILED。不要自行写 status，也不要让` +
-        ` coordinator 审批这个机械结论。\n`
-      : ownerConfirmed
-        ? `3. 完成后，先用 task_request_confirmation（MCP；CLI 是 \`orbit task request-confirmation\`）`
-          + `声明本次运行已经做完，再在本会话里用一两句话说明做了什么，然后结束本轮。`
-          + `只有这条声明才会让账户所有者收到确认卡；不声明就不会有任何卡片——任务会一直停在 OPEN，`
-          + `只能由所有者在任务面板里确认。卡片要等本次运行真的停下来（队列空、没有在飞的后台作业、`
-          + `没有自己排的唤醒）那一轮结束时才交给所有者。本任务的完成判据是 OWNER_CONFIRMED：`
-          + `由账户所有者在 Orbit app 里确认（Confirm done）或退回（Send back…），任何 agent 会话`
-          + `（包括 coordinator）都无法代为确认；退回的理由会作为下一条消息进入本会话，收到后按理由继续，`
-          + `再次做完时要重新声明一次。不要调用 task_evidence_submit，也不要写 status。\n`
-        : `3. 完成后，用 task_evidence_submit 提交完成证据信封，四个字段缺一不可：claim（你主张完成了什么）、`
-          + `criterion（{key, text}，抄自 project_get 的验收条目）、checks（每条 {kind, ref}，kind 取 `
-          + `TOOL_CALL / COMMIT / ARTIFACT，ref 指向本任务会话下已有的行；至少一条必须解析成功，否则整次提交被拒）、`
-          + `gaps（本次证据没能确立的部分，没有就给空数组）。TOOL_CALL 可再写 command/succeeded，服务端会拿它`
-          + `和被引 tool_call 逐字节核对。不要把命令原始输出抄进证据——Orbit 已经存了它；只由退出码回答的工作`
-          + `属于 EXECUTABLE 验收，不属于这里。不要用 task_comment 代替证据提交，也不要写 status——DONE 是`
-          + `解锁下游任务的授权，只能由任务声明的 completionCriterion 求值产生；服务端会拒绝任何主体直接写 DONE。\n`) +
-    `4. 如果执行失败或未能完成，先用 task_comment 说明失败/未完成的原因，再用 task_update 将` +
-    `状态（status）置为 FAILED。不要置为 DONE，也不要置为 IN_PROGRESS——IN_PROGRESS 会被下游` +
-    `当成普通等待一直等下去，FAILED 才会把下游标成需要人介入。`
-  );
-}
+export { buildTaskExecutionPrompt };
 
 // Version-agnostic (UUIDv7-safe) shape check. A non-UUID id would otherwise reach
 // Postgres and surface as a 500; we treat it like any unknown task instead.
@@ -750,6 +696,12 @@ const MAX_TASK_PARENT_DEPTH = 50;
 const VERIFICATION_PAIR_SUBJECT_REF = 'verification-subject';
 const VERIFICATION_PAIR_VERIFIER_REF = 'verification-check';
 
+/** The only exception kinds a task may be filed as a concrete fix for. */
+const FIXABLE_OPEN_ITEM_KINDS: readonly string[] = [
+  ...INTEGRATION_ITEM_KINDS,
+  'TASK_FAILED',
+];
+
 /**
  * What a task LIST row needs: every scalar column except `description`, plus the assignee
  * (with its runner, for the batch-run modal) and the comment tally. No client renders a
@@ -778,6 +730,7 @@ export const TASK_LIST_SELECT = {
   updatedAt: true,
   listId: true,
   projectId: true,
+  fixesOpenItemId: true,
   parentTaskId: true,
   acceptanceCriteria: true,
   acceptanceCommand: true,
@@ -1196,8 +1149,8 @@ interface EndedAutoRunMoment {
   deletedAt: Date | null;
   /** The run's own automatic retry (AutoRetryService), when one is armed. */
   retryAt: Date | null;
-  /** The task's provider pin and its Agent's smart selection switch: which engine a re-run would
-   *  start on, and so which quota holds it (dispatchEngines). */
+  /** The task's provider pin and whether smart selection is on for it (its Agent's switch and its
+   *  account's): which engine a re-run would start on, and so which quota holds it (dispatchEngines). */
   taskProvider: string | null;
   modelRouting: boolean;
 }
@@ -3610,6 +3563,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             acceptanceExpectedExitCode: dto.acceptanceExpectedExitCode,
             completionCriterion: dto.completionCriterion,
             completionCriterionOverrideReason: dto.completionCriterionOverrideReason,
+            fixesOpenItemId: dto.fixesOpenItemId,
           }
         : undefined;
     const idempotencyKey = idempotentWrite ? this.taskIdempotencyKey(idempotentWrite) : undefined;
@@ -3679,6 +3633,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if ((dto.projectId ?? null) !== scopedProjectId) {
       dto = { ...dto, projectId: scopedProjectId ?? undefined };
     }
+    // The link is judged against the project the scope admitted, not merely the project named by
+    // the caller. This is before any transaction so every refusal is write-free.
+    await this.assertFixesOpenItem(
+      this.prisma, ownerId, scopedProjectId, dto.fixesOpenItemId, creatorSessionId,
+    );
     // Against the project this write was ADMITTED into, for the reason stated above: a coordinator
     // that names no project still files its work under the one it coordinates, and refusing that
     // request on the DTO's empty `projectId` would be a refusal of a task that lands in a project.
@@ -3871,6 +3830,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             tx, ownerId, dependencyCrossings.edges, now,
           );
           const created = await tx.task.create({ data });
+          await this.assertFixesOpenItem(
+            tx, ownerId, created.projectId, dto.fixesOpenItemId, creatorSessionId, true,
+          );
           await this.copyAttachmentsToTask(tx, ownerId, created.id, dto.attachmentIds);
           // Unit L4's `APPLY`: the yes is spent on this task, in the transaction that wrote it. A
           // second application updates no row, throws, and takes this task with it — which is what
@@ -4034,6 +3996,88 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return new Set(paused.map((l) => l.id));
   }
 
+  /**
+   * Validate the task → exception link at both the preflight and transaction boundaries.
+   * The owner id is the authenticated writer's account; a coordinator must additionally write
+   * from the project's coordinator session. `lock` is used after the row write so a concurrent
+   * hand-over or resolution cannot make a checked link stale before commit.
+   */
+  private async assertFixesOpenItem(
+    db: PrismaService | Prisma.TransactionClient,
+    ownerId: string,
+    projectId: string | null | undefined,
+    fixesOpenItemId: string | null | undefined,
+    actingSessionId?: string,
+    lock = false,
+  ): Promise<void> {
+    if (!fixesOpenItemId) return;
+    if (lock) {
+      await db.$queryRaw`
+        SELECT "id" FROM "project_open_item"
+         WHERE "id" = ${fixesOpenItemId}::uuid
+         FOR UPDATE`;
+    }
+    const item = await db.projectOpenItem.findUnique({
+      where: { id: fixesOpenItemId },
+      select: { id: true, ownerId: true, projectId: true, state: true, kind: true, assignee: true },
+    });
+    if (!item) {
+      throw new NotFoundException({
+        code: 'FIXES_OPEN_ITEM_NOT_FOUND',
+        message: 'The fixesOpenItemId does not name an existing open item',
+      });
+    }
+    if (item.state !== 'OPEN') {
+      throw new ConflictException({
+        code: 'FIXES_OPEN_ITEM_NOT_OPEN',
+        message: 'A task can only be attached to an OPEN exception item',
+      });
+    }
+    if (!FIXABLE_OPEN_ITEM_KINDS.includes(item.kind)) {
+      throw new BadRequestException({
+        code: 'FIXES_OPEN_ITEM_KIND_REFUSED',
+        message: 'Only integration and TASK_FAILED items may have concrete fixing tasks',
+      });
+    }
+    if (!projectId || projectId !== item.projectId) {
+      throw new BadRequestException({
+        code: 'FIXES_OPEN_ITEM_PROJECT_MISMATCH',
+        message: 'The fixing task and exception item must belong to the same project',
+      });
+    }
+    if (item.ownerId !== ownerId) {
+      throw new ForbiddenException({
+        code: 'FIXES_OPEN_ITEM_OWNER_MISMATCH',
+        message: 'Only the item owner may file a concrete fix',
+      });
+    }
+    if (item.assignee === 'OWNER') {
+      if (actingSessionId) {
+        throw new ForbiddenException({
+          code: 'FIXES_OPEN_ITEM_WRITER_REFUSED',
+          message: 'An OWNER-assigned item must be fixed by the owner, not a coordinating session',
+        });
+      }
+      return;
+    }
+    if (item.assignee !== 'COORDINATOR') {
+      throw new ForbiddenException({
+        code: 'FIXES_OPEN_ITEM_ASSIGNEE_INVALID',
+        message: 'The exception item has no eligible fixing writer',
+      });
+    }
+    const project = await db.project.findUnique({
+      where: { id: item.projectId },
+      select: { coordinatorSessionId: true },
+    });
+    if (!actingSessionId || project?.coordinatorSessionId !== actingSessionId) {
+      throw new ForbiddenException({
+        code: 'FIXES_OPEN_ITEM_WRITER_REFUSED',
+        message: 'A COORDINATOR-assigned item must be fixed from its coordinating session',
+      });
+    }
+  }
+
   /** The Task row one create DTO turns into. Shared by create and createMany so the two
    *  write paths can never drift on a newly added field. */
   private taskCreateData(
@@ -4060,6 +4104,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       assigneeId: dto.assigneeId,
       listId: dto.listId,
       projectId: dto.projectId,
+      fixesOpenItemId: dto.fixesOpenItemId,
       parentTaskId: dto.parentTaskId,
       // §13.2's relation, and the only column here that decides what another task's completion
       // means. Omitted leaves it NULL, which is every task that is not a check of something.
@@ -4574,6 +4619,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             acceptanceExpectedExitCode: item.acceptanceExpectedExitCode,
             completionCriterion: item.completionCriterion,
             completionCriterionOverrideReason: item.completionCriterionOverrideReason,
+            fixesOpenItemId: item.fixesOpenItemId,
           }
         : undefined;
     const replayed = await Promise.all(validated.map(async (item) => {
@@ -4639,6 +4685,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       items.push((item.projectId ?? null) === admitted.projectId
         ? item
         : { ...item, projectId: admitted.projectId ?? undefined });
+    }
+    // Every fresh item gets the same link validation as the single-create door. Replayed winners
+    // are frozen facts and are deliberately not re-judged.
+    for (const [index, item] of items.entries()) {
+      if (frozen.has(index)) continue;
+      await this.assertFixesOpenItem(
+        this.prisma, ownerId, item.projectId, item.fixesOpenItemId, creatorSessionId,
+      );
     }
     // Item by item, over the project each one was ADMITTED into, and above the dry run for the
     // same reason the bound below is. A frozen item is a replay whose row already exists:
@@ -4860,6 +4914,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               criterionDeclarations.get(index) ?? null,
             ),
           }));
+        if (!existing) {
+          await this.assertFixesOpenItem(
+            tx, ownerId, task.projectId, item.fixesOpenItemId, creatorSessionId, true,
+          );
+        }
         if (!existing) await this.copyAttachmentsToTask(tx, ownerId, task.id, item.attachmentIds);
         // Unit L4's `APPLY`, for an item this call actually created: a replay found the row the
         // first run wrote, and that run already spent the approval on it.
@@ -6312,6 +6371,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       (existing.completionCriterionOverrideReason ?? null)
         !== normaliseTaskCriterionOverrideReason(write.completionCriterionOverrideReason)
     ) mismatch('different completion criterion override reason');
+    if (
+      write.fixesOpenItemId !== undefined
+      && (existing.fixesOpenItemId ?? null) !== (write.fixesOpenItemId ?? null)
+    ) mismatch('different fixes open item');
     // The winner rebuilt from what it actually holds. Same operation, same session, same turn, same
     // normalised payload — or it is not this write's earlier attempt.
     const rebuilt = this.taskIdempotencyKey({
@@ -8595,6 +8658,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         scopeFence = { ...scopeWrite, boundProjectId };
       }
     }
+    // Validate a newly supplied link against the task's effective project before opening the
+    // update transaction. Clearing the link (`null`) is always allowed and needs no item lookup.
+    if (dto.fixesOpenItemId) {
+      await this.assertFixesOpenItem(
+        this.prisma,
+        ownerId,
+        dto.projectId === undefined ? before.projectId : (dto.projectId ?? null),
+        dto.fixesOpenItemId,
+        actingSessionId,
+      );
+    }
     // Migration 0232's declaration, on the edit door — the half `create` has had since T1 and this
     // one has not. Its absence is what made a stale declaration a mark with no remedy: the mark
     // asks somebody to re-read the criterion and declare again, and re-declaring was the one thing
@@ -8958,6 +9032,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (dto.projectId !== undefined) {
       data.project = dto.projectId ? { connect: { id: dto.projectId } } : { disconnect: true };
     }
+    if (dto.fixesOpenItemId !== undefined) {
+      data.fixesOpenItem = dto.fixesOpenItemId
+        ? { connect: { id: dto.fixesOpenItemId } }
+        : { disconnect: true };
+    }
     if (dto.parentTaskId !== undefined) {
       data.parent = dto.parentTaskId ? { connect: { id: dto.parentTaskId } } : { disconnect: true };
     }
@@ -9000,6 +9079,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // for a mixed-version deployment; it is transaction routing only and feeds no acceptance
     // digest or completion decision.
     const touchesAcceptanceFacts = touchesAcceptanceFact(dto);
+    // The dedicated task_reopen door is the exact three-field OPEN write shared by the runner,
+    // web and native clients. Remember it transactionally; by the time this task reaches DONE its
+    // status is IN_PROGRESS again, so a later reader cannot infer the door from status alone.
+    const isTaskReopenDoor =
+      dto.status === TaskStatus.OPEN
+      && dto.supersededByTaskId === null
+      && dto.terminalReason === null
+      && ['DONE', 'CANCELLED', 'FAILED'].includes(String(before.status));
     // Restructuring is what rank 10 is for. A status write moves one row and no edge, so it must
     // not queue behind another request's DAG rewrite — the same reasoning that keeps a rename off
     // the lock entirely, applied to the writes that now need rank 40.
@@ -9008,7 +9095,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       touchesHierarchy ||
       consumesVerificationRequest ||
       !!supersession ||
-      dto.listId !== undefined;
+      dto.listId !== undefined ||
+      dto.fixesOpenItemId !== undefined ||
+      isTaskReopenDoor;
     // The FK re-check only fires on a SECOND write of this task's row. A supersession is that
     // second write (its own statement, beside `task.update`). A dependency replacement no longer
     // is: since 0132 the edge write advances `task_dependency_revision` instead of re-writing the
@@ -9042,7 +9131,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // during the rolling-upgrade window and preserves the established rank-40 ordering,
             // but it no longer expresses acceptance semantics: no task column below enters the
             // project acceptance digest or DONE gate.
-            const needsCurrent = touchesHierarchy || touchesAcceptanceFacts || !!supersession;
+            const needsCurrent = touchesHierarchy || touchesAcceptanceFacts || !!supersession || isTaskReopenDoor;
             const current = needsCurrent
               ? await tx.task.findFirst({
                 where: { id, ownerId },
@@ -9092,6 +9181,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                 tx, ownerId, [id],
                 [...acceptanceProjects, ...(dto.projectId ? [dto.projectId] : [])],
               );
+            }
+
+            // The marker and the status write share this task lock. A stale preflight may have
+            // observed a stopped row that another writer already reopened; in that case this
+            // update is still judged by the normal task rules, but it must not claim the dedicated
+            // reopen door for a lifecycle it did not open.
+            let reopenStatusBefore: string | null = null;
+            if (isTaskReopenDoor) {
+              const [lockedTask] = await tx.$queryRaw<Array<{ status: string }>>`
+                SELECT "status"::text AS "status" FROM "task"
+                 WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+                 FOR UPDATE`;
+              reopenStatusBefore = lockedTask?.status ?? null;
             }
 
             // ...and the task row IMMEDIATELY after, before anything else in this transaction
@@ -9281,6 +9383,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             if (retiresAfter) {
               await writeSupersession();
               task = await tx.task.findUniqueOrThrow({ where: { id } });
+            }
+            if (
+              isTaskReopenDoor
+              && reopenStatusBefore != null
+              && ['DONE', 'CANCELLED', 'FAILED'].includes(reopenStatusBefore)
+              && task.status === TaskStatus.OPEN
+            ) {
+              await tx.taskReopenIntent.upsert({
+                where: { taskId: id },
+                create: { taskId: id },
+                update: { createdAt: new Date() },
+              });
+            }
+            if (dto.fixesOpenItemId) {
+              await this.assertFixesOpenItem(
+                tx, ownerId, task.projectId, dto.fixesOpenItemId, actingSessionId, true,
+              );
             }
             // A run's conservative self-report is a failure like any other, and the project hears
             // about it through the same item as every other door (contract §4.3 E). The attempt it is
@@ -10045,8 +10164,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // only to discard them dwarfs the dispatch it exists to do.
     // freeBytes/minFreeDiskMb ride along on the joins this scan already needs, so the disk gate
     // below costs no extra round trip. They arrive as bigint (BIGINT column) and number. So do the
-    // task's provider pin and its Agent's smart selection switch, which say which engine the quota
-    // gate judges (dispatchEngines).
+    // task's provider pin and whether smart selection is on for its run — its Agent's switch, and
+    // its account's above it — which say which engine the quota gate judges (dispatchEngines).
     const rows = await this.prisma.$queryRaw<
       {
         id: string;
@@ -10066,7 +10185,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
              t.list_id AS "listId", e.epoch AS "dispatchEpoch", t.priority AS "priority",
-             t.project_id AS "projectId", t.provider AS "taskProvider", a.model_routing AS "modelRouting"
+             t.project_id AS "projectId", t.provider AS "taskProvider",
+             a.model_routing AND ${modelRoutingEnabledSql('t.owner_id')} AS "modelRouting"
       FROM task t
       LEFT JOIN workspace a ON a.id = t.assignee_id
       LEFT JOIN runner r ON r.id = a.runner_id
@@ -10124,7 +10244,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       SELECT c.id, c.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
              c.list_id AS "listId", e.epoch AS "dispatchEpoch", c.priority AS "priority",
-             c.project_id AS "projectId", c.provider AS "taskProvider", a.model_routing AS "modelRouting"
+             c.project_id AS "projectId", c.provider AS "taskProvider",
+             a.model_routing AND ${modelRoutingEnabledSql('c.owner_id')} AS "modelRouting"
       FROM (
         SELECT t.id, t.owner_id, t.assignee_id, t.list_id, t.created_at, t.priority, t.project_id,
                t.provider,
@@ -10740,10 +10861,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * on and routing applies; otherwise the task's provider pin, else the Agent's seed (the project's
    * last interactive session, migration 0088), which `sessions.create` falls back to.
    *
-   * The pin and the switch ride on the scan that found the candidates. Routing is planned only for
-   * the Agents with the switch on: anywhere else a route is never applied, so it could not move the
-   * engine, and nothing more is read. A route that cannot be worked out leaves the run on the pins,
-   * exactly as dispatch does (routeFreshRun).
+   * The pin and the switch ride on the scan that found the candidates — on only where both the
+   * Agent's switch and its account's are (common/model-routing-switch.ts). Routing is planned only
+   * there: anywhere else a route is never applied, so it could not move the engine, and nothing more
+   * is read. A route that cannot be worked out leaves the run on the pins, exactly as dispatch does
+   * (routeFreshRun).
    */
   private async dispatchEngines(
     candidates: Array<{
@@ -11041,7 +11163,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
              receipt.result->>'sessionId' AS "sessionId", run.status AS "sessionStatus",
              run.end_reason AS "endReason", run.completed_at AS "completedAt",
              run.archived_at AS "archivedAt", run.deleted_at AS "deletedAt",
-             run.retry_at AS "retryAt", t.provider AS "taskProvider", a.model_routing AS "modelRouting"
+             run.retry_at AS "retryAt", t.provider AS "taskProvider",
+             a.model_routing AND ${modelRoutingEnabledSql('t.owner_id')} AS "modelRouting"
         FROM task t
         JOIN workspace a ON a.id = t.assignee_id
         JOIN task_dispatch_epoch current_moment ON current_moment.task_id = t.id
@@ -12638,7 +12761,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // agent's name, which is a worse outcome than waiting.
     //
     // Availability, so the delivery budget is untouched: re-enabling the provider clears it.
-    if (!Object.values(AgentProvider).includes(seed.provider as AgentProvider)) {
+    if (!isBuiltinProvider(seed.provider, seed.providerBuiltin)) {
       const configured = await this.prisma.modelProvider.findFirst({
         where: {
           slug: seed.provider, enabled: true,
@@ -13503,7 +13626,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Routed for a fresh run only (docs/model-routing-design.md §8.1). The decision is frozen and
     // recorded either way; only an Agent with smart selection on is dispatched with it — any other
     // run keeps the task's pins and names no effort, as before routing. A RESUME or ADOPT is never
-    // routed: that run has already started.
+    // routed: that run has already started. With the account's switch off there is no decision at
+    // all (planTaskRunRoute), and the run is planned as before routing existed.
     const route = planned.kind === 'CREATE'
       ? await this.routeFreshRun(
         taskRouteReads(this.prisma, ownerId, this.now()),
@@ -13637,8 +13761,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * The route for one fresh run, or null when it could not be worked out. Routing never refuses
-   * (contract §7.2 P7): a failure here is logged and the run is planned exactly as without it.
+   * The route for one fresh run, or null when it could not be worked out — or when the account has
+   * smart model selection off, which routes nothing. Routing never refuses (contract §7.2 P7): a
+   * failure here is logged and the run is planned exactly as without it.
    */
   private async routeFreshRun(
     reads: TaskRouteReads,

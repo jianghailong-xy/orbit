@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -74,10 +77,16 @@ func elevateUpgrade(exe string) {
 	os.Exit(0)
 }
 
+// osExecutable is os.Executable, a var so a test can run this binary from a symlinked
+// install.
+var osExecutable = os.Executable
+
 // resolvedExecutable returns this process's binary with symlinks resolved — the
-// path an update replaces, and whose directory must be writable to do so.
+// path an update replaces, and whose directory must be writable to do so. With
+// install.sh's layout that is ~/.orbit/bin/orbit, not the /usr/local/bin/orbit
+// symlink to it.
 func resolvedExecutable() (string, error) {
-	exe, err := os.Executable()
+	exe, err := osExecutable()
 	if err != nil {
 		return "", err
 	}
@@ -231,12 +240,16 @@ func downloadedContractMatchesManifest(doc downloadedCapabilities, m Manifest) b
 	return gotCapability == wantCapability && gotSchema == wantSchema && gotDigest == wantDigest
 }
 
-// downloadAndSwap fetches the published binary, verifies both its version and its write contract,
-// then atomically swaps it over the current executable. The same check protects automatic upgrade,
-// explicit reinstall and N-1 rollback.
+// selfUpdateTarget is the binary downloadAndSwap replaces. A package var so tests swap a scratch
+// file rather than the test binary itself.
+var selfUpdateTarget = resolvedExecutable
+
+// downloadAndSwap fetches the published binary, verifies it against the manifest's sha256 and then
+// both its version and its write contract, then atomically swaps it over the current executable.
+// The same check protects automatic upgrade, explicit reinstall and N-1 rollback.
 func downloadAndSwap(server, key string, manifest Manifest, logf func(string)) bool {
 	ver := manifest.Version
-	exe, err := resolvedExecutable()
+	exe, err := selfUpdateTarget()
 	if err != nil {
 		logf("cannot locate executable: " + err.Error() + "\n")
 		return false
@@ -247,8 +260,9 @@ func downloadAndSwap(server, key string, manifest Manifest, logf func(string)) b
 		return false
 	}
 
+	asset := "orbit-" + key + ".gz"
 	client := &http.Client{Timeout: 120 * time.Second}
-	resp, err := client.Get(server + "/dl/orbit-" + key + ".gz")
+	resp, err := client.Get(server + "/dl/" + asset)
 	if err != nil {
 		logf("download failed: " + err.Error() + "\n")
 		return false
@@ -258,7 +272,24 @@ func downloadAndSwap(server, key string, manifest Manifest, logf func(string)) b
 		logf(fmt.Sprintf("download failed: HTTP %d\n", resp.StatusCode))
 		return false
 	}
-	gz, err := gzip.NewReader(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logf("download failed: " + err.Error() + "\n")
+		return false
+	}
+	// /dl binaries are unsigned: the manifest's digest is what ties this download to the release it
+	// announces. Checked before anything is decompressed or written next to the executable.
+	sum := sha256.Sum256(body)
+	got, want := hex.EncodeToString(sum[:]), manifest.Assets[key].SHA256
+	if want == "" {
+		logf(fmt.Sprintf("warning: version.json publishes no sha256 for %s (a control plane older than "+
+			"asset digests); installing it unverified\n", asset))
+	} else if !strings.EqualFold(got, want) {
+		logf(fmt.Sprintf("downloaded %s has sha256 %s, but version.json publishes %s; keeping current version\n",
+			asset, got, want))
+		return false
+	}
+	gz, err := gzip.NewReader(bytes.NewReader(body))
 	if err != nil {
 		logf("download failed: " + err.Error() + "\n")
 		return false
@@ -275,6 +306,7 @@ func downloadAndSwap(server, key string, manifest Manifest, logf func(string)) b
 		logf("write failed: " + err.Error() + "\n")
 		return false
 	}
+	giveToDirOwner(tmp, filepath.Dir(exe))
 
 	probe, _ := exec.Command(tmp, "version").Output()
 	if strings.TrimSpace(string(probe)) != ver {
@@ -296,6 +328,21 @@ func downloadAndSwap(server, key string, manifest Manifest, logf func(string)) b
 		return false
 	}
 	return true
+}
+
+// giveToDirOwner hands a file written as root (`sudo orbit upgrade`) to whoever owns the
+// directory it sits in, so the binary in an account's ~/.orbit/bin stays that account's.
+func giveToDirOwner(path, dir string) {
+	if os.Geteuid() != 0 {
+		return
+	}
+	fi, err := os.Stat(dir)
+	if err != nil {
+		return
+	}
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+		_ = os.Lchown(path, int(st.Uid), int(st.Gid))
+	}
 }
 
 // execCurrentProcess starts a clean runner process image. In particular, it is
@@ -387,7 +434,20 @@ func upgrade(server string) {
 	} else {
 		fmt.Printf("updating %s -> %s...\n", version, m.Version)
 	}
-	if !downloadAndSwap(server, key, m, func(s string) { fmt.Fprint(os.Stderr, s) }) {
+	// As root — the `sudo orbit upgrade` a runner that cannot update itself asks for — first
+	// move a legacy install out of root's /usr/local/bin, so this release lands where the
+	// runner can replace it next time. Its service restarts once the release is in place.
+	var restart func()
+	if os.Geteuid() == 0 {
+		if exe, err := selfUpdateTarget(); err == nil {
+			restart = migrateLegacyInstall(exe)
+		}
+	}
+	swapped := downloadAndSwap(server, key, m, func(s string) { fmt.Fprint(os.Stderr, s) })
+	if restart != nil {
+		restart()
+	}
+	if !swapped {
 		fmt.Fprintln(os.Stderr, "upgrade failed.")
 		os.Exit(1)
 	}

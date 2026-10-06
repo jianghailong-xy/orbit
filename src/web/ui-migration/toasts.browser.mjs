@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectExpired } from './toasts-checks.mjs';
 import { installFixedDate } from './fixtures.mjs';
 
 const errors = new WeakMap();
@@ -103,12 +104,12 @@ test('short and lifecycle dwell, hover restart, phone folding and permanent warn
   await page.clock.runFor(2999);
   await expect(notices(page).getByText('Link copied', { exact: true })).toBeVisible();
   await page.clock.runFor(1);
-  await expect(notices(page)).toHaveCount(0);
+  await expectExpired(page);
   await button(page, 'Complete session').click();
   await page.clock.runFor(5999);
   await expect(notices(page).getByText('Session completed', { exact: true })).toBeVisible();
   await page.clock.runFor(1);
-  await expect(notices(page)).toHaveCount(0);
+  await expectExpired(page);
   await button(page, 'Complete session').click();
   await notices(page).getByRole('button', { name: 'Undo completing Fix login redirect', exact: true }).hover();
   await page.clock.runFor(10000);
@@ -117,7 +118,7 @@ test('short and lifecycle dwell, hover restart, phone folding and permanent warn
   await page.clock.runFor(5999);
   await expect(notices(page).getByText('Session completed', { exact: true })).toBeVisible();
   await page.clock.runFor(1);
-  await expect(notices(page)).toHaveCount(0);
+  await expectExpired(page);
   await button(page, 'Warning notice').click();
   await page.clock.runFor(6000);
   if (info.project.use.isMobile) {
@@ -242,6 +243,10 @@ test('legacy AntApp confirmation still works with the same notification service'
   await button(page, 'Legacy confirm').click();
   const legacy = page.getByRole('dialog', { name: 'Legacy confirmation', exact: true });
   await expect(legacy).toBeVisible();
+  // AntApp's entrance can briefly have a stable hit box at opacity 0 / scale(.2).
+  // Wait for its painted, settled state before the real pointer click.
+  await expect(legacy).toHaveCSS('opacity', '1');
+  await expect(legacy).toHaveCSS('transform', 'none');
   await legacy.getByRole('button', { name: 'OK', exact: true }).click();
   await expect(legacy).not.toBeVisible();
   await expect(notices(page).getByText('Legacy confirmed', { exact: true })).toBeVisible();

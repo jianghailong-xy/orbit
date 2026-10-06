@@ -398,7 +398,7 @@ final class WikiModel {
     /// Draft plan, or Redraft… with the owner's words: a task of the maintenance list. Nil on success
     /// (with whether a job was made, or one already on its way answered), else the sentence to show.
     func redraftPlan(instructions: String?) async -> (created: Bool, refusal: String?) {
-        guard let space = currentSpace else { return (false, WikiCopy.refused) }
+        guard let space = currentSpace else { return (false, WikiCopy.noSpaces) }
         busy = true
         defer { busy = false }
         do {
@@ -440,7 +440,7 @@ final class WikiModel {
     /// the second only once the first came back with a draft the gate passed. A refusal of the first
     /// leaves the plan as it was, and its errors are the answer; nothing is confirmed.
     func acceptPlanProposal(_ id: String, confirm: Bool) async -> (accepted: PlanWrite, confirmed: Bool) {
-        guard let space = currentSpace else { return (.failed(WikiCopy.refused), false) }
+        guard let space = currentSpace else { return (.failed(WikiCopy.noSpaces), false) }
         busy = true
         defer { busy = false }
         let draft: WikiPlanVersion
@@ -448,7 +448,7 @@ final class WikiModel {
             let decided = try await api.decideWikiPlanProposal(id, WikiPlanDecideRequest(action: .accept))
             guard let made = decided.draft else {
                 await loadPlan()
-                return (.failed(WikiCopy.refused), false)
+                return (.failed(APIClient.failureReason(APIError.invalidResponse)), false)
             }
             draft = made
         } catch {
@@ -474,7 +474,7 @@ final class WikiModel {
     }
 
     private func planWrite(_ write: (WikiSpace) async throws -> WikiPlanVersion) async -> PlanWrite {
-        guard let space = currentSpace else { return .failed(WikiCopy.refused) }
+        guard let space = currentSpace else { return .failed(WikiCopy.noSpaces) }
         busy = true
         defer { busy = false }
         do {
@@ -659,7 +659,7 @@ final class WikiModel {
     /// One owner write, with the rationale it is recorded under and an idempotency key of its own, so
     /// a resend of the same press is one write. Nil on success, else the sentence to show.
     private func write(_ entry: WikiEntry, _ op: WikiOwnerOp, rationale: String, key: String) async -> String? {
-        guard let spaceID = entry.spaceId ?? currentSpace?.id else { return WikiCopy.refused }
+        guard let spaceID = entry.spaceId ?? currentSpace?.id else { return WikiCopy.noSpaces }
         busy = true
         defer { busy = false }
         do {
@@ -677,15 +677,15 @@ final class WikiModel {
         }
     }
 
-    /// What the server said when it refused a write — its own sentence, as the web shows it — or the
-    /// web's fallback when it said nothing readable.
+    /// What the server said when it refused a write — its own sentence, as the web shows it — or
+    /// the readable reason when the request failed without a server message.
     private static func refusal(_ error: Error) -> String {
         if case APIError.http(_, let body?) = error, let data = body.data(using: .utf8),
            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let message = object["message"] as? String, !message.isEmpty {
             return message
         }
-        return WikiCopy.refused
+        return APIClient.failureReason(error)
     }
 
     private func reloadAfterWrite() async {

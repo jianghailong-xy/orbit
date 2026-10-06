@@ -114,7 +114,7 @@ public enum AgentDefaults {
     /// the backend.
     private static func borrowedRuntime(_ custom: ConfiguredProvider) -> String {
         let borrowed = custom.runtime ?? ""
-        return ["codex", "kimi", "antigravity"].contains(borrowed) ? borrowed : "claude"
+        return ["codex", "kimi", "antigravity", "dsh"].contains(borrowed) ? borrowed : "claude"
     }
 
     /// Kimi's list comes from the runner too (`kimi provider list --json`, which also carries each
@@ -201,6 +201,9 @@ public enum AgentDefaults {
         case "kimi":     return "kimi-code/kimi-for-coding"
         case "opencode": return ""
         case "antigravity": return ""
+        // Harness's model values are opaque ACP tokens from the runner's catalogue; none is shipped,
+        // and until one is reported the runtime picks.
+        case "dsh":      return ""
         default:         return defaultModelID
         }
     }
@@ -301,7 +304,7 @@ public enum AgentDefaults {
             return borrowedRuntime(custom)
         }
         let value = provider
-        return value == "codex" || value == "kimi" || value == "antigravity" ? value : "claude"
+        return value == "codex" || value == "kimi" || value == "antigravity" || value == "dsh" ? value : "claude"
     }
 
     public static func isBuiltInProvider(_ provider: String) -> Bool {
@@ -363,7 +366,7 @@ public enum AgentDefaults {
     /// optional chains blows up combinatorially — and started failing every Swift job outright with
     /// "unable to type-check this expression in reasonable time". Same provider order, same result.
     public static func friendlyName(_ id: String, catalog: RunnerModelCatalog?) -> String {
-        for provider in ["claude", "codex", "kimi", "opencode", "antigravity"] {
+        for provider in ["claude", "codex", "kimi", "opencode", "antigravity", "dsh"] {
             let models: [ModelOption] = catalog?.models(for: provider) ?? []
             if let name = models.first(where: { $0.id == id })?.name { return name }
         }
@@ -398,6 +401,11 @@ public enum AgentDefaults {
         // after its catalog replaced that row would read "Managed by OpenCode". Its own row names it.
         if id.isEmpty, let name = models(for: provider).first(where: { $0.id == id })?.name {
             return name
+        }
+        // A Harness key with no model reported yet: the runtime picks, and no other runtime's
+        // "it picks for itself" row describes that.
+        if id.isEmpty, runtime(for: provider, configured: configured) == "dsh" {
+            return "Picked by DeepSeek Harness"
         }
         return friendlyName(id, catalog: catalog, configured: configured)
     }
@@ -483,6 +491,19 @@ public enum AgentDefaults {
         return levels.reduce(lowest) { distance($1) <= distance($0) ? $1 : $0 }
     }
 
+    /// Harness's thinking levels are its catalogue row's `reasoningLevels` (ACP `reasoning_effort`),
+    /// opaque like its model values (`off` included). A model the runner hasn't reported offers
+    /// Default only: there is no static list to fall back on. Mirrors web's `dshEffortOptions`.
+    private static func dshEfforts(model: String, catalog: RunnerModelCatalog?) -> [Effort] {
+        var result: [Effort] = [.default]
+        for raw in catalog?.modelInfo(for: "dsh", model: model)?.reasoningLevels ?? [] {
+            if let effort = Effort(rawValue: raw), effort != .default, !result.contains(effort) {
+                result.append(effort)
+            }
+        }
+        return result
+    }
+
     /// Codex efforts, OpenCode variants, Kimi and Antigravity levels are model-specific. Preserve every
     /// runner-reported key verbatim so a new runtime variant does not require a native-client release. An exact
     /// catalog row is authoritative even when its variant list is empty — Kimi's K2.7 Coding
@@ -493,6 +514,9 @@ public enum AgentDefaults {
     public static func efforts(for provider: String, model: String,
                                catalog: RunnerModelCatalog?,
                                configured: [ConfiguredProvider]? = nil) -> [Effort] {
+        if runtime(for: provider, configured: configured) == "dsh" {
+            return dshEfforts(model: model, catalog: catalog)
+        }
         if let declared = declaredEfforts(for: provider, model: model, configured: configured) {
             return efforts(for: provider).filter {
                 $0 == .default || declared.contains($0) || ($0 == .ultra && declared.contains(.xhigh))
@@ -542,6 +566,9 @@ public enum AgentDefaults {
     public static func normalizedEffort(_ effort: Effort, for provider: String, model: String,
                                         catalog: RunnerModelCatalog?,
                                         configured: [ConfiguredProvider]? = nil) -> Effort {
+        if runtime(for: provider, configured: configured) == "dsh" {
+            return dshEfforts(model: model, catalog: catalog).contains(effort) ? effort : .default
+        }
         if let declared = declaredEfforts(for: provider, model: model, configured: configured) {
             return nearestDeclaredEffort(effort, in: declared)
         }
@@ -756,9 +783,20 @@ public enum AgentDefaults {
                                            for model: String, provider: String = "claude",
                                            configured: [ConfiguredProvider]? = nil,
                                            catalog: RunnerModelCatalog? = nil) -> PermissionMode {
-        mode == .auto
+        if !isSupported(mode, provider: provider, configured: configured) { return .default }
+        return mode == .auto
             && !supportsAuto(model, provider: provider, configured: configured, catalog: catalog)
             ? .default : mode
+    }
+
+    /// Whether the runtime behind a provider identity accepts this mode at all. Only DeepSeek
+    /// Harness refuses modes outright (`DshRuntime.permissionModes`, enforced at admission), so its
+    /// others are shown but not selectable rather than caveated: the session would be rejected.
+    /// Mirrors web's `permissionModeSupported`.
+    public static func isSupported(_ mode: PermissionMode, provider: String,
+                                   configured: [ConfiguredProvider]? = nil) -> Bool {
+        SessionProviderChoices.executingRuntime(provider, configured: configured ?? []) != "dsh"
+            || DshRuntime.permissionModes.contains(mode)
     }
 
     public static func label(_ mode: PermissionMode) -> String {

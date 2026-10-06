@@ -225,7 +225,7 @@ public enum ProjectAttention {
     }
 
     /// How long an item has been waiting, for the chips that name one: `20m`, `2h`, `3d`.
-    private static func elapsedLabel(_ iso: String?, now: Date) -> String? {
+    static func elapsedLabel(_ iso: String?, now: Date) -> String? {
         let at = rank(iso)
         let nowSeconds = now.timeIntervalSince1970
         if at == -.infinity || at > nowSeconds { return nil }
@@ -437,6 +437,7 @@ public enum ProjectAttention {
         case .integrationCheckFailed: return "checks failed"
         case .integrationError: return "handling an integration error"
         case .taskFailed: return "handling a failed task"
+        case .deliveryReview: return "reviewing a delivery"
         case .unknown: return nil
         }
     }

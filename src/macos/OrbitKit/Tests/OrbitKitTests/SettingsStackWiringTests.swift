@@ -166,9 +166,23 @@ final class SettingsStackWiringTests: XCTestCase {
         // it is written the moment it flips.
         XCTAssertTrue(rows.contains("Toggle(isOn: $orchestration) { label }"))
         XCTAssertTrue(list.contains("UpdatePreferencesRequest(enableOrchestration: value)"))
-        // Signing out asks first.
+        // So is smart model selection, with the web's hint under its name; absent reads as off.
+        XCTAssertTrue(rows.contains("Toggle(isOn: $modelRouting) {"))
+        XCTAssertTrue(rows.contains("Text(SettingsCopy.smartModelSelectionHint)"))
+        XCTAssertTrue(list.contains("UpdatePreferencesRequest(modelRouting: value)"))
+        XCTAssertTrue(list.contains("modelRouting = p?.smartModelSelection ?? false"))
+        // Signing out asks first — and the panel hangs off that row rather than the `Form`, which is
+        // the view the system anchors it to: declared on the whole page it covered the header at the
+        // top of the screen while the row that asked sat at the bottom.
         XCTAssertTrue(list.contains("Button(role: .destructive) { confirmingSignOut = true }"))
         XCTAssertTrue(list.contains("Button(SettingsCopy.signOut, role: .destructive) { model.logout() }"))
+        let signOut = try slice(list, from: "private var signOutSection: some View {",
+                                to: "private func seed() {")
+        XCTAssertTrue(signOut.contains(".confirmationDialog(SettingsCopy.signOutTitle("),
+                      "the confirmation is declared on the row it belongs to")
+        let body = try slice(list, from: "var body: some View {", to: "private var displayName")
+        XCTAssertFalse(body.contains("confirmationDialog"),
+                       "and not on the form, which would anchor it to the top of the page")
     }
 
     /// The avatar and name are one button, pencilled as ChatGPT's are, that opens the edit-profile
