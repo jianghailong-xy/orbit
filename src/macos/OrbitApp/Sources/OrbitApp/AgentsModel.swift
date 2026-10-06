@@ -371,6 +371,20 @@ final class AgentsModel {
         adoptOpen(all, agentID: q.agentID)
     }
 
+    /// `applyOpenSnapshot` for a list that differs from the last one in one row, held by the
+    /// workspaces in `workspaceIDs` (before and after, which differ only for a move): the pane's own
+    /// list is re-read only when it is one of them.
+    func applyOpenRow(_ all: [Session], workspaceIDs: Set<String?>) {
+        openSnapshot = all
+        guard let q = lastSessionQuery, q.view == .open else { return }
+        #if os(iOS)
+        allSessions = all
+        #endif
+        guard workspaceIDs.contains(q.agentID) else { return }
+        let mine = SessionFilter.forAgent(all, agentID: q.agentID, view: .open)
+        if agentSessions != mine { agentSessions = mine }
+    }
+
     /// Write the Open list only where it changed: Observation invalidates on assignment, equal or
     /// not, and the list redraws for each — a change in another workspace leaves this one's rows.
     private func adoptOpen(_ all: [Session], agentID: String) {

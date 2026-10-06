@@ -1,4 +1,4 @@
-import { useId, useState, type JSX, type ReactNode } from 'react';
+import { useCallback, useId, useState, useSyncExternalStore, type JSX, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Alert, Button, Input, Modal } from 'antd';
@@ -1735,9 +1735,11 @@ function DoneRequestRowView({
   );
 }
 
+/** The owner's own "Record as done…" while no coordinator has asked: a grey hint, because nobody is
+ *  waiting on it — so it is not counted with what needs them. */
 function OwnDoneRowView({ onRecord }: { onRecord: () => void }): JSX.Element {
   return (
-    <li className="project-open-item-row is-owner is-own-start project-open-item-done-own" data-kind="DONE">
+    <li className="project-open-item-row is-owner is-own-start is-hint project-open-item-done-own" data-kind="DONE">
       <span className="project-open-item-dot" aria-hidden="true" />
       <div className="project-open-item-main">
         <button type="button" className="project-open-item-title project-open-item-start" onClick={onRecord}>
@@ -1749,6 +1751,21 @@ function OwnDoneRowView({ onRecord }: { onRecord: () => void }): JSX.Element {
       <div className="project-open-item-press" />
     </li>
   );
+}
+
+/**
+ * The coordinator's open DONE_REQUEST, as the open-items entry `ProjectOpenItems` polls holds it, or
+ * null. A passive read of that one cache line: it starts no request and adds no entry of its own.
+ */
+export function useOpenDoneRequest(projectId: string | null | undefined): ProjectOpenItemRow | null {
+  const qc = useQueryClient();
+  const subscribe = useCallback((onChange: () => void) => qc.getQueryCache().subscribe(onChange), [qc]);
+  const read = (): ProjectOpenItemRow | null => (
+    projectId
+      ? (qc.getQueryData(projectOpenItemsQuery(projectId).queryKey)?.doneRequest ?? null)
+      : null
+  );
+  return useSyncExternalStore(subscribe, read, read);
 }
 
 /**
@@ -1819,7 +1836,7 @@ export function ProjectOpenItems({
       <header className="project-open-items-head">
         <span className="project-open-items-title">{OPEN_ITEMS_HEADING}</span>
         <span className="project-open-items-hint">
-          {`${needsYou.length + (ownDone ? 1 : 0)} need you · ${withCoordinator.length} with the coordinator · oldest first`}
+          {`${needsYou.length} need you · ${withCoordinator.length} with the coordinator · oldest first`}
         </span>
       </header>
       {paused.map((row) => (
