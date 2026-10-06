@@ -23,6 +23,7 @@ import {
   handoffApprovalOf,
   handoffCrossingKey,
   handoffDependentDigest,
+  handoffMoveDigest,
   handoffPayloadDigest,
   nextHandoffState,
   sessionTriggerEvent,
@@ -243,6 +244,35 @@ test('a dependency crossing names the dependent, by id or by whole plan', () => 
   assert.notEqual(handoffDependentDigest({ taskId: TASK }), handoffDependentDigest({ identity: identity() }));
 });
 
+test('a move binds the criterion it will declare over there, and who asked', () => {
+  const source = identity().source;
+  const base = handoffMoveDigest({ criterionDefinitionId: null, source });
+  assert.notEqual(handoffMoveDigest({ criterionDefinitionId: TASK, source }), base,
+    'naming a target criterion changes what is being answered');
+  assert.notEqual(
+    handoffMoveDigest({ criterionDefinitionId: TASK, source }),
+    handoffMoveDigest({ criterionDefinitionId: OTHER_TASK, source }),
+    'a yes to one criterion is not a yes to another');
+  const askers: Array<[string, Partial<HandoffRequestIdentity['source']>]> = [
+    ['project', { projectId: PROJECT_B }],
+    ['task', { taskId: OTHER_TASK }],
+    ['session', { sessionId: OTHER_TASK }],
+    ['event', { triggerEvent: 'task.session_filed' }],
+  ];
+  for (const [what, over] of askers) {
+    assert.notEqual(handoffMoveDigest({ criterionDefinitionId: null, source: { ...source, ...over } }),
+      base, `the asking ${what} is part of the request`);
+  }
+  // Stable, and blind to the task's own plan: a move files no plan, so a title the moved task
+  // happens to have when it is asked about is display, never part of the answer.
+  assert.equal(handoffMoveDigest({ criterionDefinitionId: null, source: { ...source } }), base);
+  // The same asker filing work and moving work are two questions, by kind and subject.
+  assert.notEqual(
+    crossing(base, { kind: 'MOVE_TASK', subjectTaskId: TASK }),
+    crossing(handoffPayloadDigest(identity())),
+  );
+});
+
 test('who may accept: a person, at every project', () => {
   const open = { status: 'OPEN' } as const;
   // What used to be here was the one automatic yes in the unit: both ends on AUTO and both open, the
@@ -328,4 +358,9 @@ test('the header describes the crossing channel that exists', () => {
   // And the asking side, which is what made the answer side worth having.
   assert.match(header, /`handoff`/);
   assert.match(header, /--handoff-reason/);
+  // A move is asked for on the edit door since 0386; a header still saying no writer declares one
+  // would send the next reader to build that door, or to route around a boundary that answers.
+  const flat = header.replace(/\n \* ?/g, ' ');
+  assert.doesNotMatch(flat, /still declared by no writer/);
+  assert.match(flat, /`MOVE_TASK` is declared on the edit door/);
 });

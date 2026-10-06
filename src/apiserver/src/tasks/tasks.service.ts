@@ -103,6 +103,7 @@ import {
 } from '../projects/project-handoff';
 import {
   ProjectHandoffService,
+  type HandoffAnswer,
   type HandoffAuthority,
   type HandoffDeclaration,
 } from '../projects/project-handoff.service';
@@ -349,6 +350,15 @@ type HandoffSpend = {
   authority: HandoffAuthority;
   handoffId: string;
 };
+
+/**
+ * Unit L4: what a request to MOVE a task may carry — the destination, the declaration, and the
+ * target project's criterion the task will serve there (account owner, 2026-10-06). `scopeToken`
+ * is the scope claim every write may present (§2 SC3), not a field of the task.
+ */
+const MOVE_REQUEST_FIELDS: ReadonlySet<string> = new Set([
+  'projectId', 'handoff', 'criterionKey', 'scopeToken',
+]);
 
 /**
  * Unit L4: the cross-project prerequisite edges a plan asks for.
@@ -5873,6 +5883,159 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Unit L4 on the edit door: a session asks for an existing task to be MOVED into another project.
+   *
+   * A request, never a write — the account owner decided (2026-10-06) that a move is theirs to
+   * confirm and an agent's only to ask for. So this always refuses, and the refusal is the answer:
+   * the question it filed (`CROSS_PROJECT_APPROVAL_REQUIRED`, R10) or the one already waiting for
+   * this task and destination (`APPROVAL_PENDING`, R11), named by `handoffId` in the same body a
+   * declared filing gets. The task is not touched.
+   *
+   * In order:
+   *   1. the request is the move and nothing else. Another field would be a second edit riding on a
+   *      question, applied or not by an answer that was never about it (400);
+   *   2. §4 against no answer, as for a declared filing: R2/R3/R5, R6 for a session that holds
+   *      neither end, R8 for a settled end. Only R10 goes on;
+   *   3. a criterion it names is one the TARGET states (400);
+   *   4. a question already waiting for this move answers it, whoever asked; an earlier answer to
+   *      this same request is decided on (R12, R13), and a yes to it moves nothing here — applying a
+   *      move is the account owner's confirmation, not a re-sent request;
+   *   5. with nothing standing, what would make the move impossible is refused before anybody is
+   *      asked: the task's own landing in flight, and the hierarchy rules every move of it meets;
+   *   6. the question is filed.
+   */
+  private async requestMove(
+    ownerId: string,
+    task: {
+      id: string;
+      title: string;
+      projectId: string;
+      parentTaskId: string | null;
+      verifiesTaskId: string | null;
+      criterionDefinitionId: string | null;
+    },
+    dto: UpdateTaskDto,
+    sessionId: string,
+  ): Promise<never> {
+    const from = task.projectId;
+    const to = dto.projectId as string;
+    const extra = Object.entries(dto)
+      .filter(([field, value]) => value !== undefined && !MOVE_REQUEST_FIELDS.has(field))
+      .map(([field]) => field)
+      .sort();
+    if (extra.length) {
+      throw new BadRequestException({
+        code: 'MOVE_TASK_EXTRA_FIELDS',
+        fields: extra,
+        message:
+          'a request to move a task carries projectId, handoff and optionally criterionKey, and '
+          + `nothing else; this one also sent ${extra.join(', ')}. Nothing was written — send those `
+          + 'in a separate task_update, before the move is asked for or after it is answered.',
+      });
+    }
+    const criterionKey = typeof dto.criterionKey === 'string' ? dto.criterionKey.trim() : null;
+    if (criterionKey === '') {
+      throw new BadRequestException(this.criterionUnknown('""',
+        'a blank key names no criterion. Leave criterionKey out to ask for the move without one, '
+        + 'or pass one of the keys project_get returns for the project the task would move into.'));
+    }
+    await this.assertOwnedProject(ownerId, to);
+
+    const write: ScopeWriteInput = {
+      operation: 'HANDOFF_TASK',
+      taskId: task.id,
+      requestedProjectId: to,
+      currentProjectId: from,
+      scopeToken: dto.scopeToken,
+    };
+    const world = await this.projectScopeWorld(this.prisma, ownerId, sessionId, [write]);
+    const refusal = (admission: ScopeAdmission, row: HandoffAnswer['row'] | null) =>
+      new ForbiddenException({
+        ...scopeRefusalBody(admission.outcome!, task.id),
+        handoffId: row?.id ?? null,
+        handoffState: row?.state ?? null,
+      });
+    const unasked = this.decideScopedWrite(world, write);
+    if (unasked.outcome?.code !== 'CROSS_PROJECT_APPROVAL_REQUIRED' || !world.scope) {
+      throw refusal(unasked, null);
+    }
+    // Resolved in the target and nowhere else, by the rule every declaration is resolved by, and
+    // refused as the malformed request it is rather than as an authority refusal.
+    const criterion = criterionKey
+      ? (await this.resolveCriterionDeclarations(ownerId, [{ projectId: to, criterionKey }])
+          .catch((error: unknown) => {
+            if (error instanceof ForbiddenException) throw new BadRequestException(error.getResponse());
+            throw error;
+          })).get(0) ?? null
+      : null;
+
+    // Who asked, derived from the session exactly as a filing's source is, and checked again under
+    // the locks `declare` takes.
+    const origin = await this.resolveOwnedSession(ownerId, sessionId);
+    const declaration: HandoffDeclaration = {
+      fromProjectId: from,
+      toProjectId: to,
+      kind: 'MOVE_TASK',
+      subjectTaskId: task.id,
+      requestedCriterionDefinitionId: criterion?.criterionDefinitionId ?? null,
+      identity: {
+        plan: { title: task.title },
+        source: {
+          projectId: origin?.discoveredFromProjectId ?? null,
+          taskId: origin?.sourceTaskId ?? null,
+          sessionId: origin?.sessionId ?? null,
+          triggerEvent: origin?.triggerEvent ?? null,
+        },
+      },
+      title: task.title,
+      reason: dto.handoff?.reason ?? null,
+      requestedBySessionId: sessionId,
+    };
+    const now = new Date();
+    const answered = (answer: HandoffAnswer) => {
+      write.approval = answer.approval;
+      const decided = this.decideScopedWrite(world, write);
+      if (decided.outcome?.decision !== 'ALLOW') return refusal(decided, answer.row);
+      // R14: this very request has a yes. Re-sending it is not what applies a move.
+      return new ConflictException({
+        code: 'MOVE_TASK_ALREADY_APPROVED',
+        taskId: task.id,
+        handoffId: answer.row.id,
+        handoffState: answer.row.state,
+        message: answer.row.state === 'APPLIED'
+          ? `this request was approved and applied once already (handoff ${uuidToBase62(answer.row.id)}`
+            + '), and an answer is spent once — nothing was written. Ask with a different '
+            + 'criterionKey, or ask the account owner to move the task.'
+          : `the account owner has approved this move (handoff ${uuidToBase62(answer.row.id)}); it `
+            + 'is applied by their confirmation, not by sending the request again — nothing was '
+            + 'written.',
+      });
+    };
+    const standing = (await this.handoffs.pendingMove(
+      this.prisma, ownerId, { fromProjectId: from, toProjectId: to, subjectTaskId: task.id }, now,
+    )) ?? (await this.handoffs.answerFor(
+      this.prisma, this.handoffs.authorityOf(ownerId, declaration), now,
+    ));
+    if (standing) throw answered(standing);
+
+    await this.handoffs.assertMoveNotLanding(this.prisma, ownerId, task.id);
+    // The rules any move of this task meets, against the project it would land in. The criterion
+    // it declares today is not one of them: the move takes it back, and the card says so.
+    await this.assertHierarchyConsistent(this.prisma, ownerId, task.id, {
+      projectId: from,
+      parentTaskId: task.parentTaskId,
+      verifiesTaskId: task.verifiesTaskId,
+      criterionDefinitionId: task.criterionDefinitionId,
+    }, { projectId: to, criterionKey });
+
+    const filed = await this.handoffs.declare(ownerId, declaration, {
+      projectId: world.scope.projectId,
+      generation: world.scope.generation,
+    }, now);
+    throw filed.filed ? refusal(unasked, filed.row) : answered(filed);
+  }
+
+  /**
    * The cross-project prerequisite edges a plan asks for, and the answer that exists for each.
    *
    * An edge does not move a task between projects, so L1's write decision never sees it as a
@@ -8484,6 +8647,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           `written directly by a person, coordinator or execution session; ${remedy.instruction}. ` +
           'A task run may still write FAILED as its conservative outcome.',
       });
+    }
+    // Unit L4, the edit door's crossing: a session that sends another project WITH a `handoff` is
+    // asking for this task to be moved, and a request is not a write — it files the question (or
+    // finds the one already waiting) and moves nothing. Only a session asks: the owner's own move
+    // is §4 R1's and goes on below exactly as before, `handoff` or not. Only from a project, since
+    // a move leaves one. And only while the contract is enforced: in `observe` nothing is refused,
+    // so the write proceeds as it did before this door existed.
+    if (actingSessionId && dto.handoff != null && typeof dto.projectId === 'string'
+      && before.projectId && dto.projectId !== before.projectId
+      && projectScopeMode() === 'enforce') {
+      return this.requestMove(ownerId, { ...before, projectId: before.projectId }, dto, actingSessionId);
     }
     const acceptanceCommand = dto.acceptanceCommand === undefined
       ? before.acceptanceCommand
