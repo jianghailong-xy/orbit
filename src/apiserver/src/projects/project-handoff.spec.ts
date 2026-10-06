@@ -29,7 +29,13 @@ import {
   sessionTriggerEvent,
   type HandoffRequestIdentity,
 } from './project-handoff';
-import { SCOPE_WORK_TRANSITIONS, nextScopeWorkState } from './project-scope-contract';
+import {
+  SCOPE_WORK_TRANSITIONS,
+  nextScopeWorkState,
+  projectScopeToken,
+  type ScopeProjectStatus,
+} from './project-scope-contract';
+import { decideProjectScopeWrite, type HandoffApproval } from './project-scope-decision';
 
 const OWNER = '11111111-1111-4111-8111-111111111111';
 const PROJECT_A = '22222222-2222-4222-8222-222222222222';
@@ -280,13 +286,85 @@ test('who may accept: a person, at every project', () => {
   // is the only thing either end's half of it could be read from — so the rule that answered it has
   // nothing left to answer, and a crossing between two open projects is a question for a person.
   assert.deepEqual(decideHandoffAcceptance(open, open),
-    { acceptedBy: 'USER', rule: 'HP2_NOT_BOTH_AUTO' });
+    { acceptedBy: 'USER', rule: 'HP2_NOT_BOTH_AUTO', refusal: null });
   // A settled end is a person's decision too — and R8 refuses the write outright, so this is only
-  // about who could ever answer.
+  // about who could ever answer. For a filing or an edge, that is still all it says: the answer is
+  // a permission spent later, by a write judged again when it is made.
   for (const status of ['DONE', 'CANCELLED'] as const) {
-    assert.equal(decideHandoffAcceptance({ status }, open).acceptedBy, 'USER');
-    assert.equal(decideHandoffAcceptance({ status }, open).rule, 'HP1_TARGET_NOT_OPEN');
-    assert.equal(decideHandoffAcceptance(open, { status }).rule, 'HP1_TARGET_NOT_OPEN');
+    assert.deepEqual(decideHandoffAcceptance({ status }, open),
+      { acceptedBy: 'USER', rule: 'HP1_TARGET_NOT_OPEN', refusal: null });
+    assert.deepEqual(decideHandoffAcceptance(open, { status }),
+      { acceptedBy: 'USER', rule: 'HP1_TARGET_NOT_OPEN', refusal: null });
+  }
+});
+
+test('a move out of a settled project: a person confirms it only for a task none of its criteria count', () => {
+  const open = { status: 'OPEN' } as const;
+  for (const status of ['DONE', 'CANCELLED'] as const) {
+    // The 2026-10-06 shape: confirmable, by the account owner, like any move.
+    assert.deepEqual(decideHandoffAcceptance({ status }, open, { servesSourceCriterion: false }),
+      { acceptedBy: 'USER', rule: 'HP2_NOT_BOTH_AUTO', refusal: null }, status);
+    // A task the settled project's acceptance counted: nobody's answer moves it.
+    assert.deepEqual(decideHandoffAcceptance({ status }, open, { servesSourceCriterion: true }), {
+      acceptedBy: null,
+      rule: 'HP1_SETTLED_CRITERION_SERVED',
+      refusal: 'MOVE_TASK_SERVES_SETTLED_CRITERION',
+    }, status);
+    // Into a settled project: nobody's answer, whatever the task serves and wherever it comes from.
+    for (const from of ['OPEN', 'DONE', 'CANCELLED'] as const) {
+      for (const servesSourceCriterion of [false, true]) {
+        assert.deepEqual(decideHandoffAcceptance({ status: from }, { status }, { servesSourceCriterion }), {
+          acceptedBy: null,
+          rule: 'HP1_TARGET_NOT_OPEN',
+          refusal: 'PROJECT_REOPEN_REQUIRED',
+        }, `${from} → ${status}, serves ${servesSourceCriterion}`);
+      }
+    }
+  }
+  // Between two open projects, what the task serves is not asked: the move takes it back.
+  for (const servesSourceCriterion of [false, true]) {
+    assert.deepEqual(decideHandoffAcceptance(open, open, { servesSourceCriterion }),
+      { acceptedBy: 'USER', rule: 'HP2_NOT_BOTH_AUTO', refusal: null });
+  }
+});
+
+test('the request and the confirmation hold a move to one rule: HP1 answers what R8 does', () => {
+  // `requestMove` is decided by §4 (`decideProjectScopeWrite`); `declare` and `applyMoveApproval`
+  // by HP1. If the two could disagree, a question could be filed that no confirmation can apply,
+  // or a confirmation could apply a move the request was refused. So every move, over every pair of
+  // statuses and both answers to what the task serves, is put to both.
+  const statuses: ScopeProjectStatus[] = ['OPEN', 'DONE', 'CANCELLED'];
+  const yes: HandoffApproval = { state: 'APPROVED', fromProjectId: PROJECT_A, toProjectId: PROJECT_B, taskId: TASK };
+  for (const from of statuses) {
+    for (const to of statuses) {
+      for (const servesSourceCriterion of [false, true]) {
+        const why = `${from} → ${to}, serves ${servesSourceCriterion}`;
+        const hp = decideHandoffAcceptance({ status: from }, { status: to }, { servesSourceCriterion });
+        // The target's coordinator pulling the task over, as on 2026-10-06; asked, then answered.
+        const move = (approval: HandoffApproval | null) => decideProjectScopeWrite({
+          principal: 'COORDINATOR',
+          operation: 'HANDOFF_TASK',
+          taskId: TASK,
+          currentProjectId: PROJECT_A,
+          targetProjectId: PROJECT_B,
+          presentedScope: { projectId: PROJECT_B, generation: '1', token: projectScopeToken(PROJECT_B, '1') },
+          world: {
+            scope: { projectId: PROJECT_B, generation: '1' },
+            projectStatus: { [PROJECT_A]: from, [PROJECT_B]: to },
+            approval,
+            servesSourceCriterion,
+          },
+        });
+        if (hp.acceptedBy === null) {
+          assert.equal(move(null).code, hp.refusal, `${why}: the request is refused as the answer would be`);
+          assert.equal(move(yes).code, hp.refusal, `${why}: and no yes changes that`);
+        } else {
+          assert.equal(hp.acceptedBy, 'USER', why);
+          assert.equal(move(null).rule, 'R10_NO_APPROVAL', `${why}: the request files a question`);
+          assert.equal(move(yes).rule, 'R14_HANDOFF_APPROVED', `${why}: which the person's yes answers`);
+        }
+      }
+    }
   }
 });
 

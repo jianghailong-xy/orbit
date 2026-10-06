@@ -402,20 +402,39 @@ test('unit L4: a session asks for a task to be moved, and only asks', { skip, co
     assert.equal(await projectOf(w.task), w.projectA);
   });
 
-  await t.test('re-sending a request the owner has approved moves nothing', async () => {
+  await t.test('re-sending a request the owner has answered yes to moves nothing', async () => {
     // Applying an approved move is the account owner's confirmation; the request door never does,
-    // whatever it finds on file.
+    // whatever it finds on file. Confirming moves the task (task-move-confirm.pg.spec.ts), after
+    // which the same request is answered with the task where it is and files nothing.
     const w = await seed('approved');
     await refusalOf(() => ask(w, w.coordA));
     const [question] = await rows(w.ownerId);
     await handoffs.decide(w.ownerId, w.ownerId, question.id, 'APPROVE', new Date());
-    const resent = await refusalOf(() => ask(w, w.coordA));
-    assert.equal(resent.status, 409);
-    assert.equal(resent.body.code, 'MOVE_TASK_ALREADY_APPROVED');
-    assert.equal(resent.body.handoffId, question.id);
-    assert.equal(resent.body.handoffState, 'APPROVED');
-    assert.equal(await projectOf(w.task), w.projectA);
-    const [after] = await rows(w.ownerId);
+    const [applied] = await rows(w.ownerId);
+    assert.equal(applied.state, 'APPLIED');
+    assert.equal(await projectOf(w.task), w.projectB);
+    const resent = await ask(w, w.coordA) as { projectId: string | null };
+    assert.equal(resent.projectId, w.projectB);
+    assert.deepEqual(await rows(w.ownerId), [applied], 'no second question, and the spent one untouched');
+
+    // A yes on file that never moved anything — what an earlier build recorded — is not spent by
+    // asking again either.
+    const earlier = await seed('approved-earlier');
+    await refusalOf(() => ask(earlier, earlier.coordA));
+    const [waiting] = await rows(earlier.ownerId);
+    await admin.query(
+      `UPDATE "project_handoff_approval"
+          SET "state" = 'APPROVED', "decided_by" = 'USER', "decided_by_user_id" = $2::uuid,
+              "decided_at" = now() AT TIME ZONE 'UTC',
+              "expires_at" = (now() AT TIME ZONE 'UTC') + interval '7 days'
+        WHERE "id" = $1::uuid`, [waiting.id, earlier.ownerId]);
+    const again = await refusalOf(() => ask(earlier, earlier.coordA));
+    assert.equal(again.status, 409);
+    assert.equal(again.body.code, 'MOVE_TASK_ALREADY_APPROVED');
+    assert.equal(again.body.handoffId, waiting.id);
+    assert.equal(again.body.handoffState, 'APPROVED');
+    assert.equal(await projectOf(earlier.task), earlier.projectA);
+    const [after] = await rows(earlier.ownerId);
     assert.equal(after.state, 'APPROVED', 'and the yes is not spent by asking again');
     assert.equal(after.applied_task_id, null);
   });

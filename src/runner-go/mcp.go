@@ -2162,21 +2162,26 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"project that session coordinates. WHO may correct it is not symmetric and the server " +
 			"decides: the ACCOUNT OWNER may file work anywhere and may unfile it, while a session " +
 			"acting under a project scope is refused UNMAPPED_PROJECT_WORK for null (work under no " +
-			"goal is counted by nothing) and PROJECT_SCOPE_MISMATCH for another project unless the " +
-			"crossing was declared — a declared crossing then waits on the owner as " +
-			"CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING, which no tool can answer for " +
-			"them. Each refusal comes back with its own code: read the row with project_crossings " +
-			"and take it to the owner rather than retrying. Refused too while this task has " +
-			"subtasks, or verifications pointing at it, that the move would leave in another " +
-			"project, and while it carries a criterion declaration this same write does not take " +
-			"back (criterionKey: null) — a criterion is one project's statement of what it wants.",
+			"goal is counted by nothing) and PROJECT_SCOPE_MISMATCH for another project unless it " +
+			"ASKS for the move with `handoff`. Asking moves nothing by itself: the server files a " +
+			"move request and answers CROSS_PROJECT_APPROVAL_REQUIRED (filed now) or " +
+			"APPROVAL_PENDING (one is already waiting for this task and project), and the task " +
+			"stays where it is. No tool can answer that request; once the ACCOUNT OWNER confirms " +
+			"it, the task moves at once and nothing has to be sent again. Read it with " +
+			"project_crossings, and see `handoff` for who may ask and which moves are refused. " +
+			"Refused too while this task has subtasks, or verifications pointing at it, that the " +
+			"move would leave in another project. A criterion declaration does not travel: a " +
+			"requested move withdraws the one the task has in its current project by itself, while " +
+			"the owner's own move has to take it back in the same write (criterionKey: null) or " +
+			"name a criterion the new project states — a criterion is one project's statement of " +
+			"what it wants.",
 	}
-	// The same declaration on the edit door — and deliberately NOT the same sentence. `UpdateTaskDto`
-	// takes `handoff`, but the move gate does not read it: that write is admitted as UPDATE_TASK,
-	// and §4 R7 refuses any crossing whose operation is not HANDOFF_TASK, so a DECLARED move is
-	// refused exactly like an undeclared one. A description that promised "this makes it askable"
-	// here would send a model round a loop the server cannot break — declare, be refused, be told to
-	// declare — so this one says which door files the question and where a move actually goes.
+	// The same declaration on the edit door — and deliberately NOT the same sentence. On a create a
+	// declaration asks for permission, and the writer files the work itself once it is APPROVED; on
+	// this door it asks for a MOVE, and the account owner's confirmation is the move (2026-10-06). A
+	// model told the create door's "re-send this write once it says APPROVED" would wait for a state
+	// a move never stops in, so this one says what the request files, who may make it, what it may
+	// carry and which moves are refused before anybody is asked.
 	updateHandoffProp := map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -2187,17 +2192,28 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"answers the crossing; read by no gate.",
 			},
 		},
-		"description": "DECLARE that this write crosses into another project. Send it together with " +
-			"the projectId it moves the task into — a crossing has to name where it is going, and a " +
-			"handoff with no destination is refused before the request is made. Presence is the " +
-			"declaration and it CARRIES NO AUTHORITY: it never performs the crossing, it only asks. " +
-			"What it reaches differs by door, so read this before relying on it: filing NEW work over " +
-			"the line (task_create, task_create_batch) files the question and comes back " +
-			"CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING, which project_crossings then reads " +
-			"and the ACCOUNT OWNER answers — while MOVING a task that already exists is refused " +
-			"PROJECT_SCOPE_MISMATCH whether or not it is declared, because this door files no " +
-			"question yet. A re-filing is therefore the owner's to make directly (§4 R1 exempts " +
-			"them); asking them is the step, not retrying.",
+		"description": "DECLARE that this write moves the task into another project, which makes it " +
+			"a REQUEST for the move. Send it together with the projectId it moves the task into — a " +
+			"crossing has to name where it is going, and a handoff with no destination is refused " +
+			"before the request is made. Presence is the declaration and it CARRIES NO AUTHORITY: " +
+			"it moves nothing, it asks. The server files a MOVE_TASK request and answers " +
+			"CROSS_PROJECT_APPROVAL_REQUIRED (filed now) or APPROVAL_PENDING (a request for this " +
+			"task and project is already waiting and comes back as it stands; to change it, the " +
+			"owner refuses it and you ask again), naming it by handoffId, and the task stays where " +
+			"it is. Only the ACCOUNT OWNER answers it, on the project page — no agent, and no " +
+			"coordinator of either project, can. Their confirmation IS the move: the task joins " +
+			"the target project at once and nothing has to be sent again; read the request back " +
+			"with project_crossings. Who may ask: a session whose own project — the one a " +
+			"coordinator coordinates, or the project of the task an execution session runs — is " +
+			"the move's source or its target; any other session is refused PROJECT_SCOPE_MISMATCH. " +
+			"What it may carry: projectId, handoff and optionally criterionKey, a key of the TARGET " +
+			"project's criteria (project_get) that the task declares once it has moved; what it " +
+			"declares in its current project is withdrawn by the move, and any other field is " +
+			"refused MOVE_TASK_EXTRA_FIELDS — send that in a separate task_update. Which moves are " +
+			"refused before anybody is asked: OUT of a settled (DONE or CANCELLED) project, only a " +
+			"task that serves none of that project's acceptance criteria may be moved; INTO a " +
+			"settled project, nothing may (PROJECT_REOPEN_REQUIRED); and a task whose landing is " +
+			"queued or running is refused MOVE_TASK_LANDING_IN_FLIGHT until that job has ended.",
 	}
 	// The same link on the edit door, where it also has to be removable. A decomposition is
 	// usually understood after the tasks exist — a step turns out to belong under a different
@@ -3458,7 +3474,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_update",
-			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, EVIDENCE_JUDGMENT, or OWNER_CONFIRMED path, and an OWNER_CONFIRMED task is confirmed only by the account owner in the Orbit app. A write that lands a task on OWNER_CONFIRMED in no project, or in a project whose Automatic is off — by changing the criterion, the project or the criterion it serves — needs ownerConfirmationReason (stored or sent), or it is refused 409 OWNER_CONFIRMATION_REASON_REQUIRED and nothing is written. FAILED remains writable as a run's conservative self-report. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. `projectId` re-files this task under another project, or null takes it out of every project — how a mis-filing is corrected, and the account owner's to make: a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for null and PROJECT_SCOPE_MISMATCH for another project, and a declared crossing waits on the owner as CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING (read the row with project_crossings). Pass null for assigneeId/listId/parentTaskId/projectId/dueDate/runAt/provider/model/modelHint/modelHintReason to clear them. `codeless: true` declares that the task produces no code, which takes it out of its acceptance criterion's landing: it needs `codelessReason` in the same call, and is refused for a task that already has commits of its own.",
+			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, EVIDENCE_JUDGMENT, or OWNER_CONFIRMED path, and an OWNER_CONFIRMED task is confirmed only by the account owner in the Orbit app. A write that lands a task on OWNER_CONFIRMED in no project, or in a project whose Automatic is off — by changing the criterion, the project or the criterion it serves — needs ownerConfirmationReason (stored or sent), or it is refused 409 OWNER_CONFIRMATION_REASON_REQUIRED and nothing is written. FAILED remains writable as a run's conservative self-report. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. `projectId` re-files this task under another project, or null takes it out of every project — how a mis-filing is corrected. The account owner writes it directly; a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for null and PROJECT_SCOPE_MISMATCH for another project unless it asks for the move with `handoff`: the server then files a move request, answers CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING and leaves the task where it is, and the account owner's confirmation moves the task at once, with nothing to send again (read the request with project_crossings; `handoff` says who may ask and which moves are refused). Pass null for assigneeId/listId/parentTaskId/projectId/dueDate/runAt/provider/model/modelHint/modelHintReason to clear them. `codeless: true` declares that the task produces no code, which takes it out of its acceptance criterion's landing: it needs `codelessReason` in the same call, and is refused for a task that already has commits of its own.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId":      taskIDProp,
 				"title":       str,

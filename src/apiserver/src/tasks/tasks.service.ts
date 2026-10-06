@@ -99,8 +99,10 @@ import {
 import { TaskListPauseProjectorService } from '../task-lists/task-list-pause-projector.service';
 import type { HandoffApproval } from '../projects/project-scope-decision';
 import {
+  decideHandoffAcceptance,
   dependencyCrossingRefusal,
   handoffPayloadDigest,
+  type HandoffProjectFacts,
   type HandoffRequestIdentity,
 } from '../projects/project-handoff';
 import {
@@ -156,6 +158,7 @@ import {
   taskWorkRefusal,
 } from './task-supersession';
 import {
+  TASK_FACT_SCOPE_MOVED,
   assertAcceptanceScopeUnmoved,
   cascadedTaskClosure,
   touchesAcceptanceFact,
@@ -346,6 +349,12 @@ type ScopeWriteInput = {
    * and by nothing else — a write that declares no crossing never reaches them.
    */
   approval?: HandoffApproval | null;
+  /**
+   * A move request: whether the task serves one of the criteria of the project it would leave, as
+   * read from its row (`ProjectHandoffService.servesCriterionOf`). Read by R8 for a move out of a
+   * settled project, and by nothing else.
+   */
+  servesSourceCriterion?: boolean;
 };
 
 /** Unit L4: what a write that was allowed under an approval must spend inside its transaction. */
@@ -1960,6 +1969,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     @Optional() queue?: QueueService,
   ) {
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
+    // The account owner's yes to a MOVE_TASK is applied here (`applyMoveApproval`), so the one
+    // instance that answers it has to be able to reach this one.
+    this.handoffs.bindMoveApplier(this);
     this.completionInputs = completionInputs;
     this.pauseProjector = pauseProjector;
     this.openItems = openItems;
@@ -5271,6 +5283,29 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Whether this session's scope is the project of the task it executes — a run's — rather than
+   * one it coordinates or was woken to judge, which `deriveProjectScope` reads first. Asked only
+   * where that difference decides the answer: a run's scope moves when its task does.
+   */
+  private async scopeFollowsTask(
+    db: ScopeReadClient,
+    ownerId: string,
+    sessionId?: string,
+  ): Promise<boolean> {
+    if (!sessionId) return false;
+    const session = await db.session.findFirst({
+      where: { id: sessionId, ownerId },
+      select: {
+        taskId: true,
+        coordinatorForProject: { select: { id: true } },
+        coordinatorWakes: { where: { status: 'SESSION_OPENED' }, select: { projectId: true }, take: 1 },
+      },
+    });
+    return !!session?.taskId && !session.coordinatorForProject
+      && !session.coordinatorWakes?.length;
+  }
+
+  /**
    * §4 R8's world, read fail closed: a project this owner does not have simply is not in the map,
    * and `decideProjectScopeWrite` reads an absent status as NOT open.
    */
@@ -5355,6 +5390,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // What catches an approval that moved is the spend itself: one compare-and-set inside the
       // transaction that writes the task, which fails and takes the task with it.
       approval: write.approval ?? null,
+      servesSourceCriterion: write.servesSourceCriterion,
     };
   }
 
@@ -5898,7 +5934,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    *   1. the request is the move and nothing else. Another field would be a second edit riding on a
    *      question, applied or not by an answer that was never about it (400);
    *   2. §4 against no answer, as for a declared filing: R2/R3/R5, R6 for a session that holds
-   *      neither end, R8 for a settled end. Only R10 goes on;
+   *      neither end, R8 for a settled end — except a settled source giving up a task none of its
+   *      criteria count, and R8B for one that serves one of them. Only R10 goes on;
    *   3. a criterion it names is one the TARGET states (400);
    *   4. a question already waiting for this move answers it, whoever asked; an earlier answer to
    *      this same request is decided on (R12, R13), and a yes to it moves nothing here — applying a
@@ -5950,6 +5987,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       requestedProjectId: to,
       currentProjectId: from,
       scopeToken: dto.scopeToken,
+      // What a settled source asks of the task before it lets it go (R8/R8B), read from its row
+      // here and again under the locks the question is filed and confirmed under.
+      servesSourceCriterion: await this.handoffs.servesCriterionOf(
+        this.prisma, ownerId, task.id, from,
+      ),
     };
     const world = await this.projectScopeWorld(this.prisma, ownerId, sessionId, [write]);
     const refusal = (admission: ScopeAdmission, row: HandoffAnswer['row'] | null) =>
@@ -6036,6 +6078,287 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       generation: world.scope.generation,
     }, now);
     throw filed.filed ? refusal(unasked, filed.row) : answered(filed);
+  }
+
+  /**
+   * A request to move a task that is already where it asks to go: the request, sent again after
+   * the account owner's confirmation applied it.
+   *
+   * From inside the project the task is in now — the target's coordinator, or the task's own run,
+   * whose scope moved with it — that is an ordinary update, and this answers null so `update`
+   * treats it as one. From the project the task LEFT it is not: the asker no longer holds the task,
+   * and the ordinary rules would refuse it R6 for asking again for something that has happened. So
+   * when THIS request — this session, this criterion, out of the asker's project into the task's —
+   * is the one that was applied to this task, the answer is the task as it stands, with nothing
+   * written and nothing filed. Anything else is not this request, and gets the ordinary rules.
+   */
+  private async appliedMoveReplay(
+    ownerId: string,
+    task: { id: string; title: string; projectId: string },
+    dto: UpdateTaskDto,
+    sessionId: string,
+  ): Promise<Task | null> {
+    if (Object.entries(dto).some(([field, value]) =>
+      value !== undefined && !MOVE_REQUEST_FIELDS.has(field))) {
+      return null;
+    }
+    const scope = await this.deriveProjectScope(this.prisma, ownerId, sessionId);
+    if (!scope || scope.projectId === task.projectId) return null;
+    const criterionKey = typeof dto.criterionKey === 'string' ? dto.criterionKey.trim() : '';
+    const criterion = criterionKey
+      ? (await this.resolveCriterionDeclarations(ownerId, [{ projectId: task.projectId, criterionKey }])
+          .catch(() => null))?.get(0) ?? null
+      : null;
+    if (criterionKey && !criterion) return null;
+    // The request's identity, derived exactly as `requestMove` derived it when it was asked.
+    const origin = await this.resolveOwnedSession(ownerId, sessionId);
+    const authority = this.handoffs.authorityOf(ownerId, {
+      fromProjectId: scope.projectId,
+      toProjectId: task.projectId,
+      kind: 'MOVE_TASK',
+      subjectTaskId: task.id,
+      requestedCriterionDefinitionId: criterion?.criterionDefinitionId ?? null,
+      identity: {
+        plan: { title: task.title },
+        source: {
+          projectId: origin?.discoveredFromProjectId ?? null,
+          taskId: origin?.sourceTaskId ?? null,
+          sessionId: origin?.sessionId ?? null,
+          triggerEvent: origin?.triggerEvent ?? null,
+        },
+      },
+      title: task.title,
+      requestedBySessionId: sessionId,
+    });
+    const answer = await this.handoffs.answerFor(this.prisma, authority, new Date()).catch(() => null);
+    if (answer?.row.state !== 'APPLIED' || answer.row.appliedTaskId !== task.id) return null;
+    return this.prisma.task.findFirst({ where: { id: task.id, ownerId } });
+  }
+
+  /**
+   * Unit L4's APPLY for a move: the account owner confirms a MOVE_TASK request, and the confirmation
+   * is the move (account owner, 2026-10-06 — "确认了就好了"). Reached only through
+   * `ProjectHandoffService.decide`, which only the account owner reaches (§7 RB2): nothing a session
+   * sends ends here, and the agent that asked sends nothing more.
+   *
+   * ONE transaction, in the canonical order (`common/lock-order.ts`) and the order the owner's own
+   * move in `update` takes: the owner graph mutex (10) — the task's place in a hierarchy is judged
+   * and rewritten, as on a re-parenting —, both projects FOR NO KEY UPDATE, sorted (40), the task
+   * FOR UPDATE NOWAIT (50, for the reason `lockTaskForSupersessionWrite` gives), and then the
+   * request itself (60).
+   *
+   * Under those locks everything that made the move legal when it was asked is asked again, because
+   * the answer can come days later: the task is still in the project the request moves it out of,
+   * the target is open and the source either open or giving up a task none of its criteria count
+   * (HP1, `decideHandoffAcceptance`, the rule R8 held the request to), its landing is not queued or
+   * running, the criterion the request names is
+   * still one the target states, and the move leaves no subtask, verification, parent, verified
+   * subject or supersession link on the other side of the line. When any of that no longer holds the
+   * confirmation is refused with its own code and NOTHING is written — not the yes either — so the
+   * request stays as it was, to be confirmed again once the obstacle is gone, or denied.
+   *
+   * Then, in this order: the yes (PENDING → APPROVED, this person, this moment); the task, moved —
+   * declaring the target criterion the request named at that criterion's revision now, and taking
+   * back whatever it declared of the source's; the spend (APPROVED → APPLIED on this task, `spend`'s
+   * compare-and-set, 0155's guard behind it); and an `activity` row recording the move as this
+   * person's, naming the request. A run in progress goes with the task (the same decision), so its
+   * live claim does not refuse the move: 0389 lets exactly this transaction, named by the
+   * transaction-local `orbit.move_task_handoff_id`, through `task_claimed_project_move_guard`.
+   */
+  async applyMoveApproval(
+    ownerId: string,
+    userId: string,
+    handoffId: string,
+    now: Date,
+    credential?: AuthCredential,
+  ): Promise<void> {
+    // Which rows to lock. The two ends and the task are frozen on the request (0155), and the
+    // request is read again under its own lock below before anything is decided on it.
+    const { row: asked } = await this.handoffs.get(ownerId, handoffId, now);
+    const taskId = asked.subjectTaskId;
+    if (asked.kind !== 'MOVE_TASK' || !taskId) {
+      throw new Error(`handoff approval ${handoffId} is a ${asked.kind}, not a move`);
+    }
+    const from = asked.fromProjectId;
+    const to = asked.toProjectId;
+    const moved = await withTransactionRetry(this.prisma, async (tx) => {
+      await this.lockDependencyGraph(tx, ownerId);
+      const projectIds = orderedIds([from, to]);
+      await tx.$queryRaw`
+        SELECT "id" FROM "project"
+         WHERE "id" = ANY(${projectIds}::uuid[])
+         ORDER BY "id"
+         FOR NO KEY UPDATE`;
+      try {
+        await tx.$queryRaw`
+          SELECT "id" FROM "task"
+           WHERE "id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid
+           FOR UPDATE NOWAIT`;
+      } catch (error) {
+        if (!isLockNotAvailable(error)) throw error;
+        throw new ConflictException({
+          code: 'MOVE_TASK_BUSY',
+          requiredAction: 'CONFIRM_AGAIN',
+          taskId,
+          handoffId,
+          message:
+            `task ${uuidToBase62(taskId)} is being written by a run starting on it right now — `
+            + 'nothing was written, and the request is still waiting; confirm it again in a moment',
+        });
+      }
+      const row = await this.handoffs.lockMoveForConfirmation(tx, ownerId, handoffId, now);
+      const refuse = (code: string, requiredAction: string, why: string) => new ConflictException({
+        code,
+        requiredAction,
+        taskId,
+        handoffId: row.id,
+        handoffState: row.state,
+        message: `${why} — nothing was written, and the request is still waiting for an answer`,
+      });
+
+      const task = await tx.task.findFirst({
+        where: { id: taskId, ownerId },
+        select: {
+          id: true,
+          projectId: true,
+          parentTaskId: true,
+          verifiesTaskId: true,
+          criterionDefinitionId: true,
+          supersededByTaskId: true,
+        },
+      });
+      if (!task) {
+        throw refuse('MOVE_TASK_SUBJECT_MOVED', 'DENY_THE_REQUEST',
+          `task ${uuidToBase62(taskId)} no longer exists, so there is nothing left to move`);
+      }
+      if (task.projectId !== from) {
+        throw refuse('MOVE_TASK_SUBJECT_MOVED', 'DENY_THE_REQUEST',
+          `task ${uuidToBase62(taskId)} is no longer in project ${uuidToBase62(from)}, which this `
+          + 'request moves it out of'
+          + (task.projectId ? ` (it is in ${uuidToBase62(task.projectId)} now)` : ''));
+      }
+      // §4 R8, as the request was held to it, asked of the answer (HP1): a settled project takes no
+      // work, and gives up only a task none of its criteria count. What the task serves is read
+      // under this transaction's lock on it, so a declaration made while the request waited counts.
+      const ends = await tx.project.findMany({
+        where: { id: { in: [from, to] }, ownerId },
+        select: { id: true, status: true },
+      });
+      // A project this read does not find is not open: fail closed, as R8 does.
+      const statusOf = (id: string): HandoffProjectFacts =>
+        ({ status: ends.find((end) => end.id === id)?.status ?? 'CANCELLED' });
+      const acceptance = decideHandoffAcceptance(statusOf(from), statusOf(to), {
+        servesSourceCriterion: await this.handoffs.servesCriterionOf(tx, ownerId, taskId, from),
+      });
+      if (acceptance.refusal) {
+        throw refuse(acceptance.refusal, 'REOPEN_PROJECT_FIRST',
+          acceptance.refusal === 'MOVE_TASK_SERVES_SETTLED_CRITERION'
+            ? `task ${uuidToBase62(taskId)} serves an acceptance criterion of project `
+              + `${uuidToBase62(from)}, which is settled, and a settled project gives up only work `
+              + 'none of its criteria count'
+            : `project ${uuidToBase62(to)} is not open, and a settled project takes no work until `
+              + 'it is reopened');
+      }
+      await this.handoffs.assertMoveNotLanding(tx, ownerId, taskId, {
+        handoffId: row.id,
+        handoffState: row.state,
+      });
+      // What the task will declare over there: the criterion the request named, at its revision
+      // NOW — the same snapshot `resolveCriterionDeclarations` takes — read under the target's lock.
+      const criterion = row.requestedCriterionDefinitionId
+        ? await tx.projectAcceptanceCriterionDefinition.findFirst({
+            where: { id: row.requestedCriterionDefinitionId, projectId: to, project: { ownerId } },
+            select: { id: true, revision: true },
+          })
+        : null;
+      if (row.requestedCriterionDefinitionId && !criterion) {
+        throw refuse('MOVE_TASK_CRITERION_GONE', 'DENY_THE_REQUEST',
+          `the criterion this request would have the task serve in project ${uuidToBase62(to)} `
+          + `(${criterionKeyOf(row.requestedCriterionDefinitionId)}) is no longer one that project `
+          + 'states');
+      }
+      // The hierarchy rules every move meets, with the source's criterion taken back
+      // (`criterionKey`), so only the structure is judged here.
+      try {
+        await this.assertHierarchyConsistent(tx, ownerId, taskId, task, {
+          projectId: to,
+          criterionKey: criterion ? criterionKeyOf(criterion.id) : null,
+        } as UpdateTaskDto);
+      } catch (error) {
+        if (!(error instanceof BadRequestException) && !(error instanceof NotFoundException)) throw error;
+        throw refuse('MOVE_TASK_HIERARCHY_CONFLICT', 'RESOLVE_THE_HIERARCHY_OR_DENY', error.message);
+      }
+      // §13.6 SU3 from both ends of the link, as `update` asks it of a move (0128 and 0130 refuse
+      // the same rows, in a constraint's words): an attempt this task replaced, and the attempt that
+      // replaced it, stay in the project it is in.
+      const replaced = await tx.task.findMany({
+        where: { ownerId, supersededByTaskId: taskId, NOT: { projectId: to } },
+        select: { id: true },
+        orderBy: { id: 'asc' },
+      });
+      const successor = task.supersededByTaskId
+        ? await tx.task.findFirst({
+            where: { id: task.supersededByTaskId, ownerId },
+            select: { id: true, projectId: true },
+          })
+        : null;
+      if (replaced.length || (successor && successor.projectId !== to)) {
+        throw refuse('MOVE_TASK_HIERARCHY_CONFLICT', 'RESOLVE_THE_HIERARCHY_OR_DENY',
+          `task ${uuidToBase62(taskId)} is linked by supersession to `
+          + [...replaced.map((other) => other.id), ...(successor ? [successor.id] : [])]
+            .map((id) => uuidToBase62(id)).join(', ')
+          + ', and a replacement stays in the project of the attempt it replaced');
+      }
+
+      const authority = await this.handoffs.approveMoveForConfirmation(tx, row, userId, now);
+      await tx.$queryRaw`SELECT set_config('orbit.move_task_handoff_id', ${row.id}, true)`;
+      const written = await tx.task.updateMany({
+        where: { id: taskId, ownerId, projectId: from },
+        data: {
+          projectId: to,
+          criterionDefinitionId: criterion?.id ?? null,
+          criterionRevision: criterion?.revision ?? null,
+        },
+      });
+      await tx.$queryRaw`SELECT set_config('orbit.move_task_handoff_id', '', true)`;
+      if (written.count !== 1) {
+        throw new Error(`task ${taskId} moved underneath the lock this confirmation holds`);
+      }
+      await this.handoffs.spend(tx, authority, row.id, taskId, now);
+      await tx.activity.create({
+        data: {
+          actorId: userId,
+          type: 'task.moved',
+          payload: {
+            taskId,
+            fromProjectId: from,
+            toProjectId: to,
+            handoffId: row.id,
+            requestedBySessionId: row.requestedBySessionId,
+            criterionDefinitionId: criterion?.id ?? null,
+            withdrawnCriterionDefinitionId: task.criterionDefinitionId,
+          },
+          credentialKind: credential?.kind ?? null,
+          credentialId: credential?.kind === 'PAT' ? credential.tokenId : null,
+        },
+      });
+      return task;
+    }, this.transientWriteRetry('tasks.applyMoveApproval')).catch((error) => {
+      const fenced = taskFenceConflictMessage(error);
+      if (fenced) throw new ConflictException(fenced);
+      throw error;
+    });
+    // After the commit, what the owner's own move in `update` delivers: the task's row, and both
+    // projects — either can be left settled, or holding a criterion that just became ready.
+    await this.publishAffectedTaskRows(
+      ownerId, [taskId, moved.parentTaskId], [taskId, moved.verifiesTaskId],
+    );
+    await this.deliverSettledProjects([from, to]);
+    await this.deliverReadyCriteria([from, to]);
+    await this.deliverUnlandedCriteria([from, to]);
+    await this.deliverTaskExceptions([taskId]);
+    await this.openItems?.resolveByFact([taskId]);
+    await this.openItems?.deliverForTasks([taskId]);
   }
 
   /**
@@ -6718,6 +7041,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // pass with the fence's — because the caller is the owner, or because it had none of its own.
     if (!fenced.length || admitted.principal === 'USER') return;
     const scope = await this.deriveProjectScope(tx, ownerId, actingSessionId);
+    // A run's scope is the project of the task it executes, so a task MOVED between the admission
+    // and this lock — the account owner confirming a MOVE_TASK, which takes its run with it (unit
+    // L4) — moves the run's scope with it. Nothing was taken over, and R3's "yield, do not retry"
+    // would tell a run that still holds its task to stop. It is the stale snapshot
+    // TASK_FACT_SCOPE_MOVED names instead: nothing was written, and the same write sent again is
+    // admitted under the scope the run holds now. A coordinator's or a judgment's scope that moved
+    // is still R3's below.
+    if (admitted.scope && scope && scope.projectId !== admitted.scope.projectId
+      && await this.scopeFollowsTask(tx, ownerId, actingSessionId)) {
+      throw new ConflictException({
+        code: TASK_FACT_SCOPE_MOVED,
+        requiredAction: 'RETRY',
+        message:
+          'the task this session is executing was moved into another project while this write was '
+          + 'being prepared — nothing was written; send it again',
+      });
+    }
     const projectStatus = await this.projectScopeStatuses(tx, ownerId, [
       ...projectIds,
       scope?.projectId,
@@ -8661,6 +9001,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       && before.projectId && dto.projectId !== before.projectId
       && projectScopeMode() === 'enforce') {
       return this.requestMove(ownerId, { ...before, projectId: before.projectId }, dto, actingSessionId);
+    }
+    // ...and the same request once the account owner's confirmation has moved the task: it is
+    // already where it asked to go. See `appliedMoveReplay`; anything it does not recognise as that
+    // request goes on below as the ordinary update it is.
+    if (actingSessionId && dto.handoff != null && typeof dto.projectId === 'string'
+      && before.projectId && dto.projectId === before.projectId
+      && projectScopeMode() === 'enforce') {
+      const replayed = await this.appliedMoveReplay(
+        ownerId, { ...before, projectId: before.projectId }, dto, actingSessionId,
+      );
+      if (replayed) return replayed;
     }
     const acceptanceCommand = dto.acceptanceCommand === undefined
       ? before.acceptanceCommand
