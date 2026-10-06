@@ -63,13 +63,14 @@ export const ATTEMPT_BUDGET_LIMIT: Readonly<
  *
  * `contextWindow` is nullable because the runner REPORTS it rather than the control plane looking
  * it up, and it is absent until the first turn reports one. BD3 turns that into `UNMEASURED` rather
- * than into a zero or an infinity — see `readDimension`.
+ * than into a zero or an infinity — see `readDimension`. `costMicros` is `null` the same way for a
+ * runtime that reports no cost at all (DeepSeek Harness): its session's $0 is a default, not a spend.
  */
 export interface AttemptSpend {
   turns: number;
   wallClockMs: number;
   toolCalls: number;
-  costMicros: number;
+  costMicros: number | null;
   contextTokens: number | null;
   contextWindow: number | null;
   coordinatorSteers: number;
@@ -154,7 +155,8 @@ function readDimension(
   };
 }
 
-/** §1's "花费从哪读" column. `null` is BD3's unmeasured, and only `CONTEXT` can produce one. */
+/** §1's "花费从哪读" column. `null` is BD3's unmeasured: `CONTEXT` before a report, `COST` on a
+ *  runtime that reports none. */
 function measure(dimension: AttemptBudgetDimension, spent: AttemptSpend): number | null {
   switch (dimension) {
     case 'CONTEXT':
