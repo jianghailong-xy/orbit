@@ -2,9 +2,11 @@
 
 Task: [iOS/macOS 项目页加跨项目确认卡（含移动请求），文案与 Web 一致](orbit-task:34b99rROWy9XZs7gyAr8t),
 project [跨项目移动任务：agent 发起，账号所有者确认即生效](orbit-project:34b8pthjtmO06pvd8i3FW), criterion 5.
-Branch `orbit/ios-macos-web-857cee`, code commit `4dddff557` on main `51f0cdfee`, then main `be0f8c22a` merged (`7e8bad80c`). Executed on HPC (Linux),
-no local Mac: OrbitKit ran in `swift:6.1` docker; the macOS and iOS builds, the XCUITests and the pictures
-ran on GitHub Actions through push-triggered probe branches (never merged, deleted afterwards).
+Branch `orbit/ios-macos-web-857cee`: the card in `4dddff557`; main merged up to `30cf89786` (which brought the task
+page's own MOVE_TASK words, `TaskDetailCopy.moveTaskStateMeaning`), after which the card reads that one map
+(`2d746caee`). Everything below was checked on `2d746caee`. Executed on HPC (Linux), no local Mac: OrbitKit ran in
+`swift:6.1` docker; the macOS and iOS builds, the XCUITests and the pictures ran on GitHub Actions through
+push-triggered probe branches (never merged, deleted afterwards).
 
 ## What the clients do now
 
@@ -26,11 +28,12 @@ ran on GitHub Actions through push-triggered probe branches (never merged, delet
   which the server moves the task and spends the request. One question open at a time.
 - **A refusal.** The second step stays open under "That answer was not recorded", the server's code and its
   reason (e.g. `MOVE_TASK_LANDING_IN_FLIGHT … the request is still waiting`).
-- **Words.** `ProjectCrossings` (OrbitKit) holds every sentence; `ProjectCrossingsCardCopyParityTests` reads
-  `src/web/src/components/ProjectCrossingsCard.tsx` and `src/web/src/lib/attribution.ts` and compares each
-  one whole (a missing file is a failure, never a skip).
+- **Words.** `ProjectCrossings` (OrbitKit) holds every sentence — the state words shared with the task page's
+  attribution card (`TaskDetailCopy`); `ProjectCrossingsCardCopyParityTests` reads
+  `src/web/src/components/ProjectCrossingsCard.tsx` and `src/web/src/lib/attribution.ts` and compares each one
+  whole (a missing file is a failure, never a skip).
 
-## Pictures (real app UI, XCUITest on CI against `stub.py`)
+## Pictures (real app UI, XCUITest on CI against `stub.py`, run 37516956540 on `2d746caee`)
 
 The probe builds the iPhone app's `CompactShell` and the Mac app's `MainView` from the shared sources,
 pointed at a stub serving project P1 "Runner hardening" with five crossings: X1 a move of "Wire the drain
@@ -46,26 +49,25 @@ watchdog" in from a DONE project, X2 a move out whose task is being landed, X3 a
 | Refuse… → the refusal's second step (cancelled, nothing sent) | `ios-5-refuse-step.png` | `mac-5-refuse-step.png` |
 
 What the apps sent (`ios/writes.txt`, `mac/writes.txt`): one
-`POST /api/projects/P1/handoffs/X1/decision {"decision":"APPROVE","acknowledgedCrossingKey":"8f3c1d2e…"}` → 201,
-one for X2 → 409 `MOVE_TASK_LANDING_IN_FLIGHT`, no DENY.
+`POST /api/projects/P1/handoffs/X1/decision` with `"decision":"APPROVE"` and `"acknowledgedCrossingKey":"8f3c1d2e…"`
+→ 201, one for X2 → 409 `MOVE_TASK_LANDING_IN_FLIGHT`, no DENY. (The two keys' order in the body varies with
+Foundation's encoder.) The same flow passed on `4dddff557` too (runs 37505299361, 37509553027).
 
-## Checks
+## Checks on `2d746caee`
 
 | Check | Result |
 |---|---|
-| OrbitKit, Linux `swift:6.1` docker, `4dddff557` | 3228 tests; the 32 new ones (`ProjectCrossings*`) pass; 5 failures in 2 tests — identical on clean main `51f0cdfee` (3196 tests, same 5): `ci/orbitkit-linux-swift61.txt` |
-| OrbitKit, same, after merging the newer main `be0f8c22a` (`7e8bad80c`) | 3228 tests; the new ones pass; 12 failures in 6 tests — identical on clean main `be0f8c22a` (3196 tests, same 12; its wiki home change broke four more wiki parity tests): same file |
-| client.yml on the probe of `4dddff557` (run 37505299361) | font-tokens ✓, nav-push ✓, iOS build ✓ (`** BUILD SUCCEEDED **`), macOS OrbitApp `swift build` ✓; macOS OrbitKit `swift test` ✗ with the same 2 tests (5 failures) as the same step on clean main in the same run: `ci/` |
-| XCUITest, iPhone simulator + Mac | both `** TEST SUCCEEDED **`: `ios/`, `mac/` (run 37509553027) |
-| native sources after merging `be0f8c22a` | `git diff 4dddff557 7e8bad80c -- src/macos src/ios` is empty, and the web card and `attribution.ts` are unchanged: the CI runs above built the same native code |
-| merge check, each step | `4dddff557` and clean main `51f0cdfee`: build, shared (398), apiserver (4545), web (4255), go — all exit 0: `ci/merge-check.txt` |
+| OrbitKit, Linux `swift:6.1` docker | 3230 tests; the 32 new ones (`ProjectCrossings*`) and the project-page and task-page suites pass; 12 failures in 6 tests — identical on clean main `30cf89786` (3198 tests, the same 12): `ci/orbitkit-linux-swift61.txt` (with the earlier runs on `4dddff557`/`51f0cdfee` and `7e8bad80c`/`be0f8c22a`) |
+| client.yml, run 37516956540 | font-tokens ✓, nav-push ✓, iOS build ✓ (`** BUILD SUCCEEDED **`), macOS OrbitApp `swift build` ✓ (`Build complete!`); macOS OrbitKit `swift test` ✗ with exactly the 12 failures the same step has on clean main `30cf89786` in the same run (the baseline job reports success because its step only records; `ci/baseline-out-outcomes.txt` says failure): `ci/` |
+| XCUITest, iPhone simulator + Mac | both `** TEST SUCCEEDED **`: `ios/`, `mac/` |
+| merge check, the exact command | exit 0 — shared 398, apiserver 4551, web 4293, go ok: `ci/merge-check.txt` (with the earlier step-by-step runs on `4dddff557` and clean `51f0cdfee`, and two runs on `54146166e` whose go step failed on a timing flake and on a full host disk) |
 
-The tests red on main — `ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle`
-(the access-token revoke dialogs in `SettingsAdminView.swift` and `SettingsSheet.swift` call `.confirmationDialog` directly),
-`WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts` (the web sidebar's wiki count moved), and since
-`be0f8c22a` three more `WikiCopyParityTests`, one `WikiPlanCopyParityTests` and one `WikiReviewModeCopyParityTests` (the
-web wiki home's topic list, `2f9cc095f`) — came with other projects' merges (`90b80b42f`, `6c4e0ac0e`, `2f9cc095f`)
-and are not touched here.
+The tests red on main — `ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle` (the
+access-token revoke dialogs in `SettingsAdminView.swift` and `SettingsSheet.swift` call `.confirmationDialog`
+directly), `WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts` (the web sidebar's wiki count moved),
+and three more `WikiCopyParityTests`, one `WikiPlanCopyParityTests` and one `WikiReviewModeCopyParityTests` (the web
+wiki home's topic list) — came with other projects' merges (`90b80b42f`, `6c4e0ac0e`, `2f9cc095f`) and are not
+touched here.
 
 ## Limits
 

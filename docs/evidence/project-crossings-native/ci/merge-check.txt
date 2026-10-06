@@ -27,3 +27,13 @@ shared: Tests  398 passed (398)
 web: Tests  4255 passed (4255)
 go: ok  	orbit	212.557s
 go: ?   	orbit/cmd/release-manifest	[no test files]
+
+== the exact command, on 2d746caee (contains main 30cf89786): exit 0
+npm run build && npm test -w @orbit/shared && npm test -w @orbit/apiserver && npm test -w @orbit/web && (cd src/runner-go && go test ./...)
+  Tests  398 passed (398)
+  ℹ pass 4551
+  ℹ fail 0
+  Tests  4293 passed (4293)
+  ok  	orbit	218.048s
+
+== earlier runs of the exact command on 54146166e (code identical to 4dddff557 + main be0f8c22a): build, shared (398), apiserver (4545), web (4279) passed both times; go failed once on TestDshLifecycleLateEvents/lost-completion-is-reported-again (a 20 s wait, host load average ~14), then on the host disk filling (TestCommitRetriesOnIndexLock / TestCommitRemovesAnAbandonedIndexLock: 'No space left on device'). src/runner-go was byte-identical to the commits where go test passed.

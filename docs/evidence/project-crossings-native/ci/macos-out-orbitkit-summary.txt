@@ -1,300 +1,300 @@
-	 Executed 9 tests, with 0 failures (0 unexpected) in 0.020 (0.021) seconds
-	 Executed 13 tests, with 0 failures (0 unexpected) in 0.009 (0.010) seconds
-	 Executed 6 tests, with 0 failures (0 unexpected) in 0.018 (0.020) seconds
-	 Executed 2 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
-	 Executed 10 tests, with 0 failures (0 unexpected) in 0.012 (0.013) seconds
-	 Executed 22 tests, with 0 failures (0 unexpected) in 0.009 (0.012) seconds
-	 Executed 8 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 9 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
-	 Executed 26 tests, with 0 failures (0 unexpected) in 0.100 (0.104) seconds
-	 Executed 2 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
-	 Executed 18 tests, with 0 failures (0 unexpected) in 0.023 (0.027) seconds
-	 Executed 8 tests, with 0 failures (0 unexpected) in 0.007 (0.008) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.006 (0.007) seconds
 	 Executed 2 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
-	 Executed 8 tests, with 0 failures (0 unexpected) in 0.029 (0.030) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.023 (0.025) seconds
 	 Executed 3 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 8 tests, with 0 failures (0 unexpected) in 0.060 (0.062) seconds
-	 Executed 2 tests, with 0 failures (0 unexpected) in 0.534 (0.534) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.051 (0.052) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.430 (0.431) seconds
 	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
 /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: -[OrbitKitTests.ConfirmationStyleWiringTests testEveryConfirmationAsksThroughTheWidthAwareStyle] : XCTAssertFalse failed - /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsAdminView.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
 /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: -[OrbitKitTests.ConfirmationStyleWiringTests testEveryConfirmationAsksThroughTheWidthAwareStyle] : XCTAssertFalse failed - /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsSheet.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
-Test Case '-[OrbitKitTests.ConfirmationStyleWiringTests testEveryConfirmationAsksThroughTheWidthAwareStyle]' failed (0.930 seconds).
-	 Executed 3 tests, with 2 failures (0 unexpected) in 1.181 (1.182) seconds
+Test Case '-[OrbitKitTests.ConfirmationStyleWiringTests testEveryConfirmationAsksThroughTheWidthAwareStyle]' failed (0.846 seconds).
+	 Executed 3 tests, with 2 failures (0 unexpected) in 1.135 (1.135) seconds
 	 Executed 16 tests, with 0 failures (0 unexpected) in 0.006 (0.008) seconds
-	 Executed 5 tests, with 0 failures (0 unexpected) in 0.009 (0.009) seconds
-	 Executed 8 tests, with 0 failures (0 unexpected) in 0.076 (0.078) seconds
-	 Executed 4 tests, with 0 failures (0 unexpected) in 0.008 (0.008) seconds
-	 Executed 7 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
-	 Executed 8 tests, with 0 failures (0 unexpected) in 0.013 (0.014) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.009 (0.010) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.075 (0.077) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.007 (0.008) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.012 (0.013) seconds
 	 Executed 3 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
-	 Executed 41 tests, with 0 failures (0 unexpected) in 0.010 (0.015) seconds
-	 Executed 16 tests, with 0 failures (0 unexpected) in 0.208 (0.212) seconds
-	 Executed 9 tests, with 0 failures (0 unexpected) in 0.011 (0.012) seconds
-	 Executed 13 tests, with 0 failures (0 unexpected) in 0.027 (0.029) seconds
-	 Executed 14 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
-	 Executed 6 tests, with 0 failures (0 unexpected) in 0.005 (0.006) seconds
+	 Executed 41 tests, with 0 failures (0 unexpected) in 0.008 (0.012) seconds
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.174 (0.177) seconds
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.010 (0.011) seconds
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.021 (0.023) seconds
 	 Executed 14 tests, with 0 failures (0 unexpected) in 0.002 (0.004) seconds
-	 Executed 8 tests, with 0 failures (0 unexpected) in 0.015 (0.017) seconds
-	 Executed 8 tests, with 0 failures (0 unexpected) in 0.006 (0.007) seconds
-	 Executed 16 tests, with 0 failures (0 unexpected) in 0.009 (0.014) seconds
-	 Executed 11 tests, with 0 failures (0 unexpected) in 0.139 (0.142) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.005 (0.005) seconds
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.002 (0.004) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.014 (0.016) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.003 (0.005) seconds
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.114 (0.115) seconds
 	 Executed 6 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
-	 Executed 22 tests, with 0 failures (0 unexpected) in 0.026 (0.030) seconds
-	 Executed 13 tests, with 0 failures (0 unexpected) in 0.112 (0.115) seconds
-	 Executed 4 tests, with 0 failures (0 unexpected) in 0.032 (0.032) seconds
-	 Executed 5 tests, with 0 failures (0 unexpected) in 0.053 (0.054) seconds
-	 Executed 3 tests, with 0 failures (0 unexpected) in 0.033 (0.034) seconds
-	 Executed 10 tests, with 0 failures (0 unexpected) in 0.001 (0.003) seconds
+	 Executed 22 tests, with 0 failures (0 unexpected) in 0.021 (0.024) seconds
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.108 (0.111) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.030 (0.031) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.044 (0.045) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.032 (0.033) seconds
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
 	 Executed 6 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 13 tests, with 0 failures (0 unexpected) in 0.020 (0.022) seconds
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.020 (0.021) seconds
 	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
 	 Executed 17 tests, with 0 failures (0 unexpected) in 0.002 (0.004) seconds
 	 Executed 6 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
-	 Executed 3 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.004 (0.004) seconds
 	 Executed 3 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
-	 Executed 8 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
-	 Executed 23 tests, with 0 failures (0 unexpected) in 0.005 (0.008) seconds
-	 Executed 9 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
-	 Executed 2 tests, with 0 failures (0 unexpected) in 0.009 (0.009) seconds
-	 Executed 17 tests, with 0 failures (0 unexpected) in 0.005 (0.007) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+	 Executed 23 tests, with 0 failures (0 unexpected) in 0.006 (0.008) seconds
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.005 (0.006) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.010 (0.010) seconds
+	 Executed 17 tests, with 0 failures (0 unexpected) in 0.006 (0.008) seconds
 	 Executed 18 tests, with 0 failures (0 unexpected) in 0.003 (0.005) seconds
-	 Executed 12 tests, with 0 failures (0 unexpected) in 0.085 (0.087) seconds
-	 Executed 8 tests, with 0 failures (0 unexpected) in 0.079 (0.080) seconds
-	 Executed 31 tests, with 0 failures (0 unexpected) in 0.006 (0.010) seconds
-	 Executed 22 tests, with 0 failures (0 unexpected) in 0.005 (0.008) seconds
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.084 (0.086) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.086 (0.087) seconds
+	 Executed 31 tests, with 0 failures (0 unexpected) in 0.005 (0.009) seconds
+	 Executed 22 tests, with 0 failures (0 unexpected) in 0.003 (0.006) seconds
 	 Executed 8 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
-	 Executed 8 tests, with 0 failures (0 unexpected) in 0.015 (0.016) seconds
-	 Executed 19 tests, with 0 failures (0 unexpected) in 0.013 (0.016) seconds
-	 Executed 14 tests, with 0 failures (0 unexpected) in 0.016 (0.018) seconds
-	 Executed 4 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
-	 Executed 12 tests, with 0 failures (0 unexpected) in 4.238 (4.240) seconds
-	 Executed 15 tests, with 0 failures (0 unexpected) in 0.014 (0.018) seconds
-	 Executed 7 tests, with 0 failures (0 unexpected) in 0.014 (0.016) seconds
-	 Executed 11 tests, with 0 failures (0 unexpected) in 0.011 (0.013) seconds
-	 Executed 19 tests, with 0 failures (0 unexpected) in 0.275 (0.278) seconds
-	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 4 tests, with 0 failures (0 unexpected) in 0.015 (0.016) seconds
-	 Executed 12 tests, with 0 failures (0 unexpected) in 0.033 (0.035) seconds
-	 Executed 23 tests, with 0 failures (0 unexpected) in 0.013 (0.015) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.013 (0.014) seconds
+	 Executed 19 tests, with 0 failures (0 unexpected) in 0.014 (0.016) seconds
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.018 (0.020) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+	 Executed 12 tests, with 0 failures (0 unexpected) in 4.093 (4.095) seconds
+	 Executed 15 tests, with 0 failures (0 unexpected) in 0.007 (0.009) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.005 (0.006) seconds
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.006 (0.007) seconds
+	 Executed 19 tests, with 0 failures (0 unexpected) in 0.242 (0.246) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.004 (0.006) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.019 (0.020) seconds
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.031 (0.033) seconds
+	 Executed 23 tests, with 0 failures (0 unexpected) in 0.011 (0.013) seconds
 	 Executed 5 tests, with 0 failures (0 unexpected) in 0.007 (0.008) seconds
-	 Executed 13 tests, with 0 failures (0 unexpected) in 0.031 (0.033) seconds
-	 Executed 9 tests, with 0 failures (0 unexpected) in 0.014 (0.016) seconds
-	 Executed 21 tests, with 0 failures (0 unexpected) in 0.012 (0.015) seconds
-	 Executed 6 tests, with 0 failures (0 unexpected) in 0.001 (0.003) seconds
-	 Executed 4 tests, with 0 failures (0 unexpected) in 0.018 (0.019) seconds
-	 Executed 5 tests, with 5 tests skipped and 0 failures (0 unexpected) in 0.002 (0.003) seconds
-	 Executed 35 tests, with 0 failures (0 unexpected) in 0.015 (0.020) seconds
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.030 (0.032) seconds
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.013 (0.014) seconds
+	 Executed 21 tests, with 0 failures (0 unexpected) in 0.013 (0.016) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.023 (0.024) seconds
+	 Executed 5 tests, with 5 tests skipped and 0 failures (0 unexpected) in 0.005 (0.007) seconds
+	 Executed 35 tests, with 0 failures (0 unexpected) in 0.014 (0.017) seconds
 	 Executed 18 tests, with 0 failures (0 unexpected) in 0.003 (0.005) seconds
-	 Executed 10 tests, with 0 failures (0 unexpected) in 0.005 (0.007) seconds
-	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 10 tests, with 0 failures (0 unexpected) in 0.058 (0.059) seconds
-	 Executed 12 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
-	 Executed 3 tests, with 0 failures (0 unexpected) in 0.005 (0.005) seconds
-	 Executed 6 tests, with 0 failures (0 unexpected) in 0.015 (0.016) seconds
-	 Executed 57 tests, with 0 failures (0 unexpected) in 0.017 (0.024) seconds
-Test Suite 'ProjectCrossingsCardCopyParityTests' started at 2026-10-06 17:45:53.175.
-Test Suite 'ProjectCrossingsCardCopyParityTests' passed at 2026-10-06 17:45:53.193.
-	 Executed 10 tests, with 0 failures (0 unexpected) in 0.017 (0.018) seconds
-Test Suite 'ProjectCrossingsDoorTests' started at 2026-10-06 17:45:53.193.
-Test Suite 'ProjectCrossingsDoorTests' passed at 2026-10-06 17:45:53.201.
-	 Executed 4 tests, with 0 failures (0 unexpected) in 0.006 (0.007) seconds
-Test Suite 'ProjectCrossingsTests' started at 2026-10-06 17:45:53.201.
-Test Suite 'ProjectCrossingsTests' passed at 2026-10-06 17:45:53.209.
-	 Executed 13 tests, with 0 failures (0 unexpected) in 0.005 (0.009) seconds
-Test Suite 'ProjectCrossingsWiringTests' started at 2026-10-06 17:45:53.209.
-Test Suite 'ProjectCrossingsWiringTests' passed at 2026-10-06 17:45:53.255.
-	 Executed 5 tests, with 0 failures (0 unexpected) in 0.045 (0.046) seconds
-	 Executed 13 tests, with 0 failures (0 unexpected) in 0.049 (0.051) seconds
-	 Executed 23 tests, with 0 failures (0 unexpected) in 0.007 (0.010) seconds
-	 Executed 6 tests, with 0 failures (0 unexpected) in 0.081 (0.083) seconds
-	 Executed 13 tests, with 0 failures (0 unexpected) in 0.004 (0.006) seconds
-	 Executed 8 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
-	 Executed 2 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
-	 Executed 9 tests, with 0 failures (0 unexpected) in 0.037 (0.039) seconds
-	 Executed 9 tests, with 0 failures (0 unexpected) in 0.052 (0.054) seconds
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.055 (0.057) seconds
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.002 (0.004) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.014 (0.015) seconds
+	 Executed 57 tests, with 0 failures (0 unexpected) in 0.016 (0.023) seconds
+Test Suite 'ProjectCrossingsCardCopyParityTests' started at 2026-10-06 19:13:33.775.
+Test Suite 'ProjectCrossingsCardCopyParityTests' passed at 2026-10-06 19:13:33.792.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.015 (0.017) seconds
+Test Suite 'ProjectCrossingsDoorTests' started at 2026-10-06 19:13:33.792.
+Test Suite 'ProjectCrossingsDoorTests' passed at 2026-10-06 19:13:33.796.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
+Test Suite 'ProjectCrossingsTests' started at 2026-10-06 19:13:33.796.
+Test Suite 'ProjectCrossingsTests' passed at 2026-10-06 19:13:33.800.
 	 Executed 13 tests, with 0 failures (0 unexpected) in 0.002 (0.004) seconds
-	 Executed 30 tests, with 0 failures (0 unexpected) in 0.015 (0.019) seconds
-	 Executed 6 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
-	 Executed 7 tests, with 0 failures (0 unexpected) in 0.015 (0.016) seconds
+Test Suite 'ProjectCrossingsWiringTests' started at 2026-10-06 19:13:33.800.
+Test Suite 'ProjectCrossingsWiringTests' passed at 2026-10-06 19:13:33.845.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.044 (0.045) seconds
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.050 (0.052) seconds
+	 Executed 23 tests, with 0 failures (0 unexpected) in 0.008 (0.011) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.091 (0.092) seconds
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.042 (0.044) seconds
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.060 (0.061) seconds
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.002 (0.004) seconds
+	 Executed 30 tests, with 0 failures (0 unexpected) in 0.015 (0.018) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.013 (0.014) seconds
 	 Executed 11 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
-	 Executed 3 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
 	 Executed 7 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
 	 Executed 8 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
-	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 13 tests, with 0 failures (0 unexpected) in 0.194 (0.196) seconds
-	 Executed 14 tests, with 0 failures (0 unexpected) in 0.051 (0.052) seconds
-	 Executed 10 tests, with 0 failures (0 unexpected) in 0.023 (0.024) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.194 (0.197) seconds
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.053 (0.055) seconds
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.026 (0.027) seconds
 	 Executed 31 tests, with 0 failures (0 unexpected) in 0.012 (0.016) seconds
-	 Executed 10 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
 	 Executed 3 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
 	 Executed 5 tests, with 0 failures (0 unexpected) in 0.007 (0.008) seconds
 	 Executed 8 tests, with 0 failures (0 unexpected) in 0.015 (0.016) seconds
 	 Executed 7 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
-	 Executed 7 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 7 tests, with 0 failures (0 unexpected) in 0.012 (0.013) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.009 (0.010) seconds
 	 Executed 9 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
 	 Executed 3 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
 	 Executed 8 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
 	 Executed 8 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
 	 Executed 7 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 14 tests, with 0 failures (0 unexpected) in 0.177 (0.179) seconds
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.182 (0.185) seconds
 	 Executed 13 tests, with 0 failures (0 unexpected) in 0.001 (0.003) seconds
-	 Executed 11 tests, with 0 failures (0 unexpected) in 5.009 (5.012) seconds
-	 Executed 7 tests, with 0 failures (0 unexpected) in 0.012 (0.013) seconds
-	 Executed 19 tests, with 0 failures (0 unexpected) in 0.043 (0.045) seconds
-	 Executed 14 tests, with 0 failures (0 unexpected) in 0.874 (0.876) seconds
-	 Executed 3 tests, with 0 failures (0 unexpected) in 0.010 (0.011) seconds
-	 Executed 3 tests, with 0 failures (0 unexpected) in 0.012 (0.012) seconds
+	 Executed 11 tests, with 0 failures (0 unexpected) in 5.254 (5.257) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.024 (0.026) seconds
+	 Executed 19 tests, with 0 failures (0 unexpected) in 0.040 (0.043) seconds
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.826 (0.828) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.008 (0.009) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.009 (0.010) seconds
 	 Executed 8 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
-	 Executed 26 tests, with 0 failures (0 unexpected) in 0.010 (0.013) seconds
-	 Executed 11 tests, with 0 failures (0 unexpected) in 0.059 (0.061) seconds
-	 Executed 7 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
-	 Executed 16 tests, with 0 failures (0 unexpected) in 0.088 (0.090) seconds
+	 Executed 26 tests, with 0 failures (0 unexpected) in 0.008 (0.011) seconds
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.052 (0.054) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.076 (0.078) seconds
 	 Executed 3 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
 	 Executed 8 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
-	 Executed 8 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 6 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 6 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
 	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
 	 Executed 8 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 4 tests, with 0 failures (0 unexpected) in 0.007 (0.007) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.007 (0.008) seconds
 	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
 	 Executed 4 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
 	 Executed 12 tests, with 0 failures (0 unexpected) in 0.002 (0.004) seconds
-	 Executed 11 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 10 tests, with 0 failures (0 unexpected) in 0.164 (0.165) seconds
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.001 (0.003) seconds
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.178 (0.179) seconds
 	 Executed 3 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
-	 Executed 28 tests, with 0 failures (0 unexpected) in 0.005 (0.008) seconds
-	 Executed 8 tests, with 0 failures (0 unexpected) in 0.014 (0.016) seconds
-	 Executed 8 tests, with 0 failures (0 unexpected) in 0.004 (0.006) seconds
+	 Executed 28 tests, with 0 failures (0 unexpected) in 0.004 (0.007) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.009 (0.010) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
 	 Executed 8 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 3 tests, with 0 failures (0 unexpected) in 0.016 (0.016) seconds
-	 Executed 2 tests, with 0 failures (0 unexpected) in 0.007 (0.007) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.017 (0.018) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.014 (0.014) seconds
 	 Executed 8 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
-	 Executed 4 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.005 (0.006) seconds
 	 Executed 7 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
-	 Executed 5 tests, with 0 failures (0 unexpected) in 0.010 (0.011) seconds
-	 Executed 10 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 7 tests, with 0 failures (0 unexpected) in 0.096 (0.097) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.011 (0.011) seconds
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.098 (0.099) seconds
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.002 (0.004) seconds
 	 Executed 9 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
-	 Executed 9 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
-	 Executed 4 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
-	 Executed 4 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
-	 Executed 25 tests, with 0 failures (0 unexpected) in 0.024 (0.027) seconds
-	 Executed 7 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
-	 Executed 7 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 10 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 19 tests, with 0 failures (0 unexpected) in 0.233 (0.237) seconds
-	 Executed 2 tests, with 0 failures (0 unexpected) in 0.006 (0.006) seconds
 	 Executed 4 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+	 Executed 25 tests, with 0 failures (0 unexpected) in 0.026 (0.029) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.005 (0.005) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
+	 Executed 19 tests, with 0 failures (0 unexpected) in 0.241 (0.245) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.008 (0.008) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.006 (0.007) seconds
 	 Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
 	 Executed 50 tests, with 0 failures (0 unexpected) in 0.009 (0.014) seconds
-	 Executed 4 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
 	 Executed 7 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
 	 Executed 5 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
 	 Executed 3 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
 	 Executed 9 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 24 tests, with 0 failures (0 unexpected) in 0.003 (0.006) seconds
+	 Executed 24 tests, with 0 failures (0 unexpected) in 0.004 (0.007) seconds
 	 Executed 7 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
 	 Executed 7 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
-	 Executed 16 tests, with 0 failures (0 unexpected) in 0.003 (0.005) seconds
-	 Executed 16 tests, with 0 failures (0 unexpected) in 0.003 (0.005) seconds
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.002 (0.004) seconds
 	 Executed 7 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
-	 Executed 19 tests, with 0 failures (0 unexpected) in 0.004 (0.006) seconds
-	 Executed 7 tests, with 0 failures (0 unexpected) in 0.054 (0.055) seconds
-	 Executed 10 tests, with 0 failures (0 unexpected) in 0.019 (0.020) seconds
-	 Executed 26 tests, with 0 failures (0 unexpected) in 0.003 (0.006) seconds
-	 Executed 12 tests, with 0 failures (0 unexpected) in 0.472 (0.474) seconds
-	 Executed 11 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
-	 Executed 8 tests, with 0 failures (0 unexpected) in 0.094 (0.096) seconds
-	 Executed 7 tests, with 0 failures (0 unexpected) in 0.011 (0.013) seconds
-	 Executed 8 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
-	 Executed 13 tests, with 0 failures (0 unexpected) in 0.034 (0.036) seconds
-	 Executed 23 tests, with 0 failures (0 unexpected) in 0.003 (0.006) seconds
-	 Executed 7 tests, with 0 failures (0 unexpected) in 0.102 (0.103) seconds
-	 Executed 13 tests, with 0 failures (0 unexpected) in 0.003 (0.005) seconds
-	 Executed 7 tests, with 0 failures (0 unexpected) in 0.030 (0.031) seconds
-	 Executed 27 tests, with 0 failures (0 unexpected) in 0.011 (0.015) seconds
-	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 8 tests, with 0 failures (0 unexpected) in 0.023 (0.024) seconds
-	 Executed 16 tests, with 0 failures (0 unexpected) in 0.004 (0.006) seconds
-	 Executed 9 tests, with 0 failures (0 unexpected) in 0.106 (0.107) seconds
+	 Executed 19 tests, with 0 failures (0 unexpected) in 0.005 (0.008) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.055 (0.056) seconds
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.032 (0.035) seconds
+	 Executed 26 tests, with 0 failures (0 unexpected) in 0.005 (0.009) seconds
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.482 (0.484) seconds
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.002 (0.004) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.089 (0.090) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.010 (0.012) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.035 (0.037) seconds
+	 Executed 23 tests, with 0 failures (0 unexpected) in 0.004 (0.006) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.098 (0.099) seconds
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.029 (0.030) seconds
+	 Executed 27 tests, with 0 failures (0 unexpected) in 0.020 (0.027) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.029 (0.030) seconds
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.006 (0.009) seconds
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.109 (0.111) seconds
 	 Executed 24 tests, with 0 failures (0 unexpected) in 0.003 (0.006) seconds
 	 Executed 5 tests, with 0 failures (0 unexpected) in 0.004 (0.004) seconds
 	 Executed 10 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
-	 Executed 12 tests, with 0 failures (0 unexpected) in 0.006 (0.007) seconds
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.006 (0.008) seconds
 	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
 	 Executed 12 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 5 tests, with 0 failures (0 unexpected) in 0.015 (0.016) seconds
-	 Executed 9 tests, with 0 failures (0 unexpected) in 0.032 (0.034) seconds
-	 Executed 13 tests, with 0 failures (0 unexpected) in 0.092 (0.094) seconds
-	 Executed 25 tests, with 0 failures (0 unexpected) in 0.008 (0.011) seconds
-	 Executed 12 tests, with 0 failures (0 unexpected) in 0.123 (0.125) seconds
-	 Executed 5 tests, with 0 failures (0 unexpected) in 0.008 (0.009) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.015 (0.015) seconds
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.022 (0.024) seconds
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.098 (0.100) seconds
+	 Executed 27 tests, with 0 failures (0 unexpected) in 0.009 (0.013) seconds
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.127 (0.129) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.009 (0.010) seconds
 	 Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
-	 Executed 6 tests, with 0 failures (0 unexpected) in 0.013 (0.014) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.015 (0.016) seconds
 	 Executed 10 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
-	 Executed 16 tests, with 0 failures (0 unexpected) in 0.003 (0.005) seconds
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
 	 Executed 7 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
 	 Executed 3 tests, with 0 failures (0 unexpected) in 0.010 (0.011) seconds
 	 Executed 3 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
 	 Executed 6 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
 	 Executed 12 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
-	 Executed 9 tests, with 0 failures (0 unexpected) in 0.058 (0.059) seconds
-	 Executed 6 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
-	 Executed 9 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
-	 Executed 11 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
-	 Executed 5 tests, with 0 failures (0 unexpected) in 0.040 (0.041) seconds
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.060 (0.062) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.007 (0.009) seconds
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.007 (0.009) seconds
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.043 (0.044) seconds
 	 Executed 6 tests, with 0 failures (0 unexpected) in 0.005 (0.006) seconds
-	 Executed 9 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
 	 Executed 14 tests, with 0 failures (0 unexpected) in 0.002 (0.004) seconds
-	 Executed 7 tests, with 0 failures (0 unexpected) in 0.056 (0.057) seconds
-	 Executed 20 tests, with 0 failures (0 unexpected) in 0.002 (0.005) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.057 (0.058) seconds
+	 Executed 20 tests, with 0 failures (0 unexpected) in 0.003 (0.005) seconds
 	 Executed 7 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 5 tests, with 0 failures (0 unexpected) in 0.012 (0.013) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.013 (0.014) seconds
 	 Executed 6 tests, with 0 failures (0 unexpected) in 0.007 (0.008) seconds
 	 Executed 5 tests, with 0 failures (0 unexpected) in 0.016 (0.017) seconds
 	 Executed 103 tests, with 0 failures (0 unexpected) in 0.016 (0.027) seconds
 	 Executed 25 tests, with 0 failures (0 unexpected) in 0.004 (0.006) seconds
-	 Executed 8 tests, with 0 failures (0 unexpected) in 0.043 (0.045) seconds
-	 Executed 14 tests, with 0 failures (0 unexpected) in 0.014 (0.016) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.041 (0.042) seconds
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.013 (0.015) seconds
 	 Executed 8 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 10 tests, with 0 failures (0 unexpected) in 0.008 (0.009) seconds
-	 Executed 5 tests, with 0 failures (0 unexpected) in 0.033 (0.034) seconds
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.010 (0.011) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.038 (0.039) seconds
 	 Executed 2 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
-	 Executed 6 tests, with 0 failures (0 unexpected) in 0.473 (0.474) seconds
-	 Executed 3 tests, with 0 failures (0 unexpected) in 0.009 (0.010) seconds
-	 Executed 6 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 11 tests, with 0 failures (0 unexpected) in 0.009 (0.011) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.477 (0.478) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.009 (0.009) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.009 (0.010) seconds
 	 Executed 7 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
 	 Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
 	 Executed 25 tests, with 0 failures (0 unexpected) in 0.010 (0.013) seconds
-	 Executed 9 tests, with 0 failures (0 unexpected) in 0.021 (0.022) seconds
-	 Executed 9 tests, with 0 failures (0 unexpected) in 0.028 (0.030) seconds
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.020 (0.022) seconds
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.031 (0.032) seconds
 	 Executed 11 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
-	 Executed 6 tests, with 0 failures (0 unexpected) in 0.025 (0.026) seconds
-	 Executed 6 tests, with 0 failures (0 unexpected) in 0.013 (0.014) seconds
-	 Executed 12 tests, with 0 failures (0 unexpected) in 0.118 (0.120) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.028 (0.029) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.016 (0.017) seconds
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.130 (0.132) seconds
 	 Executed 14 tests, with 0 failures (0 unexpected) in 0.004 (0.006) seconds
-	 Executed 18 tests, with 0 failures (0 unexpected) in 0.038 (0.041) seconds
+	 Executed 18 tests, with 0 failures (0 unexpected) in 0.038 (0.040) seconds
 /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:282: error: -[OrbitKitTests.WikiCopyParityTests testTheDrawerRowCountsWhatTheWebSidebarCounts] : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says (wikiSpaces.data ?? []).reduce((sum, space) => sum + (space.pendingOps ?? 0), 0)
 /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:284: error: -[OrbitKitTests.WikiCopyParityTests testTheDrawerRowCountsWhatTheWebSidebarCounts] : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says t.key === 'wiki' && wikiPending > 0
 /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:285: error: -[OrbitKitTests.WikiCopyParityTests testTheDrawerRowCountsWhatTheWebSidebarCounts] : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says aria-label={wikiProposalsToReview(wikiPending)}
-Test Case '-[OrbitKitTests.WikiCopyParityTests testTheDrawerRowCountsWhatTheWebSidebarCounts]' failed (0.010 seconds).
-	 Executed 16 tests, with 3 failures (0 unexpected) in 0.163 (0.166) seconds
-	 Executed 5 tests, with 0 failures (0 unexpected) in 0.013 (0.014) seconds
-	 Executed 14 tests, with 0 failures (0 unexpected) in 0.070 (0.072) seconds
-	 Executed 7 tests, with 0 failures (0 unexpected) in 0.024 (0.025) seconds
-	 Executed 3 tests, with 0 failures (0 unexpected) in 0.013 (0.013) seconds
-	 Executed 21 tests, with 0 failures (0 unexpected) in 0.006 (0.008) seconds
+Test Case '-[OrbitKitTests.WikiCopyParityTests testTheDrawerRowCountsWhatTheWebSidebarCounts]' failed (0.011 seconds).
+/Users/runner/work/orbit/orbit/src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:77: error: -[OrbitKitTests.WikiCopyParityTests testTheHomeBandsAreTheWebPhonesInItsOrder] : XCTUnwrap failed: expected non-nil value of type "Range<Index>" - no `<div className="wk-cols">`
+Test Case '-[OrbitKitTests.WikiCopyParityTests testTheHomeBandsAreTheWebPhonesInItsOrder]' failed (0.002 seconds).
+/Users/runner/work/orbit/orbit/src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:369: error: -[OrbitKitTests.WikiCopyParityTests testTheHomeReadsItsBandsByKind] : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says useQuery(wikiEntriesOfKindQuery(space.id, 'decision', RECENT_DECISIONS))
+/Users/runner/work/orbit/orbit/src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:371: error: -[OrbitKitTests.WikiCopyParityTests testTheHomeReadsItsBandsByKind] : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says wikiEntriesOfKind(decisionRead.data ?? [], 'decision')
+/Users/runner/work/orbit/orbit/src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:372: error: -[OrbitKitTests.WikiCopyParityTests testTheHomeReadsItsBandsByKind] : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says <WikiEmpty>{WIKI_NO_PRINCIPLES}</WikiEmpty>
+Test Case '-[OrbitKitTests.WikiCopyParityTests testTheHomeReadsItsBandsByKind]' failed (0.007 seconds).
+/Users/runner/work/orbit/orbit/src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:349: error: -[OrbitKitTests.WikiCopyParityTests testTheHomeRowsAreTheWebsRows] : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says wikiRecentRows(timeline.data?.items ?? []).slice(0, 5).map((row) =>
+Test Case '-[OrbitKitTests.WikiCopyParityTests testTheHomeRowsAreTheWebsRows]' failed (0.005 seconds).
+	 Executed 16 tests, with 8 failures (0 unexpected) in 0.132 (0.135) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.014 (0.014) seconds
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.072 (0.074) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.023 (0.024) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.013 (0.014) seconds
+	 Executed 21 tests, with 0 failures (0 unexpected) in 0.005 (0.008) seconds
 	 Executed 7 tests, with 0 failures (0 unexpected) in 0.022 (0.023) seconds
-	 Executed 16 tests, with 0 failures (0 unexpected) in 0.103 (0.105) seconds
-	 Executed 14 tests, with 0 failures (0 unexpected) in 0.082 (0.085) seconds
-	 Executed 12 tests, with 0 failures (0 unexpected) in 0.111 (0.113) seconds
+/Users/runner/work/orbit/orbit/src/macos/OrbitKit/Tests/OrbitKitTests/WikiPlanCopyParityTests.swift:834: error: -[OrbitKitTests.WikiPlanCopyParityTests testThePlanBannerIsTheHomesSecond] : XCTAssertFalse failed - the web home: lost ["{wikiProposalsToReview(pending.length)}", "<WikiPlanBanner space={space} />", "<div className=\"wk-cols\">", "<WikiPlanCard space={space} />", "<ReviewCard"]
+Test Case '-[OrbitKitTests.WikiPlanCopyParityTests testThePlanBannerIsTheHomesSecond]' failed (0.011 seconds).
+	 Executed 16 tests, with 1 failure (0 unexpected) in 0.112 (0.115) seconds
+/Users/runner/work/orbit/orbit/src/macos/OrbitKit/Tests/OrbitKitTests/WikiReviewModeCopyParityTests.swift:727: error: -[OrbitKitTests.WikiReviewModeCopyParityTests testTheRunPagesDrawTheSameBlocksInTheSameOrder] : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says row.kind === 'run' ? ( <WikiRunTimelineRow
+Test Case '-[OrbitKitTests.WikiReviewModeCopyParityTests testTheRunPagesDrawTheSameBlocksInTheSameOrder]' failed (0.015 seconds).
+	 Executed 14 tests, with 1 failure (0 unexpected) in 0.091 (0.093) seconds
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.102 (0.104) seconds
 	 Executed 9 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
-	 Executed 37 tests, with 0 failures (0 unexpected) in 0.004 (0.008) seconds
-	 Executed 4 tests, with 0 failures (0 unexpected) in 0.010 (0.011) seconds
-	 Executed 5 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
-	 Executed 3228 tests, with 5 tests skipped and 5 failures (0 unexpected) in 19.143 (19.603) seconds
-	 Executed 3228 tests, with 5 tests skipped and 5 failures (0 unexpected) in 19.143 (19.604) seconds
+	 Executed 37 tests, with 0 failures (0 unexpected) in 0.004 (0.007) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.011 (0.011) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+	 Executed 3230 tests, with 5 tests skipped and 12 failures (0 unexpected) in 18.911 (19.352) seconds
+	 Executed 3230 tests, with 5 tests skipped and 12 failures (0 unexpected) in 18.911 (19.354) seconds

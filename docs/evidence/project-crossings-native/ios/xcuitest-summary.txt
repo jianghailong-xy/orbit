@@ -1,6 +1,6 @@
 Test Case '-[CrossingsProbeUITests.CrossingsShotTests testIPhoneConfirmsAMoveInTwoPresses]' started.
-Test Case '-[CrossingsProbeUITests.CrossingsShotTests testIPhoneConfirmsAMoveInTwoPresses]' passed (195.178 seconds).
-	 Executed 1 test, with 0 failures (0 unexpected) in 195.178 (195.180) seconds
-	 Executed 1 test, with 0 failures (0 unexpected) in 195.178 (195.181) seconds
-	 Executed 1 test, with 0 failures (0 unexpected) in 195.178 (195.182) seconds
+Test Case '-[CrossingsProbeUITests.CrossingsShotTests testIPhoneConfirmsAMoveInTwoPresses]' passed (223.993 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 223.993 (223.997) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 223.993 (223.998) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 223.993 (224.002) seconds
 ** TEST SUCCEEDED **

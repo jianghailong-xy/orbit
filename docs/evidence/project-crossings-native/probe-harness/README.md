@@ -1,8 +1,9 @@
 # The probe that took these pictures — kept as a record
 
-It ran from push-triggered branches (`probe/crossings-native`, `probe/crossings-native-shots`), which
-were deleted afterwards; `client.probe.yml` and `client.shots.yml` are the two workflows those branches
-carried as `.github/workflows/client.yml`, and the rest sat under `.xcross-probe/`. Nothing here is built
+It ran from push-triggered branches (`probe/crossings-native`, `probe/crossings-native-shots`,
+`probe/crossings-final`), which were deleted afterwards; `client.probe.yml`, `client.shots.yml` and
+`client.final.yml` are the workflows those branches carried as `.github/workflows/client.yml`, and the rest
+sat under `.xcross-probe/`. Nothing here is built
 by this repository.
 
 Task 34b99rROWy9XZs7gyAr8t (iOS / macOS: the project page's cross-project crossings card, move requests
