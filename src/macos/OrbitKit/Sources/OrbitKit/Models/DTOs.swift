@@ -201,6 +201,9 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// runner too old to report it, which stays unrestricted — an unknown must not withdraw a mode
     /// that works (see `AgentDefaults.isRunnable`).
     public let runsAsRoot: Bool?
+    /// Where this runner's updates of itself stand, as it last reported. Nil from an older server or
+    /// a runner too old to report it, which the Runners pages judge by `runsAsRoot` as they always have.
+    public var selfUpdate: RunnerSelfUpdate? = nil
     /// What the runner declared it can do on its last poll — `codex-account-move/v1` and
     /// `claude-account-move/v1` say it carries a session's conversation to another of its accounts.
     /// Nil from an older server, which claims nothing.

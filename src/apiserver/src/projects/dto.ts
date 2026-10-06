@@ -271,6 +271,18 @@ export class CreateProjectDto {
 
   @IsOptional() @IsInt() @Min(1) @Max(MAX_PROJECT_SESSION_BUDGET_PER_DAY)
   sessionBudgetPerDay?: number | null;
+
+  /**
+   * Not this door's fields, and nothing here writes them: a new project's Automatic is
+   * `coordinatorEnabled`, and its coordinator is whoever opens where `workspaceId` says. Declared all
+   * the same, and validated as `PATCH /projects/:id` validates them, so that a request carrying one is
+   * refused it by name with the rest of the authorization set rather than having it stripped by the
+   * whitelist and a project made without it: a personal access token at the user door
+   * (docs/personal-access-token-design.md §5.1), an agent at the runner door. A login is not refused
+   * them, and they stay unwritten.
+   */
+  @IsSent() @IsBoolean() automatic?: boolean;
+  @IsOptional() @IsPublicId() coordinatorAgentId?: string | null;
 }
 
 export class UpdateProjectDto {

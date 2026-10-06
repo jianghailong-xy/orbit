@@ -691,8 +691,9 @@ export class ProjectsController {
    * fork, so a caller that reads its criteria back and finds them unmoved is looking at a hold
    * rather than at a lost write.
    *
-   * A personal access token reaches this route with `projects:write`, but `status`, `integration`
-   * and `acceptanceCriteriaItems` are refused it whole — see `ProjectsService.update`.
+   * A personal access token reaches this route with `projects:write`, but `status`, `integration`,
+   * `acceptanceCriteriaItems`, the authorization set and `coordinatorAgentId` are refused it whole —
+   * see `ProjectsService.update`.
    */
   @PatScope('projects:write', { workspaceConfinable: false })
   @Patch(':id')

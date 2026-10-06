@@ -87,9 +87,11 @@ items and the fuse put to the owner, the integration line, and the wiki's owner 
 with `requiredAction: OPEN_ORBIT` before anything is read. On the routes a token does reach with its
 scope, the fields that are the owner's own decision are refused the same way and the request with
 them, so nothing it carried is written: `status`, `integration` and `acceptanceCriteriaItems` on
-`PATCH /projects/:id`, `integration` on `POST /projects`, `maintenance` on `POST /wiki/spaces`,
-`reviewMode`, `maintenance` and `automaticSpotChecks` on `PATCH /wiki/spaces/:id`, and
-`permissionMode` — to any value — on `PATCH /sessions/:id/config` and `POST /sessions/:id/resume`.
+`PATCH /projects/:id`, `integration` on `POST /projects`, the project's authorization set and
+coordinator (`automatic`, `coordinatorEnabled`, `maxConcurrentTasks`, `sessionBudgetPerDay`,
+`coordinatorAgentId`) on both, `maintenance` on `POST /wiki/spaces`, `reviewMode`, `maintenance` and
+`automaticSpotChecks` on `PATCH /wiki/spaces/:id`, and `permissionMode` — to any value — on
+`PATCH /sessions/:id/config`, `POST /sessions/:id/resume` and `POST /sessions`.
 The rule turns on the credential, not on a session: the user door carries no acting session, so the
 session conditions below never see a token, and a login on the same doors is answered exactly as the
 owner REST row says.
