@@ -47,6 +47,12 @@ Usage:
 
 When task-id is omitted, ORBIT_TASK_ID is used if this command is running inside
 an Orbit task session. Run 'orbit task <command> --help' for command options.
+
+Logged in as yourself ('orbit login', or ORBIT_USER_TOKEN), these commands call the
+REST API with your personal access token and print what they print as the runner.
+The ones that act for an Orbit session, or have no user route, are refused rather
+than sent with the runner's credential: 'orbit api' calls any user route, and
+'orbit capabilities --json' marks which commands run as you.
 `
 
 const taskListHelp = `orbit task-list — manage Orbit task lists
@@ -803,6 +809,9 @@ func cmdTaskCLI(args []string, in io.Reader, out io.Writer) error {
 		_, err := fmt.Fprint(out, h)
 		return err
 	}
+	if _, err := userModeGate("task " + action); err != nil {
+		return err
+	}
 
 	switch action {
 	case "list":
@@ -870,7 +879,7 @@ func cliTaskDependencyGraph(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	t, err := cliTransport()
+	t, err := cliTaskTransport()
 	if err != nil {
 		return err
 	}
@@ -899,7 +908,7 @@ func cliTaskDependencyAdd(args []string, out io.Writer) error {
 	if strings.TrimSpace(*dependsOn) == "" {
 		return fmt.Errorf("--depends-on is required")
 	}
-	t, err := cliTransport()
+	t, err := cliTaskTransport()
 	if err != nil {
 		return err
 	}
@@ -927,7 +936,7 @@ func cliTaskDependencyRemove(args []string, out io.Writer) error {
 	if strings.TrimSpace(*dependsOn) == "" {
 		return fmt.Errorf("--depends-on is required")
 	}
-	t, err := cliTransport()
+	t, err := cliTaskTransport()
 	if err != nil {
 		return err
 	}
@@ -982,7 +991,13 @@ func cmdTaskListCLI(args []string, in io.Reader, out io.Writer) error {
 	}
 }
 
+// cliTransport is the machine's credential, which a session and a service token ride on too. It is
+// never the person's stand-in (docs/personal-access-token-design.md §7.3): a command that gets here
+// while the CLI acts as you has no form that runs as you, and is refused rather than sent as the runner.
 func cliTransport() (*Transport, error) {
+	if identity := resolveCLIIdentity(); identity.Kind == identityUser {
+		return nil, refusedAsUser(identity, "", userModeUnported)
+	}
 	if err := configStoragePrivate(); err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("no runner config — run `orbit register` first")
@@ -1201,7 +1216,7 @@ const (
 	taskListRetryInitialWait = 2 * time.Second
 )
 
-func listTaskPageWithRetry(t *Transport, status, listID, projectID string, labels []string, cursor string, minPriority *int) (json.RawMessage, string, error) {
+func listTaskPageWithRetry(t taskTransport, status, listID, projectID string, labels []string, cursor string, minPriority *int) (json.RawMessage, string, error) {
 	wait := taskListRetryInitialWait
 	var err error
 	for attempt := 1; ; attempt++ {
@@ -1228,7 +1243,7 @@ func listTaskPageWithRetry(t *Transport, status, listID, projectID string, label
 // `jq -s` puts them back into an array for anyone who wants one.
 //
 // Returns the cursor the walk died on, so the caller can tell the user where to resume.
-func streamAllTasks(t *Transport, status, listID, projectID string, labels []string, cursor string, minPriority *int, out io.Writer) (written int, failedAt string, err error) {
+func streamAllTasks(t taskTransport, status, listID, projectID string, labels []string, cursor string, minPriority *int, out io.Writer) (written int, failedAt string, err error) {
 	encoder := json.NewEncoder(out)
 	for {
 		page, next, pageErr := listTaskPageWithRetry(t, status, listID, projectID, labels, cursor, minPriority)
@@ -1298,7 +1313,7 @@ func cliTaskList(args []string, out io.Writer) error {
 	if *cursor != "" && !*all {
 		return fmt.Errorf("--cursor is only meaningful with --all")
 	}
-	t, err := cliTransport()
+	t, err := cliTaskTransport()
 	if err != nil {
 		return err
 	}
@@ -1341,7 +1356,7 @@ func cliTaskLabels(args []string, out io.Writer) error {
 	if err := rejectTrailing(fs); err != nil {
 		return err
 	}
-	t, err := cliTransport()
+	t, err := cliTaskTransport()
 	if err != nil {
 		return err
 	}
@@ -1363,7 +1378,7 @@ func cliTaskGet(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	t, err := cliTransport()
+	t, err := cliTaskTransport()
 	if err != nil {
 		return err
 	}
@@ -1385,7 +1400,7 @@ func cliTaskEvidenceList(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	t, err := cliTransport()
+	t, err := cliTaskTransport()
 	if err != nil {
 		return err
 	}
@@ -1435,7 +1450,7 @@ func cliTaskEvidenceSubmit(args []string, in io.Reader, out io.Writer) error {
 	if strings.TrimSpace(*idempotencyKey) != "" {
 		body["idempotencyKey"] = *idempotencyKey
 	}
-	t, err := cliTransport()
+	t, err := cliTaskTransport()
 	if err != nil {
 		return err
 	}
@@ -1509,7 +1524,7 @@ func cliTaskAttributionRead(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	t, err := cliTransport()
+	t, err := cliTaskTransport()
 	if err != nil {
 		return err
 	}
@@ -1822,7 +1837,7 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	if err := requireHandoffNamesItsDestination(body); err != nil {
 		return err
 	}
-	t, err := cliTransport()
+	t, err := cliTaskTransport()
 	if err != nil {
 		return err
 	}
@@ -1833,11 +1848,14 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	// assignee regardless.
 	agentID, sessionID := cliTaskAttribution()
 	// The same card the MCP tool raises: an agent that shells out to this command must not find a
-	// door the tool keeps closed. Headless there is no session, and so nobody to ask.
-	if declined, err := askBeforeCreate(t, sessionID, taskCreateApprovalToolName, body); err != nil {
-		return fmt.Errorf("create task: %w", err)
-	} else if declined != "" {
-		return fmt.Errorf("create task: the human rejected this task: %s", declined)
+	// door the tool keeps closed. Headless there is no session, and so nobody to ask — nor as the
+	// person, who is the one asking: a card is filed by a session, on the runner's routes.
+	if runner, ok := t.(*Transport); ok {
+		if declined, err := askBeforeCreate(runner, sessionID, taskCreateApprovalToolName, body); err != nil {
+			return fmt.Errorf("create task: %w", err)
+		} else if declined != "" {
+			return fmt.Errorf("create task: the human rejected this task: %s", declined)
+		}
 	}
 	raw, err := t.createTask(agentID, sessionID, body)
 	if err != nil {
@@ -1868,6 +1886,10 @@ func cliTaskAttribution() (agentID, sessionID string) {
 func cliCapabilityActor() string {
 	if agentID, sessionID := cliTaskAttribution(); agentID != "" && sessionID != "" {
 		return "agent"
+	}
+	// A personal access token's writes are the person's own, recorded with the token they used.
+	if resolveCLIIdentity().Kind == identityUser {
+		return "user"
 	}
 	return "runner_owner"
 }
@@ -1989,7 +2011,7 @@ func cliTaskCreateBatch(args []string, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	t, err := cliTransport()
+	t, err := cliTaskTransport()
 	if err != nil {
 		return err
 	}
@@ -2001,9 +2023,10 @@ func cliTaskCreateBatch(args []string, in io.Reader, out io.Writer) error {
 		body["dryRun"] = true
 		verb = "preview plan"
 	}
-	// A preview writes nothing, so only the real write is asked, exactly as on the MCP tool.
-	if !*dryRun {
-		if declined, err := askBeforeBatch(t, agentID, sessionID, items); err != nil {
+	// A preview writes nothing, so only the real write is asked, exactly as on the MCP tool — and only
+	// from a session, whose card rides the runner's routes, as `orbit task create`'s does.
+	if runner, ok := t.(*Transport); ok && !*dryRun {
+		if declined, err := askBeforeBatch(runner, agentID, sessionID, items); err != nil {
 			return fmt.Errorf("%s: %w", verb, err)
 		} else if declined != "" {
 			return fmt.Errorf("%s: the human rejected this batch: %s", verb, declined)
@@ -2524,7 +2547,7 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	if err := requireHandoffNamesItsDestination(body); err != nil {
 		return err
 	}
-	t, err := cliTransport()
+	t, err := cliTaskTransport()
 	if err != nil {
 		return err
 	}
@@ -2551,7 +2574,7 @@ func cliTaskDelete(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	t, err := cliTransport()
+	t, err := cliTaskTransport()
 	if err != nil {
 		return err
 	}
@@ -2573,7 +2596,7 @@ func cliTaskStart(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	t, err := cliTransport()
+	t, err := cliTaskTransport()
 	if err != nil {
 		return err
 	}
@@ -2640,7 +2663,7 @@ func cliTaskComment(args []string, in io.Reader, out io.Writer) error {
 	if !bodySet || strings.TrimSpace(body) == "" {
 		return fmt.Errorf("--body or --body-file - is required")
 	}
-	t, err := cliTransport()
+	t, err := cliTaskTransport()
 	if err != nil {
 		return err
 	}
@@ -3033,6 +3056,10 @@ type cliCapability struct {
 	Description    string                 `json:"description"`
 	MCPInputSchema map[string]interface{} `json:"mcpInputSchema"`
 	Mutates        bool                   `json:"mutates"`
+	// Whether the command runs as this process's identity, and why not when it does not
+	// (capabilityAvailability).
+	Available         bool   `json:"available"`
+	UnavailableReason string `json:"unavailableReason,omitempty"`
 }
 
 type cliCapabilityContext struct {
@@ -3062,32 +3089,44 @@ type cliCapabilitiesDocument struct {
 	Registered               bool                 `json:"registered"`
 	UnavailableReason        string               `json:"unavailableReason,omitempty"`
 	Context                  cliCapabilityContext `json:"context"`
-	Capabilities             []cliCapability      `json:"capabilities"`
+	// Who this process acts as and why (docs/personal-access-token-design.md §7.4): `orbit whoami`'s
+	// answer, without the request that has the server confirm a personal access token.
+	Identity     cliIdentity     `json:"identity"`
+	Capabilities []cliCapability `json:"capabilities"`
 }
 
 func buildCLICapabilities(executable string) cliCapabilitiesDocument {
+	// Who this process acts as (docs/personal-access-token-design.md §7.2) decides what it is offered,
+	// by the same resolution every command acts on.
+	identity := resolveCLIIdentity()
 	ctx := cliCapabilityContext{
 		SessionID: strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID")),
 		AgentID:   strings.TrimSpace(os.Getenv("ORBIT_AGENT_ID")),
 		TaskID:    strings.TrimSpace(os.Getenv("ORBIT_TASK_ID")),
 		// Derived from the write path itself rather than restated, so the document cannot claim
 		// one author while the tasks it creates record another: in a session these commands
-		// stamp the acting agent, headless they write as the runner owner.
+		// stamp the acting agent, headless they write as the runner owner, and logged in as you.
 		Actor: cliCapabilityActor(),
 	}
 	// A minted service credential names its own scopes, so it decides what this process may do —
-	// including inside a session, where it was passed deliberately rather than injected.
-	service := decodeServiceTokenClaims(currentServiceToken())
+	// when it is who this process acts as. Inside a session the CLI acts as the session, and a token
+	// in its environment changes nothing.
+	var service *serviceTokenClaims
+	if identity.Kind == identityService {
+		service = decodeServiceTokenClaims(identity.token)
+	}
 	includeOrchestration := service == nil && mcpOrchestrationEnabled() && ctx.SessionID != ""
+	// The person is offered every session command, each marked by whether it runs as them.
+	asUser := identity.Kind == identityUser
 	// No session context at all => a headless process (launchd/cron), which reaches only what its
 	// credential grants. An in-session agent whose agent has orchestration off is NOT headless:
 	// it keeps seeing no session_* capability.
-	includeHeadlessSession := service != nil || (!includeOrchestration && ctx.SessionID == "")
+	includeHeadlessSession := !asUser && (service != nil || (!includeOrchestration && ctx.SessionID == ""))
 	if service != nil {
 		ctx.ServiceToken = &cliServiceTokenContext{Scopes: service.Scopes, AgentID: service.WorkspaceID}
 	}
 	descriptors := make(map[string]map[string]interface{})
-	for _, d := range toolDescriptors(false, includeOrchestration || includeHeadlessSession) {
+	for _, d := range toolDescriptors(false, includeOrchestration || includeHeadlessSession || asUser) {
 		name, _ := d["name"].(string)
 		descriptors[name] = d
 	}
@@ -3104,6 +3143,9 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	// Same argument again (§13.7): recording that a merge happened is evidence about the caller's
 	// own work, not a power over somebody else's session.
 	specs = append(specs, mergeReceiptCLICapabilities...)
+	// The person's own commands (login, logout, whoami, api): HeadlessOnly, so a terminal outside a
+	// session is offered them and a running agent is not.
+	specs = append(specs, userCLICapabilities...)
 	// Ungated like the task commands, but SessionOnly: a watch wakes the session that makes it.
 	// session_await is not here; it rides the orchestration gate with the session commands.
 	// Neither is listed in a session spawned with Watch off (watch_rollout.go).
@@ -3127,6 +3169,8 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		// The agent verbs ride the same gate as the session ones and have no headless form:
 		// no service-token scope names them, so they never appear outside a live session.
 		specs = append(specs, agentCLICapabilities...)
+	} else if asUser {
+		specs = append(specs, sessionCLICapabilities...)
 	} else if includeHeadlessSession {
 		specs = append(specs, headlessSessionCLICapabilities(headlessAllowedActions(service))...)
 	}
@@ -3157,15 +3201,18 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		}
 		argv := append([]string{}, spec.Argv...)
 		argv[0] = executable
+		available, unavailableReason := capabilityAvailability(identity, spec.Argv)
 		commands = append(commands, cliCapability{
-			ID:             spec.Tool,
-			Argv:           argv,
-			HelpArgv:       append(append([]string{}, argv...), "--help"),
-			Usage:          spec.Usage,
-			Arguments:      append([]string{}, spec.Arguments...),
-			Description:    description,
-			MCPInputSchema: schema,
-			Mutates:        spec.Mutates,
+			ID:                spec.Tool,
+			Argv:              argv,
+			HelpArgv:          append(append([]string{}, argv...), "--help"),
+			Usage:             spec.Usage,
+			Arguments:         append([]string{}, spec.Arguments...),
+			Description:       description,
+			MCPInputSchema:    schema,
+			Mutates:           spec.Mutates,
+			Available:         available,
+			UnavailableReason: unavailableReason,
 		})
 	}
 	registered := false
@@ -3187,6 +3234,7 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		Registered:               registered,
 		UnavailableReason:        unavailableReason,
 		Context:                  ctx,
+		Identity:                 identity,
 		Capabilities:             commands,
 	}
 }
@@ -3216,6 +3264,11 @@ func cmdCapabilitiesCLI(args []string, out io.Writer) error {
 	for _, c := range doc.Capabilities {
 		if _, err := fmt.Fprintf(out, "  %s\n      %s\n", c.Usage, c.Description); err != nil {
 			return err
+		}
+		if !c.Available {
+			if _, err := fmt.Fprintf(out, "      Not available here: %s\n", c.UnavailableReason); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

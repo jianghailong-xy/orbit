@@ -47,6 +47,12 @@ Usage:
   orbit project delete PROJECT_ID [--json]
 
 Run 'orbit project <command> --help' for options.
+
+Logged in as yourself ('orbit login', or ORBIT_USER_TOKEN), these commands call the
+REST API with your personal access token and print what they print as the runner.
+The ones that act for an Orbit session are refused rather than sent with the runner's
+credential: 'orbit api' calls any user route, and 'orbit capabilities --json' marks
+which commands run as you.
 `
 
 var projectActionHelp = map[string]string{
@@ -443,6 +449,9 @@ func cmdProjectCLI(args []string, in io.Reader, out io.Writer) error {
 		_, err := fmt.Fprint(out, h)
 		return err
 	}
+	if _, err := userModeGate("project " + action); err != nil {
+		return err
+	}
 	switch action {
 	case "get":
 		return cliProjectGet(args[1:], out)
@@ -486,7 +495,7 @@ func cliProjectGet(args []string, out io.Writer) error {
 	if id == "" {
 		return fmt.Errorf("project id is required")
 	}
-	t, err := cliTransport()
+	t, err := cliProjectTransport()
 	if err != nil {
 		return err
 	}
@@ -517,7 +526,7 @@ func cliProjectCrossings(args []string, out io.Writer) error {
 	if *state != "" && !isHandoffState(*state) {
 		return fmt.Errorf("--state must be one of PENDING, APPROVED, DENIED, APPLIED")
 	}
-	t, err := cliTransport()
+	t, err := cliProjectTransport()
 	if err != nil {
 		return err
 	}
@@ -684,17 +693,26 @@ func cliProjectResolveBlocker(args []string, out io.Writer) error {
 	if strings.TrimSpace(*reason) == "" {
 		return fmt.Errorf("--reason is required: say why this blocker is no longer blocking")
 	}
-	t, err := cliTransport()
+	t, err := cliProjectTransport()
 	if err != nil {
 		return err
 	}
-	raw, declined, err := resolveBlockerWithApproval(
-		t,
-		strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID")),
-		id,
-		strings.TrimSpace(*blockerID),
-		strings.TrimSpace(*reason),
-	)
+	var raw json.RawMessage
+	var declined string
+	if runner, ok := t.(*Transport); ok {
+		raw, declined, err = resolveBlockerWithApproval(
+			runner,
+			strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID")),
+			id,
+			strings.TrimSpace(*blockerID),
+			strings.TrimSpace(*reason),
+		)
+	} else {
+		// As the person: they are the account owner the card would ask, so the write goes straight
+		// through, as it does headless.
+		raw, err = t.resolveProjectBlocker(id, strings.TrimSpace(*blockerID),
+			map[string]interface{}{"reason": strings.TrimSpace(*reason)})
+	}
 	if err != nil {
 		return fmt.Errorf("resolve blocker: %w", err)
 	}
@@ -875,7 +893,7 @@ func cliProjectMergeEvidence(args []string, in io.Reader, out io.Writer) error {
 		}
 		body["detail"] = parsed
 	}
-	t, err := cliTransport()
+	t, err := cliProjectTransport()
 	if err != nil {
 		return err
 	}
@@ -1186,7 +1204,7 @@ func cliProjectCreate(args []string, in io.Reader, out io.Writer) error {
 	if len(integration) > 0 {
 		body["integration"] = integration
 	}
-	t, err := cliTransport()
+	t, err := cliProjectTransport()
 	if err != nil {
 		return err
 	}
@@ -1202,11 +1220,14 @@ func cliProjectCreate(args []string, in io.Reader, out io.Writer) error {
 	// session's grant. Headless it is empty, and naming a workspace is refused there rather than
 	// authorized by a machine credential alone.
 	sessionID := strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))
-	// The same card project_create raises over MCP; headless there is no session and nobody to ask.
-	if declined, err := askBeforeCreate(t, sessionID, projectCreateApprovalToolName, body); err != nil {
-		return fmt.Errorf("create project: %w", err)
-	} else if declined != "" {
-		return fmt.Errorf("create project: the human rejected this project: %s", declined)
+	// The same card project_create raises over MCP; headless there is no session and nobody to ask,
+	// and as the person there is none either (`orbit task create` says why).
+	if runner, ok := t.(*Transport); ok {
+		if declined, err := askBeforeCreate(runner, sessionID, projectCreateApprovalToolName, body); err != nil {
+			return fmt.Errorf("create project: %w", err)
+		} else if declined != "" {
+			return fmt.Errorf("create project: the human rejected this project: %s", declined)
+		}
 	}
 	raw, err := t.createProject(
 		sessionID,
@@ -1343,7 +1364,7 @@ func cliProjectUpdate(args []string, in io.Reader, out io.Writer) error {
 		}
 		body["expectedConfigRevision"] = *expectedConfigRevision
 	}
-	t, err := cliTransport()
+	t, err := cliProjectTransport()
 	if err != nil {
 		return err
 	}
@@ -1369,7 +1390,7 @@ func cliProjectDelete(args []string, out io.Writer) error {
 	if id == "" {
 		return fmt.Errorf("project id is required")
 	}
-	t, err := cliTransport()
+	t, err := cliProjectTransport()
 	if err != nil {
 		return err
 	}

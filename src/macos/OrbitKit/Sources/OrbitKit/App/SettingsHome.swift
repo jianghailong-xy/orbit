@@ -309,9 +309,8 @@ public enum SettingsCopy {
     // MARK: Sign out
 
     public static let signOut = "Sign out"
-    /// The confirmation names the server, the one thing that makes signing back in more than typing
-    /// a password again.
-    public static func signOutTitle(instance: String?) -> String {
-        instance.map { "Sign out of \($0)?" } ?? "Sign out?"
-    }
+    /// The question the confirmation asks. It names nothing: the server (`orbitd.io`) is the app's
+    /// business rather than the person's — ChatGPT's own log out names the account, and this screen
+    /// already shows that one row up, so the question would only repeat it.
+    public static let signOutTitle = "Sign out?"
 }

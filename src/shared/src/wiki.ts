@@ -1406,6 +1406,9 @@ export interface WikiChangesetOp {
   /** The trail of every earlier verdict of an op that was reopened, oldest first; empty for every
    *  other op (contract `reviewModes.verification.reopen`). */
   verificationHistory?: WikiOpVerificationHistory[];
+  /** The current title of the entry `entryId` names, null when it names none — added by Review's
+   *  read (`GET /api/wiki/review`) so a card can name an entry no other read of the page holds. */
+  entryTitle?: string | null;
 }
 
 /** One op's verification trail, as the op reads it back. */

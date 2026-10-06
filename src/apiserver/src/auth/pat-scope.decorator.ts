@@ -8,7 +8,7 @@ import type { PatScopeName } from './pat.service';
  *
  * JwtAuthGuard reads these only for a request that came with a token (credential PAT); a login never
  * meets them. Every route behind JwtAuthGuard declares one of them — @PatScope, @PatForbidden, or on
- * exactly one route @PatSelf — and `pat-route-coverage.spec.ts` fails on a route that declares none.
+ * exactly two routes @PatSelf — and `pat-route-coverage.spec.ts` fails on a route that declares none.
  * The guard answers such a route 403 PAT_ROUTE_UNDECLARED all the same: a route nobody decided about
  * is closed to tokens, not open.
  */
@@ -65,11 +65,12 @@ export const PatScope = (
 ): MethodDecorator => applyDecorators(SetMetadata(PAT_SCOPE, scope), SetMetadata(PAT_WORKSPACE, workspaceConfinable));
 
 /**
- * Every token reaches this route, whatever scopes and workspaces it was granted: the token reading
- * itself (§6.5) — who it acts as and what it holds — so the `orbit` CLI can say what it signed in
- * with. It reads nothing but the row the request was verified against, so no scope guards it and no
- * workspace can hold it. On a handler, never on a controller, and the census holds it to exactly one
- * route: anything more is a token reaching a route nobody granted it.
+ * Every token reaches this route, whatever scopes and workspaces it was granted: the token acting on
+ * itself (§6.5) — reading who it acts as and what it holds, so the `orbit` CLI can say what it signed
+ * in with, and revoking itself, so `orbit logout` can end it. It touches nothing but the row the
+ * request was verified against, so no scope guards it and no workspace can hold it. On a handler,
+ * never on a controller, and the census holds it to exactly those two routes: anything more is a
+ * token reaching a route nobody granted it.
  */
 export const PatSelf = (): MethodDecorator => SetMetadata(PAT_SELF, true);
 

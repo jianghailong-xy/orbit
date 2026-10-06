@@ -274,6 +274,13 @@ private struct CompactSections: View {
             NavigationStack(path: $model.nav.path) {
                 AgentContentColumn(rowNavigation: .push)
                     .drawerToggle(open: openDrawer)
+                    // The list stays mounted under whatever this stack pushes over it — that is what
+                    // keeps its rows and scroll position for the pop back — but none of it is on
+                    // screen then. Its rows' animated cues (the running spinner, the breathing
+                    // terminal) are held back until it is the page showing again: same switch, and
+                    // same reasoning, as the drawer's own `live:` above. The pushed pages keep their
+                    // own cues — this is set on the list, not on the stack.
+                    .environment(\.liveRowCues, model.sectionAtRoot)
                     // New session is a page of its own (not a bottom sheet): it leads into the
                     // session rather than back to a list, so a push reads more naturally and flows
                     // straight into the console once the first message is sent. One destination per
@@ -701,7 +708,10 @@ struct NavigationDrawer: View {
                     if section == .projects {
                         projectsRow
                     } else if section == .wiki {
-                        wikiRow
+                        // No row at all for an account the server has not switched the wiki on for
+                        // (WIKI_DISABLED), as the web sidebar draws none: a row that led to a refusal
+                        // would be worse than none.
+                        if model.wiki?.shown == true { wikiRow }
                     } else {
                         sectionRow(section)
                     }

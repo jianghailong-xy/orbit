@@ -689,8 +689,11 @@ export function entryView(row: EntryRow): Record<string, unknown> {
   };
 }
 
-/** A changeset as the wire describes it (`WikiChangeset`). */
-export function changesetView(row: ChangesetRow): Record<string, unknown> {
+/**
+ * A changeset as the wire describes it (`WikiChangeset`). Given `entryTitles`, every op also carries
+ * the title of the entry it names (`entryTitle`, null for an op that names none) — Review's read.
+ */
+export function changesetView(row: ChangesetRow, entryTitles?: ReadonlyMap<string, string>): Record<string, unknown> {
   return {
     id: row.id,
     spaceId: row.spaceId,
@@ -722,6 +725,7 @@ export function changesetView(row: ChangesetRow): Record<string, unknown> {
       spotCheck: op.spotCheck,
       verification: verificationView(op),
       verificationHistory: op.verificationHistory,
+      ...(entryTitles ? { entryTitle: op.entryId ? (entryTitles.get(op.entryId) ?? null) : null } : {}),
     })),
   };
 }
@@ -4376,6 +4380,10 @@ export class WikiService {
    * while any op of it waits for its verification too, and one that waits for nothing else is no
    * card of the owner's (contract `states.changeset.note`), so only a changeset holding an op that
    * waits for the owner is listed.
+   *
+   * EVERY OP CARRIES ITS ENTRY'S TITLE (`entryTitle`). An op names its entry by id alone, and the
+   * pages' own entry reads are windows — the home's is the 200 newest — so a challenge or a retire of
+   * an entry older than that window was a card that said "An entry".
    */
   async listReview(ownerId: string, spaceId?: string): Promise<Array<Record<string, unknown>>> {
     const rows = await this.prisma.wikiChangeset.findMany({
@@ -4384,7 +4392,12 @@ export class WikiService {
       take: 100,
       select: CHANGESET_SELECT,
     });
-    return rows.map(changesetView);
+    const named = [...new Set(rows.flatMap((row) => row.ops.flatMap((op) => (op.entryId ? [op.entryId] : []))))];
+    const entries = named.length === 0
+      ? []
+      : await this.prisma.wikiEntry.findMany({ where: { ownerId, id: { in: named } }, select: { id: true, title: true } });
+    const titles = new Map(entries.map((entry) => [entry.id, entry.title]));
+    return rows.map((row) => changesetView(row, titles));
   }
 
   // ── The three reads the pages ask for (contract `agentSurface.doors.user.routes`) ─────────────

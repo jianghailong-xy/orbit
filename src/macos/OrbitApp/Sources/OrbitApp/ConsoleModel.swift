@@ -836,6 +836,26 @@ final class ConsoleModel {
     }
     /// A repeated failure is a new notice even when its text matches an earlier attempt.
     private(set) var statusMessageRevision = 0
+
+    /// The approval decisions this window has sent, by approval id, and how far each has got.
+    ///
+    /// The one fact a view cannot get back out of the pending list: an approval that is gone looks
+    /// the same whether somebody else answered it or the reader just did, and reading the second
+    /// case as the first is the one reading of its own press a window can be sure is wrong (the
+    /// same defect `decideCriteria` closes its card for). The review sheet reads this to leave with
+    /// the reader's own press instead of reporting it back to them as news.
+    ///
+    /// `decide` writes `.sending` with the optimistic removal and `.sent` only once the door has
+    /// taken it; a refusal clears the entry, because then the card the re-seed brings back is the
+    /// live answer, and the status line above the composer says why.
+    private(set) var approvalAnswers: [String: ApprovalAnswerPhase] = [:]
+
+    enum ApprovalAnswerPhase: Equatable {
+        /// Pressed, optimistically removed, and not yet answered by the door.
+        case sending
+        /// The door took it. The card is not coming back.
+        case sent
+    }
     /// Sink for a session outcome — the app's toast host, injected by `ConsoleRegistry`.
     @ObservationIgnored var onToast: (ToastRequest) -> Void = { _ in }
     /// Local `/status` results belong in the conversation, not the error/info banner above the
@@ -3265,9 +3285,16 @@ final class ConsoleModel {
         // re-seed from REST so it reappears rather than silently vanishing.
         reducer.removeApproval(id: approval.id)
         publishStateNow()
+        approvalAnswers[approval.id] = .sending
         let req = ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRules: rules)
-        do { try await api.decideApproval(sessionID: sessionID, approvalID: approval.id, req) }
+        do {
+            try await api.decideApproval(sessionID: sessionID, approvalID: approval.id, req)
+            approvalAnswers[approval.id] = .sent
+        }
         catch {
+            // Nothing was decided: the press is not what took this card away, and the re-seed below
+            // is what puts it back.
+            approvalAnswers[approval.id] = nil
             statusMessage = "Approval failed — \(APIClient.failureReason(error))."
             await refreshApprovals()
         }
@@ -4564,6 +4591,14 @@ final class ConsoleModel {
         let id = DeliveredDecisionCard(kind: kind).id
         closedCards.insert(id)
         decisionCards.removeAll { $0.id == id }
+    }
+
+    /// Whether this window is the one that answered the card — the same "answered or set aside
+    /// HERE" set the transcript reads (`closedCards`), read by the review sheet presenting the
+    /// card: it leaves with its own press instead of drawing the card's answer back as somebody
+    /// else's ("recorded somewhere else", "approved at another end").
+    func answeredHere(_ card: DeliveredDecisionCard) -> Bool {
+        closedCards.contains(card.id)
     }
 
     /// What a decision leaves behind, in the flow, where it happened — the same place web's

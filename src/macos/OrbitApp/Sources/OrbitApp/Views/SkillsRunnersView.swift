@@ -251,8 +251,8 @@ private struct RunnerListEditing: ViewModifier {
     func body(content: Content) -> some View {
         content
             .sheet(isPresented: $addingRunner) { AddRunnerSheet() }
-            .confirmationDialog(removalTitle, isPresented: removalAsked, titleVisibility: .visible,
-                                presenting: pendingRemoval) { runner in
+            .orbitConfirmation({ _ in removalTitle },
+                               isPresented: removalAsked, presenting: pendingRemoval) { runner in
                 Button(RunnerPageCopy.RUNNER_REMOVE, role: .destructive) {
                     Task { await remove(runner) }
                 }
@@ -465,29 +465,6 @@ struct RunnerDetailContent: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .confirmationDialog(RunnerPageCopy.RUNNER_KEEP_FREE, isPresented: $choosingReserve,
-                            titleVisibility: .visible) {
-            ForEach(RunnerAttention.KEEP_FREE_TIERS.filter { $0.mb != nil }, id: \.label) { tier in
-                Button(tier.label) { keepFree = tier.mb }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(RunnerPageCopy.RUNNER_CAPACITY_FOOTER)
-        }
-        .confirmationDialog("Rotate token for “\(RunnerPageFormat.displayName(runner))”?",
-                            isPresented: $confirmingRotate, titleVisibility: .visible) {
-            Button("Rotate Token", role: .destructive) { rotate() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(RunnerPageCopy.RUNNER_ROTATE_TOKEN_FOOTER)
-        }
-        .confirmationDialog("Remove “\(RunnerPageFormat.displayName(runner))”?",
-                            isPresented: $confirmingRemove, titleVisibility: .visible) {
-            Button(RunnerPageCopy.RUNNER_REMOVE, role: .destructive) { remove() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(RunnerPageCopy.RUNNER_REMOVE_FOOTER)
-        }
         .runnerNotice(notice)
         .onAppear(perform: seed)
         .onChange(of: runner.maxConcurrent) { _, value in
@@ -696,6 +673,13 @@ struct RunnerDetailContent: View {
     private var rotateSection: some View {
         Section {
             Button(RunnerPageCopy.RUNNER_ROTATE_TOKEN) { confirmingRotate = true }
+                .orbitConfirmation("Rotate token for “\(RunnerPageFormat.displayName(runner))”?",
+                                   isPresented: $confirmingRotate) {
+                    Button("Rotate Token", role: .destructive) { rotate() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text(RunnerPageCopy.RUNNER_ROTATE_TOKEN_FOOTER)
+                }
             if let token = rotatedToken {
                 Text(token)
                     .font(.orbitMono)
@@ -713,6 +697,13 @@ struct RunnerDetailContent: View {
             Button(role: .destructive) { confirmingRemove = true } label: {
                 Text(RunnerPageCopy.RUNNER_REMOVE)
                     .frame(maxWidth: .infinity)
+            }
+            .orbitConfirmation("Remove “\(RunnerPageFormat.displayName(runner))”?",
+                               isPresented: $confirmingRemove) {
+                Button(RunnerPageCopy.RUNNER_REMOVE, role: .destructive) { remove() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(RunnerPageCopy.RUNNER_REMOVE_FOOTER)
             }
         } footer: {
             Text(RunnerPageCopy.RUNNER_REMOVE_FOOTER)
@@ -751,6 +742,16 @@ struct RunnerDetailContent: View {
             Button(RunnerPageCopy.RUNNER_REPAIR) { repair(action.workspaceId) }
         case .setReserve:
             Button(RunnerPageCopy.RUNNER_SET_A_RESERVE) { choosingReserve = true }
+                // On the button that asks, so the panel opens against it rather than at the top of
+                // the page.
+                .orbitConfirmation(RunnerPageCopy.RUNNER_KEEP_FREE, isPresented: $choosingReserve) {
+                    ForEach(RunnerAttention.KEEP_FREE_TIERS.filter { $0.mb != nil }, id: \.label) { tier in
+                        Button(tier.label) { keepFree = tier.mb }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text(RunnerPageCopy.RUNNER_CAPACITY_FOOTER)
+                }
         case .copyCommand:
             Button { copy(action.command) } label: {
                 Label(RunnerPageCopy.RUNNER_COPY_COMMAND, systemImage: "doc.on.doc")

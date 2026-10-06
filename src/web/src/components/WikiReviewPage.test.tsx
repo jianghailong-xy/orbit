@@ -183,6 +183,16 @@ describe('Review — one card per op', () => {
     expect(html).toContain('Agents stop getting this entry');
   });
 
+  it('names the entry a retirement is about by the title the queue carries, before its own read lands', () => {
+    const named = { ...RETIRE, entryTitle: 'Wakeups are lost when the engine is recycled' } as WikiChangesetOp;
+    const html = paint([changeset({ id: 'changeset-three', ops: [named] })]);
+    expect(html).toContain('Retire <span class="q">“Wakeups are lost when the engine is recycled”</span>');
+    // Without it the card can only say "entry" until the entry's own read answers.
+    expect(paint([changeset({ id: 'changeset-three', ops: [RETIRE] })])).toContain(
+      'Retire <span class="q">“entry”</span>',
+    );
+  });
+
   it('says what an add was compared against, and that it collided with nothing', () => {
     const html = paint([changeset({ ops: [ADD] })], 'orbit');
     expect(html).toContain('Similar entries');

@@ -117,8 +117,9 @@ orbit_pat_<43 字符 base64url>        # randomBytes(32)，256 bit
   controller 级的 scope 会让以后加进来的路由静默继承授权，普查就逼不出决定。`@PatForbidden(reason)`
   可挂 handler 也可挂 controller —— controller 级的拒绝是失败安全的；两者同时出现时拒绝优先。
 - `@PatSelf()`（2026-10-06 协调者新增）：任何有效令牌都可调用，不看 scope、不做 workspace 判定，只挂 handler。
-  全仓只有一条路由用它 —— 令牌自省 `GET /pat/self`（第 6.5 节）；普查双向钉住这一条，挂在第二条路由上或挂到
-  controller 上都会变红。优先级在拒绝与 scope 之后：同一 handler 上若也有 `@PatForbidden` 或 `@PatScope`，以它们为准。
+  全仓只有两条路由用它 —— 令牌自省 `GET /pat/self` 与令牌吊销自己 `DELETE /pat/self`（第 6.5 节）；普查双向钉住
+  这两条，挂在第三条路由上或挂到 controller 上都会变红。优先级在拒绝与 scope 之后：同一 handler 上若也有
+  `@PatForbidden` 或 `@PatScope`，以它们为准。
 - PAT 被拒时的 403 body：
 
   | 情形 | body |
@@ -145,7 +146,7 @@ orbit_pat_<43 字符 base64url>        # randomBytes(32)，256 bit
   | `SECRET_REVEAL` | 明文取回已存的密钥（`GET providers/mine/:id/key`） |
   | `NO_SCOPE` | v1 scope 集合没有对应 scope 的：watches、link-previews、metrics（v1 不加 scope）、outcomes/inbox |
 
-- 每条挂 `JwtAuthGuard` 的路由都必须声明 `@PatScope`、`@PatForbidden` 之一（唯一的例外是那一条 `@PatSelf`），
+- 每条挂 `JwtAuthGuard` 的路由都必须声明 `@PatScope`、`@PatForbidden` 之一（唯一的例外是那两条 `@PatSelf`），
   普查 spec `auth/pat-route-coverage.spec.ts` 逐条核对（第 6.2 节）。
 
 ## 5. 与所有者通道动作的关系
@@ -382,10 +383,21 @@ GET    /api/pat/self               → {userId, email, token: {id, name, scopes,
 - 登录凭证调用返回 400 `NOT_A_PERSONAL_ACCESS_TOKEN`；已吊销、已过期、不存在的令牌照常 401。
 - 路径不在 `/access-tokens*` 与 `auth/*` 之下：这两个前缀对 PAT 都是 Forbidden。
 - 请求级审计（第 6.4 节）对它与其余路由用同一条判定：guard 在判定声明之前就把请求交给审计，审计只看方法。
-  `GET /pat/self` 是读，不记；以后若加写方法的 `@PatSelf` 路由（如下面的 `DELETE /pat/self`），照常记 `pat.request`。
+  `GET /pat/self` 是读，不记；`DELETE /pat/self` 是写，照常记 `pat.request`。
 
-待定（交 CLI 任务与协调者）：第 7.3 节 `orbit logout` 默认同时吊销服务端令牌，但令牌调不了 `/access-tokens*`。
-要让令牌吊销自己，需要再开一条 `@PatSelf` 路由（如 `DELETE /pat/self`），普查对 `@PatSelf` 的单条钉住要随之放宽。
+令牌吊销自己（2026-10-06 协调者决定，CLI 任务落地；第 7.3 节 `orbit logout` 默认同时吊销服务端令牌，而令牌调不了
+`/access-tokens*`）：
+
+```
+DELETE /api/pat/self               → {id, revokedAt, revokedReason}
+```
+
+- 同为 `@PatSelf`：任何有效令牌都能吊销自己，不需要 scope，限定了 workspace 的也可以。只吊销发起请求的那一把，
+  `revoked_reason = USER`（与设置页里吊销同一记法），同一用户的其他令牌不受影响；吊销之后这把令牌的下一个请求就是 401，
+  再调一次 `DELETE /pat/self` 也是 401。
+- 登录凭证调用返回 400 `NOT_A_PERSONAL_ACCESS_TOKEN`，什么都不吊销。
+- 普查 `auth/pat-route-coverage.spec.ts` 双向钉住恰好这两条 `@PatSelf` 路由；`auth/access-tokens.pg.spec.ts` 第 (9) 条
+  对生产 apiserver 证明以上各点，并断言这次吊销记了一行 `pat.request`。
 
 ## 7. CLI
 
@@ -411,6 +423,21 @@ GET    /api/pat/self               → {userId, email, token: {id, name, scopes,
 
 `orbit whoami [--json]` 打印当前生效的是哪一种身份、为什么（哪一条命中）、用户邮箱、令牌名、scope、到期。
 
+落地时（CLI 任务，2026-10-06）：
+
+- 解析在 `src/runner-go/user_identity.go` 的 `resolveCLIIdentity`，只读环境变量与 `$ORBIT_HOME`，不发请求。某一条「存在」就由它决定，
+  哪怕它不可用：`user.json` 读不了（权限不是 0600/0700、不是普通文件、不是合法 JSON、缺 token 或 serverUrl）时报出问题，
+  **不**落到 runner 凭证。`user.json` 与 `config.json` 一样只在私有存储里才用：别人能写的文件可能写了别人的服务器地址。
+- 会话内若手边有 PAT（`ORBIT_USER_TOKEN` 或 `user.json`），stderr 每个进程只说一次。`capabilities --json` 的 `identity`
+  用同一个解析函数，但不往 stderr 写；会话里它带 `userTokenIgnored: true`。
+- `ORBIT_SERVER_URL` 只跟 `ORBIT_USER_TOKEN` 一起用；没设时发往本机 runner 的服务器，再没有就是二进制内置的服务器。
+  `user.json` 里的令牌永远只发往它自己的 `serverUrl`。
+- 与现有代码的出入（已在任务评论里说明）：`orbit session` 子命令与 capabilities 的 headless 门在会话内仍让
+  `ORBIT_SERVICE_TOKEN` 优先，两者同时设置时 `whoami` 报会话、`orbit session list` 用 service token。统一交给子命令移植任务。
+  子命令移植任务已统一（2026-10-06）：`requireCLIOrchestrationContext`、`orbit session merge-receipt(s)` 与
+  `buildCLICapabilities` 都按 `resolveCLIIdentity` 走，会话内 `ORBIT_SERVICE_TOKEN` 不再生效，`capabilities` 的
+  `context.serviceToken` 也只在身份是 service token 时出现。会话外（headless）照旧：有 service token 就用它。
+
 ### 7.3 命令
 
 ```
@@ -430,6 +457,62 @@ orbit api [-X METHOD] PATH [--data JSON | --data-file -] [--paginate] [--json]  
   不必等子命令逐个移植。
 - 已有子命令（`task`、`project`、`session`…）今天打的是 `/api/runner/...`。用户模式下逐个改为打用户路由，
   按使用频率排期（第 10 节）；未移植的子命令在用户模式下报错并提示用 `orbit api`，**不**静默退回 runner 凭证。
+
+落地时（CLI 任务，2026-10-06）：
+
+- `orbit login` 不带 `--with-token` 时报错（设备流是下一个任务）。`--with-token` 读 stdin 第一行，必须以 `orbit_pat_` 开头；
+  令牌出现在参数里直接拒绝，也不回显。先 `GET /pat/self` 核对，401 不写文件；成功后原子写入 `user.json`
+  `{serverUrl, token, tokenId, name, email}`（`name` 是令牌名）。服务器默认值依次是 `--server`、`ORBIT_SERVER_URL`、
+  已保存登录的服务器、本机 runner 的服务器、内置服务器。
+- 第 8 节的警告：`$ORBIT_HOME` 里有带 `runnerToken` 的 `config.json` 就打印一次。runner 从它的 `ORBIT_HOME` 读
+  `config.json`，`user.json` 写在同一个 0700 目录里，能读前者的服务就以同一 OS 用户（或 root）运行，它起的 agent 也一样。
+- `orbit logout` 默认 `DELETE /pat/self` 再删 `user.json`。服务器连不上或答非 2xx/401 时什么都不删，提示重试或
+  `--keep-token`；401 说明令牌已无效，照样删文件。`ORBIT_USER_TOKEN` 不归它管，只提示 unset。
+- 在会话内，`login`、`logout` 直接拒绝，`orbit api` 也拒绝（会话凭证打不了用户路由，也不拿 PAT 顶上）。
+  service token 或只有 runner 凭证时，`orbit api` 同样拒绝，不借用其他凭证。
+- `orbit api`：PATH 只接受路径（`/api/tasks`、`api/tasks`、`tasks` 等价），拒绝 URL 与跳出 `/api` 的路径，令牌只发往它所属的
+  服务器，并且不跟随换 scheme 或 host 的重定向。带 body 默认 POST，`GET` 不带 body；`--paginate` 只用于 GET，跟随
+  `{items, nextCursor}` 的 `cursor` 查询参数，逐页打印。非 2xx 先打印应答再以非零退出；401 统一提示令牌无效、已吊销或
+  已过期，运行 `orbit login`。
+- `orbit capabilities` 列出 `login`、`logout`、`whoami`、`api` 四条，均为 `HeadlessOnly`（会话里不提供给 agent），
+  各带自己的 input schema。`cli_mcp_parity_test.go` 只要求每个 MCP 工具有 CLI 命令，不要求反向；
+  `cli_help_flag_coverage_test.go` 现在也检查单命令（`orbit api --help` 等）的帮助文本。
+- 本任务没有让未移植的子命令在用户模式下报错，那是子命令移植任务的验收条目。
+
+落地时（子命令移植任务，2026-10-06）：
+
+- 用户身份下，`orbit task` / `project` / `session` 里有「用户路由按 runner 路由的形状作答」的动作，都改打用户路由，
+  带 PAT，发往令牌自己的服务器（`src/runner-go/user_mode.go`）；`--json` 打印与 runner 模式相同。每族一个接口
+  （`taskTransport` / `projectTransport` / `sessionTransport`），`*Transport`（runner 路由）与 `*userTransport`
+  （用户路由）各实现一份，命令本身不分叉。
+  - task：list、labels、get、attribution、evidence-list、evidence-submit（`sourceSessionId` 放进 body，须给
+    `--source-session-id`）、create、create-batch、update、reopen、delete、start（同样命名、同样重发）、comment、
+    progress、dependency-graph/add/remove。`task list` 打 `GET /tasks/page?counts=none`，打印其 `items`，即 runner
+    路由答的数组；`--all` 同样逐页走 `/tasks/page`。
+  - project：get、crossings、resolve-blocker、merge-evidence、create（用户路由可直接给 `workspaceId`，不需要会话）、
+    update、delete。
+  - session：list、search、get、send、interrupt、merge、merge-receipt、merge-receipts、end、complete、delete。
+    list/get 的形状差异由服务端补齐：新加 `GET /sessions/compact`（`status`、`parentSessionId` 过滤，
+    `workspaceConfinable: false`）与 `GET /sessions/:id/compact`（按会话判定），即 runner 路由用的
+    `listForOrchestration` / `getForOrchestration`；HTTP spec `sessions/session-compact-doors.http.spec.ts`。send 把
+    `message` 改名 `content`，没给 `--client-turn-id` 时由 CLI 生成（用户路由必填）；`--resume-if-ended` 打
+    `POST /sessions/:id/resume`；`--expect-reply` 拒绝（回复要回到一个会话）。merge 走用户的 Merge 门：指定的
+    `--target-branch` 会成为 workspace 默认目标，与菜单里选一样。
+  - 限定了 workspace 的令牌：`task list` 走的 `/tasks/page` 与 `session list` 走的 `/sessions/compact` 都是
+    `workspaceConfinable: false`（第 6.3 节），服务端答 403 `PAT_ROUTE_NOT_WORKSPACE_CONFINABLE`，CLI 原样报出；
+    按 id 的 get/update 等照常按对象判定。
+- 其余动作在用户身份下、读写任何东西之前拒绝，说明原因与替代（`userModeActions`）：需要会话上下文的
+  （task evidence-decide / request-confirmation / confirmation-review / confirmation-return / await，project
+  ensure-coordinator / send / request-start / request-done，session await / reply），以及用户路由形状不同或没有的
+  （task batch-pin，session create、import）。所有拒绝都以「`orbit api` 以你的身份调 REST API，`orbit capabilities
+  --json` 标出哪些命令以你的身份运行」收尾。
+- 绝不退回 runner 凭证：`cliTransport()`（所有以机器身份发请求的命令都从它拿凭证）在用户身份下直接拒绝，
+  所以 `task-list`、`provider`、`notify`、`token`、`agent` 等其他命令族在用户身份下同样报错。
+- `orbit capabilities --json`：每条命令带 `available`，不可用时带 `unavailableReason`；用户身份下列出全部会话命令
+  并逐条标注，`context.actor` 为 `user`。runner 身份下 `api` 标为不可用（未登录）。
+- 已知后果：runner 起的不带 `ORBIT_SESSION_ID` 的进程（EXECUTABLE 验收命令、`!` shell）同样按 §7.2 解析身份。
+  若 runner 的 `ORBIT_HOME` 里存了 `user.json`（第 8 节警告的同一 OS 用户登录），这些进程里的 `orbit task …`
+  会以登录者身份运行，`orbit wiki check` 等机器命令会被拒绝，而不是像之前那样静默用 runner 凭证。
 
 ### 7.4 能力与一致性
 

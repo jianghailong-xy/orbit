@@ -189,7 +189,7 @@ struct WikiHomePage: View {
                 bandHeader(WikiCopy.principles, count: content.principles.count,
                            badge: content.principlesAllOwner ? WikiCopy.trustLabel(.owner) : nil)
                 if content.principles.isEmpty {
-                    empty(WikiCopy.noEntries)
+                    empty(WikiCopy.noPrinciples)
                 } else {
                     ForEach(content.principles) { entry in
                         entryRow(entry, detail: entry.summary, time: entry.validFrom)

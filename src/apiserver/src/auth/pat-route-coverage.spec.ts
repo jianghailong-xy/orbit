@@ -32,9 +32,9 @@ import { PAT_SCOPES } from './pat.service';
 
 // The personal-access-token census (docs/personal-access-token-design.md §6.2). A token is the user
 // on every route behind JwtAuthGuard, so each of those routes has to say what a token may do there:
-// @PatScope (the scope it needs) or @PatForbidden (no token, and why) — or, on the one route where a
-// token reads itself, @PatSelf (every token, no scope). One that says none is closed to tokens by the
-// guard — fail-closed — and red here, which is where its author makes the decision.
+// @PatScope (the scope it needs) or @PatForbidden (no token, and why) — or, on the two routes where a
+// token reads or revokes itself, @PatSelf (every token, no scope). One that says none is closed to
+// tokens by the guard — fail-closed — and red here, which is where its author makes the decision.
 // @PatScope also says whether a token confined to workspaces reaches the route (§6.3, the census's
 // `workspaceConfinable` column), and what in its request the guard judges that on.
 //
@@ -159,11 +159,12 @@ const NEVER_GRANTABLE: ReadonlyArray<{
 // repeating it. Exact both ways, so a new controller there is a decision made here.
 const AUTH_CONTROLLERS = ['AuthController', 'GoogleAuthController'];
 
-// ── §6.5: the token reading itself ──────────────────────────────────────────────────────────────
-// The one route every token reaches whatever it holds. Exact both ways, and read off the metadata
+// ── §6.5: the token acting on itself ────────────────────────────────────────────────────────────
+// The two routes every token reaches whatever it holds: reading itself (`orbit whoami`, `orbit login
+// --with-token`) and revoking itself (`orbit logout`). Exact both ways, and read off the metadata
 // itself as well as through `patDeclaration`: a @PatSelf that a refusal or a scope outranks on the
 // same handler is a decision nobody finished, and is held here too.
-const PAT_SELF_ROUTES = ['GET /pat/self'];
+const PAT_SELF_ROUTES = ['DELETE /pat/self', 'GET /pat/self'];
 
 // ── §5: the owner channel ───────────────────────────────────────────────────────────────────────
 // Exact both ways: a route refused as the owner's own decision is listed in OWNER_INTERACTIVE_ROUTES
@@ -307,13 +308,13 @@ test("§4: every controller under auth/ is @PatForbidden('AUTH') on the class, p
   assert.deepEqual(wrong, [], "must be @PatForbidden('AUTH') on the class");
 });
 
-test('§6.5: @PatSelf opens exactly one route to every token — GET /pat/self, the token reading itself', async () => {
+test('§6.5: @PatSelf opens exactly two routes to every token — GET and DELETE /pat/self, the token reading and revoking itself', async () => {
   const { controllers, routes } = await census;
   const marked = routes
     .filter((r) => Reflect.getMetadata(PAT_SELF, (r.controller.prototype as Record<string, object>)[r.method]) !== undefined)
     .map((r) => r.route);
-  assert.deepEqual(marked, PAT_SELF_ROUTES, '@PatSelf on a handler');
-  assert.deepEqual(routes.filter((r) => r.declared.kind === 'SELF').map((r) => r.route), PAT_SELF_ROUTES, 'declared @PatSelf');
+  assert.deepEqual(marked.sort(), PAT_SELF_ROUTES, '@PatSelf on a handler');
+  assert.deepEqual(routes.filter((r) => r.declared.kind === 'SELF').map((r) => r.route).sort(), PAT_SELF_ROUTES, 'declared @PatSelf');
   // Nor anywhere it is not one of those: on a controller, or on a handler JwtAuthGuard does not guard.
   assert.deepEqual([...controllers].filter((c) => Reflect.getMetadata(PAT_SELF, c) !== undefined).map((c) => c.name), []);
   const unguarded = [...controllers].flatMap((c) =>
@@ -368,7 +369,7 @@ test('§6.3: every route open to a token declares workspaceConfinable — a refu
   t.diagnostic(
     `${routes.length} JwtAuthGuard routes: ${confinable.length} reachable by a token confined to workspaces `
       + `(${confinable.filter((r) => confinableOf(r) === 'LIST').length} of them lists, `
-      + `${confinable.filter((r) => r.declared.kind === 'SELF').length} the token reading itself), `
+      + `${confinable.filter((r) => r.declared.kind === 'SELF').length} the token acting on itself), `
       + `${routes.length - confinable.length} refused to it`,
   );
 });

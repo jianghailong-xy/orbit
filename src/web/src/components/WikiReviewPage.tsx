@@ -269,8 +269,9 @@ function ReviewCard({
   // the kind it retires are the entry's.
   const target = useQuery({ ...wikiEntryQuery(op.entryId ?? null) });
   const kind = (draft.kind as string) ?? (target.data?.kind ?? null);
+  // Until that read lands, or when it fails, the title Review's own read carries for the entry.
   const title =
-    typeof draft.title === 'string' ? draft.title : (target.data?.title ?? null);
+    typeof draft.title === 'string' ? draft.title : (target.data?.title ?? op.entryTitle ?? null);
   const kindWord = kind ? wikiKindWord(kind) : WIKI_ENTRY_WORD;
 
   const write = useWikiWrite((decisions: WikiDecision[]) => decideWikiChangeset(changeset.id, decisions));

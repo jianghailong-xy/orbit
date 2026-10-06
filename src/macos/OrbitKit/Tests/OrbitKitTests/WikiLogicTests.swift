@@ -21,6 +21,40 @@ final class WikiLogicTests: XCTestCase {
                                                     WikiSpace(id: "c", slug: "c")]), 7,
                        "a space an older server sent no count for adds nothing")
         XCTAssertEqual(WikiCopy.proposalsToReview(3), "3 proposals to review")
+        XCTAssertEqual(WikiCopy.proposalsToReview(1), "1 proposal to review", "one proposal is one proposal")
+    }
+
+    // MARK: whether the account has the wiki
+
+    /// A 404 carrying WIKI_DISABLED is the server saying the wiki is off for this account — and only
+    /// that: a plain 404, another code, or the code on another status is not (`isWikiDisabled`).
+    func testWikiDisabledIsA404CarryingItsCode() {
+        let disabled = APIError.http(status: 404, body: #"{"code":"WIKI_DISABLED","message":"The Orbit wiki is not on for this account"}"#)
+        XCTAssertTrue(WikiLogic.isDisabled(disabled))
+        XCTAssertFalse(WikiLogic.isDisabled(APIError.http(status: 404, body: #"{"message":"Not Found"}"#)))
+        XCTAssertFalse(WikiLogic.isDisabled(APIError.http(status: 404, body: #"{"code":"NOT_FOUND"}"#)))
+        XCTAssertFalse(WikiLogic.isDisabled(APIError.http(status: 500, body: #"{"code":"WIKI_DISABLED"}"#)))
+        XCTAssertFalse(WikiLogic.isDisabled(APIError.http(status: 404, body: nil)))
+        XCTAssertFalse(WikiLogic.isDisabled(APIError.invalidResponse))
+    }
+
+    /// The drawer's Wiki row — the iPad sidebar's too — is drawn as the web sidebar's is (`wikiShown`):
+    /// once the spaces read answered anything but WIKI_DISABLED, and when it failed for another reason;
+    /// never while it is on its way.
+    func testTheWikiRowIsDrawnAsTheWebSidebarDrawsIt() {
+        var state = ListLoadState()
+        XCTAssertFalse(WikiLogic.shown(state, disabled: false), "nothing answered yet: no row to press")
+        state.begin()
+        XCTAssertFalse(WikiLogic.shown(state, disabled: false))
+        state.succeed()
+        XCTAssertTrue(WikiLogic.shown(state, disabled: false), "a list, even an empty one, is a wiki")
+        XCTAssertFalse(WikiLogic.shown(state, disabled: true), "WIKI_DISABLED: no row at all")
+        state.fail()
+        XCTAssertFalse(WikiLogic.shown(state, disabled: true), "a refresh that failed does not undo the answer")
+        var failed = ListLoadState()
+        failed.begin()
+        failed.fail()
+        XCTAssertTrue(WikiLogic.shown(failed, disabled: false), "a failure is not the server saying no")
     }
 
     // MARK: marks
@@ -174,9 +208,13 @@ final class WikiLogicTests: XCTestCase {
     /// line without the count the banner says.
     func testTheHomePagesBands() throws {
         let spaces = try WikiFixtures.decode([WikiSpace].self, WikiFixtures.spaces)
+        let entries = try WikiFixtures.decode([WikiEntry].self, WikiFixtures.entries)
+        // The two bands' own reads (`?kind=principle`, `?kind=decision`), as the server answers them.
         let home = WikiHomeContent(space: try WikiFixtures.decode(WikiSpace.self, WikiFixtures.space),
                                    spaces: spaces,
-                                   entries: try WikiFixtures.decode([WikiEntry].self, WikiFixtures.entries),
+                                   entries: entries,
+                                   principles: entries.filter { $0.kind == .principle },
+                                   decisions: entries.filter { $0.kind == .decision },
                                    timeline: try XCTUnwrap(try WikiFixtures.decode(WikiTimeline.self,
                                                                                    WikiFixtures.timeline).items),
                                    proposals: WikiLogic.proposalsToReview(spaces))
@@ -248,6 +286,16 @@ final class WikiLogicTests: XCTestCase {
         let named = WikiEntry(id: "34UDFnrgM4q5oWakeLost", kind: .pitfall,
                               title: "Claude's ScheduleWakeup is lost when the engine is recycled")
         XCTAssertEqual(WikiLogic.cardTitle(cards[1], entry: named), named.title)
+        // Review's read carries the title of the entry each op names: the card says it before — or
+        // without — the entry's own read.
+        let carried = try WikiFixtures.decode(WikiChangesetOp.self, """
+            {"id":"34UDOpRetireWakeup002","seq":0,"op":"retire","entryId":"34UDFnrgM4q5oWakeLost",
+             "decision":"pending","entryTitle":"Claude's ScheduleWakeup is lost when the engine is recycled",
+             "payload":{"op":"retire","reason":"Fix landed."}}
+            """)
+        let card = WikiLogic.ReviewCard(changeset: cards[1].changeset, op: carried)
+        XCTAssertEqual(WikiLogic.cardTitle(card, entry: nil), named.title)
+        XCTAssertEqual(WikiLogic.knownTitle(card, entry: nil), named.title)
         XCTAssertEqual(WikiLogic.cardTitle(cards[2], entry: named), named.title,
                        "an amend that leaves the title alone is about the entry it names")
         XCTAssertEqual(WikiLogic.cardKind(cards[1], entry: named), .pitfall)

@@ -275,6 +275,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'requestedBySessionId',
   'decidedByUserId',
   'appliedTaskId',
+  // A move request's target criterion (0386): the definition row `criterionDefinitionId` names on
+  // a task, here as what the moved task WILL declare. An address for the same reason.
+  'requestedCriterionDefinitionId',
   // The account owner who resolved a project blocker (0269), named exactly as `decidedByUserId` is.
   'resolvedByUserId',
   // And the one who resumed a paused coordinator (0280), which is the same kind of name.

@@ -75,6 +75,10 @@ Usage:
   orbit wiki <command>              Read the Orbit wiki and propose to it
   orbit notify --message TEXT       Alert this account's devices with a line you write
   orbit token <command>             Mint/list/revoke credentials for headless processes
+  orbit login --with-token          Act as yourself with a personal access token (read from stdin)
+  orbit logout [--keep-token]       Revoke that token and forget it
+  orbit whoami [--json]             Show who the CLI acts as, and why
+  orbit api [-X METHOD] PATH        Call the Orbit REST API as yourself
   orbit capabilities [--json]       Show the CLI capabilities available to agents
   orbit host setup --server URL     Set this machine up for runners (root, once per host)
   orbit hostd [--foreground]        Serve the machine broker (systemd starts this, not you)
@@ -88,6 +92,8 @@ installation and sign-in guidance.
 
 Env:
   ORBIT_HOME               Override the runner's config/runs dir (default: ~/.orbit)
+  ORBIT_USER_TOKEN         A personal access token to act as, in place of 'orbit login' (CI, containers)
+  ORBIT_SERVER_URL         The server ORBIT_USER_TOKEN belongs to
   ORBIT_NO_SELFUPDATE      Disable startup and periodic runner auto-updates
   ORBIT_NO_ENGINE_UPDATE   Disable the periodic coding-engine CLI update check
 `
@@ -195,6 +201,10 @@ running it when the machine is idle. Disable the periodic check with ORBIT_NO_EN
 	"watch":     watchHelp,
 	"wiki":      wikiHelp,
 	"token":     tokenHelp,
+	"login":     loginHelp,
+	"logout":    logoutHelp,
+	"whoami":    whoamiHelp,
+	"api":       apiHelp,
 	"host":      hostHelp,
 	"capabilities": `orbit capabilities — show agent-safe Orbit CLI capabilities
 
@@ -358,6 +368,26 @@ func main() {
 	case "token":
 		if err := cmdTokenCLI(args[1:], os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "orbit token:", err)
+			os.Exit(1)
+		}
+	case "login":
+		if err := cmdLoginCLI(args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit login:", err)
+			os.Exit(1)
+		}
+	case "logout":
+		if err := cmdLogoutCLI(args[1:], os.Stdout, os.Stderr); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit logout:", err)
+			os.Exit(1)
+		}
+	case "whoami":
+		if err := cmdWhoamiCLI(args[1:], os.Stdout, os.Stderr); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit whoami:", err)
+			os.Exit(1)
+		}
+	case "api":
+		if err := cmdAPICLI(args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit api:", err)
 			os.Exit(1)
 		}
 	case "capabilities":
