@@ -31,14 +31,18 @@ func TestPerActionHelpDocumentsEveryAdvertisedFlag(t *testing.T) {
 		baseCLICapabilities, providerCLICapabilities, projectCLICapabilities,
 		notifyCLICapabilities, sessionCLICapabilities, agentCLICapabilities,
 		watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, wikiPlanCLICapabilities,
+		userCLICapabilities,
 	} {
 		for _, spec := range list {
-			// Single-command families (`orbit notify`) have one help text, not a per-action map.
+			help, ok := "", false
 			if len(spec.Argv) < 3 {
-				continue
-			}
-			help, ok := helpByFamily[spec.Argv[1]][spec.Argv[2]]
-			if !ok {
+				// A single-command family (`orbit notify`, `orbit whoami`) has one help text: the one
+				// `orbit <cmd> --help` prints.
+				if help, ok = cmdHelp[spec.Argv[1]]; !ok {
+					t.Errorf("`orbit %s --help` has no help text, and capabilities advertises it", spec.Argv[1])
+					continue
+				}
+			} else if help, ok = helpByFamily[spec.Argv[1]][spec.Argv[2]]; !ok {
 				continue
 			}
 			seen := map[string]bool{}
@@ -49,8 +53,8 @@ func TestPerActionHelpDocumentsEveryAdvertisedFlag(t *testing.T) {
 					}
 					seen[flag] = true
 					if !strings.Contains(help, flag) {
-						t.Errorf("`orbit %s %s --help` does not document %s, which capabilities advertises",
-							spec.Argv[1], spec.Argv[2], flag)
+						t.Errorf("`%s --help` does not document %s, which capabilities advertises",
+							strings.Join(spec.Argv, " "), flag)
 					}
 				}
 			}

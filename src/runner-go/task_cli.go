@@ -3062,7 +3062,10 @@ type cliCapabilitiesDocument struct {
 	Registered               bool                 `json:"registered"`
 	UnavailableReason        string               `json:"unavailableReason,omitempty"`
 	Context                  cliCapabilityContext `json:"context"`
-	Capabilities             []cliCapability      `json:"capabilities"`
+	// Who this process acts as and why (docs/personal-access-token-design.md §7.4): `orbit whoami`'s
+	// answer, without the request that has the server confirm a personal access token.
+	Identity     cliIdentity     `json:"identity"`
+	Capabilities []cliCapability `json:"capabilities"`
 }
 
 func buildCLICapabilities(executable string) cliCapabilitiesDocument {
@@ -3104,6 +3107,9 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	// Same argument again (§13.7): recording that a merge happened is evidence about the caller's
 	// own work, not a power over somebody else's session.
 	specs = append(specs, mergeReceiptCLICapabilities...)
+	// The person's own commands (login, logout, whoami, api): HeadlessOnly, so a terminal outside a
+	// session is offered them and a running agent is not.
+	specs = append(specs, userCLICapabilities...)
 	// Ungated like the task commands, but SessionOnly: a watch wakes the session that makes it.
 	// session_await is not here; it rides the orchestration gate with the session commands.
 	// Neither is listed in a session spawned with Watch off (watch_rollout.go).
@@ -3187,6 +3193,7 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		Registered:               registered,
 		UnavailableReason:        unavailableReason,
 		Context:                  ctx,
+		Identity:                 resolveCLIIdentity(),
 		Capabilities:             commands,
 	}
 }

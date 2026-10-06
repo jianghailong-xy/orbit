@@ -120,6 +120,19 @@ The installer can create a systemd or launchd service. Use `--foreground` for an
 `ORBIT_NO_REGISTER=1` to install only the binary. Run `orbit doctor` on the runner to diagnose missing runtime
 installations or authentication.
 
+Scripts can also act as a person rather than a machine. A user issues a personal access token under
+**Settings → Access tokens** and logs the `orbit` CLI in with it, on a runner or on any other machine:
+
+```bash
+orbit login --with-token --server https://orbit.example.com < token.txt
+orbit whoami
+```
+
+The binary this deployment serves already defaults to its own `PUBLIC_ORIGIN`, so `--server` can be left off
+where it was installed from here. On a runner machine, have users script as an OS account other than the
+runner service's: that service's agent sessions can read the account's saved login. See
+[CLI automation](runner-cli.md#personal-access-tokens), including when to use a service token instead.
+
 ## 5. Back up and monitor
 
 The Compose stack writes Postgres data to `./data/postgres`. A sidecar writes base backups and archived WAL to
@@ -153,6 +166,8 @@ explicitly require a database change outside the normal migration path.
 - [ ] Only the gateway is publicly reachable.
 - [ ] The first administrator uses a strong password and user access is reviewed.
 - [ ] Runner machines use least-privilege OS accounts and narrowly scoped credentials.
+- [ ] Personal access tokens carry only the scopes, workspaces and lifetime their scripts need, and nobody
+      scripts with one under a runner service's OS account.
 - [ ] Backups are copied off-host and a restore has been tested.
 - [ ] Container health, disk space, backup failures, and runner availability are monitored.
 - [ ] The deployment is pinned to a known release or commit and has a documented upgrade cadence.

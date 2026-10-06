@@ -1,5 +1,5 @@
 /**
- * Personal access tokens managed signed in to Orbit, and a token reading itself
+ * Personal access tokens managed signed in to Orbit, and a token reading and revoking itself
  * (docs/personal-access-token-design.md §6.5, §9, §11), held against the production apiserver —
  * `build/main.js`, the whole AppModule — over a real PostgreSQL that `scripts/run-pg-spec.sh`
  * migrates from empty. What it is held to:
@@ -27,7 +27,12 @@
  *       administrator's token routes — 403 PAT_FORBIDDEN, reason TOKEN_MANAGEMENT or ADMIN — and the
  *       token table and both users are, byte for byte, what they were; the only rows the refusals
  *       leave are the request audit's record of them, one pat.request.denied for each write and none
- *       for a read; the same requests with a login do their work.
+ *       for a read; the same requests with a login do their work;
+ *   (9) DELETE /pat/self revokes the token it is made with — USER — and no other: that token is 401
+ *       from its next request on, revoking itself again included, while the same user's other token
+ *       and another user's are untouched and still work; a login is 400 NOT_A_PERSONAL_ACCESS_TOKEN
+ *       and revokes nothing; being a write, the revoke is recorded pat.request (§6.4);
+ *  (10) no answer of this run but the one that issued a token ever carries it.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/auth/access-tokens.pg.spec.ts
  *
@@ -96,7 +101,7 @@ async function eventually<T>(what: string, check: () => Promise<T | null>, timeo
   }
 }
 
-test('access tokens: issued, listed and revoked signed in; an administrator\'s list and revoke; the password change\'s choice; the token reading itself; and every token route closed to a token', {
+test('access tokens: issued, listed and revoked signed in; an administrator\'s list and revoke; the password change\'s choice; the token reading and revoking itself; and every token route closed to a token', {
   skip: !URL, concurrency: 1, timeout: 600_000,
 }, async (t) => {
   const url = URL!;
@@ -498,7 +503,65 @@ test('access tokens: issued, listed and revoked signed in; an administrator\'s l
     assert.deepEqual(minted, [{ owner_id: admin.id, created_via: 'WEB' }]);
   });
 
-  await t.test('(9) every token issued appears in exactly one answer of this run — the one that issued it', async () => {
+  await t.test('(9) DELETE /pat/self revokes the token it is made with and no other, USER, 401 from then on; a login is 400', async () => {
+    const leaving = await issue(adminLogin, { name: 'leaving', scopes: ['wiki:read'], expiresInDays: 30 });
+    const staying = await issue(adminLogin, { name: 'staying' });
+    const theirs = await issue(memberLogin, { name: 'theirs, staying' });
+    issuedTokens.push(leaving.token, staying.token, theirs.token);
+    /** Where every other token of this run's users stands. */
+    const others = async () => (await sql.query(
+      `SELECT id, revoked_at, revoked_reason, expires_at FROM personal_access_token
+        WHERE owner_id = ANY($1::uuid[]) AND id <> $2 ORDER BY id`,
+      [[admin.id, member.id, stranger.id], toUuid(leaving.id)],
+    )).rows;
+    const before = await others();
+
+    // Signed in there is no token to revoke: 400, and nothing is.
+    const signedIn = await api('DELETE', '/pat/self', adminLogin);
+    assert.equal(signedIn.status, 400, signedIn.text);
+    assert.equal(signedIn.json.code, 'NOT_A_PERSONAL_ACCESS_TOKEN');
+    assert.equal((await row(leaving.id)).revoked_at, null);
+    assert.deepEqual(await others(), before, 'a login revoked nothing');
+
+    // The token revokes itself, whatever it holds: wiki:read alone opens no other write.
+    const revoked = expect(await api('DELETE', '/pat/self', leaving.token), 200, 'the token revoking itself');
+    assert.equal(revoked.id, leaving.id);
+    assert.equal(revoked.revokedReason, 'USER');
+    const ended = await row(leaving.id);
+    assert.equal(ended.revoked_reason, 'USER');
+    assert.equal(new Date(revoked.revokedAt).getTime(), ended.revoked_at.getTime());
+
+    // From its next request on it is refused like any revoked token, revoking itself again included.
+    for (const [method, path] of [['GET', '/pat/self'], ['DELETE', '/pat/self'], ['GET', '/access-tokens']]) {
+      const after = await api(method, path, leaving.token);
+      assert.equal(after.status, 401, `${method} ${path}: ${after.text}`);
+      assert.deepEqual(after.json, INVALID_TOKEN);
+    }
+    // The same user's other token and another user's are as they were, and still work.
+    assert.deepEqual(await others(), before, 'only the calling token was revoked');
+    assert.equal(expect(await self(staying.token), 200, "the same user's other token").token.id, staying.id);
+    assert.equal(expect(await self(theirs.token), 200, "another user's token").token.id, theirs.id);
+    // The settings page lists it revoked by its user.
+    const listed = expect(await api('GET', '/access-tokens', adminLogin), 200, 'the list');
+    const entry = listed.tokens.find((token: { id: string }) => token.id === leaving.id);
+    assert.deepEqual([entry.state, entry.revokedReason], ['REVOKED', 'USER']);
+
+    // A write, so the request audit records it (§6.4) — once: the refused requests after it are 401s,
+    // which no record follows.
+    await eventually('the revoke to be recorded', async () =>
+      ((await auditRows()).some((record) => record.credential_id === toUuid(leaving.id)) ? true : null));
+    await sleep(500);
+    const records = (await auditRows())
+      .filter((record) => record.credential_id === toUuid(leaving.id))
+      .map(({ id: _id, ...record }) => record);
+    assert.deepEqual(records, [{
+      type: 'pat.request',
+      credential_id: toUuid(leaving.id),
+      payload: { method: 'DELETE', route: '/pat/self', status: 200, params: {} },
+    }]);
+  });
+
+  await t.test('(10) every token issued appears in exactly one answer of this run — the one that issued it', async () => {
     assert.ok(issuedTokens.length >= 15, `${issuedTokens.length} tokens`);
     for (const token of issuedTokens) {
       const secret = token.slice(PAT_PREFIX.length);
