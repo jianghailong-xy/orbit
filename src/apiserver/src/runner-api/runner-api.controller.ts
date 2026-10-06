@@ -1457,13 +1457,13 @@ export class RunnerApiController {
   @Post('integration-jobs/:jobId/result')
   @HttpCode(200)
   async integrationJobResult(
-    @CurrentRunner() runner: { id: string },
+    @CurrentRunner() runner: { id: string; ownerId?: string },
     @Param('jobId', PublicIdPipe) jobId: string,
     @Body() body: IntegrationJobResultRequest,
   ): Promise<IntegrationJobResultResponse> {
     let applied: Awaited<ReturnType<IntegrationJobRelay['applyResult']>>;
     try {
-      applied = await this.integrationQueue().applyResult(jobId, runner.id, body);
+      applied = await this.integrationQueue().applyResult(jobId, runner.id, body, runner.ownerId);
     } catch (error) {
       throw integrationJobHttpError(error);
     }
