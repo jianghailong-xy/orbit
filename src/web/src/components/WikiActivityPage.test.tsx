@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
-import type { WikiPlanJob, WikiPlanProposal, WikiPlanState, WikiPlanVersion } from '@orbit/shared';
+import type { WikiDocsDirectory, WikiPlanJob, WikiPlanProposal, WikiPlanState, WikiPlanVersion } from '@orbit/shared';
 import { ThemeProvider } from '../lib/theme';
 import type { WikiChangeset, WikiEntry, WikiSpaceRow, WikiSpaceWithUsage, WikiTimeline } from '../lib/wiki';
 import { wikiSeenKey } from '../lib/wiki';
@@ -294,6 +294,21 @@ describe('Activity', () => {
     expect(html).not.toContain('>Principles<');
   });
 
+  it('stands under the home’s head on a desktop: the title, the line saying what the space holds, the search (mock 33 ④)', () => {
+    const cache = client();
+    cache.setQueryData(['wiki', 'space', ORBIT, 'docs'], {
+      spaceId: ORBIT,
+      plan: { version: 13, confirmedAt: '2026-10-06T00:00:00.000Z' },
+      docs: { total: 35, written: 5 },
+      categories: [],
+    } satisfies WikiDocsDirectory);
+    const html = wiki('/wiki/orbit/activity', cache);
+    const order = ['<h1 class="page-title">Wiki</h1>', '<div class="wk-home-state">35 documents · 5 written</div>', 'class="wk-search"', 'class="wk-crumb wk-crumb--back"'].map(
+      (needle) => at(html, needle),
+    );
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+  });
+
   it('reads Recent decisions by kind, not out of the newest 200 entries', () => {
     const html = wiki('/wiki/orbit/activity');
     expect(html).toContain('Remove wiki auto-push rather than reshape it');
@@ -384,6 +399,87 @@ describe('one number in four places, over two spaces whose plans wait', () => {
     expect(amberBanners(page)).toEqual([]);
     expect(page).not.toContain('tp-rail-badge');
     expect(sidebar(cache)).not.toContain('waiting on you');
+  });
+});
+
+/** A card of Activity's, by its class: everything inside its `<section>`. */
+function card(html: string, className: string): string {
+  const match = html.match(new RegExp(`<section class="project-open-items wk-card ${className}[^"]*">([\\s\\S]*?)</section>`));
+  expect(match, className).not.toBeNull();
+  return match![1];
+}
+
+/** A card's amber count, beside its title. */
+const cardCount = (html: string, className: string): number =>
+  Number(card(html, className).match(/<span class="tp-count needs-you">(\d+)<\/span>/)?.[1] ?? 0);
+
+/**
+ * A desktop draws this space's Review and Plan as cards and hides the phone's banners (mock 33 ④ ⑤), so
+ * over two spaces what waits elsewhere has to be on it too (§12.3.3: everything W counts can be found):
+ * the Review card counts every space's proposals and says the others' shares as the first banner does,
+ * and the other spaces' plan banners stand over the cards. With one space it is mock 33's as it was.
+ */
+describe('a desktop over two spaces: what waits elsewhere is on it too', () => {
+  it('counts every space’s proposals on the Review card, says wikova’s share, and lists this space’s', () => {
+    const page = wiki('/wiki/orbit/activity');
+    const review = card(page, 'wk-review-card');
+    expect(cardCount(page, 'wk-review-card')).toBe(wikiProposalsWaiting(SPACES));
+    expect(review).toContain('<div class="project-open-items-hint wk-review-sub">1 proposal from 1 session · 2 in wikova</div>');
+    expect(review).toContain('Secret redaction lets ENV_VAR=value secrets through');
+    expect(review).not.toContain('A wikova pitfall');
+    // Its button is Review over every space, the first banner's door.
+    expect(review).toMatch(/<button[^>]*class="ant-btn[^"]*ant-btn-primary[^"]*"[^>]*><span>Review<\/span><\/button>/);
+  });
+
+  it('draws the other spaces’ plan banners, and only theirs, over the cards', () => {
+    const page = wiki('/wiki/orbit/activity');
+    const elsewhere = [...page.matchAll(/<a class="wk-banner wk-plan-banner amber elsewhere" data-waiting="(\d+)"[^>]*>[\s\S]*?<span class="t">([^<]*)<\/span>/g)];
+    expect(elsewhere.map((match) => [match[2], Number(match[1])])).toEqual([['2 plan changes to review · in wikova', 2]]);
+    expect(page.indexOf('wk-plan-banner amber elsewhere')).toBeLessThan(at(page, 'class="wk-act-cards"'));
+    // This space's own plan is its card on a desktop: its banner is the phone's alone.
+    expect(page).toContain('<a class="wk-banner wk-plan-banner amber" data-waiting="1"');
+  });
+
+  it('shows every thing the badge counts: Review’s count, this space’s Plan card and the other spaces’ banners', () => {
+    const page = wiki('/wiki/orbit/activity');
+    const banners = [...page.matchAll(/class="wk-banner wk-plan-banner amber elsewhere" data-waiting="(\d+)"/g)].map((match) => Number(match[1]));
+    const shown = cardCount(page, 'wk-review-card') + cardCount(page, 'wk-plan-card') + banners.reduce((sum, n) => sum + n, 0);
+    expect(shown).toBe(wikiWaiting(SPACES));
+  });
+
+  it('with nothing to review here, says the first banner’s sentence and still opens Review', () => {
+    const spaces = [row(ORBIT, 'github.com/jianghailong-xy/orbit', 0, 1, 5), row(WIKOVA, 'github.com/jianghailong-xy/wikova', 2, 2, 12)];
+    const cache = client(spaces);
+    cache.setQueryData(['wiki', 'review', ORBIT], []);
+    const page = wiki('/wiki/orbit/activity', cache);
+    const review = card(page, 'wk-review-card');
+    expect(cardCount(page, 'wk-review-card')).toBe(2);
+    expect(review).toContain('<div class="project-open-items-hint wk-review-sub">2 proposals to review · 2 in wikova</div>');
+    expect(review).not.toContain('wk-rv-row');
+    expect(review).toContain('<span>Review</span></button>');
+    expect(review).not.toContain('Nothing is waiting for you.');
+  });
+
+  it('with one space, is mock 33’s: this space’s count, no share, no banner over the cards', () => {
+    const spaces = [row(ORBIT, 'github.com/jianghailong-xy/orbit', 1, 1, 5)];
+    const page = wiki('/wiki/orbit/activity', client(spaces));
+    expect(cardCount(page, 'wk-review-card')).toBe(1);
+    expect(card(page, 'wk-review-card')).toContain('<div class="project-open-items-hint wk-review-sub">1 proposal from 1 session</div>');
+    expect(page).not.toMatch(/wk-plan-banner [a-z]+ elsewhere/);
+  });
+
+  it('names the cards the desktop grid places, Agents used the wiki right after Recently changed', () => {
+    const page = wiki('/wiki/orbit/activity');
+    const cards = page.slice(at(page, 'class="wk-act-cards"'));
+    expect([...cards.matchAll(/<section class="project-open-items wk-card ?([^"]*)">/g)].map((match) => match[1].split(' ')[0])).toEqual([
+      'wk-review-card',
+      'wk-plan-card',
+      'wk-decisions-card',
+      'wk-changed-card',
+      '',
+    ]);
+    expect(card(page, 'wk-changed-card')).toContain('>Recently changed<');
+    expect(cards).toMatch(/<\/section><section class="project-open-items wk-card"><div class="project-open-items-head"><span class="project-open-items-title">Agents used the wiki</);
   });
 });
 
