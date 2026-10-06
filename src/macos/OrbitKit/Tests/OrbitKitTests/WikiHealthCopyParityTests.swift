@@ -293,7 +293,7 @@ final class WikiHealthCopyParityTests: XCTestCase {
         let screens = try swift(Self.app + "Views/WikiScreens.swift")
         XCTAssertTrue(screens.contains("openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) }"))
         let model = try swift(Self.app + "WikiModel.swift")
-        XCTAssertTrue(model.contains("async let healthRead = api.wikiHealth(spaceID: space.id)"))
+        XCTAssertTrue(model.contains("let healthRead = Task { try await api.wikiHealth(spaceID: space.id) }"))
         XCTAssertTrue(model.contains("health: health)"), "the home is drawn with the health it read")
     }
 }

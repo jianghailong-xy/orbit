@@ -95,6 +95,7 @@ final class WikiCopyParityTests: XCTestCase {
             ("WIKI_AGENTS_USED", WikiCopy.agentsUsed),
             ("WIKI_AGENTS_USED_HINT", WikiCopy.agentsUsedHint),
             ("WIKI_NO_SPACES", WikiCopy.noSpaces),
+            ("WIKI_DISABLED_NOTE", WikiCopy.disabledNote),
             ("WIKI_SPACE_PICKER_HINT", WikiCopy.spacePickerHint),
             ("WIKI_SESSIONS_RECEIVED", WikiCopy.sessionsReceived),
             ("WIKI_SEARCHES", WikiCopy.searches),
@@ -153,7 +154,7 @@ final class WikiCopyParityTests: XCTestCase {
             ("WIKI_TAB_ADD", WikiCopy.tabAdd),
             ("WIKI_TAB_AMEND", WikiCopy.tabAmend),
             ("WIKI_TAB_RETIRE", WikiCopy.tabRetire),
-            ("WIKI_NO_ENTRIES", WikiCopy.noEntries),
+            ("WIKI_NO_PRINCIPLES", WikiCopy.noPrinciples),
             ("WIKI_NO_REVIEW", WikiCopy.noReview),
             ("WIKI_NO_CHANGES", WikiCopy.noChanges),
             ("WIKI_NO_DECISIONS", WikiCopy.noDecisions),
@@ -189,7 +190,9 @@ final class WikiCopyParityTests: XCTestCase {
     func testTheSentencesBuiltAroundAValue() throws {
         let web = try source(Self.lib)
         XCTAssertEqual(WikiCopy.proposalsToReview(3), "3 proposals to review")
-        assertSays(web, "wikiProposalsToReview = (count: number): string => `${count} proposals to review`", in: Self.lib)
+        XCTAssertEqual(WikiCopy.proposalsToReview(1), "1 proposal to review")
+        assertSays(web, "wikiProposalsToReview = (count: number): string => `${count} proposal${count === 1 ? '' : 's'} to review`",
+                   in: Self.lib)
         XCTAssertEqual(WikiCopy.proposalsFrom(3, sessions: 2), "3 proposals from 2 sessions")
         XCTAssertEqual(WikiCopy.proposalsFrom(1, sessions: 1), "1 proposal from 1 session")
         assertSays(web, "`${count} proposal${count === 1 ? '' : 's'} from ${sessions} session${sessions === 1 ? '' : 's'}`",
@@ -355,6 +358,56 @@ final class WikiCopyParityTests: XCTestCase {
         }
     }
 
+    /// Principles and Recent decisions read their own kind at both ends, the same number of each — never
+    /// picked out of the newest 200 entries of every kind — and an empty Principles band speaks for the
+    /// principles, not for the whole space.
+    func testTheHomeReadsItsBandsByKind() throws {
+        let home = try source(Self.home)
+        assertSays(home, "const PRINCIPLES_READ = \(WikiHomeContent.principlesRead);", in: Self.home)
+        assertSays(home, "const RECENT_DECISIONS = \(WikiHomeContent.recentDecisionCount);", in: Self.home)
+        assertSays(home, "useQuery(wikiEntriesOfKindQuery(space.id, 'principle', PRINCIPLES_READ))", in: Self.home)
+        assertSays(home, "useQuery(wikiEntriesOfKindQuery(space.id, 'decision', RECENT_DECISIONS))", in: Self.home)
+        assertSays(home, "wikiEntriesOfKind(principleRead.data ?? [], 'principle')", in: Self.home)
+        assertSays(home, "wikiEntriesOfKind(decisionRead.data ?? [], 'decision')", in: Self.home)
+        assertSays(home, "<WikiEmpty>{WIKI_NO_PRINCIPLES}</WikiEmpty>", in: Self.home)
+        XCTAssertFalse(home.contains("WIKI_NO_ENTRIES"), "the home no longer says the space holds nothing")
+        let queries = try source("src/web/src/lib/queries.ts")
+        assertSays(queries, "/entries?kind=${kind}&limit=${limit}`", in: "src/web/src/lib/queries.ts")
+    }
+
+    /// A Review card names the entry it is about by the title Review's read carries (`entryTitle`) when
+    /// no draft names one — the web's home card and Review page, the native card's `knownTitle`.
+    func testAReviewCardNamesItsEntryByTheTitleTheQueueCarries() throws {
+        let home = try source(Self.home)
+        let title = try slice(home, from: "export function opTitle(op: WikiChangesetOp): string {",
+                              to: "return op.op === 'add' ? 'A new entry' : 'An entry';")
+        assertOrder(title, ["if (typeof payload.entry?.title === 'string') return payload.entry.title;",
+                            "if (op.entryTitle) return op.entryTitle;",
+                            "if (typeof payload.changes?.title === 'string') return payload.changes.title;"],
+                    "the home card's title")
+        let shared = try source(Self.shared)
+        assertSays(shared, "entryTitle?: string | null;", in: Self.shared)
+        let op = WikiChangesetOp(id: "o", op: .challenge, entryId: "e", entryTitle: "An entry older than any window")
+        let card = WikiLogic.ReviewCard(changeset: WikiChangeset(id: "c", ops: [op]), op: op)
+        XCTAssertEqual(WikiLogic.cardTitle(card, entry: nil), "An entry older than any window")
+    }
+
+    /// The wiki off for this account (404 WIKI_DISABLED) is the web's answer at both ends: no Wiki row,
+    /// and the section's sentence where its pages would be.
+    func testTheWikiOffForThisAccountIsTheWebsAnswer() throws {
+        let web = try source(Self.lib)
+        assertSays(web, "export const WIKI_DISABLED = '\(WikiLogic.disabledCode)';", in: Self.lib)
+        assertSays(web, "return error instanceof ApiError && error.status === 404 && error.code === WIKI_DISABLED;",
+                   in: Self.lib)
+        assertSays(web, "return spaces.data !== undefined ? spaces.data !== null : spaces.isError;", in: Self.lib)
+        let sidebar = try source(Self.sidebar)
+        assertSays(sidebar, "const topItems = wikiShown(wikiSpaces) ? TOP : TOP.filter((t) => t.key !== 'wiki');",
+                   in: Self.sidebar)
+        let page = try source(Self.page)
+        assertSays(page, "<WikiEmpty>{WIKI_DISABLED_NOTE}</WikiEmpty>", in: Self.page)
+        XCTAssertEqual(WikiCopy.disabledNote, "The wiki is not switched on for this account.")
+    }
+
     // MARK: one entry
 
     /// Details, Sources, Anchors, Where it's used, History — the drawer's order, which the native
@@ -491,7 +544,8 @@ final class WikiCopyParityTests: XCTestCase {
                    in: Self.review)
         // What a card is about, and the anchors it lists: the draft's, else the named entry's.
         assertSays(review, "const draft = (payload.entry ?? {}) as Record<string, unknown>;", in: Self.review)
-        assertSays(review, "typeof draft.title === 'string' ? draft.title : (target.data?.title ?? null);", in: Self.review)
+        assertSays(review, "typeof draft.title === 'string' ? draft.title : (target.data?.title ?? op.entryTitle ?? null);",
+                   in: Self.review)
         assertSays(review, "const raw = Array.isArray(draft.anchors) ? draft.anchors : Array.isArray(fallback) ? fallback : [];",
                    in: Self.review)
         assertSays(review, "if (typeof row.sha === 'string') return [row.sha];", in: Self.review)
