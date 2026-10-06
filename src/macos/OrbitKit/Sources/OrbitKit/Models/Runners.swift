@@ -352,6 +352,25 @@ public struct RunnerInstallState: Codable, Equatable, Sendable {
     public var inFlight: Bool { status == "pending" || status == "installing" }
 }
 
+/// Where a runner's updates of itself stand, as its heartbeats report them (@orbit/shared
+/// `RunnerSelfUpdate`): `enabled`, `disabledByEnv`, `dirNotWritable`, `waitingForIdle`, `failed` or
+/// `heldByRollout`, why (`reason`, for `failed` and `disabledByEnv`), the folder holding its binary,
+/// and the last update it installed. The state stays raw so a newer control plane cannot make the
+/// runner list undecodable; `RunnerAttention` reads the ones it knows.
+public struct RunnerSelfUpdate: Codable, Equatable, Sendable {
+    public let state: String
+    public let reason: String?
+    public let installDir: String?
+    public let lastUpdatedAt: String?
+    public let lastUpdatedFrom: String?
+    public let lastUpdatedTo: String?
+}
+
+/// POST /runners/:id/self-update (Update Runner Now) acknowledges when the check was requested.
+public struct RunnerSelfUpdateRequest: Codable, Equatable, Sendable {
+    public let requestedAt: String?
+}
+
 /// Browser-facing account-removal relay. Raw engine/status strings preserve forward compatibility.
 public struct RunnerAccountRemoveState: Codable, Equatable, Sendable {
     public let engine: String?

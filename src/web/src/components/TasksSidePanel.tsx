@@ -42,6 +42,7 @@ import type {
   RunnerEngineHealth,
   RunnerInstallState,
   RunnerModelCatalog,
+  RunnerSelfUpdate,
   RuntimeDefaultModels,
   SlashCommandInfo,
 } from '@orbit/shared';
@@ -230,6 +231,10 @@ export interface Runner {
   // Bypass under root and exits before its first message. undefined/null = a runner too old to
   // report it, which stays unrestricted.
   runsAsRoot?: boolean | null;
+  // Where this runner's updates of itself stand, as it last reported: why it is or isn't on the
+  // latest release, and the last update it installed. undefined/null = a runner too old to report
+  // it, which the Runners page judges by runsAsRoot as it always has.
+  selfUpdate?: RunnerSelfUpdate | null;
   // Free-space floor in MB (PATCH minFreeDiskMb): below it this machine takes no new task runs.
   // null = no floor.
   minFreeDiskMb?: number | null;
