@@ -8,11 +8,13 @@ import type {
   ProjectStartedCard,
   SessionCapabilities,
   SessionMessageCard,
+  SessionReplyCard,
   SessionMoveTargets,
   SessionRequestView,
   SessionProjectMembership,
   SessionTurnIntent,
   SessionTurnPlacement,
+  TaskStartCard,
 } from '@orbit/shared';
 // Types only, so the public project page's payload is typed by the cards that draw it.
 import type { ProjectPanoramaBuckets, ProjectPanoramaShape } from './components/ProjectPanoramaHeader';
@@ -626,6 +628,9 @@ export interface ActiveSessionTurn {
   /** An exception item's delivery carries the item's own fields beside its words (`OpenItemDeliveryCard`),
    *  read by the same function the runner's echo is read by. Absent on every turn a person typed. */
   openItemDelivery?: OpenItemDeliveryCard;
+  /** The same for the turn that hands a task's run its brief (`TaskStartCard`): a resumed run's — a
+   *  run's opening turn is never listed here. */
+  taskStart?: TaskStartCard;
   /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
   projectStarted?: ProjectStartedCard;
   /** A confirmation request handed to this conversation to review, and a reviewer's return handed to
@@ -636,6 +641,9 @@ export interface ActiveSessionTurn {
    *  carry it. Its words are that session's, not the reader's. Absent on every turn nobody's session
    *  sent. */
   sessionMessage?: SessionMessageCard;
+  /** The outcomes of this session's own requests a reply turn hands back (`SessionReplyCard`), as
+   *  the runner's echo will carry them. Absent on every other turn. */
+  sessionReplies?: SessionReplyCard[];
   /** The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
    *  delivery — so nobody typed its words. Absent on every turn somebody sent. */
   authoredByOrbit?: true;
