@@ -242,13 +242,10 @@ public enum ProjectCrossings {
 
     /// What each state means for a move, where `TaskDetailCopy.crossingStateMeaning` speaks for a
     /// filing: the task is already filed, so "not filed anywhere until you answer" would be false of
-    /// it.
-    public static let moveStateMeaning: [String: String] = [
-        "PENDING": "the task stays in its project until you answer, and confirming moves it",
-        "APPROVED": "the task has not moved: this yes was recorded without moving it",
-        "DENIED": "refusing is final for this request, and the task stays where it is",
-        "APPLIED": "the task was moved when this request was confirmed",
-    ]
+    /// it. The task page's attribution card holds the same four sentences for the same reason.
+    public static var moveStateMeaning: [String: String] {
+        TaskDetailCopy.moveTaskStateMeaning
+    }
 
     // MARK: a filing, and a dependency
 
