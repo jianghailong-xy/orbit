@@ -442,6 +442,19 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(banner.contains("return openProjectSessions(projectID, inColumn: projectInColumn)"))
     }
 
+    /// A read that failed with no rows in hand says why in one sentence, with Retry, and stays up
+    /// through the page's 4-second polls rather than blinking out while each one is in flight.
+    func testAFailedReadStaysUpWithItsReasonAndRetry() throws {
+        let source = code(try appSource("Views/SessionProjectPage.swift"))
+        let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
+        let overlay = try slice(page, from: ".overlay {", to: "\n        }")
+        let failed = try slice(overlay, from: "if sessions.isEmpty, let failure = app.projectSessionsError {",
+                               to: "} else if")
+        XCTAssertFalse(failed.contains("projectSessionsLoading"))
+        XCTAssertTrue(failed.contains("Text(CodexSignIn.sentence(failure))"))
+        XCTAssertTrue(failed.contains("Button(\"Retry\") { Task { await app.loadProjectSessions(address) } }"))
+    }
+
     func testTheProjectUILayerIsCompiledForIOSOnly() throws {
         let page = try appSource("Views/SessionProjectPage.swift")
         for part in ["struct SessionProjectRowView: View", "struct SessionProjectPage: View",
