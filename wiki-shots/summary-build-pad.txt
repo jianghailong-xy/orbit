@@ -1,0 +1,6 @@
+Test Case '-[WikiProbeUITests.WikiPadShotsTests testTheDirectoryBesideTheContent]' started.
+Test Case '-[WikiProbeUITests.WikiPadShotsTests testTheDirectoryBesideTheContent]' passed (594.302 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 594.302 (594.308) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 594.302 (594.318) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 594.302 (594.321) seconds
+** TEST SUCCEEDED **

@@ -1,0 +1,300 @@
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest
+
+Touch /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest
+
+2026-10-06 22:26:22.215223+0000 WikiProbeUITests-Runner[40193:115642] [Default] Running tests...
+2026-10-06 22:26:22.401700+0000 WikiProbeUITests-Runner[40193:115642] [UIKit App Config] Update the Info.plist: Launch screens will soon be required.
+objc[40193]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x108cb4310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x107c0c398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'Selected tests' started at 2026-10-06 22:26:39.801.
+Test Suite 'WikiProbeUITests.xctest' started at 2026-10-06 22:26:39.803.
+Test Suite 'WikiPadShotsTests' started at 2026-10-06 22:26:39.803.
+Test Case '-[WikiProbeUITests.WikiPadShotsTests testTheDirectoryBesideTheContent]' started.
+    t =     0.00s Start Test at 2026-10-06 22:26:39.806
+2026-10-06 22:26:56.078 xcodebuild[8994:36363] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 22:26:56.078 xcodebuild[8994:36363] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.33s Set Up
+    t =     1.33s Setting device orientation to Landscape Left
+    t =     1.37s     Device orientation changed to Landscape Left
+    t =     2.31s     Interface orientation changed to Landscape Right
+    t =     2.51s     Wait for com.apple.DocumentManager.DockFolderViewService to idle
+    t =     3.30s     Wait for com.apple.springboard to idle
+    t =     3.79s Open io.orbitd.wikiprobe
+    t =     3.79s     Launch io.orbitd.wikiprobe
+    t =    27.55s         Setting up automation session
+    t =    49.60s         Wait for io.orbitd.wikiprobe to idle
+    t =   112.60s             App event loop idle notification not received, will attempt to continue.
+    t =   114.18s Waiting 60.0s for Button (First Match) to exist
+    t =   117.44s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =   117.44s         Checking existence of `Button (First Match)`
+    t =   139.23s         Capturing element debug description
+    t =   139.32s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =   139.32s         Checking existence of `Button (First Match)`
+    t =   145.31s Tap Button (First Match)
+    t =   145.31s     Wait for io.orbitd.wikiprobe to idle
+    t =   145.33s     Find the Button (First Match)
+    t =   145.98s     Check for interrupting elements affecting "Wiki, 1 waiting on you" Button
+    t =   146.23s         Wait for com.apple.springboard to idle
+    t =   146.39s     Synthesize event
+    t =   147.95s     Wait for io.orbitd.wikiprobe to idle
+    t =   212.19s         App event loop idle notification not received, will attempt to continue.
+    t =   234.39s App animations complete notification not received, will attempt to continue.
+    t =   234.40s Waiting 20.0s for Any (First Match) to exist
+    t =   237.86s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   238.28s         Checking existence of `Any (First Match)`
+    t =   248.60s Checking existence of `Any (First Match)`
+    t =   251.10s Find the Any (First Match)
+    t =   256.15s Find the "Browse by category" Button
+    t =   258.66s Find the "Browse by category" Button
+    t =   259.88s Find the "Browse by category" Button
+    t =   261.79s Find the "Browse by category" Button
+    t =   264.09s Waiting 20.0s for Any (First Match) to exist
+    t =   265.14s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   265.14s         Checking existence of `Any (First Match)`
+    t =   266.52s Checking existence of `Any (First Match)`
+    t =   268.37s Find the Any (First Match)
+    t =   270.66s Find the "A–Z index" Button
+    t =   271.39s Find the "A–Z index" Button
+    t =   272.19s Find the "A–Z index" Button
+    t =   272.75s Find the "A–Z index" Button
+    t =   273.29s Waiting 20.0s for Any (First Match) to exist
+    t =   274.30s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   274.30s         Checking existence of `Any (First Match)`
+    t =   275.10s Checking existence of `Any (First Match)`
+    t =   275.77s Find the Any (First Match)
+    t =   276.43s Find the "Plan" Button
+    t =   277.08s Find the "Plan" Button
+    t =   277.75s Find the "Plan" Button
+    t =   278.30s Find the "Plan" Button
+    t =   279.08s Waiting 20.0s for Any (First Match) to exist
+    t =   280.10s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   280.10s         Checking existence of `Any (First Match)`
+    t =   281.01s Checking existence of `Any (First Match)`
+    t =   281.65s Find the Any (First Match)
+    t =   282.30s Find the "35 documents · 5 written" StaticText
+    t =   282.83s Find the "35 documents · 5 written" StaticText
+    t =   283.49s Find the "35 documents · 5 written" StaticText
+    t =   284.14s Find the "35 documents · 5 written" StaticText
+    t =   284.85s Waiting 20.0s for Any (First Match) to exist
+    t =   285.85s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   285.85s         Checking existence of `Any (First Match)`
+    t =   289.89s Checking existence of `Any (First Match)`
+    t =   291.26s Find the Any (First Match)
+    t =   292.94s Find the "1.1, 产品定位与核心能力, Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上，计划、历史和控制都留在一个自托管的地方。" Button
+    t =   294.52s Find the "1.1, 产品定位与核心能力, Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上，计划、历史和控制都留在一个自托管的地方。" Button
+    t =   296.05s Find the "1.1, 产品定位与核心能力, Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上，计划、历史和控制都留在一个自托管的地方。" Button
+    t =   296.57s Find the "1.1, 产品定位与核心能力, Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上，计划、历史和控制都留在一个自托管的地方。" Button
+    t =   297.25s Checking existence of `Any (First Match)`
+    t =   302.22s Checking existence of `Any (First Match)`
+    t =   303.18s Checking existence of `Any (First Match)`
+    t =   303.93s Waiting 10.0s for "The codebase this wiki describes" StaticText to exist
+    t =   304.99s     Checking `Expect predicate `existsNoRetry == 1` for object "The codebase this wiki describes" StaticText`
+    t =   304.99s         Checking existence of `"The codebase this wiki describes" StaticText`
+    t =   314.19s         Capturing element debug description
+    t =   314.20s     Checking existence of `"The codebase this wiki describes" StaticText`
+    t =   324.27s Waiting 10.0s for "Activity" Button to exist
+    t =   325.33s     Checking `Expect predicate `existsNoRetry == 1` for object "Activity" Button`
+    t =   325.35s         Checking existence of `"Activity" Button`
+    t =   325.85s Find the "Activity" Button
+    t =   331.29s Added attachment named '31-pad-wiki'
+    t =   331.30s Requesting snapshot of accessibility hierarchy for app with pid 41088
+    t =   334.89s Requesting snapshot of accessibility hierarchy for app with pid 41088
+    t =   335.50s Get all elements bound by index for: Elements matching predicate 'label CONTAINS "Session 运行与恢复"'
+    t =   336.08s Checking existence of `Button (Element at index 0)`
+    t =   338.64s Find the Button (Element at index 0)
+    t =   339.16s Checking existence of `"3.1, Session 运行与恢复, session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。" Button`
+    t =   340.15s Find the "3.1, Session 运行与恢复, session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。" Button
+    t =   341.71s Find the "3.1, Session 运行与恢复, session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。" Button
+    t =   342.39s Find the "3.1, Session 运行与恢复, session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。" Button
+    t =   343.29s Find the "3.1, Session 运行与恢复, session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。" Button
+    t =   344.29s Find the "3.1, Session 运行与恢复, session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。" Button
+    t =   344.98s Tap "3.1, Session 运行与恢复, session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。" Button
+    t =   344.98s     Wait for io.orbitd.wikiprobe to idle
+    t =   345.01s     Find the "3.1, Session 运行与恢复, session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。" Button
+    t =   345.71s     Check for interrupting elements affecting "3.1, Session 运行与恢复, session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。" Button
+    t =   346.12s         Wait for com.apple.springboard to idle
+    t =   346.39s     Synthesize event
+    t =   346.92s     Wait for io.orbitd.wikiprobe to idle
+    t =   348.03s Waiting 30.0s for Any (First Match) to exist
+    t =   349.08s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   349.09s         Checking existence of `Any (First Match)`
+    t =   352.80s Checking existence of `Any (First Match)`
+    t =   356.20s Find the Any (First Match)
+    t =   358.98s Find the "会话运行模型与长连接：总览" StaticText
+    t =   361.26s Find the "会话运行模型与长连接：总览" StaticText
+    t =   363.12s Find the "会话运行模型与长连接：总览" StaticText
+    t =   365.20s Find the "会话运行模型与长连接：总览" StaticText
+    t =   366.07s Checking existence of `Any (First Match)`
+    t =   366.77s Checking existence of `Any (First Match)`
+    t =   367.72s Checking existence of `Any (First Match)`
+    t =   370.96s Added attachment named '32-pad-doc'
+    t =   370.96s Requesting snapshot of accessibility hierarchy for app with pid 41088
+    t =   373.18s Requesting snapshot of accessibility hierarchy for app with pid 41088
+    t =   373.48s Get all elements bound by index for: Elements matching predicate 'label CONTAINS "Home"'
+    t =   373.77s Checking existence of `Button (Element at index 0)`
+    t =   373.94s Find the Button (Element at index 0)
+    t =   374.23s Tap "Home" Button
+    t =   374.23s     Wait for io.orbitd.wikiprobe to idle
+    t =   374.23s     Find the "Home" Button
+    t =   374.52s     Check for interrupting elements affecting "Home" Button
+    t =   374.76s         Wait for com.apple.springboard to idle
+    t =   378.21s     Synthesize event
+    t =   380.00s     Wait for io.orbitd.wikiprobe to idle
+    t =   385.28s Waiting 30.0s for Any (First Match) to exist
+    t =   386.38s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   386.38s         Checking existence of `Any (First Match)`
+    t =   389.46s Checking existence of `Any (First Match)`
+    t =   391.73s Find the Any (First Match)
+    t =   395.69s Find the "35 documents · 5 written" StaticText
+    t =   403.30s Find the "35 documents · 5 written" StaticText
+    t =   407.52s Find the "35 documents · 5 written" StaticText
+    t =   409.99s Find the "35 documents · 5 written" StaticText
+    t =   418.15s Waiting 10.0s for "Activity" Button to exist
+    t =   419.20s     Checking `Expect predicate `existsNoRetry == 1` for object "Activity" Button`
+    t =   419.20s         Checking existence of `"Activity" Button`
+    t =   421.49s Tap "Activity" Button
+    t =   421.49s     Wait for io.orbitd.wikiprobe to idle
+    t =   421.59s     Find the "Activity" Button
+    t =   423.24s     Check for interrupting elements affecting "Activity" Button
+    t =   423.87s         Wait for com.apple.springboard to idle
+    t =   423.93s     Synthesize event
+    t =   424.68s     Wait for io.orbitd.wikiprobe to idle
+    t =   425.51s Waiting 30.0s for Any (First Match) to exist
+    t =   426.53s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   426.53s         Checking existence of `Any (First Match)`
+    t =   440.72s         Capturing element debug description
+    t =   441.58s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   441.58s         Checking existence of `Any (First Match)`
+    t =   447.92s Checking existence of `Any (First Match)`
+    t =   454.21s Find the Any (First Match)
+    t =   460.93s Find the "1 proposal to review" Button
+    t =   466.48s Find the "1 proposal to review" Button
+    t =   469.62s Find the "1 proposal to review" Button
+    t =   471.71s Find the "1 proposal to review" Button
+    t =   475.51s Waiting 20.0s for Any (First Match) to exist
+    t =   476.55s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   476.58s         Checking existence of `Any (First Match)`
+    t =   478.76s Checking existence of `Any (First Match)`
+    t =   480.51s Find the Any (First Match)
+    t =   482.28s Find the "Recent decisions" StaticText
+    t =   485.03s Find the "Recent decisions" StaticText
+    t =   488.64s Find the "Recent decisions" StaticText
+    t =   490.50s Find the "Recent decisions" StaticText
+    t =   493.83s Waiting 20.0s for Any (First Match) to exist
+    t =   494.90s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   494.90s         Checking existence of `Any (First Match)`
+    t =   497.39s Checking existence of `Any (First Match)`
+    t =   499.88s Find the Any (First Match)
+    t =   504.04s Find the "Browse by category" Button
+    t =   506.99s Find the "Browse by category" Button
+    t =   509.93s Find the "Browse by category" Button
+    t =   512.58s Find the "Browse by category" Button
+    t =   517.10s Added attachment named '33-pad-activity'
+    t =   517.11s Requesting snapshot of accessibility hierarchy for app with pid 41088
+    t =   519.38s Requesting snapshot of accessibility hierarchy for app with pid 41088
+    t =   519.77s Get all elements bound by index for: Elements matching predicate 'label CONTAINS "1 proposal to review"'
+    t =   529.15s Checking existence of `Button (Element at index 0)`
+    t =   532.85s Find the Button (Element at index 0)
+    t =   533.15s Find the "1 proposal to review" Button
+    t =   533.50s Find the "1 proposal to review" Button
+    t =   533.84s Tap "1 proposal to review" Button
+    t =   533.84s     Wait for io.orbitd.wikiprobe to idle
+    t =   533.88s     Find the "1 proposal to review" Button
+    t =   534.35s     Check for interrupting elements affecting "1 proposal to review" Button
+    t =   537.59s         Wait for com.apple.springboard to idle
+    t =   537.73s     Synthesize event
+    t =   538.22s     Wait for io.orbitd.wikiprobe to idle
+    t =   539.85s Waiting 30.0s for Any (First Match) to exist
+    t =   540.92s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   540.92s         Checking existence of `Any (First Match)`
+    t =   541.80s Checking existence of `Any (First Match)`
+    t =   542.39s Find the Any (First Match)
+    t =   542.74s Find the "1 proposal from 1 session · oldest 2h ago" StaticText
+    t =   543.06s Find the "1 proposal from 1 session · oldest 2h ago" StaticText
+    t =   543.35s Find the "1 proposal from 1 session · oldest 2h ago" StaticText
+    t =   543.64s Find the "1 proposal from 1 session · oldest 2h ago" StaticText
+    t =   543.89s Waiting 20.0s for Any (First Match) to exist
+    t =   544.95s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   544.95s         Checking existence of `Any (First Match)`
+    t =   545.87s Checking existence of `Any (First Match)`
+    t =   546.79s Find the Any (First Match)
+    t =   548.05s Find the "Browse by category" Button
+    t =   548.96s Find the "Browse by category" Button
+    t =   549.54s Find the "Browse by category" Button
+    t =   550.02s Find the "Browse by category" Button
+    t =   553.14s Added attachment named '35-pad-review'
+    t =   553.16s Requesting snapshot of accessibility hierarchy for app with pid 41088
+    t =   555.02s Requesting snapshot of accessibility hierarchy for app with pid 41088
+    t =   555.34s Get all elements bound by index for: Elements matching predicate 'label CONTAINS "Home"'
+    t =   555.53s Checking existence of `Button (Element at index 0)`
+    t =   555.79s Find the Button (Element at index 0)
+    t =   556.03s Tap "Home" Button
+    t =   556.03s     Wait for io.orbitd.wikiprobe to idle
+    t =   556.04s     Find the "Home" Button
+    t =   556.26s     Check for interrupting elements affecting "Home" Button
+    t =   556.45s         Wait for com.apple.springboard to idle
+    t =   556.58s     Synthesize event
+    t =   556.96s     Wait for io.orbitd.wikiprobe to idle
+    t =   565.13s Waiting 30.0s for Any (First Match) to exist
+    t =   566.17s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   566.17s         Checking existence of `Any (First Match)`
+    t =   566.97s Checking existence of `Any (First Match)`
+    t =   567.59s Find the Any (First Match)
+    t =   568.24s Find the "35 documents · 5 written" StaticText
+    t =   568.76s Find the "35 documents · 5 written" StaticText
+    t =   569.50s Find the "35 documents · 5 written" StaticText
+    t =   570.95s Find the "35 documents · 5 written" StaticText
+    t =   572.57s Get all elements bound by index for: Elements matching predicate 'label CONTAINS "Settings"'
+    t =   572.82s Checking existence of `Button (Element at index 0)`
+    t =   573.06s Find the Button (Element at index 0)
+    t =   573.25s Checking existence of `Button (Element at index 1)`
+    t =   573.47s Find the Button (Element at index 1)
+    t =   573.78s Find the "gearshape" Button
+    t =   574.11s Find the "gearshape" Button
+    t =   574.42s Checking existence of `"gearshape" Button`
+    t =   574.66s Find the "gearshape" Button
+    t =   575.04s Find the "gearshape" Button
+    t =   575.29s Find the "gearshape" Button
+    t =   575.76s Find the "gearshape" Button
+    t =   576.12s Find the "gearshape" Button
+    t =   576.49s Tap "gearshape" Button
+    t =   576.49s     Wait for io.orbitd.wikiprobe to idle
+    t =   576.49s     Find the "gearshape" Button
+    t =   577.01s     Check for interrupting elements affecting "gearshape" Button
+    t =   577.30s         Wait for com.apple.springboard to idle
+    t =   577.36s     Synthesize event
+    t =   578.04s     Wait for io.orbitd.wikiprobe to idle
+    t =   579.18s Waiting 30.0s for Any (First Match) to exist
+    t =   580.22s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   580.22s         Checking existence of `Any (First Match)`
+    t =   583.42s Checking existence of `Any (First Match)`
+    t =   585.64s Find the Any (First Match)
+    t =   586.36s Find the "Maintenance" StaticText
+    t =   587.00s Find the "Maintenance" StaticText
+    t =   587.89s Find the "Maintenance" StaticText
+    t =   588.64s Find the "Maintenance" StaticText
+    t =   591.71s Added attachment named '34-pad-settings'
+    t =   591.72s Requesting snapshot of accessibility hierarchy for app with pid 41088
+    t =   593.26s Requesting snapshot of accessibility hierarchy for app with pid 41088
+    t =   593.53s Tear Down
+Test Case '-[WikiProbeUITests.WikiPadShotsTests testTheDirectoryBesideTheContent]' passed (594.302 seconds).
+Test Suite 'WikiPadShotsTests' passed at 2026-10-06 22:36:34.111.
+	 Executed 1 test, with 0 failures (0 unexpected) in 594.302 (594.308) seconds
+Test Suite 'WikiProbeUITests.xctest' passed at 2026-10-06 22:36:34.121.
+	 Executed 1 test, with 0 failures (0 unexpected) in 594.302 (594.318) seconds
+Test Suite 'Selected tests' passed at 2026-10-06 22:36:34.121.
+	 Executed 1 test, with 0 failures (0 unexpected) in 594.302 (594.321) seconds
+2026-10-06 22:39:10.637 xcodebuild[8994:36363] [MT] IDETestOperationsObserverDebug: 882.839 elapsed -- Testing started completed.
+2026-10-06 22:39:10.651 xcodebuild[8994:36363] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-06 22:39:10.651 xcodebuild[8994:36363] [MT] IDETestOperationsObserverDebug: 882.839 sec, +882.839 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.wiki-probe/results/pad.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

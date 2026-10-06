@@ -1,0 +1,43 @@
+==> stubs ready after 2s
+iPhone iPhone 17 Pro com.apple.CoreSimulator.SimRuntime.iOS-26-5
+iPad iPad Air 11-inch (M4) com.apple.CoreSimulator.SimRuntime.iOS-26-5
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B, iPad CD273885-3D56-471B-AD88-07FFF01EA675
+Test Case '-[WikiProbeUITests.WikiPadShotsTests testTheDirectoryBesideTheContent]' started.
+Test Case '-[WikiProbeUITests.WikiPadShotsTests testTheDirectoryBesideTheContent]' passed (594.302 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 594.302 (594.308) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 594.302 (594.318) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 594.302 (594.321) seconds
+** TEST SUCCEEDED **
+Traceback (most recent call last):
+  File "<stdin>", line 3, in <module>
+FileNotFoundError: [Errno 2] No such file or directory: '/Users/runner/work/orbit/orbit/.wiki-probe/shots/attachments-mac/manifest.json'
+Traceback (most recent call last):
+  File "<stdin>", line 3, in <module>
+FileNotFoundError: [Errno 2] No such file or directory: '/Users/runner/work/orbit/orbit/.wiki-probe/shots/attachments-phone/manifest.json'
+.wiki-probe/run.sh: line 95:  1582 Terminated: 15          python3 -u stub.py 8766 "$OUT/requests-three.log" three > "$OUT/stub-three.out" 2>&1
+.wiki-probe/run.sh: line 95:  1583 Terminated: 15          SLOW=25 python3 -u stub.py 8767 "$OUT/requests-slow.log" slow > "$OUT/stub-slow.out" 2>&1
+.wiki-probe/run.sh: line 95:  1581 Terminated: 15          python3 -u stub.py 8765 "$OUT/requests-one.log" one > "$OUT/stub-one.out" 2>&1
+total 5024
+drwxr-xr-x  23 runner  staff     736 Oct  6 22:39 .
+drwxr-xr-x  14 runner  staff     448 Oct  6 22:12 ..
+-rw-r--r--   1 runner  staff  444866 Oct  6 22:32 31-pad-wiki.png
+-rw-r--r--   1 runner  staff  504580 Oct  6 22:32 32-pad-doc.png
+-rw-r--r--   1 runner  staff  465781 Oct  6 22:35 33-pad-activity.png
+-rw-r--r--   1 runner  staff  467153 Oct  6 22:36 34-pad-settings.png
+-rw-r--r--   1 runner  staff  424115 Oct  6 22:35 35-pad-review.png
+drwxr-xr-x   2 runner  staff      64 Oct  6 22:39 attachments-mac
+drwxr-xr-x   9 runner  staff     288 Oct  6 22:39 attachments-pad
+drwxr-xr-x   2 runner  staff      64 Oct  6 22:39 attachments-phone
+-rw-r--r--   1 runner  staff     168 Oct  6 22:39 not-served.txt
+-rw-r--r--   1 runner  staff   13830 Oct  6 22:36 requests-one.log
+-rw-r--r--   1 runner  staff      51 Oct  6 22:02 requests-slow.log
+-rw-r--r--   1 runner  staff      51 Oct  6 22:02 requests-three.log
+-rw-r--r--   1 runner  staff      55 Oct  6 22:02 stub-one.out
+-rw-r--r--   1 runner  staff      56 Oct  6 22:02 stub-slow.out
+-rw-r--r--   1 runner  staff      57 Oct  6 22:02 stub-three.out
+-rw-r--r--@  1 runner  staff   42909 Oct  6 22:35 tree-pad-activity.txt
+-rw-r--r--@  1 runner  staff   38779 Oct  6 22:32 tree-pad-doc.txt
+-rw-r--r--@  1 runner  staff   33858 Oct  6 22:35 tree-pad-review.txt
+-rw-r--r--@  1 runner  staff   38370 Oct  6 22:36 tree-pad-settings.txt
+-rw-r--r--@  1 runner  staff   44135 Oct  6 22:32 tree-pad-wiki.txt
+-rw-r--r--@  1 runner  staff    2182 Oct  6 22:36 WikiPadShotsTeststestTheDirectoryBesideTheContent-notes.txt
