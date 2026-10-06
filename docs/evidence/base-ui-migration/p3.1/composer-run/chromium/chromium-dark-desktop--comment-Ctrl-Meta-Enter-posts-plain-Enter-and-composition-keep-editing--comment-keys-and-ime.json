@@ -1,0 +1,534 @@
+{
+  "ant": [
+    {
+      "label": "enter-and-shift-enter-newlines",
+      "value": "First\nsecond\n",
+      "caret": [
+        13,
+        13
+      ],
+      "focused": true,
+      "height": 76,
+      "menu": null,
+      "chips": [],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "F",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "i",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "r",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "s",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "t",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "Enter",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertLineBreak",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "s",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "e",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "c",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "o",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "n",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "d",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "Shift",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "Enter",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertLineBreak",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "composition-committed",
+      "value": "First\nsecond\n评论",
+      "caret": [
+        15,
+        15
+      ],
+      "focused": true,
+      "height": 76,
+      "menu": null,
+      "chips": [],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "compositionstart",
+          null,
+          null,
+          false
+        ],
+        [
+          "compositionupdate",
+          null,
+          null,
+          false
+        ],
+        [
+          "input",
+          "insertCompositionText",
+          true,
+          false
+        ],
+        [
+          "keydown",
+          "Enter",
+          true,
+          false
+        ],
+        [
+          "compositionupdate",
+          null,
+          null,
+          false
+        ],
+        [
+          "input",
+          "insertCompositionText",
+          true,
+          false
+        ],
+        [
+          "compositionend",
+          null,
+          null,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "posted",
+      "value": "",
+      "caret": [
+        0,
+        0
+      ],
+      "focused": true,
+      "height": 32,
+      "menu": null,
+      "chips": [],
+      "staged": [],
+      "sent": "[{\"body\":\"First\\nsecond\\n评论\",\"mentions\":[]}]",
+      "events": [
+        [
+          "keydown",
+          "Control",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "Enter",
+          false,
+          false
+        ]
+      ]
+    }
+  ],
+  "orbit": [
+    {
+      "label": "enter-and-shift-enter-newlines",
+      "value": "First\nsecond\n",
+      "caret": [
+        13,
+        13
+      ],
+      "focused": true,
+      "height": 76,
+      "menu": null,
+      "chips": [],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "F",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "i",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "r",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "s",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "t",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "Enter",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertLineBreak",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "s",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "e",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "c",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "o",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "n",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "d",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "Shift",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "Enter",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertLineBreak",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "composition-committed",
+      "value": "First\nsecond\n评论",
+      "caret": [
+        15,
+        15
+      ],
+      "focused": true,
+      "height": 76,
+      "menu": null,
+      "chips": [],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "compositionstart",
+          null,
+          null,
+          false
+        ],
+        [
+          "compositionupdate",
+          null,
+          null,
+          false
+        ],
+        [
+          "input",
+          "insertCompositionText",
+          true,
+          false
+        ],
+        [
+          "keydown",
+          "Enter",
+          true,
+          false
+        ],
+        [
+          "compositionupdate",
+          null,
+          null,
+          false
+        ],
+        [
+          "input",
+          "insertCompositionText",
+          true,
+          false
+        ],
+        [
+          "compositionend",
+          null,
+          null,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "posted",
+      "value": "",
+      "caret": [
+        0,
+        0
+      ],
+      "focused": true,
+      "height": 32,
+      "menu": null,
+      "chips": [],
+      "staged": [],
+      "sent": "[{\"body\":\"First\\nsecond\\n评论\",\"mentions\":[]}]",
+      "events": [
+        [
+          "keydown",
+          "Control",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "Enter",
+          false,
+          false
+        ]
+      ]
+    }
+  ]
+}
