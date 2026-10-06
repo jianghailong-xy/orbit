@@ -487,7 +487,7 @@ orbit api [-X METHOD] PATH [--data JSON | --data-file -] [--paginate] [--json]  
   明文只出现在这一次轮询应答里，§3「只存 sha256、明文只出现一次」照样成立。并发或重试的轮询拿不到第二个令牌，只得到 `delivered`。
   签发被拒时（批准之后名字被占，或到了 50 个上限）撤回认领，把 409 答给 CLI。批准时先按同样的规则查名字与上限，浏览器里就能看到 409。
   CLI 在批准前退出的话，令牌不会签发。
-- 新表 `pat_device_login`（迁移 0387；0386 当时被另一条在途分支占用）：请求的名字、scope、天数（NULL = 永不过期）、主机名，
+- 新表 `pat_device_login`（迁移 0388；当时 main 最高是 0386，0387 被另一条在途分支占用）：请求的名字、scope、天数（NULL = 永不过期）、主机名，
   状态 `PENDING | APPROVED | DENIED | DELIVERED`，决定者与决定时间，请求自身 10 分钟的到期。决定者被删除时级联删除。
 - 轮询应答 `{status}`：`pending`、`approved`（带签发应答的全部字段，含 `token`）、`denied`、`expired`、`delivered`。
   已拒绝、已取走的请求过了 10 分钟仍如实回答；已批准却没在 10 分钟内取走的答 `expired`，不再签发。

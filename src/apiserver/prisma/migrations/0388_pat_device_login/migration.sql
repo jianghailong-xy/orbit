@@ -1,4 +1,4 @@
--- 0387 — `orbit login` through the browser (docs/personal-access-token-design.md §7.3).
+-- 0388 — `orbit login` through the browser (docs/personal-access-token-design.md §7.3).
 --
 -- One row per `orbit login` the CLI starts: what it asks for — the token's name, scopes and
 -- lifetime, and the host it runs on — until a person signed in to Orbit approves or denies it at
@@ -13,7 +13,7 @@
 -- has collected the token. `expires_in_days` NULL is a token that never expires (§11.1).
 -- `decided_by_id` is the user who approved or denied it — the token's owner — and goes with them.
 --
--- 0387: main's highest is 0385, and 0386 is held by another branch in flight (2026-10-06); the
+-- 0388: main's highest is 0386, and 0387 is held by another branch in flight (2026-10-06); the
 -- ledger allows holes, never a number twice. Every statement can run twice: IF NOT EXISTS, and
 -- constraints inside a `duplicate_object` guard. Nothing existing is altered and no row is written.
 

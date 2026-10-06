@@ -319,7 +319,7 @@ model User {
   sessionFolders   SessionFolder[] // folders sessions are filed in, each inside one workspace (0348)
   refreshTokens    RefreshToken[] // long-lived rotating refresh tokens (hashed at rest)
   personalAccessTokens PersonalAccessToken[] // the user's own API tokens (hashed at rest, 0383)
-  patDeviceLogins  PatDeviceLogin[] // the `orbit login` requests this user approved or denied (0387)
+  patDeviceLogins  PatDeviceLogin[] // the `orbit login` requests this user approved or denied (0388)
   clientVersions   ClientVersion[] // which build of each client this user is running
   mergeReceipts    SessionMergeReceipt[] // merges recorded against this user's session branches
   agents           Agent[] // Agent identities this user owns (tenant scope)
@@ -415,7 +415,7 @@ model PersonalAccessToken {
   @@map("personal_access_token")
 }
 
-/// An `orbit login` through the browser (docs/personal-access-token-design.md §7.3, migration 0387):
+/// An `orbit login` through the browser (docs/personal-access-token-design.md §7.3, migration 0388):
 /// what the CLI asked for, until a person signed in to Orbit approves or denies it at
 /// /cli-login?code=… and the CLI, polling with its device code, collects the token. No token is ever
 /// kept here: approving records who approved, and the token is issued to them in the answer to the
