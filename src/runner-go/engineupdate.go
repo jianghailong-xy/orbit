@@ -652,12 +652,18 @@ func engineBinaryUpdatable(binPath string) (string, bool) {
 	if resolved, err := filepath.EvalSymlinks(binPath); err == nil && resolved != "" {
 		real = resolved
 	}
-	// O_WRONLY without O_TRUNC/O_APPEND: asks the kernel the exact question (may I write this
-	// file, as this user, under this ACL?) without altering a byte. Root passes regardless of
-	// mode, which is correct — a root runner really can replace it.
-	f, err := os.OpenFile(real, os.O_WRONLY, 0)
+	// access(2) WITHOUT opening the file: the question is the same one — may I write this file, as
+	// this user, under any ACL — and asking it must not touch the file. This used to be an
+	// `os.OpenFile(real, os.O_WRONLY, 0)` on the reasoning that opening without O_TRUNC alters no
+	// byte. On macOS it alters something anyway: a write-open of a *signed* executable invalidates
+	// its code signature in the kernel, and from then on every exec of that file is SIGKILLed
+	// (`Taskgated Invalid Signature`, CODESIGNING namespace, no output at all). Measured on a Mac
+	// mini on 2026-10-05: this probe ran once per engine-update pass, and each pass that caught the
+	// CLI in use poisoned it — the machine's every new session then died in its first second until
+	// somebody reinstalled the CLI. Root passes access(2) regardless of mode, which is correct — a
+	// root runner really can replace the file.
+	err := enginePathWriteError(real)
 	if err == nil {
-		_ = f.Close()
 		return real, true
 	}
 	return real, !errors.Is(err, fs.ErrPermission)

@@ -166,6 +166,57 @@ func TestInstallEngineNowRepairsAnEngineThatDoesNotRun(t *testing.T) {
 	}
 }
 
+// The repair for a file whose bytes are fine and whose identity is not: on 2026-10-05 a Mac mini's
+// native Claude Code could not be exec'd at all (exit 137, no output, no log) while a copy of the
+// very same bytes ran perfectly — and the state came back, so the repair had to be cheap. What the
+// copy has to produce is a NEW file at the same path; rewriting the one that is there would keep
+// the identity that is the problem.
+func TestRematerializeEngineGivesTheFileANewIdentity(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "orbit-fake-engine")
+	if err := os.WriteFile(target, []byte("#!/bin/sh\necho fake-1.0\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bin := withFakeEngine(t, dir, "true")
+	before, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !rematerializeEngine(bin) {
+		t.Fatal("a runnable engine, copied to a fresh file, must report the repair as done")
+	}
+	after, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if os.SameFile(before, after) {
+		t.Fatal("the file was not replaced — a new identity is the whole repair")
+	}
+	if b, _ := os.ReadFile(target); !strings.Contains(string(b), "fake-1.0") {
+		t.Fatalf("the bytes did not survive the copy: %q", b)
+	}
+	if _, err := os.Stat(target + ".orbit-renew"); err == nil {
+		t.Fatal("the copy was left behind beside the install")
+	}
+}
+
+// Everything this cannot copy stays the installer's job, and it has to say so rather than leave a
+// half-repaired engine behind: nothing on PATH, and a path that is not a binary at all.
+func TestRematerializeEngineLeavesWhatItCannotCopyAlone(t *testing.T) {
+	dir := t.TempDir()
+	bin := withFakeEngine(t, dir, "true")
+	if rematerializeEngine(bin) {
+		t.Fatal("an engine that is not on PATH is nothing to copy")
+	}
+	if err := os.Mkdir(filepath.Join(dir, "orbit-fake-engine"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if rematerializeEngine(bin) {
+		t.Fatal("a directory where the binary should be is not an install to refresh")
+	}
+}
+
 // The web transcript only offers its sign-in card for text that reads as an auth failure
 // (isAuthErrorText in @orbit/shared keys on this exact prefix), and that card is the whole
 // remedy for an engine installed on a machine nobody has a terminal on.

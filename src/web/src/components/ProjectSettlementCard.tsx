@@ -659,7 +659,7 @@ export function SessionProjectSettlementCard({
   });
   const openItemsRead = useQuery({
     queryKey: ['project', project, 'open-items'],
-    queryFn: () => api<{ doneRequest?: ProjectOpenItemRow | null; needsYou?: ProjectOpenItemRow[]; withCoordinator?: ProjectOpenItemRow[] }>(`/projects/${encodeURIComponent(project)}/open-items`),
+    queryFn: () => api<{ doneRequest?: ProjectOpenItemRow | null; startRequest?: ProjectOpenItemRow | null; needsYou?: ProjectOpenItemRow[]; withCoordinator?: ProjectOpenItemRow[] }>(`/projects/${encodeURIComponent(project)}/open-items`),
     enabled: Boolean(projectId) && coordinator,
     refetchInterval: 20_000,
   });
@@ -791,6 +791,19 @@ export function SessionProjectSettlementCard({
         onAskCoordinator={delegate}
       />
     );
+  }
+
+  // A DONE Orbit recorded itself is the Why-not-done card's terminal state, read off the project
+  // document so that it survives a refresh. Like the question itself, it is drawn only from the
+  // unified read (`counts`); an older projection keeps drawing nothing here.
+  if (
+    !doneDelivered
+    && document?.status === 'DONE'
+    && document.doneBy !== 'OWNER'
+    && document.derivedDone != null
+    && 'counts' in document.derivedDone
+  ) {
+    return <ProjectWhyNotDoneCard project={document as unknown as ProjectDoneDocument} />;
   }
 
   // The owner's DONE is a durable record on the project document, so its receipt is drawn from
@@ -1062,10 +1075,9 @@ export function ProjectDoneCard({
   // `doneBy` outlives a reopen on the document, so it is the owner's record only while the
   // project is DONE; the receipt is the answer this card's own press just got.
   const ownerRecorded = receipt != null || (project.status === 'DONE' && project.doneBy === 'OWNER');
-  // A derived DONE is still a durable read-model state, even when this card was reached through
-  // a stale OPEN project document during a refresh.  Keep the provenance line honest instead of
-  // reopening the question while the server is already saying DONE.
-  const recorded = ownerRecorded || project.status === 'DONE' || project.derivedDone?.done === true;
+  // The receipt is the project's status, not its derived read: an OPEN project is asked the
+  // question even while `derivedDone` says done or a leftover `doneBy` lingers.
+  const recorded = receipt != null || project.status === 'DONE';
   const canRecord = Boolean(onRecordDone) && !busy;
 
   if (recorded) {
@@ -1202,7 +1214,7 @@ export function ProjectDoneDialog({
   });
   const openItemsRead = useQuery({
     queryKey: ['project', projectId, 'open-items'],
-    queryFn: () => api<{ doneRequest?: ProjectOpenItemRow | null; needsYou?: ProjectOpenItemRow[]; withCoordinator?: ProjectOpenItemRow[] }>(`/projects/${encodeURIComponent(projectId)}/open-items`),
+    queryFn: () => api<{ doneRequest?: ProjectOpenItemRow | null; startRequest?: ProjectOpenItemRow | null; needsYou?: ProjectOpenItemRow[]; withCoordinator?: ProjectOpenItemRow[] }>(`/projects/${encodeURIComponent(projectId)}/open-items`),
     enabled: open && Boolean(projectId) && suppliedRow === undefined,
     refetchInterval: open ? 20_000 : false,
   });
@@ -1323,7 +1335,8 @@ export function ProjectWhyNotDoneCard({
   const coordinatorOnIt = onlyInFlight || (openItems?.withCoordinator?.length ?? 0) > 0;
   const hasGaps = waiting.length > 0 || needsCall.length > 0;
   const counts = project.derivedDone?.counts;
-  if (!hasGaps && project.derivedDone?.done === true) {
+  // A DONE project is done whatever its criteria still say: nothing is left to ask "why not".
+  if (project.status === 'DONE' || (!hasGaps && project.derivedDone?.done === true)) {
     return (
       <div className="approval-card project-settlement project-why-not-done is-settled">
         <div className="approval-head project-settlement-head">

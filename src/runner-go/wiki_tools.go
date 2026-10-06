@@ -75,6 +75,17 @@ const wikiProposeDescription = wikiProposePrecondition + " This is how what you 
 	"recording nothing. Search first with wiki_search: a near neighbour is answered under similar[], and " +
 	"reinforcing the entry that exists is better than adding a second one."
 
+// wikiSourceRefs is what each source kind takes as its ref (contracts/wiki.contract.json
+// `sourceInput.refs`), said where a source is filled in: a tool_use_id where a row's id goes is the
+// mistake it prevents, because task_evidence_submit takes exactly that id for a tool call.
+// wiki_tools_test.go holds it to naming every kind the contract lists.
+const wikiSourceRefs = "ref by kind: turn, event, task, task_comment, approval, merge_receipt and note take the " +
+	"record's id (its UUID, or the short id Orbit shows); owner_decision the id of the project blocker the owner " +
+	"resolved with a note; tool_call the tool call's id, or the tool_use_id its engine gave the call (toolu_…, " +
+	"call_…), this session's own call first and else the one session of the owner's that made it; commit the full " +
+	"sha. evidence, criterion and url cannot be cited yet. A turn of this session is {kind:\"turn\",session:\"self\"} " +
+	"and takes no ref. A ref that names nothing is refused, naming the source as ops[i].sources[j].ref."
+
 // ── The tool descriptors ────────────────────────────────────────────────────────────────────────
 
 // wikiToolDescriptors is the agent-facing contract of the wiki tools. Unlike the task tools these
@@ -217,7 +228,7 @@ func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 						"sources": map[string]interface{}{
 							"type":        "array",
 							"items":       map[string]interface{}{"type": "object"},
-							"description": "The records this came from: {kind, ref|session, quote}. Reinforce requires at least one, and a quote must be a substring of the record it cites.",
+							"description": "The records this came from: {kind, ref|session, quote}. Reinforce requires at least one, and a quote must be a substring of the record it cites. " + wikiSourceRefs,
 						},
 					}, "op"),
 					"description": "The batch, at most " + strconv.Itoa(wikiOpsPerTurn) + " ops per turn, each answered on its own by its position.",
@@ -707,6 +718,13 @@ func describeWikiOp(op map[string]interface{}, names []string) string {
 			code, _ := reason["code"].(string)
 			message, _ := reason["message"].(string)
 			line += " " + strings.TrimSpace(code+": "+message)
+			// And each field it names, by path: which op's which source a refusal is about is in
+			// errors[], and a WIKI_SCHEMA's message alone does not say.
+			for _, field := range wikiMapSlice(reason["errors"]) {
+				path, _ := field["path"].(string)
+				detail, _ := field["message"].(string)
+				line += "; " + strings.TrimSpace(path+" "+detail)
+			}
 		}
 	default:
 		line += strings.TrimSpace(status)

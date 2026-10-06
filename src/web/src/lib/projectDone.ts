@@ -275,15 +275,19 @@ export function doneProvenance(project: Pick<ProjectDoneDocument, 'doneBy' | 'ac
 }
 
 /**
- * The open items the card's Orbit checked row counts: every row the open-items read holds, except
- * the DONE_REQUEST the card is itself reviewing.
+ * The open items the card's Orbit checked row counts: every row the open-items read holds — the
+ * START_REQUEST kept beside the groups included — except the DONE_REQUEST the card is itself
+ * reviewing. Without a DONE_REQUEST (the owner opened it) nothing is left out.
  */
 export function orbitCheckedOpenItemCount(view: {
-  needsYou?: readonly Pick<ProjectOpenItemRow, 'kind'>[];
-  withCoordinator?: readonly Pick<ProjectOpenItemRow, 'kind'>[];
+  needsYou?: readonly Pick<ProjectOpenItemRow, 'itemId'>[];
+  withCoordinator?: readonly Pick<ProjectOpenItemRow, 'itemId'>[];
+  startRequest?: Pick<ProjectOpenItemRow, 'itemId'> | null;
+  doneRequest?: Pick<ProjectOpenItemRow, 'itemId'> | null;
 } | null | undefined): number {
-  return [...(view?.needsYou ?? []), ...(view?.withCoordinator ?? [])]
-    .filter((row) => row.kind !== 'DONE_REQUEST').length;
+  const reviewing = view?.doneRequest?.itemId ?? null;
+  return [...(view?.needsYou ?? []), ...(view?.withCoordinator ?? []), ...(view?.startRequest ? [view.startRequest] : [])]
+    .filter((row) => reviewing === null || row.itemId !== reviewing).length;
 }
 
 /** How long the coordinator's request has waited, from its own `waitingSince`. */
