@@ -345,13 +345,17 @@ public enum RunnerPageFormat {
         return checked.map { RunnerPageCopy.runnerEnginesChecked(when: RunnerAttention.ago($0.0, nowMs: nowMs(now))) }
     }
 
-    /// The quota windows an Engines row shows under the engine: Default's, while the engine is signed
-    /// in and has one account. With several, each account's quota is its own and lives on the
-    /// engine's page (web: a group's own columns stay empty rather than speak for one account).
-    public static func engineWindows(_ runner: Runner, engine: String) -> [PlanUsageRow] {
+    /// The quota window an Engines row shows under the engine: Default's binding one — the window that
+    /// stops that login, or will stop it first (`PlanUsageSnapshot.bindingRow`, the one the composer's
+    /// gauge shows) — while the engine is signed in and has one account. One per row, whether the CLI
+    /// reports two windows or four: every window is the engine page's to list. With several accounts,
+    /// each account's quota is its own and lives on the engine's page (web: a group's own columns stay
+    /// empty rather than speak for one account).
+    public static func engineWindows(_ runner: Runner, engine: String, now: Date = Date()) -> [PlanUsageRow] {
         guard let health = runner.engines?.first(where: { $0.engine == engine }), health.installed == true,
               health.auth == "yes", (health.accounts ?? []).count < 2 else { return [] }
-        return accountWindows(runner, engine: engine, account: CodexAccounts.defaultID)
+        let usage = CodexAccounts.usage(engine, planUsage: runner.planUsage, engines: runner.engines)
+        return CodexAccounts.snapshot(usage, account: CodexAccounts.defaultID)?.bindingRow(at: now).map { [$0] } ?? []
     }
 
     /// One account's own windows: Default's are the engine snapshot's, another's its entry under

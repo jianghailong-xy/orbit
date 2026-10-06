@@ -86,8 +86,8 @@ final class AntigravityAccountsTests: XCTestCase {
 
     // MARK: the runner page's row (01-ios-runner-row.png)
 
-    /// ① One Google account reads like Codex: "Signed in", its own windows on the row, and nothing
-    /// in place of Sign In.
+    /// ① One Google account reads like Codex: "Signed in", its window closest to its limit on the row,
+    /// and nothing in place of Sign In.
     func testOneGoogleAccountIsSignedInWithItsWindowsOnTheRow() throws {
         let hpc = try runner(engine(accounts: [("default", nil, "yes")], defaultBuckets: defaultBuckets))
         let health = try agy(hpc)
@@ -95,7 +95,10 @@ final class AntigravityAccountsTests: XCTestCase {
                        RunnerPageFormat.Status(text: "Signed in", tone: .ok))
         XCTAssertFalse(RunnerPageFormat.needsSignIn(health))
         XCTAssertNil(RunnerPageFormat.signInHint(hpc, engine: "antigravity"))
-        let rows = RunnerPageFormat.engineWindows(hpc, engine: "antigravity")
+        // The row carries the one closest to its limit — 3p-weekly, at 98% left — and the engine page
+        // all four (accountWindows).
+        XCTAssertEqual(RunnerPageFormat.engineWindows(hpc, engine: "antigravity").map(\.groupLabel), ["3p-weekly"])
+        let rows = RunnerPageFormat.accountWindows(hpc, engine: "antigravity", account: "default")
         XCTAssertEqual(rows.map(\.groupLabel), ["gemini-weekly", "gemini-5h", "3p-weekly", "3p-5h"])
         XCTAssertEqual(rows.map(\.label), ["Weekly", "5-hour", "Weekly", "5-hour"])
         XCTAssertEqual(rows.map(\.percent), [100, 100, 98, 100])

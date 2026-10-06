@@ -152,3 +152,37 @@
 .ring { position: absolute; z-index: 8; border: 2px dashed var(--warning-solid); border-radius: 14px; pointer-events: none; }
 .ring.red { border-color: #e5484d; }
 .ring.green { border-color: #2f9e44; }
+
+/* Dark appearance, sampled off the owner's evening screenshot (2026-10-07): sheet #1C1C1D, cards
+   #2C2C2D, separators #404042, secondary #9E9EA5, chevrons #707075. */
+.ph-net { font-size: 15px; font-weight: 600; }
+.ph-batt.low { background: #f5c43c; color: #1c1c1d; }
+.dark { background: #101010; color: #fff; }
+.dark .ph-sb { color: #fff; }
+.dark .ph-sb svg path, .dark .ph-sb svg rect { fill: #fff; }
+.dark .ph-sheet { background: #1c1c1d; }
+.dark .ph-nav { background: rgba(38, 38, 40, .96); box-shadow: 0 .5px 0 rgba(255, 255, 255, .08); }
+.dark .ph-gb { background: #252527; box-shadow: 0 0 0 .75px #434346, 0 2px 6px rgba(0, 0, 0, .3); }
+.dark .ph-gb svg path { stroke: #fff; }
+.dark .s-h { color: #98989e; }
+.dark .s-f { color: #9e9ea5; }
+.dark .s-card { background: #2c2c2d; }
+.dark .r + .r::before { background: #404042; }
+.dark .e-s, .dark .a-sub, .dark .w-h span, .dark .w-r, .dark .a-none, .dark .a-note,
+.dark .hd .s { color: #9e9ea5; }
+.dark .ok { color: #5fcf65; }
+.dark .warn, .dark .w-r.warn { color: #ff9f0a; }
+.dark .w-bar { background: rgba(255, 255, 255, .11); }
+.dark .w-bar.full i { background: #ff9f0a; }
+.dark .chev path { stroke: #707075; }
+.dark .r.btn { color: #5b84ff; }
+.dark .bb { background: rgba(62, 105, 246, .26); color: #7d9dff; }
+.dark .bb.grey { background: rgba(120, 120, 128, .26); color: #e5e5ea; }
+.dark .mk.kimi, .dark .mk.codex { box-shadow: 0 0 0 .75px #4a4a4e; }
+.dark .mk.kimi { background: #161616; }
+.dark .mk.codex { background: linear-gradient(160deg, #3a3d42, #26282c); }
+
+/* A row on its own, cut out of a phone: the edge states. */
+.cut { width: 393px; border-radius: 22px; overflow: hidden; background: #1c1c1d; padding: 10px 0; font-family: Inter, "Noto Sans SC", sans-serif;
+       color: #fff; letter-spacing: -.01em; box-shadow: 0 0 0 1px #3a3a3c; }
+.cut .s-card { background: #2c2c2d; }

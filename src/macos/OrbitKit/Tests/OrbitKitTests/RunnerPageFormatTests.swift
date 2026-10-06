@@ -271,9 +271,12 @@ final class RunnerPageFormatTests: XCTestCase {
 
     func testTheRowShowsDefaultsQuotaAndEachAccountHasItsOwn() throws {
         let wikova = try wikova()
-        let claude = RunnerPageFormat.engineWindows(wikova, engine: "claude")
-        XCTAssertEqual(claude.map(\.label), ["5-hour limit", "Weekly · all models"])
-        XCTAssertEqual(claude.map(\.percent), [14, 98])
+        // One window on the row — the one closest to its limit — and every window on the engine page.
+        let claude = RunnerPageFormat.engineWindows(wikova, engine: "claude", now: now)
+        XCTAssertEqual(claude.map(\.label), ["Weekly · all models"])
+        XCTAssertEqual(claude.map(\.percent), [98])
+        XCTAssertEqual(RunnerPageFormat.accountWindows(wikova, engine: "claude", account: "default").map(\.label),
+                       ["5-hour limit", "Weekly · all models"])
         XCTAssertEqual(RunnerPageFormat.engineWindows(wikova, engine: "codex"), [],
                        "with two accounts each one's quota is on the engine page")
         XCTAssertEqual(RunnerPageFormat.accountWindows(wikova, engine: "codex", account: "default").map(\.percent),
@@ -441,7 +444,7 @@ final class RunnerPageFormatTests: XCTestCase {
         XCTAssertEqual(RunnerPageFormat.resetsWhen("2026-09-29T02:59:59Z", now: now, timeZone: utc),
                        "2:59 AM", "the same instant, read where the reader is")
         XCTAssertNil(RunnerPageFormat.resetsWhen("not a time", now: now))
-        let row = try XCTUnwrap(RunnerPageFormat.engineWindows(try wikova(), engine: "claude").first)
+        let row = try XCTUnwrap(RunnerPageFormat.accountWindows(try wikova(), engine: "claude", account: "default").first)
         XCTAssertEqual(RunnerPageFormat.resetsLine(row, now: now, timeZone: shanghai), "Resets 10:59 AM")
         XCTAssertEqual(RunnerPageFormat.lastSeen("2026-09-14T14:25:09Z", timeZone: shanghai), "Sep 14, 10:25 PM")
         XCTAssertEqual(RunnerPageFormat.day("2026-09-13T16:54:10Z", now: now, timeZone: utc), "Sep 13")

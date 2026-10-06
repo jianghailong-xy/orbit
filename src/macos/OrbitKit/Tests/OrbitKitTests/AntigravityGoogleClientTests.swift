@@ -26,7 +26,9 @@ final class AntigravityGoogleClientTests: XCTestCase {
         XCTAssertEqual(RunnerPageFormat.engineStatus(health)?.text, "Signed in",
                        "a Google sign-in is signed in, in the words Claude Code's and Codex's rows use")
         XCTAssertTrue(RunnerPageFormat.antigravityCanSignIn(runner))
-        let rows = RunnerPageFormat.engineWindows(runner, engine: "antigravity")
+        // The row carries the bucket closest to its limit; the engine page every bucket.
+        XCTAssertEqual(RunnerPageFormat.engineWindows(runner, engine: "antigravity").map(\.groupLabel), ["3p-5h"])
+        let rows = RunnerPageFormat.accountWindows(runner, engine: "antigravity", account: "default")
         XCTAssertEqual(rows.map(\.label), ["Weekly", "5-hour"])
         XCTAssertEqual(rows.map(\.groupLabel), ["gemini-weekly", "3p-5h"])
         XCTAssertEqual(rows.map(\.percent), [72, 18])
