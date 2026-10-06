@@ -76,13 +76,13 @@ export function useWholePixelOffsets(anchor: RefObject<Element | null>, gap: num
  * the side it is aligned to. Base UI's own alignment flip always slides, so the flip is applied as an
  * alignment offset. As rc-trigger measured the list unconstrained before aligning it, the list keeps
  * its natural width until it first overflows (--orbit-dropdown-room: none); that overflow decides the
- * side for the rest of the opening, and from then on the room is handed to the stylesheet.
+ * edge for the rest of the opening, and from then on the room is handed to the stylesheet.
  */
 export function useDropdownPlacement(open: boolean, anchor: RefObject<Element | null>, gap: number, align: 'start' | 'center' | 'end') {
   const { sideOffset, alignOffset: wholePixel } = useWholePixelOffsets(anchor, gap);
   const positioner = useRef<HTMLDivElement>(null);
-  const flipped = useRef<boolean | null>(null);
-  useLayoutEffect(() => { if (!open) flipped.current = null; }, [open]);
+  const edge = useRef<'start' | 'end' | null>(null);
+  useLayoutEffect(() => { if (!open) edge.current = null; }, [open]);
   if (align === 'center') return { sideOffset, alignOffset: wholePixel, positioner, collisionPadding: 8 };
   const alignOffset = (data: OffsetData) => {
     const rect = anchor.current?.getBoundingClientRect();
@@ -91,20 +91,22 @@ export function useDropdownPlacement(open: boolean, anchor: RefObject<Element | 
     const right = document.documentElement.clientWidth;
     const startX = Math.floor(rect.left);
     const endX = Math.ceil(rect.right) - width;
-    const [own, other] = data.align === 'start' ? [startX, endX] : [endX, startX];
+    // Decided on the alignment asked for: Floating UI also tries the other one as a fallback placement.
+    const [own, other] = align === 'start' ? [startX, endX] : [endX, startX];
     const visible = (x: number) => Math.min(right, x + width) - Math.max(0, x);
-    if (flipped.current === null && (data.align === 'start' ? own + width > right : own < 0)) {
-      flipped.current = visible(other) > visible(own);
+    if (edge.current === null && (align === 'start' ? own + width > right : own < 0)) {
+      edge.current = visible(other) > visible(own) ? (align === 'start' ? 'end' : 'start') : align;
     }
-    const atStart = (data.align === 'start') !== (flipped.current ?? false);
+    const atStart = (edge.current ?? align) === 'start';
     positioner.current?.style.setProperty('--orbit-dropdown-room',
-      flipped.current === null ? 'none' : `${atStart ? right - startX : Math.ceil(rect.right)}px`);
+      edge.current === null ? 'none' : `${atStart ? right - startX : Math.ceil(rect.right)}px`);
     const x = atStart ? startX : endX;
     // Held by its right inset, an end-aligned list keeps the fractional left edge of its width there;
     // Base UI rounds the position, so the remainder is handed back as a relative offset, which moves
     // the list in layout without resizing the positioner it is measured by.
     positioner.current?.style.setProperty('--orbit-dropdown-subpixel', `${x - Math.round(x)}px`);
-    return data.align === 'start' ? x - rect.left : rect.right - width - x;
+    // Whichever alignment is being placed, the offset lands its edge on x.
+    return data.align === 'end' ? rect.right - width - x : x - rect.left;
   };
   return { sideOffset, alignOffset, positioner, collisionPadding: 0, collisionAvoidance: { side: 'flip', align: 'none' } as const };
 }
