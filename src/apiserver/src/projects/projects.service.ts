@@ -951,6 +951,9 @@ export class ProjectsService {
     'no session to record as this project’s coordinator — the session this request came from ' +
     'is not one this runner is running for this owner, or the workspace it ran in cannot be run in';
 
+  /** The one wording for an edit's acting session that is no session of this account (`actingSessionOf`). */
+  private static readonly NO_SUCH_ACTING_SESSION = 'X-Orbit-Session-Id names no session of this account';
+
   /**
    * The other half of the binding, refused. `coordinator_session_id` is UNIQUE, so a session
    * coordinates at most one project; a second project recorded from the same conversation cannot
@@ -2348,6 +2351,26 @@ export class ProjectsService {
    * Refusing is the point. Creating the project anyway, minus the binding, is exactly the
    * coordinator-less project this whole path exists to stop producing.
    */
+  /**
+   * The session an edit through the runner door says it is made from (`X-Orbit-Session-Id` on
+   * PATCH /runner/projects/:id), as this account's own session — the id an edit's authorship and a
+   * held decision's principal are written under, so one that names no session of the account is
+   * refused, never recorded: another account's session above all (T2 of the tenant isolation
+   * census), whose id an edit of this account's would otherwise carry. Decoded as
+   * `coordinatorFromSession` decodes it, for the reason given there.
+   */
+  async actingSessionOf(ownerId: string, sessionId: string): Promise<string> {
+    let id: string;
+    try {
+      id = toUuid(sessionId);
+    } catch {
+      throw new ForbiddenException(ProjectsService.NO_SUCH_ACTING_SESSION);
+    }
+    const session = await this.prisma.session.findFirst({ where: { id, ownerId }, select: { id: true } });
+    if (!session) throw new ForbiddenException(ProjectsService.NO_SUCH_ACTING_SESSION);
+    return session.id;
+  }
+
   private async coordinatorFromSession(
     ownerId: string,
     runnerId: string,
