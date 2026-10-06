@@ -127,12 +127,14 @@ final class AgentsModel {
     // MARK: a DeepSeek key's account balance
 
     /// The account's own keys read again, and the balance of each DeepSeek key among them: the server's
-    /// last read of it, which the providers holding one key share.
+    /// last read of it, which the providers holding one key share. Read side by side, so a key whose
+    /// read is slow holds up no other key's.
     func loadDeepSeekBalances() async {
         guard let mine = try? await api.personalProviders() else { return }
         personalProviders = mine
-        for provider in mine where DeepSeekBalance.applies(to: provider) {
-            if let id = provider.providerID { await readBalance(id, refresh: false) }
+        let ids = mine.filter(DeepSeekBalance.applies(to:)).compactMap(\.providerID)
+        await withTaskGroup(of: Void.self) { group in
+            for id in ids { group.addTask { await self.readBalance(id, refresh: false) } }
         }
     }
 
