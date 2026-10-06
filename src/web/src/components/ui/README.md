@@ -120,7 +120,7 @@ P2.2 提供 `Menu`、`Popover`、`Tooltip`、`Select`、`Combobox` 和 `MultiSel
 
 ## 自动增高 Textarea 与会话输入
 
-P3.1 把自动增高、手动高度和 DOM 访问收进 `Textarea`，替代 `resizableTextArea.textArea` 一类 AntD 内部引用。ref 直接是原生 textarea：`focus()`、`setSelectionRange()`、`selectionStart`、`scrollHeight/clientHeight/offsetHeight` 都按 DOM 原义使用，组件不暴露其它句柄。
+P3.1 把自动增高、手动高度和 DOM 访问收进 `Textarea`，业务不再经由 AntD 字段的内部 ref 取 textarea。ref 直接是原生 textarea：`focus()`、`setSelectionRange()`、`selectionStart`、`scrollHeight/clientHeight/offsetHeight` 都按 DOM 原义使用，组件不暴露其它句柄。
 
 - `autoSize` 按受控 `value` 测量（现有调用都是受控值）：值或行数界限变化时在绘制前测量，字段宽度变化时下一帧重测。测量沿用被替换字段的离屏副本算法与样式清单，空值按 placeholder 计高，超过 `maxRows` 后改为滚动；结果写入 height/min-height/max-height/overflow-y/resize，并覆盖调用方 style 中的同名项。placeholder 变化本身不触发重测，与旧字段相同。
 - 手动高度：调用方在用户拖动后传 `autoSize={false}` 和 `style={{ height }}`，双击复位时恢复 `autoSize`。拖动起点读 ref 的 `offsetHeight`，到顶判断读 `scrollHeight > clientHeight + 1`（下一帧读取，测量已在绘制前完成）。
