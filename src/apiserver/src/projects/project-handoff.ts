@@ -22,8 +22,9 @@
  * moved, and `TasksService.update` files that question and moves nothing. It may be asked from
  * either end of the move — the project the task is leaving or the one it would enter — and one
  * question stands per task and destination at a time. An undeclared move is still §4 R7, and the
- * account owner's own move is still theirs to make directly (§4 R1). What the yes then does is the
- * account owner's confirmation to apply; re-sending the request moves nothing.
+ * account owner's own move is still theirs to make directly (§4 R1). The account owner's yes is the
+ * move: confirming it moves the task, as their act, and spends the answer on it in the same
+ * transaction (`TasksService.applyMoveApproval`); re-sending the request moves nothing.
  *
  * The gap this unit closed was never a missing endpoint. It was a missing FACT: "the user said yes
  * to THIS crossing" is not derivable from any column the schema has.
