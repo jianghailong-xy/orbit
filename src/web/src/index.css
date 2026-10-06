@@ -4938,22 +4938,143 @@ html[data-theme='dark'] .session-tag-chip {
   border-color: var(--success-border);
   background: var(--success-bg);
 }
+/* The project page's progress card, first in its list and scrolling with it (iOS
+   `SessionProjectPage.progressCard`; docs/mocks/project-sessions-page-web): the progress line, the
+   start's row while nobody has started the project, and the landing line while a task lands. */
+.session-project-page-card {
+  margin: 4px 0 10px;
+  border-radius: 10px;
+  background: var(--fill-muted);
+}
 .session-project-page-progress {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
+  gap: 10px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.session-project-page-progress .session-project-progress-bar {
+  width: 66px;
+}
+.session-project-start {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+.session-project-start-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text-3);
   font-size: 12px;
-  color: var(--text-3);
 }
-.session-project-page-progress a {
+.session-project-start-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-4);
+}
+.session-project-start-dot.is-asked {
+  background: var(--warning-solid);
+}
+.session-project-start-title {
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 600;
+}
+.session-project-start-ago {
   margin-left: auto;
-  font-size: 16px;
-  color: var(--text-3);
+  white-space: nowrap;
 }
-.session-project-page-progress a:hover {
+.session-project-start-suggestion {
+  margin: 2px 0 0 14px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.session-project-start-press {
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--brand-tint);
   color: var(--brand);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.session-project-start-press.is-primary {
+  background: var(--brand);
+  color: #fff;
+}
+.session-project-page-landing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px 10px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 10px 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.session-project-page-landing .project-landing {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 0;
+  border-bottom: 0;
+  font-size: 12.5px;
+}
+.session-project-page-landing-chev {
+  flex: none;
+  color: var(--text-4);
+  font-size: 11px;
+}
+/* The page with no rows says what is there in the middle, as iOS's empty page does. */
+.session-project-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 56px 16px 0;
+  color: var(--text-3);
+  font-size: 13px;
+  text-align: center;
+}
+.session-project-empty-icon {
+  margin-bottom: 4px;
+  color: var(--text-4);
+  font-size: 30px;
+}
+.session-project-empty b {
+  color: var(--text-1);
+  font-size: 15px;
+  font-weight: 600;
+}
+.session-project-empty-retry {
+  height: 32px;
+  margin-top: 8px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-base);
+  color: var(--text-1);
+  font: inherit;
+  cursor: pointer;
+}
+/* Where a held press opened a phone row's menu: the finger's point, for the menu to hang from. */
+.session-press-anchor {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
 }
 .session-project-page-header .session-kebab {
   border: 0;
@@ -4983,7 +5104,7 @@ html[data-theme='dark'] .session-tag-chip {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin: 8px 10px 4px;
+  margin: 0 0 10px;
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -5017,6 +5138,25 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .session-project-merge.is-blocked .session-project-merge-title {
   color: var(--warning);
+}
+.session-project-merge-tile {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--warning-solid) 16%, transparent);
+  color: var(--warning-solid);
+}
+.session-project-merge-rule {
+  height: 1px;
+  margin: 2px 0;
+  background: var(--border);
+}
+.session-project-merge-criteria {
+  color: var(--text-3);
 }
 .session-project-merge-badge {
   margin-left: auto;
@@ -5130,22 +5270,15 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .session-project-merge-row-mark {
   position: relative;
+  display: flex;
   flex: none;
+  align-items: center;
+  justify-content: center;
   width: 28px;
   height: 28px;
   border-radius: 50%;
   background: var(--success-bg);
-}
-.session-project-merge-row-mark::after {
-  content: '✓';
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   color: var(--success);
-  font-size: 13px;
-  font-weight: 700;
 }
 .session-project-merge-row-body {
   display: flex;
@@ -5307,6 +5440,12 @@ html[data-theme='dark'] .session-tag-chip {
 @media (max-width: 960px) and (hover: none) and (pointer: coarse) {
   .session-right {
     display: none;
+  }
+  /* A held press opens the row's menu; the system's own callout and selection would cover it. */
+  .session-row {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
 }
 .session-actions {
@@ -10091,6 +10230,11 @@ button.chat-jump-start:hover {
    `StartProjectCard.tsx`: the settlement card's shell, with three sections under it — the
    criteria, the plan, and How it runs, drawn with the integration settings card's own rows
    (`.project-integration-setting`) in a raised panel. Mock: start-mock/board2-start-web.html. */
+/* On a phone the start card rises as a sheet (`ProjectStartDialog`), whose own title already asks
+   the card's question: the card does not ask it twice. */
+.start-card-sheet .settlement-card-head {
+  display: none;
+}
 .start-card-section {
   display: flex;
   align-items: baseline;
@@ -13218,6 +13362,14 @@ button.chat-jump-start:hover {
     display: none;
   }
   .app-shell:has(.workspace-split.show-conversation) .app-main {
+    padding-top: 0;
+  }
+  /* A project's sessions page carries its own back, title and action in its header, so it is the
+     one bar there too, as on iPhone; ← returns to the list, where ☰ is. */
+  .app-shell:has(.session-project-page) .app-topbar {
+    display: none;
+  }
+  .app-shell:has(.session-project-page) .app-main {
     padding-top: 0;
   }
   /* As the sole top bar the header sits a touch tighter than the roomy desktop version. */

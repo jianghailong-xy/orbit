@@ -66,6 +66,12 @@ final class StartProjectTests: XCTestCase {
         XCTAssertEqual(StartProject.planTaskLabel("123) three"), "123) three")
         XCTAssertEqual(StartProject.planTaskLabel("E -mail"), "E -mail")
         XCTAssertEqual(StartProject.planTaskLabel("E - mail"), "E")
+        // A capital and one or two digits is a code, and a space after it is enough.
+        XCTAssertEqual(StartProject.planTaskLabel("P1 Web：合并 Runners 与 Providers 为 Infrastructure 页"), "P1")
+        XCTAssertEqual(StartProject.planTaskLabel("P5：接通 Web、macOS 和 iOS 的 DeepSeek Harness 操作链"), "P5")
+        XCTAssertEqual(StartProject.planTaskLabel("D12. wire the card"), "D12")
+        XCTAssertEqual(StartProject.planTaskLabel("v2 API changes"), "v2 API changes")
+        XCTAssertEqual(StartProject.planTaskLabel("P123 three"), "P123 three")
     }
 
     func testThePlanIsSaidTheWayTheMockSaysIt() {

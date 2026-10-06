@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>Web 项目会话页：手机</title>
+<link rel="stylesheet" href="web.css">
+<style>
+  .col { width: 408px; }
+  .col .shot { width: 408px; }
+</style></head>
+<body>
+<h1>③ 手机上的 Web（宽 390）</h1>
+<p class="lede" style="width:1760px">手机浏览器里，这一页和 iPhone 上的同一页应该一模一样：只有一层顶栏，进度卡和启动行一样，起始卡从底部升起来。下面四张都在真实的 Web 控制台上以手机尺寸截取。</p>
+
+<div class="row" style="gap:36px">
+  <div class="col">
+    <div class="cap"><span class="tag now">现在</span>两层顶栏</div>
+    <div class="shot phone"><img src="shots/p-now.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1">全局的 “☰ Orbit” 顶栏还在，下面又是项目页头，一共两层。</li>
+      <li class="n" data-n="2">进度横带写 “0/5 done · 0 running” 加 ↗，没有启动入口。</li>
+    </ul>
+  </div>
+  <div class="col">
+    <div class="cap"><span class="tag new">方案</span>没启动 · 还没请求</div>
+    <div class="shot phone"><img src="shots/p-own.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1">这一页只留一层顶栏：‹ 返回、项目名、⊞ 打开项目页。规则和打开会话时一样（那时已经会隐藏全局顶栏）；← 回到工作区列表后，☰ 还在。</li>
+      <li class="n" data-n="2">进度卡和启动行和桌面一样，按钮高 32px，整行宽。</li>
+    </ul>
+  </div>
+  <div class="col">
+    <div class="cap"><span class="tag new">方案</span>没启动 · 已请求</div>
+    <div class="shot phone"><img src="shots/p-asked.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1"><b>Review and start</b> 是这一页最该按的东西。协调者那一行照旧是橙色的 “Ready to start”。</li>
+    </ul>
+  </div>
+  <div class="col">
+    <div class="cap"><span class="tag new">方案</span>点按后 · 起始卡从底部升起</div>
+    <div class="shot phone"><img src="shots/p-sheet.png" alt=""></div>
+    <ul class="notes">
+      <li>手机上，起始卡用接近全屏的底部面板，而不是 640px 的居中弹窗，和 iPhone 的 sheet 一样。实现用的是控制台自己的抽屉组件，所以顶部是标题加 ✕（图里画的是 Cancel）。卡片本身的标题不再重复。</li>
+      <li>内容和桌面弹窗是同一个组件，只是外壳不同。</li>
+    </ul>
+  </div>
+</div>
+</body></html>

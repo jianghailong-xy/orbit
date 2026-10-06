@@ -320,7 +320,7 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(spend.contains("requestScroll(to: card.id)"))
 
         // Start… opens the same card, set by the default rule, saying nothing a coordinator said.
-        let sheet = try slice(view, from: "private struct OwnerStartProjectSheet: View {",
+        let sheet = try slice(view, from: "struct OwnerStartProjectSheet: View {",
                               to: "private struct MergeCheckEditor: View {")
         XCTAssertTrue(sheet.contains("StartProjectCard("))
         XCTAssertTrue(sheet.contains("askedAt: nil,"))

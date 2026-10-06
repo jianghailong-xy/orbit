@@ -543,7 +543,7 @@ export const openProjectsQuery = () =>
 export const projectDetailsQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId] as const,
-    queryFn: () => api<{ id: string; title: string; tasksByStatus?: Record<string, number> }>(
+    queryFn: () => api<{ id: string; title: string; status?: string; tasksByStatus?: Record<string, number> }>(
       `/projects/${encodeURIComponent(projectId)}`,
     ),
   });
