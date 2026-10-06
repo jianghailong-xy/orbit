@@ -1,0 +1,10 @@
+Test Case '-[SwipeProbeUITests.ProjectSessionsFailureTests testA502PageIsOneSentenceWithRetryThatStaysUpThroughPolls]' started.
+/Users/runner/work/orbit/orbit/.err-probe/UITests/ProjectSessionsFailureTests.swift:23: error: -[SwipeProbeUITests.ProjectSessionsFailureTests testA502PageIsOneSentenceWithRetryThatStaysUpThroughPolls] : Failed to get matching snapshots: Timed out while evaluating UI query.
+Test Case '-[SwipeProbeUITests.ProjectSessionsFailureTests testA502PageIsOneSentenceWithRetryThatStaysUpThroughPolls]' failed (138.101 seconds).
+Test Suite 'ProjectSessionsFailureTests' failed at 2026-10-06 09:27:46.356.
+	 Executed 1 test, with 1 failure (0 unexpected) in 138.101 (138.111) seconds
+Test Suite 'SwipeProbeUITests.xctest' failed at 2026-10-06 09:27:46.358.
+	 Executed 1 test, with 1 failure (0 unexpected) in 138.101 (138.113) seconds
+Test Suite 'All tests' failed at 2026-10-06 09:27:46.359.
+	 Executed 1 test, with 1 failure (0 unexpected) in 138.101 (138.118) seconds
+** TEST FAILED **

@@ -1,0 +1,5 @@
+Query chain:
+ →Find: Target Application 'io.orbitd.swipeprobe'
+  ↪︎Find: Descendants matching type Any
+    ↪︎Find: Elements matching predicate 'label BEGINSWITH "DeepSeek Harness 首版后续" AND label != "DeepSeek Harness 首版后续"'
+      ↪︎Find: First Match

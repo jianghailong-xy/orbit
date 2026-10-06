@@ -1,0 +1,19 @@
+==> stub ready after 2s
+iPhone 17 Pro com.apple.CoreSimulator.SimRuntime.iOS-26-5
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+Test Case '-[SwipeProbeUITests.ProjectSessionsFailureTests testA502PageIsOneSentenceWithRetryThatStaysUpThroughPolls]' started.
+/Users/runner/work/orbit/orbit/.err-probe/UITests/ProjectSessionsFailureTests.swift:23: error: -[SwipeProbeUITests.ProjectSessionsFailureTests testA502PageIsOneSentenceWithRetryThatStaysUpThroughPolls] : Failed to get matching snapshots: Timed out while evaluating UI query.
+Test Case '-[SwipeProbeUITests.ProjectSessionsFailureTests testA502PageIsOneSentenceWithRetryThatStaysUpThroughPolls]' failed (138.101 seconds).
+	 Executed 1 test, with 1 failure (0 unexpected) in 138.101 (138.111) seconds
+	 Executed 1 test, with 1 failure (0 unexpected) in 138.101 (138.113) seconds
+	 Executed 1 test, with 1 failure (0 unexpected) in 138.101 (138.118) seconds
+** TEST FAILED **
+.err-probe/run.sh: line 44:  2796 Terminated: 15          python3 -u stub.py 8765 "$OUT/requests.log" "$OUT/server-up" > "$OUT/stub.out" 2>&1
+total 24
+drwxr-xr-x   7 runner  staff  224 Oct  6 09:29 .
+drwxr-xr-x  13 runner  staff  416 Oct  6 09:16 ..
+drwxr-xr-x   6 runner  staff  192 Oct  6 09:29 attachments
+-rw-r--r--   1 runner  staff  211 Oct  6 09:29 not-served.txt
+-rw-r--r--@  1 runner  staff    0 Oct  6 09:27 ProjectSessionsFailureTeststestA502PageIsOneSentenceWithRetryThatStaysUpThroughPolls-notes.txt
+-rw-r--r--   1 runner  staff  583 Oct  6 09:26 requests.log
+-rw-r--r--   1 runner  staff   49 Oct  6 09:13 stub.out
