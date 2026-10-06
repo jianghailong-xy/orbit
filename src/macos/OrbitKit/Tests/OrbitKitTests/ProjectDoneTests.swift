@@ -118,41 +118,37 @@ final class ProjectDoneTests: XCTestCase {
     /// refuses a request while any other item is open, so a card the coordinator asked for says
     /// "no open items" — mock ⑤ ①'s line, word for word — rather than counting itself (evidence
     /// revision 1's seventh gap). Only that one request is left out, though: every other open item
-    /// counts, wherever the read lists it (the coordinator's ruling, 2026-10-06).
+    /// counts, the START_REQUEST kept beside the groups included (the coordinator's ruling,
+    /// 2026-10-06; the browser's `orbitCheckedOpenItemCount` since ccb406ad0).
     func testOrbitCheckedCountsEveryOpenItemButTheRequestItAnswers() {
         let row = ProjectOpenItemRow(itemId: "i1", kind: .unknown, title: "", waitingSince: "")
         let asking = ProjectOpenItemRow(itemId: "req1", kind: .unknown, title: ProjectDone.heading,
                                         waitingSince: "", doneRequest: request)
         let onlyTheRequest = ProjectOpenItemsView(doneRequest: asking)
-        XCTAssertEqual(ProjectDone.openItemsCount(onlyTheRequest, reviewing: "req1"), 0)
+        XCTAssertEqual(ProjectDone.openItemsCount(onlyTheRequest), 0)
         XCTAssertEqual(ProjectDone.orbitCheckedLine(counts: closeout().counts,
                                                     confirmedAt: "2026-09-29T10:00:00.000Z",
-                                                    openItems: ProjectDone.openItemsCount(onlyTheRequest,
-                                                                                          reviewing: "req1"),
+                                                    openItems: ProjectDone.openItemsCount(onlyTheRequest),
                                                     running: 0, timeZone: utc),
                        "Orbit checked: every criterion is met by its work · nothing running · no open items · "
                         + "criteria confirmed by you on Sep 29")
-        XCTAssertEqual(ProjectDone.openItemsCount(ProjectOpenItemsView(needsYou: [asking], doneRequest: asking),
-                                                  reviewing: "req1"), 0,
+        XCTAssertEqual(ProjectDone.openItemsCount(ProjectOpenItemsView(needsYou: [asking], doneRequest: asking)), 0,
                        "nor counted when a server lists it among the owner's rows too")
         // Every other item is open: the owner's and the coordinator's alike.
         let items = ProjectOpenItemsView(needsYou: [row], withCoordinator: [row, row], doneRequest: asking)
-        XCTAssertEqual(ProjectDone.openItemsCount(items, reviewing: "req1"), 3)
+        XCTAssertEqual(ProjectDone.openItemsCount(items), 3)
         XCTAssertEqual(ProjectDone.orbitCheckedLine(counts: closeout().counts, confirmedAt: nil,
-                                                    openItems: ProjectDone.openItemsCount(items, reviewing: "req1"),
-                                                    running: 0),
+                                                    openItems: ProjectDone.openItemsCount(items), running: 0),
                        "Orbit checked: every criterion is met by its work · nothing running · 3 open items")
-        // …including another request to record it done, and a request to start it: only the one under
-        // review is left out.
+        // …a request to start the project too, and any other row: only the one under review is out.
         let other = ProjectOpenItemRow(itemId: "req0", kind: .unknown, title: ProjectDone.heading,
                                        waitingSince: "", doneRequest: request)
         let start = ProjectOpenItemRow(itemId: "s1", kind: .unknown, title: "", waitingSince: "")
         XCTAssertEqual(ProjectDone.openItemsCount(ProjectOpenItemsView(needsYou: [other], startRequest: start,
-                                                                       doneRequest: asking),
-                                                  reviewing: "req1"), 2)
-        // A card nobody asked for answers no request, so a request standing beside it counts.
-        XCTAssertEqual(ProjectDone.openItemsCount(onlyTheRequest, reviewing: nil), 1)
-        XCTAssertEqual(ProjectDone.openItemsCount(nil, reviewing: "req1"), 0)
+                                                                       doneRequest: asking)), 2)
+        // A card nobody asked for answers no request: nothing is left out.
+        XCTAssertEqual(ProjectDone.openItemsCount(ProjectOpenItemsView(needsYou: [row], startRequest: start)), 2)
+        XCTAssertEqual(ProjectDone.openItemsCount(nil), 0)
         XCTAssertEqual(ProjectDone.runningCount(closeout(counts: ProjectDoneCounts(
             criteria: 3, met: 3, landed: 1, onMain: 1, byReason: [.inFlight: 2]))), 2)
     }
@@ -206,9 +202,23 @@ final class ProjectDoneTests: XCTestCase {
                        "a project that looks finished and was not asked about in time gets the card unasked")
         XCTAssertEqual(ProjectDone.slot(subject: open, request: nil, waitingKind: nil, record: nil, started: false),
                        .none, "a project nobody started is asked by the start card, not this one")
-        XCTAssertEqual(ProjectDone.slot(subject: closeout(status: "DONE"), request: nil, waitingKind: nil,
-                                        record: nil, started: true), .done(requestID: nil),
-                       "a done project keeps its receipt in the conversation")
+        // DONE: the owner's record keeps its receipt in the conversation; a DONE Orbit recorded
+        // itself is the Why-not-done card's terminal state, "This project is done · recorded by
+        // Orbit" (the coordinator's ruling, 2026-10-06; the browser since ccb406ad0).
+        let ownerDone = ProjectDoneSubject(title: "t", status: "DONE", derivedDone: open.derivedDone,
+                                           doneBy: .owner)
+        XCTAssertEqual(ProjectDone.slot(subject: ownerDone, request: nil, waitingKind: nil, record: nil,
+                                        started: true), .done(requestID: nil),
+                       "the owner's DONE keeps its receipt in the conversation")
+        let orbitDone = closeout(status: "DONE", done: true)
+        XCTAssertEqual(ProjectDone.slot(subject: orbitDone, request: nil, waitingKind: nil, record: nil,
+                                        started: true), .notDone,
+                       "Orbit's DONE is the Why-not-done card's terminal state")
+        XCTAssertTrue(ProjectDone.WhyNotDone(subject: orbitDone, withCoordinator: 0, requested: false)
+                        .settled(orbitDone))
+        XCTAssertEqual(ProjectDone.slot(subject: closeout(done: true), request: nil, waitingKind: nil,
+                                        record: nil, started: true), .none,
+                       "an OPEN project the projection already calls done is asked nothing")
         let older = ProjectDoneSubject(title: "t", status: "OPEN", derivedDone: ProjectDerivedDone(counts: nil))
         XCTAssertEqual(ProjectDone.slot(subject: older, request: row, waitingKind: .doneRequest, record: nil,
                                         started: true), .none, "a server without counts draws no card")
@@ -355,6 +365,11 @@ final class ProjectDoneTests: XCTestCase {
         XCTAssertEqual(why.action, .review, "asked, the button is Review")
         let settled = closeout(done: true, criteria: [ProjectDoneCriterion(definitionId: "c1", satisfied: true)])
         XCTAssertTrue(ProjectDone.WhyNotDone(subject: settled, withCoordinator: 0, requested: false).settled(settled))
+        // A DONE project is done whatever its criteria still say: nothing is left to ask "why not".
+        let doneWithGaps = closeout(status: "DONE", criteria: [
+            ProjectDoneCriterion(definitionId: "c1", satisfied: true, landingReason: .noReceipt)])
+        XCTAssertTrue(ProjectDone.WhyNotDone(subject: doneWithGaps, withCoordinator: 0, requested: false)
+                        .settled(doneWithGaps))
     }
 
     // MARK: the project page

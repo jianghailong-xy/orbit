@@ -133,8 +133,8 @@ final class ProjectDoneWiringTests: XCTestCase {
         XCTAssertTrue(card.contains("onNotYet: row == nil ? nil : { await console.declineDoneRequest(note: $0) },"),
                       "Not yet… is offered only on a card the coordinator asked for")
         XCTAssertTrue(card.contains("onReopen: { await console.reopenProject() })"))
-        XCTAssertTrue(card.contains("openItems: ProjectDone.openItemsCount(console.openItems, reviewing: row?.itemId),"),
-                      "Orbit checked leaves out only the request this card answers")
+        XCTAssertTrue(card.contains("openItems: ProjectDone.openItemsCount(console.openItems),"),
+                      "Orbit checked counts the open-items read the card is drawn beside")
         XCTAssertTrue(card.contains(".environment(\\.approvalReviewTarget, nil)"),
                       "with no review target the card takes ApprovalReviewLayout's whole-card path")
         let notDone = code(try section(approvals, from: "private struct ProjectNotDoneCardView: View {",
@@ -221,7 +221,7 @@ final class ProjectDoneWiringTests: XCTestCase {
         for call in ["ProjectDone.live(openItems: store.openItems, status: document.status.rawValue)",
                      "ProjectDoneCard(", "await store.loadDoneCard()",
                      "ProjectDone.body(subject: subject, requestID: row?.itemId,",
-                     "openItems: ProjectDone.openItemsCount(store.openItems, reviewing: row?.itemId),",
+                     "openItems: ProjectDone.openItemsCount(store.openItems),",
                      "switch await store.recordDone(body) {",
                      "store.declineDone(itemID: row.itemId, note: note)", "store.setStatus(.open)"] {
             XCTAssertTrue(sheet.contains(call), "the card over the page no longer \(call)")
@@ -256,7 +256,8 @@ final class ProjectDoneWiringTests: XCTestCase {
             XCTAssertTrue(asked.contains(call), "the request's row no longer draws \(call)")
         }
         let own = code(try section(cards, from: "struct ProjectOwnDoneRow: View {", to: "// MARK: - the pieces"))
-        XCTAssertTrue(own.contains("Text(ProjectDone.recordAsDoneRow)"))
+        XCTAssertTrue(own.contains("Text(ProjectDone.recordAsDoneRow) .font(.orbitSubtext.weight(.semibold)) .foregroundStyle(.secondary)"),
+                      "nobody asked: the owner's own row is a grey hint, title and dot alike")
         XCTAssertTrue(own.contains("Text(ProjectDone.notAskedYet)"))
     }
 }

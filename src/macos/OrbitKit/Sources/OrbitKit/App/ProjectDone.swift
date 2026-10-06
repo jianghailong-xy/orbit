@@ -715,18 +715,18 @@ public enum ProjectDone {
         return line
     }
 
-    /// How many items the Orbit checked line counts as open: every open item — the owner's, the
-    /// coordinator's, a request to start the project or to record it done — except the one request
-    /// the card itself is answering (`reviewing`, its item id). The close check refuses a request
-    /// while any other item is open, so a card the coordinator asked for says "no open items", as
-    /// the mock does; counting the request would make every such card say "1 open item" about
-    /// itself. Anything else stays counted, wherever the read lists it.
-    public static func openItemsCount(_ items: ProjectOpenItemsView?, reviewing requestID: String?) -> Int {
+    /// How many items the Orbit checked line counts as open (the browser's
+    /// `orbitCheckedOpenItemCount`): every row the open-items read holds — the owner's, the
+    /// coordinator's, and the START_REQUEST kept beside the groups — except the DONE_REQUEST the card
+    /// is itself reviewing, which is the read's own `doneRequest`. Without one (the owner opened the
+    /// card) nothing is left out. The close check refuses a request while any other item is open, so
+    /// a card the coordinator asked for says "no open items", as the mock does.
+    public static func openItemsCount(_ items: ProjectOpenItemsView?) -> Int {
         guard let items else { return 0 }
-        let reviewed: (ProjectOpenItemRow) -> Bool = { row in requestID != nil && row.itemId == requestID }
-        return items.needsYou.filter { !reviewed($0) }.count
-            + items.withCoordinator.filter { !reviewed($0) }.count
-            + [items.startRequest, items.doneRequest].compactMap { $0 }.filter { !reviewed($0) }.count
+        let reviewing = items.doneRequest?.itemId
+        return (items.needsYou + items.withCoordinator + [items.startRequest].compactMap { $0 })
+            .filter { reviewing == nil || $0.itemId != reviewing }
+            .count
     }
 
     /// How many criteria are still landing — what the Orbit checked line calls running.
@@ -850,7 +850,8 @@ public enum ProjectDone {
         case none
         /// "Why is this project not done?" — an OPEN, started project with criteria to be done
         /// against, that the projection does not call done and nobody has asked to record
-        /// (`asksWhyNotDone`).
+        /// (`asksWhyNotDone`) — or, once Orbit has recorded it DONE itself, that card's terminal
+        /// state, "This project is done".
         case notDone
         /// "Is this project done?" — asked by the request named (nil when the owner is reminded
         /// without one) — or, once it is recorded, its receipt.
@@ -861,10 +862,19 @@ public enum ProjectDone {
                             waitingKind: SessionWaitingKind?, record: ProjectDoneRecord?,
                             started: Bool?) -> Slot {
         guard let subject, subject.counts != nil else { return .none }
-        if request != nil || waitingKind == .recordAsDone || recorded(subject, record: record) {
+        // Asked, reminded, or just recorded here: the owner's card, or the receipt it turned into.
+        if request != nil || waitingKind == .recordAsDone || record != nil {
             return .done(requestID: request?.itemId)
         }
-        guard subject.status == "OPEN", started == true,
+        // DONE, read off the document so that it survives a reload: the owner's record keeps its
+        // receipt; a DONE Orbit recorded itself is the Why-not-done card's terminal state — "This
+        // project is done", recorded by Orbit (the browser's SessionProjectSettlementCard).
+        if subject.status == "DONE" {
+            return subject.doneBy == .owner ? .done(requestID: nil) : .notDone
+        }
+        // Asked why it is not done only of an OPEN project somebody started, with criteria to be
+        // done against, that the projection does not call done (`asksWhyNotDone`).
+        guard subject.status == "OPEN", started == true, subject.derivedDone?.done != true,
               !(subject.derivedDone?.criteria ?? []).isEmpty else { return .none }
         return .notDone
     }
@@ -906,9 +916,10 @@ public enum ProjectDone {
 
         public var hasGaps: Bool { !waiting.isEmpty || !needsCall.isEmpty }
 
-        /// Whether the card is the settled one: no gap left, and the projection says done.
+        /// Whether the card is the settled one: the project is DONE — whatever its criteria still
+        /// say, nothing is left to ask "why not" — or no gap is left and the projection says done.
         public func settled(_ subject: ProjectDoneSubject) -> Bool {
-            !hasGaps && subject.derivedDone?.done == true
+            subject.status == "DONE" || (!hasGaps && subject.derivedDone?.done == true)
         }
 
         /// The one button: Review while asked, Ask the coordinator while work has nobody on it.

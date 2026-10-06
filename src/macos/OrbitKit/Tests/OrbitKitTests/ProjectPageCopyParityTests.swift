@@ -172,6 +172,16 @@ final class ProjectPageCopyParityTests: XCTestCase {
         XCTAssertEqual(ProjectDone.requestRowDetail(row), "The coordinator asked · 2 gaps it couldn’t prove")
         XCTAssertEqual(ProjectPage.needsYouRows(ProjectOpenItemsView(needsYou: [row])), [],
                        "the request is drawn once, in its own row, as the browser filters it")
+        // The owner's own Record as done… is a grey hint the Open items count leaves out (the browser
+        // since 1f85c0afe): only the request counts as needing the owner.
+        assertSays(web, "is-owner is-own-start is-hint project-open-item-done-own", in: Self.progress)
+        assertSays(web, "`${needsYou.length} need you · ${withCoordinator.length} with the coordinator · oldest first`",
+                   in: Self.progress)
+        XCTAssertEqual(ProjectPage.openItemsSummary(status: .open, started: true, items: ProjectOpenItemsView())?.needsYou, 0,
+                       "nobody asked: the owner's own row needs nobody")
+        XCTAssertEqual(ProjectPage.openItemsSummary(status: .open, started: true,
+                                                    items: ProjectOpenItemsView(doneRequest: row))?.needsYou, 1,
+                       "the coordinator's request is the one thing that needs the owner")
     }
 
     /// The page's header: Ready to close beside the status while the coordinator asks, and once the
@@ -179,6 +189,10 @@ final class ProjectPageCopyParityTests: XCTestCase {
     func testTheHeaderSaysReadyToCloseAndWhoRecordedItDone() throws {
         let web = try source(Self.page)
         assertSays(web, "<Tag color=\"gold\">{PROJECT_DONE_COPY.readyToClose}</Tag>", in: Self.page)
+        // …only while the coordinator's request stands, not for every OPEN project (the browser since
+        // 1f85c0afe; this client's `ProjectDone.readyToClose`).
+        assertSays(web, "{p.status === 'OPEN' && doneRequest ? (", in: Self.page)
+        assertSays(web, "const doneRequest = useOpenDoneRequest(id);", in: Self.page)
         assertSays(web, "<span className=\"project-done-provenance\">{doneProvenance(p)}</span>", in: Self.page)
         assertSays(web, "DONE: 'Completed',", in: Self.page)
         XCTAssertEqual(ProjectDone.readyToClose, "Ready to close")

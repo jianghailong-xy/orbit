@@ -2164,7 +2164,7 @@ private struct ProjectDoneSheet: View {
                 request: row?.doneRequest,
                 askedAt: row?.waitingSince,
                 confirmedAt: store.confirmation?.confirmation?.confirmedAt,
-                openItems: ProjectDone.openItemsCount(store.openItems, reviewing: row?.itemId),
+                openItems: ProjectDone.openItemsCount(store.openItems),
                 running: ProjectDone.runningCount(subject),
                 record: record,
                 sealRead: row?.doneRequest != nil || digest != nil,

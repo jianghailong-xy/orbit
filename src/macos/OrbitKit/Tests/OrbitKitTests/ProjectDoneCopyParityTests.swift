@@ -15,9 +15,10 @@ import XCTest
 /// counterpart is a FAILURE and never an `XCTSkip`. A sentence with a count in it is rendered here
 /// with sentinels and compared whole against the web template's own interpolations.
 ///
-/// What is NOT compared, deliberately: the `ago` words beside "asked by the coordinator" and "the
-/// coordinator asked", which each end takes from its own clock (`RelativeTime.format` here) — the
-/// browser writes "just now" there — and the card's look (`FROM ORBIT` is compared; colours are not).
+/// The request's age beside "asked by the coordinator" and "the coordinator asked" is compared as
+/// the words around it ("waiting" and `formatSpan`, which `RelativeTime.span` ports and
+/// `BackgroundWakeCopyParityTests` holds); the clock reading itself is each end's own. What is NOT
+/// compared is the card's look (`FROM ORBIT` is compared; colours are not).
 final class ProjectDoneCopyParityTests: XCTestCase {
 
     private static let words = "src/web/src/lib/projectDone.ts"
@@ -113,6 +114,8 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         ("WHY_NOT_DONE_ASK_COORDINATOR", ProjectDone.askCoordinator),
         ("WHY_NOT_DONE_WAITING_DETAIL", ProjectDone.waitingDetail),
         ("WHY_NOT_DONE_NEEDS_CALL_DETAIL", ProjectDone.needsCallDetail),
+        ("WHY_NOT_DONE_NOT_MET_YET", ProjectDone.notMetYet),
+        ("WHY_NOT_DONE_NOT_MET_DETAIL", ProjectDone.notMetDetail),
         ("PROJECT_DONE_RECORDED_BY_YOU", ProjectDone.recordedByYou),
         ("PROJECT_DONE_RECORDED_BY_ORBIT", ProjectDone.recordedByOrbit),
         ("READY_TO_CLOSE", ProjectDone.readyToClose),
@@ -152,6 +155,8 @@ final class ProjectDoneCopyParityTests: XCTestCase {
                       "the tally's landed-on-main words drifted")
         XCTAssertTrue(web.contains("openItems: '\(ProjectPage.openItemsHeading)',"),
                       "the Open items heading the card's row sits under drifted")
+        XCTAssertTrue(web.contains("notMetYet: WHY_NOT_DONE_NOT_MET_YET,"))
+        XCTAssertTrue(web.contains("notMetDetail: WHY_NOT_DONE_NOT_MET_DETAIL,"))
         let card = try flat(Self.card)
         XCTAssertTrue(card.contains("className=\"criteria-provenance\">\(ProjectDone.provenance)</span>"),
                       "the done cards' provenance badge drifted from \(ProjectDone.provenance)")
@@ -290,9 +295,18 @@ final class ProjectDoneCopyParityTests: XCTestCase {
             "counts && counts.met < counts.criteria ? PROJECT_DONE_COPY.recordAsDoneAnyway : DONE_CARD_RECORD"))
         XCTAssertEqual(ProjectDone.recordLabel(counts()), ProjectDone.recordAsDoneAnyway)
         XCTAssertEqual(ProjectDone.recordLabel(all), ProjectDone.recordAsDone)
-        // The meta line: who asked — the time beside it is each end's own clock — or nobody.
-        XCTAssertTrue(card.contains("{project.title} · {doneRequest ? `${PROJECT_DONE_COPY.askedByCoordinator} · "),
+        // The meta line: who asked and how long the request has waited — or nobody.
+        XCTAssertTrue(card.contains("{project.title} · {doneRequest\n"), "the asked meta line drifted")
+        XCTAssertTrue(card.contains(
+            "? [PROJECT_DONE_COPY.askedByCoordinator, doneRequestWaiting(requestWaitingSince, now)].filter(Boolean).join(' · ')"),
                       "the asked meta line drifted")
+        let words = try flat(Self.words)
+        XCTAssertTrue(words.contains("return Number.isNaN(at) ? null : `waiting ${formatSpan(now - at)}`;"),
+                      "the request's age is no longer `waiting` and formatSpan")
+        let now = RelativeTime.parse("2026-10-05T21:00:00.000Z")!
+        XCTAssertEqual(ProjectDone.meta(projectTitle: "Aurora", asked: true,
+                                        waiting: ProjectDone.requestWaiting("2026-10-05T20:56:00.000Z", now: now)),
+                       "Aurora · asked by the coordinator · waiting 4m")
         XCTAssertTrue(card.contains(": PROJECT_DONE_COPY.noRequestMeta}"), "the unasked meta line drifted")
         XCTAssertEqual(ProjectDone.meta(projectTitle: "Aurora", asked: true, waiting: "waiting 4m"),
                        "Aurora · asked by the coordinator · waiting 4m")
@@ -343,13 +357,13 @@ final class ProjectDoneCopyParityTests: XCTestCase {
             "criteria.filter((criterion) => criterion.satisfied && criterion.landingReason === 'NO_RECEIPT');",
             "waiting.length > 0 && waiting.every((criterion) => criterion.landingReason === 'IN_FLIGHT');",
             "const coordinatorOnIt = onlyInFlight || (openItems?.withCoordinator?.length ?? 0) > 0;",
-            "if (!hasGaps && project.derivedDone?.done === true) {",
+            "if (project.status === 'DONE' || (!hasGaps && project.derivedDone?.done === true)) {",
             "{group(PROJECT_DONE_COPY.waitingOnWork, waiting, true)}",
             "{group(PROJECT_DONE_COPY.needsYourCall, needsCall, false)}",
             "<span className=\"project-why-who\">● {PROJECT_DONE_COPY.coordinatorIsOnIt}</span>",
-            "{PROJECT_DONE_COPY.openItemsDoneRequest.toLowerCase()} · ",
-            "{waitingGroup ? PROJECT_DONE_COPY.waitingDetail : PROJECT_DONE_COPY.needsCallDetail}",
-            "{landingReasonLabel(criterion.landingReason)}",
+            "{[PROJECT_DONE_COPY.openItemsDoneRequest.toLowerCase(), doneRequestWaiting(openItems.doneRequest.waitingSince, now)].filter(Boolean).join(' · ')}",
+            "{criterion.satisfied ? landingReasonLabel(criterion.landingReason) : PROJECT_DONE_COPY.notMetYet}",
+            "{!criterion.satisfied\n                    ? PROJECT_DONE_COPY.notMetDetail\n                    : waitingGroup ? PROJECT_DONE_COPY.waitingDetail : PROJECT_DONE_COPY.needsCallDetail}",
             "{item?.ordinal ?? '•'}",
             "{projectWhyNotDoneTally(counts)}",
             "{PROJECT_DONE_COPY.reviewDoneRequest}",
@@ -361,9 +375,87 @@ final class ProjectDoneCopyParityTests: XCTestCase {
             XCTAssertTrue(card.contains(part), "the Why-not-done card drifted: no \(part.debugDescription)")
         }
         XCTAssertEqual(ProjectDone.askedAside(waiting: "waiting 4m"), "the coordinator asked · waiting 4m")
+        let unmet = ProjectDoneCriterion(definitionId: "c", satisfied: false, landingReason: .noReceipt)
+        let met = ProjectDoneCriterion(definitionId: "c", satisfied: true, landingReason: .noReceipt)
+        XCTAssertEqual(ProjectDone.rowState(unmet), ProjectDone.notMetYet)
+        XCTAssertEqual(ProjectDone.rowDetail(unmet, waitingOnWork: true), ProjectDone.notMetDetail)
+        XCTAssertEqual(ProjectDone.rowState(met), ProjectDone.landingReasonLabel(.noReceipt))
+        XCTAssertEqual(ProjectDone.rowDetail(met, waitingOnWork: false), ProjectDone.needsCallDetail)
         XCTAssertEqual(ProjectDone.askedAside(waiting: nil), "the coordinator asked")
         XCTAssertEqual(ProjectDone.settledBadge(.owner), ProjectDone.recordedByYou)
         XCTAssertEqual(ProjectDone.settledBadge(.derived), ProjectDone.recordedByOrbit)
+    }
+
+    /// Which card the conversation draws, state by state, is the browser's: the question for an
+    /// OPEN, started project with criteria that the projection does not call done; the owner's card
+    /// while asked or just pressed; the owner's DONE as its receipt; and a DONE Orbit recorded itself
+    /// as the Why-not-done card's terminal state — the coordinator's rulings of 2026-10-06, which the
+    /// web carries since ccb406ad0.
+    func testTheConversationDrawsTheWebsCardForEachState() throws {
+        let card = try flat(Self.card)
+        for part in [
+            "if (!project || project.status !== 'OPEN' || project.startedAt === null) return false;",
+            "if (!projection || !('counts' in projection) || projection.done) return false;",
+            "return projection.criteria.length > 0;",
+            "&& document?.status === 'DONE'\n    && document.doneBy !== 'OWNER'",
+            "return <ProjectWhyNotDoneCard project={document as unknown as ProjectDoneDocument} />;",
+            "const ownerRecordedDone = document?.status === 'DONE' && document.doneBy === 'OWNER';",
+            "const ownerRecorded = receipt != null || (project.status === 'DONE' && project.doneBy === 'OWNER');",
+            "const recorded = receipt != null || project.status === 'DONE';",
+        ] {
+            XCTAssertTrue(card.contains(part), "the conversation's card rule drifted: no \(part.debugDescription)")
+        }
+        // …and this client's slot answers the same, state by state.
+        func subject(_ status: String, doneBy: ProjectDoneBy? = nil, done: Bool = false,
+                     criteria: [ProjectDoneCriterion] = [ProjectDoneCriterion(definitionId: "c1", satisfied: true)])
+            -> ProjectDoneSubject {
+            ProjectDoneSubject(title: "t", status: status, derivedDone: ProjectDerivedDone(
+                done: done, withheld: done ? [] : ["CRITERION_UNLANDED"], criteria: criteria,
+                counts: ProjectDoneCounts(criteria: criteria.count, met: criteria.count, landed: 0, onMain: 0,
+                                          byReason: [:])),
+                doneBy: doneBy)
+        }
+        func slot(_ subject: ProjectDoneSubject, started: Bool = true) -> ProjectDone.Slot {
+            ProjectDone.slot(subject: subject, request: nil, waitingKind: nil, record: nil, started: started)
+        }
+        XCTAssertEqual(slot(subject("OPEN")), .notDone)
+        XCTAssertEqual(slot(subject("OPEN"), started: false), .none, "not started: the start card asks")
+        XCTAssertEqual(slot(subject("OPEN", criteria: [])), .none, "no criteria: nothing to explain")
+        XCTAssertEqual(slot(subject("OPEN", done: true)), .none, "the projection already says done")
+        XCTAssertEqual(slot(subject("DONE", doneBy: .owner)), .done(requestID: nil), "the owner's receipt")
+        XCTAssertEqual(slot(subject("DONE", doneBy: .derived, done: true)), .notDone, "Orbit's DONE: the terminal state")
+        let terminal = subject("DONE", doneBy: .derived, done: true)
+        XCTAssertTrue(ProjectDone.WhyNotDone(subject: terminal, withCoordinator: 0, requested: false).settled(terminal))
+        XCTAssertEqual(ProjectDone.settledBadge(terminal.doneBy), ProjectDone.recordedByOrbit)
+        XCTAssertTrue(ProjectDone.recorded(subject("DONE"), record: nil))
+        XCTAssertFalse(ProjectDone.recorded(subject("OPEN", doneBy: .owner, done: true), record: nil),
+                       "an OPEN project is asked, whatever its projection or a leftover doneBy says")
+    }
+
+    /// Orbit checked counts what the browser's `orbitCheckedOpenItemCount` counts: every row of the
+    /// open-items read, the START_REQUEST beside the groups included, except the DONE_REQUEST under
+    /// review — and, unasked, nothing left out.
+    func testOrbitCheckedCountsTheOpenItemsTheWebCounts() throws {
+        let words = try flat(Self.words)
+        for part in [
+            "const reviewing = view?.doneRequest?.itemId ?? null;",
+            "return [...(view?.needsYou ?? []), ...(view?.withCoordinator ?? []), ...(view?.startRequest ? [view.startRequest] : [])]",
+            ".filter((row) => reviewing === null || row.itemId !== reviewing).length;",
+        ] {
+            XCTAssertTrue(words.contains(part), "orbitCheckedOpenItemCount drifted: no \(part.debugDescription)")
+        }
+        let card = try flat(Self.card)
+        XCTAssertTrue(card.contains("openItemsCount={orbitCheckedOpenItemCount(openItemsRead.data)}"),
+                      "the conversation's card no longer counts with orbitCheckedOpenItemCount")
+        XCTAssertTrue(card.contains("const openItemsCount = orbitCheckedOpenItemCount(openItemsRead.data);"),
+                      "the page's card no longer counts with orbitCheckedOpenItemCount")
+        let row = { (id: String) in ProjectOpenItemRow(itemId: id, kind: .unknown, title: "", waitingSince: "") }
+        XCTAssertEqual(ProjectDone.openItemsCount(ProjectOpenItemsView(doneRequest: row("r"))), 0)
+        XCTAssertEqual(ProjectDone.openItemsCount(ProjectOpenItemsView(
+            needsYou: [row("r"), row("a")], withCoordinator: [row("b")], startRequest: row("s"),
+            doneRequest: row("r"))), 3)
+        XCTAssertEqual(ProjectDone.openItemsCount(ProjectOpenItemsView(needsYou: [row("a")], startRequest: row("s"))), 2,
+                       "unasked, nothing is left out")
     }
 
     /// "Ask the coordinator to handle it" sends the card's own facts as one turn — the same message,

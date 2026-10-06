@@ -102,10 +102,9 @@ final class ProjectAttentionCopyParityTests: XCTestCase {
     }
 
     /// The sixth: its coordinator asking to record the project done (criterion 2: "the projects list
-    /// says Ready to close"). The browser's index does not draw it yet — reported to the coordinator
-    /// on 2026-10-05 — so the words are held to the shared read model, which documents the row as
-    /// saying exactly this, and are built the start request's way from the session row's own word
-    /// (`READY_TO_CLOSE` in `lib/projectDone.ts`), with its age joined on as the start's is.
+    /// says Ready to close"). Keyed, ranked, worded and counted the browser's way since its fix
+    /// 1f85c0afe — and held to the shared read model too, which documents the row as saying exactly
+    /// this, built from the session row's own word (`READY_TO_CLOSE` in `lib/projectDone.ts`).
     func testTheDoneRequestChipIsTheReadModelsOwnWords() throws {
         let shared = try String(contentsOf: try repoRoot().appendingPathComponent("src/shared/src/project-progress.ts"),
                                 encoding: .utf8)
@@ -127,6 +126,22 @@ final class ProjectAttentionCopyParityTests: XCTestCase {
         XCTAssertNotEqual(ProjectAttentionReason.doneRequest.rawValue, ProjectAttentionReason.readyToClose.rawValue,
                           "the settled-but-unasked chip is the web's ready-to-close; the request is not it")
         XCTAssertTrue(web.contains("| '\(ProjectAttentionReason.readyToClose.rawValue)';"))
+        // The browser's own: the reason, its tier, its words and its age.
+        XCTAssertTrue(web.contains("| '\(ProjectAttentionReason.doneRequest.rawValue)'"),
+                      "the web no longer has a reason keyed \(ProjectAttentionReason.doneRequest.rawValue)")
+        XCTAssertTrue(web.contains("'\(ProjectAttentionReason.doneRequest.rawValue)': 1,"),
+                      "the web no longer ranks a done request in the owner tier")
+        XCTAssertTrue(web.contains("export const READY_TO_CLOSE_SAYS = `Needs you · ${READY_TO_CLOSE}`;"),
+                      "the done request's chip drifted from the web's")
+        XCTAssertTrue(web.contains("text: [READY_TO_CLOSE_SAYS, age].filter(Boolean).join(' · ')"),
+                      "the chip says how long the request has waited, as the start request's does")
+        // Who leads when several wait: the longest, and on a tie the four, then the start, then this.
+        XCTAssertTrue(web.contains("['ready-to-start', startRequestOf(project)],\n    ['done-request', doneRequestOf(project)],"),
+                      "the order a tie is settled in drifted")
+        XCTAssertTrue(web.contains("if (request && (!lead || byInstantAsc(request.waitingSince, lead.since) < 0)) {"))
+        // The drawer and sidebar count it, and order by its wait.
+        XCTAssertTrue(web.contains("+ (waitingDoneRequest(project) ? 1 : 0);"), "the sidebar no longer counts it")
+        XCTAssertTrue(web.contains("waitingDoneRequest(project)?.waitingSince,"), "the sidebar no longer orders by it")
     }
 
     /// A done project's row on the index says who recorded it — the owner with the gaps accepted,

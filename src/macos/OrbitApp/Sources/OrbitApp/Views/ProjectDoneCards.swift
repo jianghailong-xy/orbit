@@ -505,8 +505,9 @@ struct ProjectDoneRequestRow: View {
     }
 }
 
-/// The owner's own Record as done… — nobody asked, so it is quiet, and opens the same card over the
-/// page with the facts Orbit fills in.
+/// The owner's own Record as done… — nobody asked, so it is a grey hint (dot and title alike, as the
+/// browser's `is-hint` row draws it), counted with nothing that needs the owner, and it opens the
+/// same card over the page with the facts Orbit fills in.
 struct ProjectOwnDoneRow: View {
     var busy = false
     let onRecord: () -> Void
@@ -518,7 +519,7 @@ struct ProjectOwnDoneRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(ProjectDone.recordAsDoneRow)
                         .font(.orbitSubtext.weight(.semibold))
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(.secondary)
                     Text(ProjectDone.notAskedYet).font(.orbitLabel).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 6)
