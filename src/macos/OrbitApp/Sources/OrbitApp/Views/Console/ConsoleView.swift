@@ -29,6 +29,7 @@ struct ConsoleView: View {
     /// The public read-only link's sheet — opened from the nav bar on iOS, the window toolbar on macOS.
     @State private var showShare = false
     @State private var promotionReview: PromotionReviewTarget?
+    @State private var promotionReceipt: PromotionReceiptTarget?
     @State private var approvalReview: ApprovalReviewTarget?
     @State private var approvalReviewDrafts = ApprovalReviewDrafts()
     #if os(iOS)
@@ -213,7 +214,13 @@ struct ConsoleView: View {
                     promotionReview = PromotionReviewTarget(id: promotionID)
                 })
                 .sheet(item: $promotionReview) { target in
-                    PromotionReviewSheet(console: console, promotionID: target.id)
+                    PromotionReviewSheet(source: console, promotionID: target.id)
+                }
+                .environment(\.openPromotionReceipt, { promotion in
+                    promotionReceipt = PromotionReceiptTarget(promotion: promotion)
+                })
+                .sheet(item: $promotionReceipt) { target in
+                    PromotionReceiptSheet(promotion: target.promotion)
                 }
                 .environment(approvalReviewDrafts)
                 .environment(\.openApprovalReview, { target in
@@ -238,6 +245,7 @@ struct ConsoleView: View {
         }
         .onChange(of: sessionID) { _, _ in
             promotionReview = nil
+            promotionReceipt = nil
             approvalReview = nil
             approvalReviewDrafts = ApprovalReviewDrafts()
         }

@@ -844,6 +844,10 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// The card this queued turn is, read by the same function the runner's echo is read by. Nil
     /// unless `openItemDelivery` is one.
     public var itemCard: OpenItemDelivery? { OpenItemDelivery.parseCard(openItemDelivery) }
+    /// The same for the turn that hands a task's run its brief (`taskStart`) — a resumed run's; a
+    /// run's opening turn is never listed — held raw for `TaskStart.parseCard`, the reader the echo's
+    /// payload is read by. Nil on every other turn, and from a server that predates the field.
+    public let taskStart: JSONValue?
     /// The same for the message telling a coordinator its project was started (`projectStarted`),
     /// held raw for `ProjectStarted.parseCard` — the reader the echo's payload is read by.
     public let projectStarted: JSONValue?
@@ -877,6 +881,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
 
     public init(turnId: String, kind: String? = nil, content: String,
                 attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil,
+                taskStart: JSONValue? = nil,
                 projectStarted: JSONValue? = nil, sessionMessage: JSONValue? = nil,
                 sessionReplies: JSONValue? = nil, authoredByOrbit: Bool? = nil, confirmationReviewRequest: JSONValue? = nil,
                 confirmationReturn: JSONValue? = nil) {
@@ -885,6 +890,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
         self.content = content
         self.attachments = attachments
         self.openItemDelivery = openItemDelivery
+        self.taskStart = taskStart
         self.projectStarted = projectStarted
         self.sessionMessage = sessionMessage
         self.sessionReplies = sessionReplies

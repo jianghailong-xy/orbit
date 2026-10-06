@@ -1743,7 +1743,15 @@ final class AppModel {
     /// the console which card first, so the read that console runs on appearing is the one that
     /// spends the press: a card delivered by that read is scrolled to as it arrives, rather than a
     /// moment after the reader has looked away.
-    func openNeedsYouItem(_ s: Session, _ item: SessionOwnerItem) {
+    func openNeedsYouItem(_ s: Session, _ item: SessionOwnerItem, projectInColumn: Bool = false) {
+        #if os(iOS)
+        // The merge into main is answered on the project's sessions page, where its card is (owner
+        // decision 2026-10-06); the coordinator's conversation keeps only a line about it. A wide
+        // shell opens that page in its session column, as the drawer's project row does.
+        if item.kind == .promotionApproval, let projectID = s.projectMembership?.projectId {
+            return openProjectSessions(projectID, inColumn: projectInColumn)
+        }
+        #endif
         consoleRegistry?.model(for: s.id, agentID: s.agent?.id ?? s.agentId).focus(ownerItem: item)
         openNeedsYouSession(s)
     }
@@ -2202,6 +2210,9 @@ final class AppModel {
     private(set) var projectSessionsIntegrationReadAt: Date?
     private(set) var projectSessionsIntegrationReadFailed = false
     private var projectSessionsAddress: SessionProjectAddress?
+    /// The merge into main for the project whose sessions page is showing: the card under its
+    /// progress card and the merges on its timeline (owner decision 2026-10-06).
+    private(set) var projectSessionsMerge: ProjectMergeModel?
 
     var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
 
@@ -2308,6 +2319,17 @@ final class AppModel {
         } else {
             projectSessionsIntegrationReadFailed = true
         }
+    }
+
+    /// One poll of the page's merge into main. Kept apart from `loadProjectSessions` so the
+    /// sessions are on screen before the promotion reads answer; another project's merge is
+    /// dropped the moment the address changes, never shown under this one.
+    func loadProjectMerge(_ address: SessionProjectAddress, force: Bool = false) async {
+        guard let api else { return }
+        if projectSessionsMerge?.projectID != address.projectID {
+            projectSessionsMerge = ProjectMergeModel(projectID: address.projectID, api: api)
+        }
+        await projectSessionsMerge?.load(force: force)
     }
 
     /// A member may belong to another Workspace. Carry its record into the console's cache and
@@ -2879,6 +2901,14 @@ final class AppModel {
         case .open(let route): self.route(to: route)
         case let .approve(sid, behavior): Task { await approveAll(sessionID: sid, behavior: behavior) }
         case let .reply(sid, text): Task { await reply(sessionID: sid, text: text) }
+        case let .openProjectMerge(projectID, sid):
+            #if os(iOS)
+            // A push names its project by the stored UUID; every list row spells it base62.
+            settingsPresented = false
+            openProjectSessions(PublicID.toPublic(projectID), inColumn: false)
+            #else
+            route(to: .session(sid))
+            #endif
         }
     }
 

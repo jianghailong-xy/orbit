@@ -1,4 +1,4 @@
-import { type MergeRecoveryAction, type ProjectSidebarTaskCounts } from '@orbit/shared';
+import { type MergeRecoveryAction, type ProjectPromotionView, type ProjectSidebarTaskCounts } from '@orbit/shared';
 import {
   ArrowDownOutlined,
   ArrowLeftOutlined,
@@ -315,6 +315,8 @@ import {
   promotionChatContext,
   promotionRecordMoment,
 } from './ProjectPromotionCard';
+import { ProjectMergeStrip, ProjectMergeTimelineRow } from './ProjectMergeStrip';
+import { projectTimelineSections } from '../lib/projectMerge';
 import {
   CHAT_FACTS_AS_ARMED,
   CHAT_SUBJECT_GONE,
@@ -893,6 +895,9 @@ function pushHistory(sessionId: string | undefined, entry: string): void {
 
 // Recent sessions read better as relative time ("3h ago"); anything older than a
 // day falls back to an absolute month/day stamp. hour12:false keeps it compact.
+/** A row of a project's sessions page that is not a session: a merge into main, at its instant. */
+type ProjectPageMerge = { kind: 'merge'; id: string; promotion: ProjectPromotionView };
+
 const fmtTime = (d?: string): string => {
   if (!d) return '';
   const t = new Date(d).getTime();
@@ -2865,6 +2870,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     enabled: !!openProjectId,
     refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
   });
+  // The merges into main this project has made: rows on the page's timeline at their own instant
+  // (owner decision 2026-10-06), each opening its receipt.
+  const pageMergesQ = useQuery({
+    ...projectMergedPromotionsQuery(openProjectId ?? ''),
+    enabled: Boolean(openProjectId),
+    refetchInterval: 60_000,
+  });
+  const pageMerges = useMemo(() => (Array.isArray(pageMergesQ.data) ? pageMergesQ.data : []), [pageMergesQ.data]);
   const projectMembers = useMemo(() => [...new Map(
     [...(projectSessionsQ.data ?? []), ...(completedProjectSessionsQ.data ?? [])].map((s) => [s.id, s]),
   ).values()].sort((a, b) => (Date.parse(b.lastTurnAt ?? b.createdAt ?? '') || 0) -
@@ -2978,14 +2991,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // a "Pinned" section would fight an active tag filter, so it's suppressed there (as on iOS).
   // Note the Completed view is server-ordered by completed_at while bucketing reads last activity,
   // so its rows are grouped by when they last ran, not by when they moved — same as iOS.
-  const sections = useMemo<Array<{ key: string; title: string; tag: SessionTagRef | null; sessions: SessionProjectEntry<SessionListItem>[] }>>(
+  // On a project's page the merges into main it has made sit among its sessions at their own
+  // instant (`projectTimelineSections`): rows of their own kind, never sessions.
+  const sections = useMemo<Array<{ key: string; title: string; tag: SessionTagRef | null; sessions: Array<SessionProjectEntry<SessionListItem> | ProjectPageMerge> }>>(
     () =>
       openProjectId
         ? [
             ...(pageCoordinator ? [{ key: 'Coordinator', title: SESSION_PROJECT_COPY.coordinatorSection, tag: null,
               sessions: [{ ...pageCoordinator, kind: 'session' as const }] }] : []),
-            ...sessionTimeSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), { pinnedFirst: false })
-              .map((s) => ({ ...s, key: s.title, tag: null, sessions: s.sessions.map((row) => ({ ...row, kind: 'session' as const })) })),
+            ...projectTimelineSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), pageMerges)
+              .map((s) => ({ key: s.title, title: s.title, tag: null, sessions: s.items.map((item) =>
+                item.kind === 'merge'
+                  ? { kind: 'merge' as const, id: item.id, promotion: item.promotion }
+                  : { ...item.session, kind: 'session' as const }) })),
           ]
         : groupByTag
         ? sessionTagSections(folderListing.entries).map((s) => ({
@@ -3003,7 +3021,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             // Folded, Pinned keeps its heading but none of its rows — on screen or in the order below.
             sessions: s.title === 'Pinned' && pinnedCollapsed ? [] : s.sessions,
           })),
-    [folderListing, groupByTag, view, tagFilter, pinnedCollapsed, openProjectId, pageCoordinator, projectMembers],
+    [folderListing, groupByTag, view, tagFilter, pinnedCollapsed, openProjectId, pageCoordinator, projectMembers, pageMerges],
   );
 
   // The rows in the order they're actually on screen. Sectioning can reorder relative to the
@@ -3011,7 +3029,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // and tag grouping regroups outright — so anything that moves the cursor by a row (Up/Down,
   // "open the next one after completing") has to walk this, not the pre-section list.
   const orderedSessions = useMemo(() => sections.flatMap((s) => s.sessions.flatMap((entry) =>
-    entry.kind === 'project' ? entry.coordinator ? [entry.coordinator] : [] : [entry],
+    entry.kind === 'merge' ? [] : entry.kind === 'project' ? entry.coordinator ? [entry.coordinator] : [] : [entry],
   )), [sections]);
 
   // Right-pane mode. A real session (/sessions/<id>) shows its conversation; with
@@ -4936,7 +4954,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               anchor,
               moment: mergedAt,
               key: `promotion-receipt:${promotion.promotionId}`,
-              element: <ProjectPromotionReceipt promotion={promotion} />,
+              element: <ProjectPromotionReceipt promotion={promotion} asLine />,
             }];
       }),
     ],
@@ -5085,6 +5103,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           project={null}
           now={Date.now()}
           onChat={chatAboutThis}
+          asLine
         />
       ),
     }];
@@ -8617,6 +8636,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               onClick={(e) => { e.preventDefault(); navigate(`/projects/${encodeId(openProjectId)}`); }}>↗</a>
           </div>
         )}
+        {/* The merge into main: its card lives here, under the progress strip (owner decision
+            2026-10-06), and the coordinator's conversation keeps a line about it. */}
+        {openProjectId && (
+          <ProjectMergeStrip key={`merge:${openProjectId}`} projectId={openProjectId}
+            coordinatorSessionId={pageCoordinator?.id ?? null} />
+        )}
         {!openProjectId && <div className={`session-new ${composing ? 'active' : ''}`} onClick={goNew}>
           <PlusOutlined />
           <span>New session</span>
@@ -8695,6 +8720,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 </div>
               )}
               {sec.sessions.map((s) => {
+                if (s.kind === 'merge') {
+                  return (
+                    <ProjectMergeTimelineRow key={s.id} promotion={s.promotion}
+                      time={fmtTime(s.promotion.merged?.at ?? undefined)} />
+                  );
+                }
                 if (s.kind === 'project') {
                   const coordinator = s.coordinator;
                   const openTarget = () => {
@@ -9457,11 +9488,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   }
                 />
               )}
-              {/* The merge this project is asking its owner to make, drawn in the conversation that
-                  is coordinating it (mock 4, §3.3): what would land on main, what the checks came
-                  to, and — while it is under way — why nobody is being asked to press anything yet.
-                  Read from the candidate itself rather than from any turn, so it is the same card
-                  the project page shows.
+              {/* The merge this project is asking its owner to make, as one line in the conversation
+                  that is coordinating it: the card's home is the project's sessions view (owner
+                  decision 2026-10-06), and the line opens that same card — what would land on main,
+                  what the checks came to, and while it is under way why nobody is being asked to
+                  press anything yet. Read from the candidate itself rather than from any turn.
                   ASKING, NOT RECORDING: what already has a moment is drawn at that moment instead —
                   a merge as its receipt (`mergedPromotions` above), a candidate a check blocked as
                   the card itself (`blockedPromotionCard` above) — rather than kept here under
@@ -9473,6 +9504,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   projectId={coordinatedProjectId}
                   drawRecords={false}
                   onChat={chatAboutThis}
+                  asLine
                 />
               )}
               {/* A question THIS conversation put to the account owner, drawn where it was asked
