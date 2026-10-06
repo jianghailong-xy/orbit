@@ -400,6 +400,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'createdById',
   'approvedById',
   'decidedById',
+  // The administrator who last saved a sign-in provider (`sign_in_provider`, migration 0387): a user,
+  // named the way `createdById` names one.
+  'updatedById',
   'actorId',
   'mentions',
   // Wire-only aggregates: no column of their own, but they carry the same ids in request and

@@ -449,6 +449,33 @@ model PatDeviceLogin {
   @@map("pat_device_login")
 }
 
+/// A way to sign in other than a password, as an administrator saved it in the admin area's
+/// Sign-in settings (docs/google-sign-in-design.md §7.1, migration 0387): one row per provider, and
+/// only `google` exists. No row is the same as a row that is off.
+///
+/// It is on only when `enabled` is true AND `clientId` and the secret are both present
+/// (auth/sign-in-providers.service.ts); the empty string in either is "none saved". The secret is
+/// kept encrypted as a model provider's API key is (providers/provider-crypto.ts), and no response
+/// carries it in either form. Two CHECKs carry the closed sets below and cannot be spelled here:
+/// `sign_in_provider_provider_chk` and `sign_in_provider_signup_policy_chk`.
+model SignInProvider {
+  /// `google`.
+  provider        String   @id
+  enabled         Boolean  @default(false)
+  /// The OAuth client ID.
+  clientId        String   @map("client_id")
+  /// AES-256-GCM ciphertext of the OAuth client secret ("iv:tag:ct", each base64).
+  clientSecretEnc String   @map("client_secret_enc")
+  /// `EXISTING_ACCOUNTS` (only an account that already exists may sign in) | `OPEN` (a Google
+  /// account with none gets one at its first sign-in, §5.6).
+  signupPolicy    String   @default("EXISTING_ACCOUNTS") @map("signup_policy")
+  /// The administrator who saved it last. An id rather than a relation, so deleting them writes nothing here.
+  updatedById     String?  @map("updated_by_id") @db.Uuid
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("sign_in_provider")
+}
+
 /// Owner-scoped APNs/FCM registration. Token uniqueness is global; Android also replaces the
 /// installation's previous token atomically. Legacy iOS rows keep a NULL installation identity.
 /// `environment` selects the APNs host; Android accepts only production (FCM has no APNs sandbox).

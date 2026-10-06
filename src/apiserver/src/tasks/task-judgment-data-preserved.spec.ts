@@ -1935,6 +1935,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // trigger freezing the new column. 0155's guard is not replaced; no task, project,
       // acceptance or DONE fence object is named, and no row is written or backfilled.
       '0386_project_handoff_move_request',
+      // Sign-in providers (0387): one new table, sign_in_provider, with its primary key and two
+      // CHECKs of its own, and no other index, foreign key, function or trigger. No existing table,
+      // column, constraint, function, trigger or type is altered or dropped; no task, project,
+      // acceptance or DONE fence object is named, and no row is written.
+      '0387_sign_in_provider',
       // `orbit login` through the browser (0388): one new table, pat_device_login, with its own
       // CHECKs, indexes and one foreign key to `user` (ON DELETE CASCADE). No existing table,
       // column, constraint, function, trigger or type is altered or dropped; no task, project,
