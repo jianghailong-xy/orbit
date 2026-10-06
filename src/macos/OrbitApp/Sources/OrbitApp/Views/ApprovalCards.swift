@@ -1460,8 +1460,7 @@ private struct OwnerDecisionReceiptView: View {
             .approvalChrome(.blue, dimmed: true)
             // The task panel's own question and write (`TaskReopen`), so this is a second place to
             // press the one door rather than a door of its own.
-            .confirmationDialog(TaskReopenCopy.modalTitle, isPresented: $confirmingReopen,
-                                titleVisibility: .visible) {
+            .orbitConfirmation(TaskReopenCopy.modalTitle, isPresented: $confirmingReopen) {
                 Button(TaskReopenCopy.modalOK) {
                     Task { await console.reopenOwnerConfirmedTask() }
                 }

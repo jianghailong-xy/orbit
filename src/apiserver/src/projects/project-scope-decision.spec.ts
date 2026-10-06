@@ -141,6 +141,36 @@ test('cross project: a declared handoff is a request, and the user is the one wh
   assert.equal(granted.rule, 'R14_HANDOFF_APPROVED');
 });
 
+test('cross project: a declared move is asked for from one of its ends, never by a bystander', () => {
+  // Pushing a task out of the scope it holds, and pulling one into it: both ends may ask.
+  assert.equal(decide(handoff()).rule, 'R10_NO_APPROVAL');
+  const pulled = decide(handoff({ currentProjectId: B, targetProjectId: A }));
+  assert.equal(pulled.rule, 'R10_NO_APPROVAL');
+  assert.deepEqual(pulled.ends, { from: B, to: A });
+
+  // Between two projects this session holds neither of: refused before any answer is read, and
+  // before a settled end is — who is asking comes first.
+  const bystander = decide(handoff({ currentProjectId: B, targetProjectId: C }));
+  assert.equal(bystander.rule, 'R6_OUT_OF_SCOPE');
+  assert.equal(bystander.code, 'PROJECT_SCOPE_MISMATCH');
+  assert.equal(bystander.crossing, true);
+  assert.deepEqual(bystander.ends, { from: B, to: C });
+  assert.equal(decide(handoff({
+    currentProjectId: B, targetProjectId: C,
+    world: { approval: approval({ fromProjectId: B, toProjectId: C }) },
+  })).rule, 'R6_OUT_OF_SCOPE', 'a yes about the move does not make a bystander one of its ends');
+  assert.equal(decide(handoff({
+    currentProjectId: B, targetProjectId: C, world: { projectStatus: { [A]: 'OPEN', [B]: 'OPEN', [C]: 'DONE' } },
+  })).rule, 'R6_OUT_OF_SCOPE');
+
+  // Undeclared, the same move stays R7's, as it always was: same code, same remedy.
+  const undeclared = decide(write({
+    operation: 'UPDATE_TASK', taskId: TASK, currentProjectId: B, targetProjectId: C,
+  }));
+  assert.equal(undeclared.rule, 'R7_UNDECLARED_CROSSING');
+  assert.equal(undeclared.code, bystander.code);
+});
+
 test('cross project: a yes about another move is not a yes about this one', () => {
   const otherTask = decide(handoff({ world: { approval: approval({ taskId: 'another-task' }) } }));
   assert.equal(otherTask.rule, 'R9_APPROVAL_TARGET_MISMATCH');

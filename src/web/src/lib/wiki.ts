@@ -208,7 +208,8 @@ export const WIKI_NEW_ENTRY = 'New entry';
 export const WIKI_REVIEW_TITLE = 'Review';
 
 /** The sidebar's amber count, and the tooltip that says what it counts. */
-export const wikiProposalsToReview = (count: number): string => `${count} proposals to review`;
+export const wikiProposalsToReview = (count: number): string =>
+  `${count} proposal${count === 1 ? '' : 's'} to review`;
 /** The same count under Review's own title. */
 export const wikiProposalsFrom = (count: number, sessions: number): string =>
   `${count} proposal${count === 1 ? '' : 's'} from ${sessions} session${sessions === 1 ? '' : 's'}`;
@@ -398,6 +399,8 @@ export const WIKI_TAB_RETIRE = 'Retire';
 
 /** Empty states, and the two reads a phase-1 wiki cannot fill yet. */
 export const WIKI_NO_ENTRIES = 'Nothing has been recorded in this space yet.';
+/** The home's Principles with none to list: about the principles alone, not the whole space. */
+export const WIKI_NO_PRINCIPLES = 'No principle has been recorded yet.';
 export const WIKI_NO_REVIEW = 'Nothing is waiting for you.';
 export const WIKI_NO_CHANGES = 'Nothing has changed yet.';
 export const WIKI_NO_DECISIONS = 'No decision has been recorded yet.';

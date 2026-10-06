@@ -3847,6 +3847,16 @@ model ProjectHandoffApproval {
   appliedTaskId String?   @map("applied_task_id") @db.Uuid
   appliedAt     DateTime? @map("applied_at")
 
+  /// MOVE_TASK only (0386, a CHECK): the target project's criterion the moved task will declare
+  /// once it is there, as the request named it. Part of what is being answered, so frozen like
+  /// `title` and `reason`; bound into `payloadDigest` as well. No foreign key, like the subject:
+  /// deleting the criterion must not rewrite or delete the record of what was asked.
+  ///
+  /// 0386 also adds the partial unique index this schema cannot spell — one PENDING MOVE_TASK per
+  /// (owner, subject, from, to) — which is what makes a second request for a move that is already
+  /// waiting, from any session, find the first instead of filing beside it.
+  requestedCriterionDefinitionId String? @map("requested_criterion_definition_id") @db.Uuid
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @map("updated_at")
 

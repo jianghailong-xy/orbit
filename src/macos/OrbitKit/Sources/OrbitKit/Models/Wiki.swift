@@ -694,6 +694,9 @@ public struct WikiChangesetOp: Codable, Equatable, Sendable, Identifiable {
     public let appliedByMode: WikiReviewMode?
     /// An op the mode applied, drawn into Review for the owner to check after the fact.
     public let spotCheck: Bool?
+    /// The current title of the entry `entryId` names — Review's read adds it, so a card can name an
+    /// entry no other read holds. Nil when the op names none, and on every other read.
+    public let entryTitle: String?
 
     public init(id: String, changesetId: String? = nil, seq: Int? = nil, op: WikiOpKind? = nil,
                 entryId: String? = nil, baseRevision: Int? = nil, payload: JSONValue? = nil,
@@ -701,7 +704,7 @@ public struct WikiChangesetOp: Codable, Equatable, Sendable, Identifiable {
                 decisionReason: String? = nil, decisionNote: String? = nil,
                 resultEntryId: String? = nil, resultRevision: Int? = nil, decidedAt: String? = nil,
                 verification: WikiOpVerification? = nil, appliedByMode: WikiReviewMode? = nil,
-                spotCheck: Bool? = nil) {
+                spotCheck: Bool? = nil, entryTitle: String? = nil) {
         self.id = id
         self.changesetId = changesetId
         self.seq = seq
@@ -720,6 +723,7 @@ public struct WikiChangesetOp: Codable, Equatable, Sendable, Identifiable {
         self.verification = verification
         self.appliedByMode = appliedByMode
         self.spotCheck = spotCheck
+        self.entryTitle = entryTitle
     }
 }
 

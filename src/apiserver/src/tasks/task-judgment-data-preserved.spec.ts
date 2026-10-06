@@ -1929,6 +1929,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // task, project, acceptance or DONE fence object is named; no INSERT, UPDATE or DELETE —
       // every runner reads NULL, "not reported" and "nobody asked", until its next heartbeat.
       '0385_runner_self_update',
+      // Move requests (0386): one nullable `requested_criterion_definition_id` on
+      // project_handoff_approval with a CHECK keeping it to MOVE_TASK rows, one partial unique index
+      // (one PENDING move per owner, task and pair of projects) and one new function + BEFORE UPDATE
+      // trigger freezing the new column. 0155's guard is not replaced; no task, project,
+      // acceptance or DONE fence object is named, and no row is written or backfilled.
+      '0386_project_handoff_move_request',
       // `orbit login` through the browser (0388): one new table, pat_device_login, with its own
       // CHECKs, indexes and one foreign key to `user` (ON DELETE CASCADE). No existing table,
       // column, constraint, function, trigger or type is altered or dropped; no task, project,
