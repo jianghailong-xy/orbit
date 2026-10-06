@@ -4,6 +4,7 @@ import { JwtModule, type JwtSignOptions } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { PatService } from './pat.service';
 
 @Global()
 @Module({
@@ -28,7 +29,8 @@ import { JwtAuthGuard } from './jwt-auth.guard';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtAuthGuard],
-  exports: [JwtAuthGuard, JwtModule],
+  providers: [AuthService, JwtAuthGuard, PatService],
+  // PatService is exported because JwtAuthGuard is instantiated in every module that uses it.
+  exports: [JwtAuthGuard, JwtModule, PatService],
 })
 export class AuthModule {}

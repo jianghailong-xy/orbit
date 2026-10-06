@@ -246,6 +246,8 @@ layered over it. Agent values may override ordinary runner values. `ORBIT_HOME` 
 the runner, and session-scoped values are removed rather than inherited or accepted from agent
 configuration: `ORBIT_SESSION_ID`, `ORBIT_AGENT_ID`, `ORBIT_TASK_ID`, `ORBIT_SPAWN_DEPTH`,
 `ORBIT_ALLOW_ORCHESTRATION`, `ORBIT_ORCHESTRATION_TOKEN`, and `ORBIT_MCP_PERMISSION_PROMPT`.
+A person's access token, `ORBIT_USER_TOKEN`, is removed from both sources the same way
+(`docs/personal-access-token-design.md` §8).
 No extra criterion-specific env is injected.
 
 A command may use PostgreSQL when the task's own workspace deliberately provides a reachable
