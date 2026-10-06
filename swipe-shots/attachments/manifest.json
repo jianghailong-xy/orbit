@@ -1,0 +1,84 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "2B806F01-2AF8-49C0-9D35-2FC2795DA8FC.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "03-after-edge-swipe_0_F63D8E13-E919-45A4-945C-6DA9B7117486.png",
+        "timestamp" : 1791268181.23
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "00B2AEAE-D834-45BE-ADAC-35B357F62078.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "02-page-pushed-from-list_0_EEAEB904-5620-4C8B-90F7-60F70F1320DE.png",
+        "timestamp" : 1791268168.66
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "32AFB9FC-504E-4DBE-9FE1-066EE9AE14FA.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "01-workspace-list_0_DFC0A0BD-541C-4A4F-9122-B37CCBD3CCE1.png",
+        "timestamp" : 1791268160.913
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "6DE27D13-F332-4EFD-B36B-E7DB59748B91.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "SwipeBackTests/testAListRowsProjectPageSwipesBackToTheList()",
+    "testIdentifierURL" : "test://com.apple.xcode/SwipeProbe/SwipeProbeUITests/SwipeBackTests/testAListRowsProjectPageSwipesBackToTheList"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "50EE54EC-750B-497E-8B83-A5440D8E8DB2.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "06-edge-swipe-on-drawer-page_0_03D32B36-55D6-44B4-9C6A-2373889DC6D3.png",
+        "timestamp" : 1791268204.293
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "6477D171-3F96-499F-A49E-B44D2C214A6B.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "05-page-opened-from-drawer_0_A8764BC5-4EBF-4A42-A1E6-E7A1DBA05481.png",
+        "timestamp" : 1791268200.53
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "D6C7668D-8BEC-4C3F-869B-A12BF141BB1D.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "04-drawer_0_9BFD2914-5821-4EDD-9526-36E01FC4B630.png",
+        "timestamp" : 1791268196.323
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "0B268FE1-1AD8-4A30-A63C-9632FC790EEB.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "SwipeBackTests/testTheDrawersProjectPageKeepsTheHamburgerAndTheEdgeOpensTheDrawer()",
+    "testIdentifierURL" : "test://com.apple.xcode/SwipeProbe/SwipeProbeUITests/SwipeBackTests/testTheDrawersProjectPageKeepsTheHamburgerAndTheEdgeOpensTheDrawer"
+  }
+]

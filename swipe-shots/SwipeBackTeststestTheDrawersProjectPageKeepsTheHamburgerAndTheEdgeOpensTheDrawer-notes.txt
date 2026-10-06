@@ -1,0 +1,1 @@
+header minX before 121.0, after 426.6666564941406

@@ -1,0 +1,8 @@
+Test Case '-[SwipeProbeUITests.SwipeBackTests testAListRowsProjectPageSwipesBackToTheList]' started.
+Test Case '-[SwipeProbeUITests.SwipeBackTests testAListRowsProjectPageSwipesBackToTheList]' passed (91.151 seconds).
+Test Case '-[SwipeProbeUITests.SwipeBackTests testTheDrawersProjectPageKeepsTheHamburgerAndTheEdgeOpensTheDrawer]' started.
+Test Case '-[SwipeProbeUITests.SwipeBackTests testTheDrawersProjectPageKeepsTheHamburgerAndTheEdgeOpensTheDrawer]' passed (22.683 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 113.835 (113.838) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 113.835 (113.839) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 113.835 (113.841) seconds
+** TEST SUCCEEDED **

@@ -1,0 +1,30 @@
+==> stub ready after 2s
+iPhone 17 Pro com.apple.CoreSimulator.SimRuntime.iOS-26-5
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+Test Case '-[SwipeProbeUITests.SwipeBackTests testAListRowsProjectPageSwipesBackToTheList]' started.
+Test Case '-[SwipeProbeUITests.SwipeBackTests testAListRowsProjectPageSwipesBackToTheList]' passed (91.151 seconds).
+Test Case '-[SwipeProbeUITests.SwipeBackTests testTheDrawersProjectPageKeepsTheHamburgerAndTheEdgeOpensTheDrawer]' started.
+Test Case '-[SwipeProbeUITests.SwipeBackTests testTheDrawersProjectPageKeepsTheHamburgerAndTheEdgeOpensTheDrawer]' passed (22.683 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 113.835 (113.838) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 113.835 (113.839) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 113.835 (113.841) seconds
+** TEST SUCCEEDED **
+.swipe-probe/run.sh: line 44:  3433 Terminated: 15          python3 -u stub.py 8765 "$OUT/requests.log" > "$OUT/stub.out" 2>&1
+total 3440
+drwxr-xr-x  17 runner  staff     544 Oct  6 06:30 .
+drwxr-xr-x  13 runner  staff     416 Oct  6 06:19 ..
+-rw-r--r--   1 runner  staff  134691 Oct  6 06:29 01-workspace-list.png
+-rw-r--r--   1 runner  staff  138361 Oct  6 06:29 02-page-pushed-from-list.png
+-rw-r--r--   1 runner  staff  134903 Oct  6 06:29 03-after-edge-swipe.png
+-rw-r--r--   1 runner  staff  566480 Oct  6 06:29 04-drawer.png
+-rw-r--r--   1 runner  staff  137338 Oct  6 06:30 05-page-opened-from-drawer.png
+-rw-r--r--   1 runner  staff  567950 Oct  6 06:30 06-edge-swipe-on-drawer-page.png
+drwxr-xr-x  11 runner  staff     352 Oct  6 06:30 attachments
+-rw-r--r--   1 runner  staff     389 Oct  6 06:31 not-served.txt
+-rw-r--r--   1 runner  staff    5910 Oct  6 06:30 requests.log
+-rw-r--r--   1 runner  staff      49 Oct  6 06:15 stub.out
+-rw-r--r--@  1 runner  staff     503 Oct  6 06:29 SwipeBackTeststestAListRowsProjectPageSwipesBackToTheList-notes.txt
+-rw-r--r--@  1 runner  staff      49 Oct  6 06:30 SwipeBackTeststestTheDrawersProjectPageKeepsTheHamburgerAndTheEdgeOpensTheDrawer-notes.txt
+-rw-r--r--@  1 runner  staff   13173 Oct  6 06:29 tree-after-edge-swipe-from-list-page.txt
+-rw-r--r--@  1 runner  staff   13850 Oct  6 06:30 tree-page-opened-from-drawer.txt
+-rw-r--r--@  1 runner  staff   13558 Oct  6 06:29 tree-page-pushed-from-list.txt
