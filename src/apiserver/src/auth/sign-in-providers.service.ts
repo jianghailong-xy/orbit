@@ -65,7 +65,7 @@ function settingsOf(row: SignInProvider | null): GoogleSignInSettings {
 
 /**
  * The sign-in providers an administrator configures in the admin area (`sign_in_provider`,
- * migration 0387). No row and a row that is off are the same: every Google route refuses and the
+ * migration 0390). No row and a row that is off are the same: every Google route refuses and the
  * login page offers the password alone, as before there was a table. Read on every request, so a
  * change an administrator saves holds from the next one.
  */

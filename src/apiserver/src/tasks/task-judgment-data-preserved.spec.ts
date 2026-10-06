@@ -1945,16 +1945,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // created — so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: nothing
       // is backfilled.
       '0387_antigravity_account',
-      // Sign-in providers (0387): one new table, sign_in_provider, with its primary key and two
-      // CHECKs of its own, and no other index, foreign key, function or trigger. No existing table,
-      // column, constraint, function, trigger or type is altered or dropped; no task, project,
-      // acceptance or DONE fence object is named, and no row is written.
-      '0387_sign_in_provider',
       // `orbit login` through the browser (0388): one new table, pat_device_login, with its own
       // CHECKs, indexes and one foreign key to `user` (ON DELETE CASCADE). No existing table,
       // column, constraint, function, trigger or type is altered or dropped; no task, project,
       // acceptance or DONE fence object is named, and no row is written.
-      '0388_pat_device_login'],
+      '0388_pat_device_login',
+      // Sign-in providers (0390): one new table, sign_in_provider, with its primary key and two
+      // CHECKs of its own, and no other index, foreign key, function or trigger. No existing table,
+      // column, constraint, function, trigger or type is altered or dropped; no task, project,
+      // acceptance or DONE fence object is named, and no row is written. Written as 0387 and
+      // renumbered before landing, unchanged otherwise, when main's 0387_antigravity_account took
+      // that number first.
+      '0390_sign_in_provider'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

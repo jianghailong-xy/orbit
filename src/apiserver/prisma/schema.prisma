@@ -450,7 +450,7 @@ model PatDeviceLogin {
 }
 
 /// A way to sign in other than a password, as an administrator saved it in the admin area's
-/// Sign-in settings (docs/google-sign-in-design.md §7.1, migration 0387): one row per provider, and
+/// Sign-in settings (docs/google-sign-in-design.md §7.1, migration 0390): one row per provider, and
 /// only `google` exists. No row is the same as a row that is off.
 ///
 /// It is on only when `enabled` is true AND `clientId` and the secret are both present
