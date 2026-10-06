@@ -1,0 +1,747 @@
+[
+ {
+  "trace": "chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--trace.zip",
+  "moduleRequests": 29,
+  "failedRequests": [
+   {
+    "url": ":4177/src/components/ui/Input.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 126.9
+   },
+   {
+    "url": ":4177/src/components/ui/Dialog.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 127.0
+   },
+   {
+    "url": ":4177/src/components/ui/Overlay.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 127.0
+   },
+   {
+    "url": ":4177/src/components/ui/Menu.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 127.0
+   },
+   {
+    "url": ":4177/src/components/ui/Popover.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 127.0
+   },
+   {
+    "url": ":4177/src/components/ui/Tooltip.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 127.0
+   },
+   {
+    "url": ":4177/src/components/ui/Select.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 127.1
+   },
+   {
+    "url": ":4177/src/components/ui/Combobox.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 127.1
+   },
+   {
+    "url": ":4177/src/components/ui/MultiSelect.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 127.1
+   },
+   {
+    "url": ":4177/src/components/ui/__fixtures__/ChoicesFixture.css",
+    "status": -1,
+    "failure": null,
+    "ms": 127.1
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/react-dom.js?v=fa04b385",
+    "status": -1,
+    "failure": null,
+    "ms": 102.2
+   }
+  ],
+  "networkChangedConsoleErrors": 11,
+  "slowestRequests": [
+   {
+    "url": ":4177/src/components/ui/Select.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 127.1
+   },
+   {
+    "url": ":4177/src/components/ui/Combobox.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 127.1
+   },
+   {
+    "url": ":4177/src/components/ui/MultiSelect.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 127.1
+   },
+   {
+    "url": ":4177/src/components/ui/__fixtures__/ChoicesFixture.css",
+    "status": -1,
+    "failure": null,
+    "ms": 127.1
+   },
+   {
+    "url": ":4177/src/components/ui/Dialog.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 127.0
+   }
+  ],
+  "console": [
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   }
+  ],
+  "pageErrors": [
+   "",
+   ""
+  ],
+  "lastActions": [
+   {
+    "api": "fixture",
+    "title": "Fixture \"browser\"",
+    "start": 432398.899,
+    "error": null
+   },
+   {
+    "api": "fixture",
+    "title": "Fixture \"browserName\"",
+    "start": 432409.922,
+    "error": null
+   },
+   {
+    "api": "newPage",
+    "title": null,
+    "start": 342378.817,
+    "error": null
+   },
+   {
+    "api": "emulateMedia",
+    "title": null,
+    "start": 342394.924,
+    "error": null
+   },
+   {
+    "api": "goto",
+    "title": null,
+    "start": 342396.781,
+    "error": null
+   },
+   {
+    "api": "click",
+    "title": null,
+    "start": 342622.183,
+    "error": null
+   }
+  ]
+ },
+ {
+  "trace": "chromium-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--trace.zip",
+  "moduleRequests": 134,
+  "failedRequests": [],
+  "networkChangedConsoleErrors": 0,
+  "slowestRequests": [
+   {
+    "url": ":4177/node_modules/.vite/deps/antd.js?v=fa04b385",
+    "status": 200,
+    "failure": null,
+    "ms": 103.2
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@ant-design_icons.js?v=fa04b385",
+    "status": 200,
+    "failure": null,
+    "ms": 79.1
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@tanstack_react-query.js?v=fa04b385",
+    "status": 200,
+    "failure": null,
+    "ms": 66.9
+   },
+   {
+    "url": ":4177/src/theme.ts",
+    "status": 200,
+    "failure": null,
+    "ms": 66.0
+   },
+   {
+    "url": ":4177/src/lib/theme.tsx",
+    "status": 200,
+    "failure": null,
+    "ms": 65.9
+   }
+  ],
+  "console": [],
+  "pageErrors": [
+   ""
+  ],
+  "lastActions": [
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 552434.622,
+    "error": null
+   },
+   {
+    "api": "focus",
+    "title": null,
+    "start": 552436.698,
+    "error": null
+   },
+   {
+    "api": "keyboardPress",
+    "title": null,
+    "start": 552451.93,
+    "error": null
+   },
+   {
+    "api": "keyboardPress",
+    "title": null,
+    "start": 552466.215,
+    "error": null
+   },
+   {
+    "api": "keyboardPress",
+    "title": null,
+    "start": 552467.511,
+    "error": null
+   },
+   {
+    "api": "expect",
+    "title": "Expect \"toHaveText\"",
+    "start": 552479.251,
+    "error": null
+   }
+  ]
+ },
+ {
+  "trace": "chromium-dark-phone--tooltip-center-zoom-origin-matches--trace.zip",
+  "moduleRequests": 28,
+  "failedRequests": [
+   {
+    "url": ":4177/src/components/ui/Button.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 47.1
+   },
+   {
+    "url": ":4177/src/components/ui/Input.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 48.7
+   },
+   {
+    "url": ":4177/src/components/ui/Dialog.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 48.8
+   },
+   {
+    "url": ":4177/src/components/ui/Overlay.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 48.8
+   },
+   {
+    "url": ":4177/src/components/ui/Menu.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 48.8
+   },
+   {
+    "url": ":4177/src/components/ui/Popover.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 48.8
+   },
+   {
+    "url": ":4177/src/components/ui/Tooltip.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 48.8
+   },
+   {
+    "url": ":4177/src/components/ui/Select.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 48.8
+   },
+   {
+    "url": ":4177/src/components/ui/Combobox.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 48.8
+   },
+   {
+    "url": ":4177/src/components/ui/MultiSelect.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 48.9
+   },
+   {
+    "url": ":4177/src/components/ui/__fixtures__/ChoicesFixture.css",
+    "status": -1,
+    "failure": null,
+    "ms": 48.9
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/rolldown-runtime-DC62tzP2.js?v=fa04b385",
+    "status": -1,
+    "failure": null,
+    "ms": 48.9
+   }
+  ],
+  "networkChangedConsoleErrors": 12,
+  "slowestRequests": [
+   {
+    "url": ":4177/node_modules/.vite/deps/antd.js?v=fa04b385",
+    "status": 200,
+    "failure": null,
+    "ms": 106.9
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@ant-design_icons.js?v=fa04b385",
+    "status": 200,
+    "failure": null,
+    "ms": 80.0
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@tanstack_react-query.js?v=fa04b385",
+    "status": 200,
+    "failure": null,
+    "ms": 67.3
+   },
+   {
+    "url": ":4177/src/theme.ts",
+    "status": 200,
+    "failure": null,
+    "ms": 66.2
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/client-HvpxMbDi.js?v=fa04b385",
+    "status": 200,
+    "failure": null,
+    "ms": 65.0
+   }
+  ],
+  "console": [
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   }
+  ],
+  "pageErrors": [
+   "",
+   ""
+  ],
+  "lastActions": [
+   {
+    "api": "emulateMedia",
+    "title": null,
+    "start": 661035.482,
+    "error": null
+   },
+   {
+    "api": "goto",
+    "title": null,
+    "start": 661037.509,
+    "error": null
+   },
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 661146.827,
+    "error": null
+   },
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 661148.744,
+    "error": null
+   },
+   {
+    "api": "hover",
+    "title": null,
+    "start": 661150.321,
+    "error": null
+   },
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 751053.852,
+    "error": null
+   }
+  ]
+ },
+ {
+  "trace": "chromium-light-desktop--touch-or-pointer-menus-dismiss-outside-fit-viewport-and-open-a-dialog-with-stable-return-focus--trace.zip",
+  "moduleRequests": 29,
+  "failedRequests": [
+   {
+    "url": ":4177/src/components/ui/Button.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 148.7
+   },
+   {
+    "url": ":4177/src/components/ui/Input.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 148.9
+   },
+   {
+    "url": ":4177/src/components/ui/Dialog.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 148.9
+   },
+   {
+    "url": ":4177/src/components/ui/Overlay.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 148.9
+   },
+   {
+    "url": ":4177/src/components/ui/Menu.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 148.9
+   },
+   {
+    "url": ":4177/src/components/ui/Popover.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 148.9
+   },
+   {
+    "url": ":4177/src/components/ui/Tooltip.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 148.9
+   },
+   {
+    "url": ":4177/src/components/ui/Select.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 148.9
+   },
+   {
+    "url": ":4177/src/components/ui/Combobox.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 148.9
+   },
+   {
+    "url": ":4177/src/components/ui/MultiSelect.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 148.9
+   },
+   {
+    "url": ":4177/src/components/ui/__fixtures__/ChoicesFixture.css",
+    "status": -1,
+    "failure": null,
+    "ms": 148.9
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/rolldown-runtime-DC62tzP2.js?v=fa04b385",
+    "status": -1,
+    "failure": null,
+    "ms": 126.8
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/react-dom.js?v=fa04b385",
+    "status": -1,
+    "failure": null,
+    "ms": 103.6
+   }
+  ],
+  "networkChangedConsoleErrors": 13,
+  "slowestRequests": [
+   {
+    "url": ":4177/src/components/ui/Input.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 148.9
+   },
+   {
+    "url": ":4177/src/components/ui/Dialog.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 148.9
+   },
+   {
+    "url": ":4177/src/components/ui/Overlay.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 148.9
+   },
+   {
+    "url": ":4177/src/components/ui/Menu.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 148.9
+   },
+   {
+    "url": ":4177/src/components/ui/Popover.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 148.9
+   }
+  ],
+  "console": [
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   }
+  ],
+  "pageErrors": [
+   ""
+  ],
+  "lastActions": [
+   {
+    "api": "hook",
+    "title": "Worker Cleanup",
+    "start": 149449.109,
+    "error": null
+   },
+   {
+    "api": "fixture",
+    "title": "Fixture \"browser\"",
+    "start": 149449.671,
+    "error": null
+   },
+   {
+    "api": "fixture",
+    "title": "Fixture \"browserName\"",
+    "start": 149479.701,
+    "error": null
+   },
+   {
+    "api": "newPage",
+    "title": null,
+    "start": 134077.166,
+    "error": null
+   },
+   {
+    "api": "goto",
+    "title": null,
+    "start": 134093.593,
+    "error": null
+   },
+   {
+    "api": "expect",
+    "title": "Expect \"toHaveText\"",
+    "start": 134359.415,
+    "error": null
+   }
+  ]
+ },
+ {
+  "trace": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-search--trace.zip",
+  "moduleRequests": 268,
+  "failedRequests": [],
+  "networkChangedConsoleErrors": 0,
+  "slowestRequests": [
+   {
+    "url": ":4177/node_modules/.vite/deps/@ant-design_icons.js?v=fa04b385",
+    "status": 200,
+    "failure": null,
+    "ms": 110.9
+   },
+   {
+    "url": ":4177/src/components/ui/Overlay.tsx",
+    "status": 304,
+    "failure": null,
+    "ms": 99.3
+   },
+   {
+    "url": ":4177/src/components/ui/Combobox.tsx",
+    "status": 304,
+    "failure": null,
+    "ms": 95.4
+   },
+   {
+    "url": ":4177/src/components/ui/__fixtures__/ChoicesFixture.css",
+    "status": 304,
+    "failure": null,
+    "ms": 95.0
+   },
+   {
+    "url": ":4177/src/components/ui/MultiSelect.tsx",
+    "status": 304,
+    "failure": null,
+    "ms": 94.9
+   }
+  ],
+  "console": [],
+  "pageErrors": [
+   "",
+   ""
+  ],
+  "lastActions": [
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 888227.802,
+    "error": null
+   },
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 888269.679,
+    "error": null
+   },
+   {
+    "api": "click",
+    "title": null,
+    "start": 888278.525,
+    "error": null
+   },
+   {
+    "api": "expect",
+    "title": "Expect \"toBeVisible\"",
+    "start": 888660.374,
+    "error": null
+   },
+   {
+    "api": "waitForFunction",
+    "title": null,
+    "start": 888699.85,
+    "error": null
+   },
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 975395.92,
+    "error": null
+   }
+  ]
+ }
+]

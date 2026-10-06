@@ -1,0 +1,988 @@
+{
+  "kind": "Drawer",
+  "before": {
+    "x": 896,
+    "y": 16,
+    "width": 360,
+    "height": 128
+  },
+  "samples": [
+    {
+      "t": 13,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "insideViewport": true
+    },
+    {
+      "t": 29,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "insideViewport": true
+    },
+    {
+      "t": 63,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "100%",
+      "insideViewport": true
+    },
+    {
+      "t": 75,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "100%",
+      "insideViewport": true
+    },
+    {
+      "t": 98,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "93.358688%",
+      "insideViewport": true
+    },
+    {
+      "t": 109,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "87.79213%",
+      "insideViewport": true
+    },
+    {
+      "t": 125,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "77.207199%",
+      "insideViewport": true
+    },
+    {
+      "t": 141,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "65.143234%",
+      "insideViewport": true
+    },
+    {
+      "t": 158,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "52.714233%",
+      "insideViewport": true
+    },
+    {
+      "t": 174,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "42.413769%",
+      "insideViewport": true
+    },
+    {
+      "t": 190,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "33.690926%",
+      "insideViewport": true
+    },
+    {
+      "t": 206,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "26.429474%",
+      "insideViewport": true
+    },
+    {
+      "t": 222,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "20.430641%",
+      "insideViewport": true
+    },
+    {
+      "t": 238,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "15.501305%",
+      "insideViewport": true
+    },
+    {
+      "t": 254,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "11.477069%",
+      "insideViewport": true
+    },
+    {
+      "t": 270,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "8.223697%",
+      "insideViewport": true
+    },
+    {
+      "t": 286,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "5.632717%",
+      "insideViewport": true
+    },
+    {
+      "t": 302,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "3.616303%",
+      "insideViewport": true
+    },
+    {
+      "t": 318,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "2.102838%",
+      "insideViewport": true
+    },
+    {
+      "t": 334,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "1.033389%",
+      "insideViewport": true
+    },
+    {
+      "t": 352,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "0.300343%",
+      "insideViewport": true
+    },
+    {
+      "t": 366,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "0.038554%",
+      "insideViewport": true
+    },
+    {
+      "t": 383,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 399,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 414,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 430,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 446,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 462,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 478,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 494,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 511,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 527,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 543,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 559,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 575,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 591,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 607,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 623,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 639,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 655,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 671,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 687,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 703,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 719,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 735,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 751,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 768,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 784,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    },
+    {
+      "t": 800,
+      "x": 896,
+      "y": 16,
+      "width": 360,
+      "height": 128,
+      "card": {
+        "x": 896,
+        "y": 16,
+        "width": 360,
+        "height": 128,
+        "top": 16,
+        "right": 1256,
+        "bottom": 144,
+        "left": 896
+      },
+      "scale": "none",
+      "translate": "none",
+      "insideViewport": true
+    }
+  ],
+  "shifted": []
+}

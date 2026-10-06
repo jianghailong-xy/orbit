@@ -1,0 +1,3250 @@
+{
+  "before": {
+    "x": 16,
+    "y": 56,
+    "width": 358,
+    "height": 144,
+    "top": 56,
+    "right": 374,
+    "bottom": 200,
+    "left": 16
+  },
+  "samples": [
+    {
+      "phase": "open",
+      "t": 1029,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "open",
+      "t": 1045.7000000178814,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "open",
+      "t": 1072.5,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.9",
+          "translate": "none",
+          "opacity": "0",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "open",
+      "t": 1079.1000000238419,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.9",
+          "translate": "none",
+          "opacity": "0",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "open",
+      "t": 1095.7000000178814,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.907129",
+          "translate": "none",
+          "opacity": "0.0712907",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "open",
+      "t": 1112.5,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.922074",
+          "translate": "none",
+          "opacity": "0.220735",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "open",
+      "t": 1129.1000000238419,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.940784",
+          "translate": "none",
+          "opacity": "0.407837",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "open",
+      "t": 1145.7000000178814,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.957562",
+          "translate": "none",
+          "opacity": "0.575616",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "open",
+      "t": 1162.5,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.970565",
+          "translate": "none",
+          "opacity": "0.705649",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "open",
+      "t": 1179.1000000238419,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.98021",
+          "translate": "none",
+          "opacity": "0.8021",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "open",
+      "t": 1195.800000011921,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.987344",
+          "translate": "none",
+          "opacity": "0.873439",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "open",
+      "t": 1212.5,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.992484",
+          "translate": "none",
+          "opacity": "0.924839",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "open",
+      "t": 1229,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.996053",
+          "translate": "none",
+          "opacity": "0.960527",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "open",
+      "t": 1245.7000000178814,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.998345",
+          "translate": "none",
+          "opacity": "0.983445",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "open",
+      "t": 1262.5,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.99961",
+          "translate": "none",
+          "opacity": "0.996099",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "open",
+      "t": 1279.4000000059605,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-1",
+      "t": 1295.7000000178814,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-1",
+      "t": 1312.300000011921,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-1",
+      "t": 1332,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.9",
+          "translate": "none",
+          "opacity": "0",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-1",
+      "t": 1345.800000011921,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.9",
+          "translate": "none",
+          "opacity": "0",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-1",
+      "t": 1362.4000000059605,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.907092",
+          "translate": "none",
+          "opacity": "0.0709152",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-1",
+      "t": 1379.1000000238419,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.922121",
+          "translate": "none",
+          "opacity": "0.221212",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-1",
+      "t": 1395.800000011921,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.940832",
+          "translate": "none",
+          "opacity": "0.408323",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-1",
+      "t": 1412.5,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.957512",
+          "translate": "none",
+          "opacity": "0.575116",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-1",
+      "t": 1429.2000000178814,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.970527",
+          "translate": "none",
+          "opacity": "0.705273",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-1",
+      "t": 1445.800000011921,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.980232",
+          "translate": "none",
+          "opacity": "0.802319",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-1",
+      "t": 1462.6000000238419,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.987324",
+          "translate": "none",
+          "opacity": "0.873236",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-1",
+      "t": 1479.1000000238419,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.992495",
+          "translate": "none",
+          "opacity": "0.924952",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-1",
+      "t": 1495.800000011921,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.996043",
+          "translate": "none",
+          "opacity": "0.960429",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-1",
+      "t": 1512.4000000059605,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.998349",
+          "translate": "none",
+          "opacity": "0.983491",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-1",
+      "t": 1529,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.999607",
+          "translate": "none",
+          "opacity": "0.996072",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-1",
+      "t": 1545.800000011921,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "1",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-1",
+      "t": 1563.1000000238419,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-2",
+      "t": 1579,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-2",
+      "t": 1595.6000000238419,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-2",
+      "t": 1615.2000000178814,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.9",
+          "translate": "none",
+          "opacity": "0",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-2",
+      "t": 1629.2000000178814,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.9",
+          "translate": "none",
+          "opacity": "0",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-2",
+      "t": 1645.7000000178814,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.907077",
+          "translate": "none",
+          "opacity": "0.070768",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-2",
+      "t": 1662.300000011921,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.922097",
+          "translate": "none",
+          "opacity": "0.220974",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-2",
+      "t": 1679.1000000238419,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.940808",
+          "translate": "none",
+          "opacity": "0.40808",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-2",
+      "t": 1695.7000000178814,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.957581",
+          "translate": "none",
+          "opacity": "0.575812",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-2",
+      "t": 1712.5,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.97058",
+          "translate": "none",
+          "opacity": "0.705797",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-2",
+      "t": 1729,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.980221",
+          "translate": "none",
+          "opacity": "0.802209",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-2",
+      "t": 1745.7000000178814,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.987352",
+          "translate": "none",
+          "opacity": "0.873519",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-2",
+      "t": 1762.4000000059605,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.992464",
+          "translate": "none",
+          "opacity": "0.924638",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-2",
+      "t": 1779.1000000238419,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.996039",
+          "translate": "none",
+          "opacity": "0.960391",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-2",
+      "t": 1795.800000011921,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.998347",
+          "translate": "none",
+          "opacity": "0.983468",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-2",
+      "t": 1812.6000000238419,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.999611",
+          "translate": "none",
+          "opacity": "0.99611",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-2",
+      "t": 1829.1000000238419,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "1",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "nested-2",
+      "t": 1846.2000000178814,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "close-2",
+      "t": 1868.800000011921,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "1",
+          "translate": "none",
+          "opacity": "1",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-2",
+      "t": 1879.5,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.992939",
+          "translate": "none",
+          "opacity": "0.929393",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-2",
+      "t": 1895.9000000059605,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.977929",
+          "translate": "none",
+          "opacity": "0.779287",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-2",
+      "t": 1912.4000000059605,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.959108",
+          "translate": "none",
+          "opacity": "0.591081",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-2",
+      "t": 1929.1000000238419,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.94244",
+          "translate": "none",
+          "opacity": "0.424402",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-2",
+      "t": 1945.800000011921,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.929436",
+          "translate": "none",
+          "opacity": "0.294364",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-2",
+      "t": 1962.4000000059605,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.919741",
+          "translate": "none",
+          "opacity": "0.197413",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-2",
+      "t": 1979,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.912657",
+          "translate": "none",
+          "opacity": "0.126568",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-2",
+      "t": 1995.7000000178814,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.907517",
+          "translate": "none",
+          "opacity": "0.0751666",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-2",
+      "t": 2012.4000000059605,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.903948",
+          "translate": "none",
+          "opacity": "0.0394769",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-2",
+      "t": 2029.1000000238419,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.901656",
+          "translate": "none",
+          "opacity": "0.016557",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-2",
+      "t": 2045.7000000178814,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.90039",
+          "translate": "none",
+          "opacity": "0.00390198",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-2",
+      "t": 2062.2000000178814,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.9",
+          "translate": "none",
+          "opacity": "5.293e-08",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-2",
+      "t": 2082.100000023842,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "close-1",
+      "t": 2100.2000000178814,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "1",
+          "translate": "none",
+          "opacity": "1",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-1",
+      "t": 2112.9000000059605,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.992888",
+          "translate": "none",
+          "opacity": "0.928884",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-1",
+      "t": 2129.100000023842,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.977846",
+          "translate": "none",
+          "opacity": "0.778463",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-1",
+      "t": 2145.7000000178814,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.959135",
+          "translate": "none",
+          "opacity": "0.591346",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-1",
+      "t": 2162.5,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.942372",
+          "translate": "none",
+          "opacity": "0.423725",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-1",
+      "t": 2179.100000023842,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.929453",
+          "translate": "none",
+          "opacity": "0.294526",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-1",
+      "t": 2195.600000023842,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.919753",
+          "translate": "none",
+          "opacity": "0.197532",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-1",
+      "t": 2212.4000000059605,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.912666",
+          "translate": "none",
+          "opacity": "0.126655",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-1",
+      "t": 2229,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.907523",
+          "translate": "none",
+          "opacity": "0.0752283",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-1",
+      "t": 2245.600000023842,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.903969",
+          "translate": "none",
+          "opacity": "0.039692",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-1",
+      "t": 2262.4000000059605,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.901658",
+          "translate": "none",
+          "opacity": "0.0165823",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-1",
+      "t": 2279,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.900391",
+          "translate": "none",
+          "opacity": "0.00391354",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-1",
+      "t": 2295.7000000178814,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.9",
+          "translate": "none",
+          "opacity": "1.00946e-07",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-1",
+      "t": 2314.4000000059605,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        }
+      ]
+    },
+    {
+      "phase": "close-0",
+      "t": 2336.7000000178814,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "1",
+          "translate": "none",
+          "opacity": "1",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-0",
+      "t": 2345.9000000059605,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.992904",
+          "translate": "none",
+          "opacity": "0.929045",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-0",
+      "t": 2362.5,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.977981",
+          "translate": "none",
+          "opacity": "0.779806",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-0",
+      "t": 2379,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.959161",
+          "translate": "none",
+          "opacity": "0.591611",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-0",
+      "t": 2395.7000000178814,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.942394",
+          "translate": "none",
+          "opacity": "0.423939",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-0",
+      "t": 2412.300000011921,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.929469",
+          "translate": "none",
+          "opacity": "0.294687",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-0",
+      "t": 2429,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.919765",
+          "translate": "none",
+          "opacity": "0.197651",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-0",
+      "t": 2445.7000000178814,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.912638",
+          "translate": "none",
+          "opacity": "0.12638",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-0",
+      "t": 2462.300000011921,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.907529",
+          "translate": "none",
+          "opacity": "0.0752901",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-0",
+      "t": 2479,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.903956",
+          "translate": "none",
+          "opacity": "0.0395601",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-0",
+      "t": 2495.600000023842,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.901661",
+          "translate": "none",
+          "opacity": "0.0166075",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-0",
+      "t": 2512.4000000059605,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        },
+        {
+          "scale": "0.900393",
+          "translate": "none",
+          "opacity": "0.00392511",
+          "ending": true
+        }
+      ]
+    },
+    {
+      "phase": "close-0",
+      "t": 2530.800000011921,
+      "sameNode": true,
+      "card": {
+        "x": 16,
+        "y": 56,
+        "width": 358,
+        "height": 144,
+        "top": 56,
+        "right": 374,
+        "bottom": 200,
+        "left": 16
+      },
+      "opacity": "1",
+      "overlays": [
+        {
+          "scale": "none",
+          "translate": "none",
+          "opacity": "1",
+          "ending": false
+        }
+      ]
+    }
+  ],
+  "phase": "close-0",
+  "running": false
+}

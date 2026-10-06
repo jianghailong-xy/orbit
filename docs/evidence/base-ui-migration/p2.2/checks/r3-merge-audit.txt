@@ -1,0 +1,71 @@
+{
+  "task": "d5716beb168861834aed8ef22a99a5b966866322",
+  "project": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+  "base": "67e62c0b4028eefe2c619dac80d3fac312cea601",
+  "merge": "e1eb1d3796a6086f413a6dd57bee228c2fa59c85",
+  "tree": "7097c8c0881a2433b13da3db287142a724340bc1",
+  "counts": {
+    "identicalParents": 6032,
+    "projectOnly": 5949,
+    "taskOnly": 4492
+  },
+  "bothChanged": [
+    "src/web/.gitignore",
+    "src/web/package.json",
+    "src/web/src/components/ui/README.md",
+    "src/web/ui-migration/playwright.config.mjs"
+  ],
+  "manualResolutions": [
+    "src/web/.gitignore",
+    "src/web/package.json",
+    "src/web/ui-migration/playwright.config.mjs"
+  ],
+  "packageMetadataUnchanged": true,
+  "scriptsAreExactUnion": true,
+  "baselineConfigOnlyTestIgnoreChanged": true,
+  "readmeAutomaticMergeUnmodified": true,
+  "runtimeAndAssertionsPreservedFromRespectiveParents": true,
+  "historicalEvidence": {
+    "task": {
+      "parent": "d5716beb168861834aed8ef22a99a5b966866322",
+      "historicalFiles": 6697,
+      "changedOrMissing": []
+    },
+    "project": {
+      "parent": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+      "historicalFiles": 7909,
+      "changedOrMissing": []
+    }
+  },
+  "r2TrackedArtifactsVerified": 3027,
+  "reviewerLogSha256": {
+    "choices-matrix.log": "2df99fc943012b95c48fecfc16c7e1d232bf58224f11a2815d7b583f1a69c695",
+    "coordinator-choices-repeat.log": "696772b4093c923d61578dc77ba49939d669284dbeb1093f2c69b27f44cb867b",
+    "coordinator-edge.log": "632ca6187427b1f54a07ab3fd8a45a64e783dd6c87d2ea91d5d26c3a8399e314"
+  },
+  "lockfile": {
+    "gitBlob": "cfef4f0cbb6231906be27eb7e01755ffa7c369f7",
+    "sha256": "1cbd66c8623d8d7fbd9499ed7607efba173bb578ff0877eda2c7dc12feff7836"
+  },
+  "conflictBlobs": {
+    "src/web/.gitignore": {
+      "base": "bab497dade2f4e3626fc8c900d39e6f73126c32f",
+      "task": "1cb3bdfe33767ca87f1df7bed8d960d286d4f1ce",
+      "project": "68616cb7b4f4b703f5a0ab7fc91f8c3527b47871",
+      "merge": "076ad89aefce6a4b0db5913382aa4c0ff1e93ceb"
+    },
+    "src/web/package.json": {
+      "base": "3f4ac8a4f3e75c1d344e25666dd18ebc75daafb9",
+      "task": "62605e07497da73e1495139137c55f8ddfb4af8e",
+      "project": "3a6520577e0d70b3caace81ebdbea48294860ba7",
+      "merge": "dfdff1c309da2726975b780e3f6542f86eed7f1a"
+    },
+    "src/web/ui-migration/playwright.config.mjs": {
+      "base": "0ff876ecc794a3939fe2530c2eba372b0594bb29",
+      "task": "ad2993916bd261f22746b64ce3fece5bd97e47cb",
+      "project": "cca34b07e3a55d8eb7fe85f3b7822966b8ba4e09",
+      "merge": "3af9008fde95b46972fa82738b66af3326ac70de"
+    }
+  },
+  "unexpectedDifferences": []
+}

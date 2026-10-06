@@ -1,0 +1,18 @@
+{
+  "elapsedMs": 6505,
+  "remaining": 1,
+  "events": [
+    {
+      "type": "mouseout",
+      "at": 1791115834753,
+      "target": "",
+      "inResult": false
+    },
+    {
+      "type": "mouseover",
+      "at": 1791115834753,
+      "target": "toast-action",
+      "inResult": true
+    }
+  ]
+}

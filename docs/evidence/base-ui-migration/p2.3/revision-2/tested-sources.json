@@ -1,0 +1,9 @@
+{
+  "src/web/src/components/ToastViewport.tsx": "6f10cb9bee00ad3e8053538b279e07248cc1093a7de957848c37763150aec4c2",
+  "src/web/src/components/ui/README.md": "91fa00b9e22e6b4297ef69c5a73be2a666b87f3000a442efab77e9361e85ea5a",
+  "src/web/src/index.css": "d937dc9212ed3ea9d5c66cc09c8d09370a92ffaa5de00794c03bc3fd909e3e7f",
+  "src/web/src/lib/toast.test.tsx": "29771b3082c8a79b1e6be05ba0f1b24b7e45ee9fb9562e7ce807206182a7dc73",
+  "src/web/src/pages/ProjectsPage.newTask.test.tsx": "e667e25e0ec975d4294a0d17131beef3bc7413e271c23955f7f51e4ee7f32070",
+  "src/web/ui-migration/toasts-tests.tsconfig.json": "5b6622a337b01bb92e79432a6b17d0a673b3900091e2ac6cbf0ce2af1d54e976",
+  "src/web/ui-migration/toasts-lifecycle.browser.mjs": "1e46528debc4c86f68f92abba1806b3759c37119a7f8ada51a0a54783118cf26"
+}

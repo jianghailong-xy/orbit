@@ -239,7 +239,16 @@ body {
    its top bar instead. The column takes no clicks, and neither does a pill that names nothing:
    they float over the header band, whose controls stay live. Toasts that do something opt back in
    (`.toast--live`). */
+.toast-layer {
+  position: fixed; inset: 0; margin: 0; padding: 0; border: 0;
+  width: auto; height: auto; overflow: visible; background: transparent; color: inherit;
+  pointer-events: none;
+}
+.toast-layer::backdrop { background: transparent; pointer-events: none; }
 .toast-viewport {
+  /* A modal may own the portal; keep the body's typography for stack controls. */
+  font-size: 1rem;
+  line-height: 1.15;
   position: fixed;
   z-index: 2050;
   top: calc(env(safe-area-inset-top, 0px) + 16px);
@@ -284,6 +293,8 @@ body {
   font-size: 14px;
   line-height: 20px;
   text-align: start;
+  /* Keep the original card's rasterization when its host enters the top layer. */
+  will-change: transform;
 }
 :root[data-theme='dark'] .toast {
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);

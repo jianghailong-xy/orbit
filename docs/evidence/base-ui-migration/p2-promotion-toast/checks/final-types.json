@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "bash",
+    "-c",
+    "node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts-tests.tsconfig.json --noEmit"
+  ],
+  "cwd": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0",
+  "sourceCommitAtStart": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+  "sourceCommitAtEnd": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+  "finishedAt": "2026-10-04T12:06:26.130755+00:00",
+  "seconds": 0.9319488069741055,
+  "exitCode": 0
+}

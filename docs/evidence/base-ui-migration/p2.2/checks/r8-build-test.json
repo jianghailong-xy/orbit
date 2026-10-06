@@ -1,0 +1,13 @@
+{
+  "command": "npm run build -w @orbit/web && npm run test -w @orbit/web",
+  "runner": "mcp__orbit__bg_run",
+  "bgJobId": "bgj_8a52de0d2369",
+  "cwd": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2",
+  "commit": "38947755e48ac979362db36f82bfcf966b527a75",
+  "webTree": "848736509199b4db94c3a30a20b43d5c202599a4",
+  "started": "2026-10-06T05:15:12Z",
+  "outputLastWritten": "2026-10-06T05:18:59.425834+00:00",
+  "exitCode": 0,
+  "outputSha256": "04cbee863c63d881d0a22fec330581e9ccef1d479d475d6f0ea4183ee90a1520",
+  "outputBytes": 994510
+}

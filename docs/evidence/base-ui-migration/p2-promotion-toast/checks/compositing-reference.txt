@@ -1,0 +1,31 @@
+[WebServer] (node:525394) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 8 tests using 1 worker
+
+(node:525517) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium-light-desktop] › ../../../../tmp/promotion-toast-compositing-reference/src/web/ui-migration/toasts-reference.browser.mjs:81:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors (2.4s)
+(node:525935) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 [chromium-light-phone] › ../../../../tmp/promotion-toast-compositing-reference/src/web/ui-migration/toasts-reference.browser.mjs:81:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors (1.8s)
+(node:526308) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  3 [chromium-dark-desktop] › ../../../../tmp/promotion-toast-compositing-reference/src/web/ui-migration/toasts-reference.browser.mjs:81:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors (1.5s)
+(node:526727) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  4 [chromium-dark-phone] › ../../../../tmp/promotion-toast-compositing-reference/src/web/ui-migration/toasts-reference.browser.mjs:81:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors (1.6s)
+(node:527151) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  5 [webkit-light-desktop] › ../../../../tmp/promotion-toast-compositing-reference/src/web/ui-migration/toasts-reference.browser.mjs:81:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors (1.7s)
+(node:527514) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  6 [webkit-light-phone] › ../../../../tmp/promotion-toast-compositing-reference/src/web/ui-migration/toasts-reference.browser.mjs:81:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors (1.6s)
+(node:528039) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  7 [webkit-dark-desktop] › ../../../../tmp/promotion-toast-compositing-reference/src/web/ui-migration/toasts-reference.browser.mjs:81:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors (1.4s)
+(node:528298) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  8 [webkit-dark-phone] › ../../../../tmp/promotion-toast-compositing-reference/src/web/ui-migration/toasts-reference.browser.mjs:81:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors (1.5s)
+
+  8 passed (17.6s)

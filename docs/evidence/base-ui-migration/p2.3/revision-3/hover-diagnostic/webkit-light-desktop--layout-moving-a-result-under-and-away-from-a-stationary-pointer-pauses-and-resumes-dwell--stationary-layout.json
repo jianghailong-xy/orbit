@@ -1,0 +1,33 @@
+{
+  "entered": [
+    {
+      "type": "mouseout",
+      "at": 1791072003050,
+      "target": "",
+      "inResult": false
+    },
+    {
+      "type": "mouseover",
+      "at": 1791072003050,
+      "target": "toast-action",
+      "inResult": true
+    }
+  ],
+  "left": [
+    {
+      "type": "mouseout",
+      "at": 1791072007600,
+      "target": "toast-action",
+      "inResult": true
+    },
+    {
+      "type": "mouseover",
+      "at": 1791072007600,
+      "target": "",
+      "inResult": false
+    }
+  ],
+  "releaseAt": 1791072007600,
+  "visibleAfterReleaseMs": 5999,
+  "expiredAfterReleaseMs": 6000
+}

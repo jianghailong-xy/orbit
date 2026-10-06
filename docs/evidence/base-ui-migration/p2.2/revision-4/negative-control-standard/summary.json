@@ -1,0 +1,348 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T11:54:26.365Z",
+    "duration": 15357.756,
+    "expected": 16,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--observer-rejects-retained-scroll-lock",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 497
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+          "sha256": "4fab28b13d9114f04c28e5c27c67a97eebd35e5a3b14f94dcd2240258add35d0"
+        },
+        {
+          "file": "chromium-light-desktop--observer-rejects-retained-scroll-lock--blocked-scroll.json",
+          "sha256": "93f987c3b360d7bc3f309c277d4ec11cd784ea9b31f1ef391ac5015b479ae245"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--observer-rejects-late-scroll-lock",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 345
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--observer-rejects-late-scroll-lock--rejected-unlock.json",
+          "sha256": "93c3e2e0ff978a7f1a9a627f8d428fb8b59f9a5cb35ca58be646742426d1cb58"
+        },
+        {
+          "file": "chromium-light-desktop--observer-rejects-late-scroll-lock--late-release.json",
+          "sha256": "bd94f4bcb097ea83fbb261dfebe009b23491e60aa64454542e7d49532ac6a5ff"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--observer-rejects-retained-scroll-lock",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 443
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+          "sha256": "4fbadea98fef0d141592cf5405cfa7ea9df46416da10930793dd9ae3fa9dda85"
+        },
+        {
+          "file": "chromium-light-phone--observer-rejects-retained-scroll-lock--blocked-scroll.json",
+          "sha256": "1d965820eee941083e530575b06f00d6b809bbd9111276e0eb90dec10aaed7af"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--observer-rejects-late-scroll-lock",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 248
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--observer-rejects-late-scroll-lock--rejected-unlock.json",
+          "sha256": "46972e705ac91872b0d5617b8d2a80aa54b053dc010d9a8ba5a531f24fab4386"
+        },
+        {
+          "file": "chromium-light-phone--observer-rejects-late-scroll-lock--late-release.json",
+          "sha256": "7c74ae66f3981ef08143ad47adf5d81f0e1172b2fa96692659d8c72843804d16"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--observer-rejects-retained-scroll-lock",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 501
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+          "sha256": "64d18f68dfa82b0822e924544e42785fd2f7dd29200d49bdae61439dde7f50bf"
+        },
+        {
+          "file": "chromium-dark-desktop--observer-rejects-retained-scroll-lock--blocked-scroll.json",
+          "sha256": "b82cb8a2a2bf9d57d7cc4ff3eb60d939d6d3b0920a79ba673651812ac92d80fd"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--observer-rejects-late-scroll-lock",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 344
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--observer-rejects-late-scroll-lock--rejected-unlock.json",
+          "sha256": "09f47e1a447fe4b8dfdf99f47d5c8ba9de7bfabd5ff06d5a67d418a7c7c67b5e"
+        },
+        {
+          "file": "chromium-dark-desktop--observer-rejects-late-scroll-lock--late-release.json",
+          "sha256": "0cd5fd52ff553934d2cbca7fcec899b6c0c8ffdd5f596b89748e6a404603fec9"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--observer-rejects-retained-scroll-lock",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 597
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+          "sha256": "5339965a2f6da6f7caeca2f5c1b86369fdff20421dabce7054a7bcb7a3f4fdd2"
+        },
+        {
+          "file": "chromium-dark-phone--observer-rejects-retained-scroll-lock--blocked-scroll.json",
+          "sha256": "9fe768176b00224aa23f36fd4e50e56b5c2399257eac9b458fe5782befae5a86"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--observer-rejects-late-scroll-lock",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 308
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--observer-rejects-late-scroll-lock--rejected-unlock.json",
+          "sha256": "d291553f66109545187ccbd2cca7ce053fa87e9ff8b6a2079d4e7707f8610062"
+        },
+        {
+          "file": "chromium-dark-phone--observer-rejects-late-scroll-lock--late-release.json",
+          "sha256": "ff2761480e0373631380e1879727a6879a90755bd8ac442719a8eb261ed247ae"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--observer-rejects-retained-scroll-lock",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1003
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+          "sha256": "bc4ee8a6efabcf0db9d0681c4a229672ffa93e48c35bc1b8b32bfdea5ca81349"
+        },
+        {
+          "file": "webkit-light-desktop--observer-rejects-retained-scroll-lock--blocked-scroll.json",
+          "sha256": "5a22a077cd5fd4535f901ec8c575c97c793e6f52929498eb07af1b5f395b4d31"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--observer-rejects-late-scroll-lock",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 673
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--observer-rejects-late-scroll-lock--rejected-unlock.json",
+          "sha256": "2b49046dfe92f67889ee4f743891147e273973a5d9264fea0938964638c3fc3e"
+        },
+        {
+          "file": "webkit-light-desktop--observer-rejects-late-scroll-lock--late-release.json",
+          "sha256": "544178fa0458ddab22f1bea82db70e480d043235da03d62e6a69b2d27cb2dd8d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--observer-rejects-retained-scroll-lock",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 805
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+          "sha256": "406703ba8576030cc65f68f1fa9fc0fa6a99bc9c5ce53743b1b5394590ae5474"
+        },
+        {
+          "file": "webkit-light-phone--observer-rejects-retained-scroll-lock--blocked-scroll.json",
+          "sha256": "f7aa71ab7b204d2e3b84b96e1ec8fdce75a085f6ecb2357192568803b841e2b9"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--observer-rejects-late-scroll-lock",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 608
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--observer-rejects-late-scroll-lock--rejected-unlock.json",
+          "sha256": "cf151f7d4418e64ac9b09ed04eefb674a24f29ba4c291bde1c8da5efed6d0857"
+        },
+        {
+          "file": "webkit-light-phone--observer-rejects-late-scroll-lock--late-release.json",
+          "sha256": "51a9212c3e97497555587d5245cd029be4f5a449f78031d85aead220d16ffb0a"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--observer-rejects-retained-scroll-lock",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1273
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+          "sha256": "75c94a532817037d42ce1d011a2a8339be6f21fa8c4a907e746f52a8c3c4d6d0"
+        },
+        {
+          "file": "webkit-dark-desktop--observer-rejects-retained-scroll-lock--blocked-scroll.json",
+          "sha256": "53919fe443cda737ea0203bd2694b0c24f4577edbb3dd1301817150cee5dbe56"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--observer-rejects-late-scroll-lock",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 614
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--observer-rejects-late-scroll-lock--rejected-unlock.json",
+          "sha256": "b135bbe02a9aec8f4aacdf18956211f967122fc37486fef1329374bbe8136ed7"
+        },
+        {
+          "file": "webkit-dark-desktop--observer-rejects-late-scroll-lock--late-release.json",
+          "sha256": "07d09d22524e903f24aea8daa092c523430a3dcf7e1df795a004d28baa7f423f"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--observer-rejects-retained-scroll-lock",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 643
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+          "sha256": "60b5d0448b65e861e2a8d58fea4b681397a4952dd26c2894cf95ca01fb0da970"
+        },
+        {
+          "file": "webkit-dark-phone--observer-rejects-retained-scroll-lock--blocked-scroll.json",
+          "sha256": "fc5f376a1a8b836796b73bb528ea68b37a7cbefbabacc38b214434f8db5df94f"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--observer-rejects-late-scroll-lock",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 335
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--observer-rejects-late-scroll-lock--rejected-unlock.json",
+          "sha256": "afc032669b8373c73ef67e723f643ebaa1b5fa58c146464c580925f854b406ea"
+        },
+        {
+          "file": "webkit-dark-phone--observer-rejects-late-scroll-lock--late-release.json",
+          "sha256": "544178fa0458ddab22f1bea82db70e480d043235da03d62e6a69b2d27cb2dd8d"
+        }
+      ]
+    }
+  ]
+}

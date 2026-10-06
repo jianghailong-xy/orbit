@@ -1,0 +1,13 @@
+{
+  "command": "bash scripts/worktree-overlay.sh",
+  "runner": "mcp__orbit__bg_run",
+  "bgJobId": "bgj_8e6055e973fd",
+  "cwd": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2",
+  "commit": "38947755e48ac979362db36f82bfcf966b527a75",
+  "webTree": "848736509199b4db94c3a30a20b43d5c202599a4",
+  "started": "2026-10-06T05:14:51Z",
+  "outputLastWritten": "2026-10-06T05:14:57.532777+00:00",
+  "exitCode": 0,
+  "outputSha256": "55d0b737a2f68013a960cfc93d9ed545b1f7ed55742a8bdd940073fc5c39bf34",
+  "outputBytes": 1160
+}

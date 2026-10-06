@@ -1,0 +1,109 @@
+{
+  "limitMs": 100,
+  "exitStartedAfterMs": 45.900000005960464,
+  "exitTransitionDuration": "0s",
+  "closedAfterMs": 49.5,
+  "closeRead": {
+    "phase": "dom-change",
+    "afterEscapeMs": 49.5,
+    "connected": false,
+    "hidden": false,
+    "overflow": [
+      "visible",
+      "hidden"
+    ],
+    "locked": true
+  },
+  "unlockedAfterMs": 51,
+  "readyAfterCloseMs": 1.5,
+  "firstRead": {
+    "phase": "first-read-after-hidden-and-focus",
+    "afterEscapeMs": 58.80000001192093,
+    "connected": false,
+    "hidden": false,
+    "overflow": [
+      "visible",
+      "auto"
+    ],
+    "locked": false
+  },
+  "finalRead": {
+    "phase": "final-read",
+    "afterEscapeMs": 58.80000001192093,
+    "connected": false,
+    "hidden": false,
+    "overflow": [
+      "visible",
+      "auto"
+    ],
+    "locked": false
+  },
+  "samples": [
+    {
+      "phase": "final-escape",
+      "afterEscapeMs": 0,
+      "connected": true,
+      "hidden": false,
+      "overflow": [
+        "visible",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "dom-change",
+      "afterEscapeMs": 45.900000005960464,
+      "connected": true,
+      "hidden": false,
+      "overflow": [
+        "visible",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "dom-change",
+      "afterEscapeMs": 49.5,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "visible",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "dom-change",
+      "afterEscapeMs": 51,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "visible",
+        "auto"
+      ],
+      "locked": false
+    },
+    {
+      "phase": "first-read-after-hidden-and-focus",
+      "afterEscapeMs": 58.80000001192093,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "visible",
+        "auto"
+      ],
+      "locked": false
+    },
+    {
+      "phase": "final-read",
+      "afterEscapeMs": 58.80000001192093,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "visible",
+        "auto"
+      ],
+      "locked": false
+    }
+  ]
+}

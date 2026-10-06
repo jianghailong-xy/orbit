@@ -1,0 +1,122 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --project chromium-light-desktop --project webkit-dark-phone --grep existing states|Dialog keeps
+
+[WebServer] (node:2080167) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 4 tests using 1 worker
+
+(node:2080255) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [chromium-light-desktop] › ui-migration/choices.browser.mjs:98:1 › empty, disabled, hover and focus choice surfaces match the existing states (12.9s)
+(node:2080579) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 [chromium-light-desktop] › ui-migration/choices.browser.mjs:390:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner (1.4s)
+(node:2080702) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  3 [webkit-dark-phone] › ui-migration/choices.browser.mjs:98:1 › empty, disabled, hover and focus choice surfaces match the existing states (10.1s)
+(node:2081128) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  4 [webkit-dark-phone] › ui-migration/choices.browser.mjs:390:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner (1.3s)
+
+
+  1) [chromium-light-desktop] › ui-migration/choices.browser.mjs:98:1 › empty, disabled, hover and focus choice surfaces match the existing states 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+    @@ -1,11 +1,11 @@
+      Object {
+        "control": Object {
+          "rows": Array [],
+          "surface": Object {
+            "backgroundColor": "rgba(0, 0, 0, 0.04)",
+    -       "borderColor": "rgb(217, 217, 217)",
+    +       "borderColor": "rgb(222, 224, 227)",
+            "borderRadius": "4px",
+            "borderStyle": "solid",
+            "borderWidth": "1px",
+            "boxShadow": "none",
+            "color": "rgba(0, 0, 0, 0.25)",
+
+      133 |   }
+      134 |   await attach(info, 'choice-states', measurements);
+    > 135 |   for (const values of Object.values(measurements)) expect(values.orbit).toEqual(values.antd);
+          |                                                                          ^
+      136 | });
+      137 |
+      138 | test('menu arrows, disabled items, submenu, checkbox and focus return work', async ({ page }, info) => {
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:135:74
+
+    Error Context: .choices-results/choices.browser.mjs-empty--b01ef-s-match-the-existing-states-chromium-light-desktop/error-context.md
+
+    attachment #15: trace (application/zip) ────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-empty--b01ef-s-match-the-existing-states-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-empty--b01ef-s-match-the-existing-states-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-dark-phone] › ui-migration/choices.browser.mjs:98:1 › empty, disabled, hover and focus choice surfaces match the existing states 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+    @@ -1,11 +1,11 @@
+      Object {
+        "control": Object {
+          "rows": Array [],
+          "surface": Object {
+            "backgroundColor": "rgba(255, 255, 255, 0.08)",
+    -       "borderColor": "rgb(91, 91, 108)",
+    +       "borderColor": "rgb(66, 66, 70)",
+            "borderRadius": "4px",
+            "borderStyle": "solid",
+            "borderWidth": "1px",
+            "boxShadow": "none",
+            "color": "rgba(255, 255, 255, 0.25)",
+
+      133 |   }
+      134 |   await attach(info, 'choice-states', measurements);
+    > 135 |   for (const values of Object.values(measurements)) expect(values.orbit).toEqual(values.antd);
+          |                                                                          ^
+      136 | });
+      137 |
+      138 | test('menu arrows, disabled items, submenu, checkbox and focus return work', async ({ page }, info) => {
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:135:74
+
+    Error Context: .choices-results/choices.browser.mjs-empty--b01ef-s-match-the-existing-states-webkit-dark-phone/error-context.md
+
+    attachment #15: trace (application/zip) ────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-empty--b01ef-s-match-the-existing-states-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-empty--b01ef-s-match-the-existing-states-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:98:1 › empty, disabled, hover and focus choice surfaces match the existing states 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:98:1 › empty, disabled, hover and focus choice surfaces match the existing states 
+  2 passed (28.3s)
+npm error Lifecycle script `test:ui-choices` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/choices.config.mjs --project chromium-light-desktop --project webkit-dark-phone --grep 'existing states|Dialog keeps'

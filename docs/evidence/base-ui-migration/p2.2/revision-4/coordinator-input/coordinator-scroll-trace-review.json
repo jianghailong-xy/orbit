@@ -1,0 +1,165 @@
+{
+  "traceSha256": "028f45ca780ad341f915ee65b8fdb7c22ba7d11449fe9416bc1ced12aa037608",
+  "events": [
+    {
+      "type": "before",
+      "callId": "call@168",
+      "startTime": 4996.303,
+      "title": "Expect \"not toBeVisible\"",
+      "class": "Frame",
+      "method": "expect",
+      "params": {
+        "selector": "internal:role=dialog[name=\"Share workspace\"s]",
+        "expression": "to.be.visible",
+        "expectedValue": {
+          "value": {
+            "v": "undefined"
+          },
+          "handles": []
+        },
+        "isNot": true,
+        "timeout": 15000
+      },
+      "stepId": "expect@60"
+    },
+    {
+      "type": "log",
+      "callId": "call@168",
+      "time": 4996.918,
+      "message": "Expect \"not toBeVisible\" getByRole('dialog', { name: 'Share workspace', exact: true }) with timeout 15000ms"
+    },
+    {
+      "type": "log",
+      "callId": "call@168",
+      "time": 4996.922,
+      "message": "waiting for getByRole('dialog', { name: 'Share workspace', exact: true })"
+    },
+    {
+      "type": "after",
+      "callId": "call@168",
+      "endTime": 4997.584
+    },
+    {
+      "type": "before",
+      "callId": "call@170",
+      "startTime": 4998.622,
+      "title": "Expect \"toBeFocused\"",
+      "class": "Frame",
+      "method": "expect",
+      "params": {
+        "selector": "internal:role=button[name=\"Open Dialog\"s]",
+        "expression": "to.be.focused",
+        "expectedValue": {
+          "value": {
+            "v": "undefined"
+          },
+          "handles": []
+        },
+        "isNot": false,
+        "timeout": 15000
+      },
+      "stepId": "expect@61"
+    },
+    {
+      "type": "log",
+      "callId": "call@170",
+      "time": 4999.292,
+      "message": "Expect \"toBeFocused\" getByRole('button', { name: 'Open Dialog', exact: true }) with timeout 15000ms"
+    },
+    {
+      "type": "log",
+      "callId": "call@170",
+      "time": 4999.296,
+      "message": "waiting for getByRole('button', { name: 'Open Dialog', exact: true })"
+    },
+    {
+      "type": "after",
+      "callId": "call@170",
+      "endTime": 5000.456
+    },
+    {
+      "type": "before",
+      "callId": "call@172",
+      "startTime": 5002.237,
+      "class": "Frame",
+      "method": "evaluateExpression",
+      "params": {
+        "expression": "() => [document.body, document.documentElement].some(node => /hidden|clip/.test(getComputedStyle(node).overflowY))",
+        "isFunction": true,
+        "arg": {
+          "value": {
+            "v": "undefined"
+          },
+          "handles": []
+        }
+      },
+      "stepId": "pw:api@62"
+    },
+    {
+      "type": "after",
+      "callId": "call@172",
+      "endTime": 5003.296,
+      "result": {
+        "value": {
+          "b": true
+        }
+      }
+    }
+  ],
+  "snapshots": [
+    {
+      "timestamp": 4995.486,
+      "name": null,
+      "bodyAttributes": [
+        {
+          "style": "overflow: hidden;"
+        }
+      ]
+    },
+    {
+      "timestamp": 4996.8,
+      "name": null,
+      "bodyAttributes": []
+    },
+    {
+      "timestamp": 4998.034,
+      "name": null,
+      "bodyAttributes": []
+    },
+    {
+      "timestamp": 4999.175,
+      "name": null,
+      "bodyAttributes": []
+    },
+    {
+      "timestamp": 5001.792,
+      "name": null,
+      "bodyAttributes": [
+        {
+          "style": "overflow: hidden;"
+        }
+      ]
+    },
+    {
+      "timestamp": 5002.972,
+      "name": null,
+      "bodyAttributes": [
+        {
+          "style": "overflow: hidden;"
+        }
+      ]
+    },
+    {
+      "timestamp": 5004.519,
+      "name": null,
+      "bodyAttributes": [
+        {
+          "style": ""
+        }
+      ]
+    }
+  ],
+  "librarySha256": "8f0150cbc228d9a3733f455bb24817a521f58ddc477bbaaee6232bc7621bcd0c",
+  "releaseExcerpt": "release = () => {\n    this.lockCount -= 1;\n    if (this.lockCount === 0 && this.restore) {\n      this.timeoutUnlock.start(0, this.unlock);\n    }\n  };\n  unlock = () => {\n    if (this.lockCount === 0 && this.restore) {\n      this.restore?.();\n      this.restore = null;\n    }\n  };\n  lock(referenceElement) {\n    if (this.lockCount === 0 || this.restore !== null) {\n      return;\n    }\n    const doc = ownerDocument(referenceElement)",
+  "conclusion": "Source uses zero-delay asynchronous unlock, and original trace clears body style immediately after failed read. This supports a transient observation race; exact scheduler causal order not reproduced independently. Final independent browser result remains a separate record."
+}
