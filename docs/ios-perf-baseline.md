@@ -893,9 +893,9 @@ docker run --rm -e ORBIT_PERF=1 -v "$PWD:/src" -w /src/src/macos/OrbitKit swift:
 ```bash
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 cd src/ios && xcodegen generate
-xcodebuild -scheme Orbit -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
-  -derivedDataPath /tmp/orbit-dd build
 S=<simulator-udid>
+xcodebuild -scheme Orbit -destination "platform=iOS Simulator,id=$S" \
+  -derivedDataPath /tmp/orbit-dd build
 xcrun simctl install $S /tmp/orbit-dd/Build/Products/Debug-iphonesimulator/Orbit.app
 DC=$(xcrun simctl get_app_container $S io.orbitd.app data)
 for i in 1 2 3 4 5; do
