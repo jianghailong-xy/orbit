@@ -1934,7 +1934,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // (one PENDING move per owner, task and pair of projects) and one new function + BEFORE UPDATE
       // trigger freezing the new column. 0155's guard is not replaced; no task, project,
       // acceptance or DONE fence object is named, and no row is written or backfilled.
-      '0386_project_handoff_move_request'],
+      '0386_project_handoff_move_request',
+      // `orbit login` through the browser (0388): one new table, pat_device_login, with its own
+      // CHECKs, indexes and one foreign key to `user` (ON DELETE CASCADE). No existing table,
+      // column, constraint, function, trigger or type is altered or dropped; no task, project,
+      // acceptance or DONE fence object is named, and no row is written.
+      '0388_pat_device_login'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
