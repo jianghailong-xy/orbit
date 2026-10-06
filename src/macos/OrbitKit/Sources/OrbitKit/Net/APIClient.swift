@@ -136,14 +136,15 @@ public final class APIClient: @unchecked Sendable {
 
     /// List one canonical lifecycle scope. During a rolling upgrade, retry the legacy query spelling
     /// if the new one is rejected. Older servers silently treat unknown Completed/Trash values as
-    /// Open, so a mismatched (or empty, for those two scopes) response also triggers the fallback.
+    /// Open, so a response holding rows of another scope also triggers the fallback. An empty one is
+    /// an answer: a project with nothing completed is common, and asking again under the old
+    /// spelling only doubled that read, on every poll. (A pre-Completed server with nothing Open
+    /// answers an empty list for Completed too, and keeps it.)
     public func listSessions(view: SessionView = .open,
                              runnerId: String? = nil, projectId: String? = nil) async throws -> [Session] {
         do {
             let sessions = try await listSessions(queryValue: view.queryValue, runnerId: runnerId, projectId: projectId)
-            if view == .open || (!sessions.isEmpty && sessions.allSatisfy({
-                $0.effectiveLifecycleState == view.lifecycleState
-            })) {
+            if view == .open || sessions.allSatisfy({ $0.effectiveLifecycleState == view.lifecycleState }) {
                 return sessions
             }
         } catch APIError.http(let status, _) where [400, 404, 422].contains(status) {
@@ -466,6 +467,24 @@ public final class APIClient: @unchecked Sendable {
         let result: TurnOffShareLinksResult = try await post("share-links/turn-off",
                                                              body: TurnOffShareLinksRequest(shareLinkIds: ids))
         return result.count
+    }
+
+    // MARK: personal access tokens — listed and revoked here, issued only on the web
+    // (docs/personal-access-token-design.md §6.5, §9)
+
+    /// Every token this account has issued, newest first — Active, Revoked and Expired alike — for
+    /// Settings → Access tokens. Never the token itself: the server keeps only its hash. Web parity:
+    /// `listAccessTokens`.
+    public func accessTokens() async throws -> [AccessToken] {
+        let list: AccessTokenList = try await get("access-tokens")
+        return list.tokens
+    }
+
+    /// Revoke one of this account's tokens at once; anything using it gets a 401 from then on.
+    /// Idempotent. Web parity: `revokeAccessToken`.
+    @discardableResult
+    public func revokeAccessToken(_ id: String) async throws -> RevokedAccessToken {
+        try await delete("access-tokens/\(id)")
     }
 
     // MARK: approvals
