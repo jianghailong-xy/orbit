@@ -1209,49 +1209,49 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'a provider\'s credit id inside a reset result, which a REFRESHED result stores as the reporting machine\'s own '
     + 'plan usage (codex-reset-relay.ts:211)',
   'POST /runner/claude-history-result body transcripts[].claudeSessionId':
-    'a transcript file on the reporting machine, stored as that machine\'s own history scan (runner-api.controller.ts:1706)',
+    'a transcript file on the reporting machine, stored as that machine\'s own history scan (runner-api.controller.ts:1707)',
   'POST /runner/sessions/:id/approvals body toolUseId':
-    'the engine\'s id for one tool call, a key only within the session the path names (runner-api.controller.ts:3866)',
+    'the engine\'s id for one tool call, a key only within the session the path names (runner-api.controller.ts:3867)',
   'POST /runner/sessions/:id/approvals body backgroundJobId':
     'the id the machine gave one of its own processes, stored on the approval of the session the path names '
-    + '(runner-api.controller.ts:3899)',
+    + '(runner-api.controller.ts:3900)',
   'POST /runner/sessions/:id/background-wake body wakeId':
     'the machine\'s key for one wake of one of its jobs, made into a turn key of the session the path names '
-    + '(runner-api.controller.ts:4093)',
+    + '(runner-api.controller.ts:4094)',
   'POST /runner/sessions/:id/background-wake body jobId':
     'the id the machine gave one of its own processes, looked up only among the session\'s own wakes '
     + '(background-job-wake.ts:147)',
   'POST /runner/sessions/:id/turn-complete body runtimeSessionId':
     'the engine\'s own id for its conversation, stored on the session the path names; the one reader that compared it '
-    + 'across accounts, the transcript import, compares within the account (sessions.service.ts:1446)',
+    + 'across accounts, the transcript import, compares within the account (sessions.service.ts:1449)',
   'POST /runner/sessions/:id/finalize body claudeSessionId':
     'the engine\'s own id for its conversation, under its older name, stored as the next field is '
-    + '(runner-api.controller.ts:6150)',
+    + '(runner-api.controller.ts:6151)',
   'POST /runner/sessions/:id/finalize body runtimeSessionId':
-    'the engine\'s own id for its conversation, stored on the session the path names (runner-api.controller.ts:6150)',
+    'the engine\'s own id for its conversation, stored on the session the path names (runner-api.controller.ts:6151)',
   'POST /runner/sessions/:id/complete body claudeSessionId':
-    'as finalize\'s: complete is finalize under another name (runner-api.controller.ts:6150)',
+    'as finalize\'s: complete is finalize under another name (runner-api.controller.ts:6151)',
   'POST /runner/sessions/:id/complete body runtimeSessionId':
-    'as finalize\'s: complete is finalize under another name (runner-api.controller.ts:6150)',
+    'as finalize\'s: complete is finalize under another name (runner-api.controller.ts:6151)',
   'POST /runner/sessions/:id/merge-result body operationId':
     'the merge attempt token the server minted for the session the path names, compared only with that locked row '
-    + '(runner-api.controller.ts:6549)',
+    + '(runner-api.controller.ts:6554)',
   'POST /runner/sessions/:id/merge-result body recovery.previewId':
-    'compared only with the recovery the session the path names has stored (runner-api.controller.ts:6577)',
+    'compared only with the recovery the session the path names has stored (runner-api.controller.ts:6582)',
   'POST /runner/sessions/:id/commit-result body operationId':
     'the commit attempt token the server minted for the session the path names, compared only with that locked row '
-    + '(runner-api.controller.ts:6784)',
+    + '(runner-api.controller.ts:6789)',
   // A run event's payload (RUNNER_OPAQUE_BODIES).
   'POST /runner/sessions/:id/events body events[].payload.sessionId':
     'an init event\'s engine conversation id, stored on the session the path names as its runtime id '
     + '(runtime-init.ts:17); see turn-complete\'s runtimeSessionId',
   'POST /runner/sessions/:id/events body events[].payload.id':
-    'the engine\'s id for one tool call, matched only within the session the path names (runner-api.controller.ts:5722)',
+    'the engine\'s id for one tool call, matched only within the session the path names (runner-api.controller.ts:5723)',
   'POST /runner/sessions/:id/events body events[].payload.toolUseId':
-    'the engine\'s id for one tool call, matched only within the session the path names (runner-api.controller.ts:5745)',
+    'the engine\'s id for one tool call, matched only within the session the path names (runner-api.controller.ts:5746)',
   'POST /runner/sessions/:id/events body events[].payload.parentToolUseId':
     'the engine\'s id for the tool call a sub-agent\'s event belongs to, read only to tell its text from the main '
-    + 'conversation\'s (runner-api.controller.ts:5548)',
+    + 'conversation\'s (runner-api.controller.ts:5549)',
 
   // ── sessions ────────────────────────────────────────────────────────────────────────────────────
   'POST /runner/sessions/import header x-orbit-session-id':
@@ -1261,7 +1261,7 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   // ── tasks ───────────────────────────────────────────────────────────────────────────────────────
   'POST /runner/tasks/:id/execute body triggerId':
     'an idempotency key the caller makes up for one press: it keys only the caller\'s own run receipt '
-    + '(tasks.service.ts:12761)',
+    + '(tasks.service.ts:12768)',
   'POST /runner/tasks/:taskId/owner-confirmation body requestId':
     'never read: this door refuses every caller before reading anything (task-owner-confirmation.service.ts:205)',
   'POST /runner/tasks/:taskId/owner-confirmation body reviewRecordId':
@@ -1271,9 +1271,9 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
 
   // ── projects ────────────────────────────────────────────────────────────────────────────────────
   'POST /runner/projects body coordinatorAgentId':
-    'the account owner\'s to set: refused to every machine before anything is read (runner-projects.controller.ts:600)',
+    'the account owner\'s to set: refused to every machine before anything is read (runner-projects.controller.ts:603)',
   'PATCH /runner/projects/:id body coordinatorAgentId':
-    'the account owner\'s to set: refused to every machine before anything is read (runner-projects.controller.ts:600)',
+    'the account owner\'s to set: refused to every machine before anything is read (runner-projects.controller.ts:603)',
   'POST /runner/projects body acceptanceCriteriaItems[].evidenceTaskId':
     'a removed field: any value is refused by validation, before the handler (projects/dto.ts:171)',
   'PATCH /runner/projects/:id body acceptanceCriteriaItems[].evidenceTaskId':
@@ -1283,12 +1283,12 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     + 'owner first (project-acceptance.service.ts:868)',
   'POST /runner/projects/:id/owner-questions body clientQuestionId':
     'the coordinator\'s own key for one question, a dedupe key within the project the path names '
-    + '(project-open-item.service.ts:677)',
+    + '(project-open-item.service.ts:686)',
 
   // ── the wiki: what a Record body carries (RUNNER_OPAQUE_BODIES) ─────────────────────────────────────
   'POST /runner/wiki/spaces/:id/articles/:slug body articles[].entries[]':
     'never looked up: an article keeps only the ids that are entries of the topic being written, and drops the rest '
-    + '(wiki-articles.ts:1027)',
+    + '(wiki-articles.ts:1028)',
   'POST /runner/wiki/spaces/:id/plan/drafts body docs[].sections[].sources.sessions.projects[]':
     'looked up among the account\'s own projects only; one that is not is refused as no project of this account '
     + '(wiki-plan.ts:1159)',
@@ -1312,7 +1312,7 @@ export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly str
   'POST /runner/integration-jobs/:jobId/result body errorDetail.*': {
     reads: [],
     reading: 'the runner\'s own account of a failure, stored as it is on the job it holds and never dereferenced '
-      + '(integration-job-relay.ts:890)',
+      + '(integration-job-relay.ts:896)',
   },
   'POST /runner/sessions/:id/source/pin body refusal.detail.*': {
     reads: [],
@@ -1321,7 +1321,7 @@ export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly str
   'POST /runner/sessions/:id/approvals body input': {
     reads: [],
     reading: 'the tool call\'s own input, shown on the approval card; what it is read for — a project-create card\'s '
-      + 'reviews and a task-create preview — is read under the session\'s own owner (runner-api.controller.ts:3878, :3975)',
+      + 'reviews and a task-create preview — is read under the session\'s own owner (runner-api.controller.ts:3879, :3976)',
   },
   'POST /runner/sessions/:id/events body events[].payload.*': {
     reads: [
@@ -1335,7 +1335,7 @@ export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly str
     ],
     reading: 'a run event\'s payload as the engine wrote it; what the handler reads of it by id is the task a '
       + '`task_changed` names, the turn a `user_delivery` acknowledges, the init event\'s engine id and the tool-call '
-      + 'ids (runner-api.controller.ts:5548, :5722, :5745)',
+      + 'ids (runner-api.controller.ts:5549, :5723, :5746)',
   },
   'POST /runner/tasks/:taskId/owner-confirmation/review body *': {
     reads: ['body requestId'],
@@ -1348,15 +1348,15 @@ export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly str
   },
   'POST /runner/sessions/:id/turns body expectReply': {
     reads: [],
-    reading: 'a flag, refused unless it is a boolean (session-request.ts:131)',
+    reading: 'a flag, refused unless it is a boolean (sessions/session-request.ts:131)',
   },
   'POST /runner/sessions/:id/turns body replyOptions': {
     reads: [],
-    reading: 'the reply\'s option labels: text, no id (session-request.ts:143)',
+    reading: 'the reply\'s option labels: text, no id (sessions/session-request.ts:143)',
   },
   'POST /runner/sessions/:id/turns body replyWithinSeconds': {
     reads: [],
-    reading: 'a number of seconds (session-request.ts:144)',
+    reading: 'a number of seconds (sessions/session-request.ts:144)',
   },
   'POST /runner/workspaces body (the body)': {
     reads: ['body runnerId'],
@@ -1376,7 +1376,7 @@ export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly str
   },
   'POST /runner/wiki/spaces/:id/articles/:slug body *': {
     reads: ['body articles[].entries[]'],
-    reading: 'an article as the local model wrote it; the ids are the entries it was written from (wiki-articles.ts:1027)',
+    reading: 'an article as the local model wrote it; the ids are the entries it was written from (wiki-articles.ts:1028)',
   },
   'POST /runner/wiki/spaces/:id/plan/drafts body *': {
     reads: ['body docs[].sections[].sources.sessions.projects[]'],
@@ -1392,7 +1392,7 @@ export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly str
   },
   'POST /runner/wiki/spaces/:id/plan/job/finish body *': {
     reads: [],
-    reading: 'an outcome, a version of the space\'s own plan and the job\'s report — no id of anything else (wiki-plan.ts:1805)',
+    reading: 'an outcome, a version of the space\'s own plan and the job\'s report — no id of anything else (wiki-plan.ts:1804)',
   },
   'POST /runner/wiki/spaces/:id/maintenance/docs/withdrawals body *': {
     reads: [],
@@ -1466,10 +1466,10 @@ export const SHARED_BY_HAND: Readonly<Record<string, string>> = {
     + '(share-links.service.ts:281); `limit`, `maxPayload` and `preview` are numbers and a flag',
   'GET /shared/:token/events':
     'a page of the link\'s own session — `before` and `limit` are numbers, and any link that is not a session\'s is '
-    + 'the one 404 (shared.controller.ts:194)',
+    + 'the one 404 (shared.controller.ts:196)',
   'GET /shared/:token/events/:seq':
     'a position in the link\'s own session\'s transcript, not an object: read WHERE session_id = the link\'s '
-    + '(sessions.service.ts:3717)',
+    + '(sessions.service.ts:3719)',
 };
 
 /**
