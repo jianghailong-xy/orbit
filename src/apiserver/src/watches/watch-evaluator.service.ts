@@ -167,22 +167,32 @@ const SESSION_HINT_EVENTS: ReadonlySet<string> = new Set([
 ]);
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** The key `RealtimeService.publishForUser` publishes one account's events on: `user:<ownerId>`. */
+const OWNER_KEY = /^user:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
 /**
  * The exact rows an event names, or null. Only identities are taken from it — the session it was
  * published on, the task ids a task.changed lists — and nothing it says about them. A task.changed
  * that asks for a resync names no row, so it hints nothing and the sweep answers it.
+ *
+ * A task.changed is the control plane's own announcement, published on the account's key
+ * (`publishForUser`), and its ids are matched among that account's watches only (`ownerId`). One on
+ * a session's key is that session's machine speaking — a runner re-publishes every event of its
+ * batches on its session — and it names nothing a watch may be woken by: least of all another
+ * account's, whose task ids a machine could name.
  */
 export function watchHintFor(
   runId: string,
   event: NormalizedRunEvent,
-): { kind: WatchTargetKind; ids: string[] } | null {
+): { kind: WatchTargetKind; ids: string[]; ownerId?: string } | null {
   if (event.type === RunEventType.TASK_CHANGED) {
+    const ownerId = OWNER_KEY.exec(runId)?.[1];
+    if (!ownerId) return null;
     const payload = (event.payload ?? {}) as { taskId?: unknown; taskIds?: unknown };
     const ids = [...(Array.isArray(payload.taskIds) ? payload.taskIds : []), payload.taskId].filter(
       (id): id is string => typeof id === 'string' && UUID.test(id),
     );
-    return ids.length > 0 ? { kind: 'TASK', ids: [...new Set(ids)] } : null;
+    return ids.length > 0 ? { kind: 'TASK', ids: [...new Set(ids)], ownerId } : null;
   }
   return SESSION_HINT_EVENTS.has(event.type) && UUID.test(runId) ? { kind: 'SESSION', ids: [runId] } : null;
 }
@@ -301,7 +311,7 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
     this.loop = 'RUNNING';
     this.hints = this.realtime.localPublications().subscribe(({ runId, event }) => {
       const hint = watchHintFor(runId, event);
-      if (hint) void this.hint(hint.kind, hint.ids);
+      if (hint) void this.hint(hint.kind, hint.ids, hint.ownerId);
     });
     this.kick();
   }
@@ -407,9 +417,9 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** A hint, applied (see `markDue`). A hint that fails is a hint that was lost, which the sweep absorbs. */
-  async hint(kind: WatchTargetKind, resourceIds: readonly string[]): Promise<number> {
+  async hint(kind: WatchTargetKind, resourceIds: readonly string[], ownerId?: string): Promise<number> {
     try {
-      return await this.markDue(kind, resourceIds);
+      return await this.markDue(kind, resourceIds, ownerId);
     } catch (error) {
       this.log.warn(`watch hint failed: ${error instanceof Error ? error.message : error}`);
       return 0;
@@ -434,7 +444,7 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
    * would only run a second evaluation beside that one. The asking stops when the loop stops, and once
    * a reconciliation period has passed, by which time the sweep has come round.
    */
-  async markDue(kind: WatchTargetKind, resourceIds: readonly string[]): Promise<number> {
+  async markDue(kind: WatchTargetKind, resourceIds: readonly string[], ownerId?: string): Promise<number> {
     if (resourceIds.length === 0) return 0;
     let asked: Prisma.Sql = Prisma.sql`
       SELECT DISTINCT "watch_id" AS "id", NULL::text AS "seen" FROM "watch_target"
@@ -448,6 +458,7 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
         WITH "asked" AS (${asked}), "hinted" AS (
           SELECT w."id", w."last_evaluated_at"::text AS "last", a."seen" FROM "watch" w JOIN "asked" a ON a."id" = w."id"
           WHERE w."state" = 'ACTIVE' AND w."next_evaluate_at" > now()
+            ${ownerId === undefined ? Prisma.empty : Prisma.sql`AND w."owner_id" = ${ownerId}::uuid`}
         ), "free" AS (
           SELECT "id" FROM "watch"
           WHERE "id" IN (SELECT "id" FROM "hinted") AND "state" = 'ACTIVE' AND "next_evaluate_at" > now()
