@@ -468,6 +468,24 @@ public final class APIClient: @unchecked Sendable {
         return result.count
     }
 
+    // MARK: personal access tokens — listed and revoked here, issued only on the web
+    // (docs/personal-access-token-design.md §6.5, §9)
+
+    /// Every token this account has issued, newest first — Active, Revoked and Expired alike — for
+    /// Settings → Access tokens. Never the token itself: the server keeps only its hash. Web parity:
+    /// `listAccessTokens`.
+    public func accessTokens() async throws -> [AccessToken] {
+        let list: AccessTokenList = try await get("access-tokens")
+        return list.tokens
+    }
+
+    /// Revoke one of this account's tokens at once; anything using it gets a 401 from then on.
+    /// Idempotent. Web parity: `revokeAccessToken`.
+    @discardableResult
+    public func revokeAccessToken(_ id: String) async throws -> RevokedAccessToken {
+        try await delete("access-tokens/\(id)")
+    }
+
     // MARK: approvals
 
     public func approvals(sessionID: String, status: String = "PENDING") async throws -> [ApprovalInfo] {

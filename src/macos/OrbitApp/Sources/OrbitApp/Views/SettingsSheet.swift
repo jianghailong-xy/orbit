@@ -76,6 +76,7 @@ private struct SettingsPageView: View {
         case .providers:      ProvidersSettingsPage()
         case .notifications:  NotificationSettingsPage()
         case .sharedLinks:    SharedLinksSettingsPage()
+        case .accessTokens:   AccessTokensSettingsPage()
         case .changePassword: ChangePasswordPage()
         case .admin:          AdminUsersView(rowNavigation: .push)
         }
@@ -157,6 +158,7 @@ struct SettingsHomeView: View {
         .task { alertsAllowed = await model.notifications.alertsAllowed() }
         .task { await model.runners?.load() }
         .task { await model.sharedLinks?.load() }
+        .task { await model.accessTokens?.load() }
         // Back from the system's Settings, where the card sends you: say what it is now.
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
@@ -258,7 +260,7 @@ struct SettingsHomeView: View {
             NavigationLink(value: NavNode.settingsRunners) {
                 LabeledContent { if let value = runnersValue { Text(value) } } label: { label }
             }
-        case .providers, .notifications, .sharedLinks, .changePassword, .admin:
+        case .providers, .notifications, .sharedLinks, .accessTokens, .changePassword, .admin:
             if let page = SettingsHome.page(row) {
                 NavigationLink(value: NavNode.settingsPage(page)) {
                     LabeledContent { if let value = value(of: row) { Text(value) } } label: { label }
@@ -279,6 +281,8 @@ struct SettingsHomeView: View {
             return SettingsHome.notificationsValue(allowed: alertsAllowed)
         case .sharedLinks:
             return model.sharedLinks?.activeCount.map(SettingsHome.sharedLinksValue)
+        case .accessTokens:
+            return model.accessTokens?.activeCount.map(SettingsHome.accessTokensValue)
         default:
             return nil
         }
@@ -1175,6 +1179,122 @@ private struct SharedLinksSettingsPage: View {
             return
         }
         show(SharedLinksList.turnedOff(count))
+    }
+
+    /// A line over the list's foot for a moment — the app's toast lives under this sheet.
+    private func show(_ text: String) {
+        notice = text
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            if notice == text { notice = nil }
+        }
+    }
+}
+
+// MARK: - Access tokens
+
+/// Every personal access token this account has issued, by whether it still works — the web page's
+/// tabs, lines and words. A token that works is revoked by a swipe or from its context menu, which
+/// asks first: anything using it stops working at once. A new token is issued on the web only
+/// (docs/personal-access-token-design.md §9), which the page's footer says.
+private struct AccessTokensSettingsPage: View {
+    @Environment(AppModel.self) private var model
+
+    @State private var tab: AccessTokensList.Tab = .active
+    @State private var pendingRevoke: AccessToken?
+    @State private var notice: String?
+
+    var body: some View {
+        let tokens = model.accessTokens?.tokens ?? []
+        let shown = AccessTokensList.tokens(tokens, in: tab)
+        List {
+            Section {
+                Picker(AccessTokensList.title, selection: $tab) {
+                    ForEach(AccessTokensList.Tab.allCases) { tab in
+                        Text("\(tab.label) \(AccessTokensList.tokens(tokens, in: tab).count)").tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+            } footer: {
+                Text(AccessTokensList.subtitle + " " + AccessTokensList.issuedOnTheWeb)
+            }
+
+            Section {
+                switch LoadFailureLogic.presentation(model.accessTokens?.loadState ?? ListLoadState(),
+                                                     isEmpty: tokens.isEmpty) {
+                case .loading:
+                    HStack { Spacer(); ProgressView(); Spacer() }
+                case .failed:
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(model.accessTokens?.errorText ?? AccessTokensList.couldNotLoad)
+                            .foregroundStyle(.secondary)
+                        Button(SharePanelCopy.retry) { Task { await model.accessTokens?.load() } }
+                    }
+                case .empty, .content:
+                    if shown.isEmpty {
+                        Text(tab.empty).foregroundStyle(.secondary)
+                    }
+                    ForEach(shown) { token in
+                        row(token)
+                    }
+                }
+            }
+        }
+        .navigationTitle(AccessTokensList.title)
+        .task { await model.accessTokens?.load() }
+        .refreshable { await model.accessTokens?.load() }
+        .confirmationDialog(pendingRevoke.map(AccessTokensList.revokeTitle) ?? AccessTokensList.revoke,
+                            isPresented: revokeAsked, titleVisibility: .visible,
+                            presenting: pendingRevoke) { token in
+            Button(AccessTokensList.revoke, role: .destructive) { Task { await revoke(token) } }
+            Button(SharePanelCopy.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(AccessTokensList.revokeDetail)
+        }
+        .overlay(alignment: .bottom) {
+            if let notice {
+                Text(notice)
+                    .font(.orbitListSubtitle.weight(.semibold))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.bottom, 24)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.default, value: notice)
+    }
+
+    private var revokeAsked: Binding<Bool> {
+        Binding(get: { pendingRevoke != nil }, set: { if !$0 { pendingRevoke = nil } })
+    }
+
+    private func row(_ token: AccessToken) -> some View {
+        AccessTokenRow(token: token, now: Date())
+            .opacity(model.accessTokens?.revokingID == token.id ? 0.5 : 1)
+            .swipeActions(edge: .trailing) {
+                if AccessTokensList.canRevoke(token) {
+                    Button(AccessTokensList.revoke, role: .destructive) { pendingRevoke = token }
+                }
+            }
+            .contextMenu {
+                if AccessTokensList.canRevoke(token) {
+                    Button(role: .destructive) { pendingRevoke = token } label: {
+                        Label(AccessTokensList.revoke, systemImage: "xmark.circle")
+                    }
+                }
+            }
+    }
+
+    private func revoke(_ token: AccessToken) async {
+        guard let accessTokens = model.accessTokens else { return }
+        if let reason = await accessTokens.revoke(token) {
+            show(AccessTokensList.notRevoked(reason))
+        } else {
+            show(AccessTokensList.revoked)
+        }
     }
 
     /// A line over the list's foot for a moment — the app's toast lives under this sheet.
