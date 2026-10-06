@@ -359,7 +359,7 @@ export class RunnerProjectsController {
    * back and finds them unmoved is looking at a hold rather than at a lost write.
    */
   @Patch('projects/:id')
-  async updateProject(
+  updateProject(
     @CurrentRunner() runner: Runner,
     @Param('id', PublicIdPipe) id: string,
     // The session this edit is being made from, read for the acceptance-criteria HUMAN_ONLY
@@ -370,10 +370,7 @@ export class RunnerProjectsController {
     @Body() dto: UpdateProjectDto,
   ) {
     RunnerProjectsController.refuseGovernance(dto);
-    // Named, it is this account's own session or the edit is refused: the id is written as the
-    // edit's author. Not named — or named empty — is the headless path, as before.
-    const acting = sessionId?.trim() ? await this.projects.actingSessionOf(runner.ownerId, sessionId) : sessionId;
-    return this.projects.update(runner.ownerId, id, dto, acting);
+    return this.projects.update(runner.ownerId, id, dto, sessionId);
   }
 
   /**

@@ -1271,9 +1271,9 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
 
   // ── projects ────────────────────────────────────────────────────────────────────────────────────
   'POST /runner/projects body coordinatorAgentId':
-    'the account owner\'s to set: refused to every machine before anything is read (runner-projects.controller.ts:603)',
+    'the account owner\'s to set: refused to every machine before anything is read (runner-projects.controller.ts:600)',
   'PATCH /runner/projects/:id body coordinatorAgentId':
-    'the account owner\'s to set: refused to every machine before anything is read (runner-projects.controller.ts:603)',
+    'the account owner\'s to set: refused to every machine before anything is read (runner-projects.controller.ts:600)',
   'POST /runner/projects body acceptanceCriteriaItems[].evidenceTaskId':
     'a removed field: any value is refused by validation, before the handler (projects/dto.ts:171)',
   'PATCH /runner/projects/:id body acceptanceCriteriaItems[].evidenceTaskId':
