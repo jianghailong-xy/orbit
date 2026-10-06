@@ -66,7 +66,9 @@ import {
 } from '../projects/task-aggregation-writer';
 import {
   INTEGRATION_ITEM_KINDS,
+  SESSION_ENDING_SELECT,
   recordTaskFailure,
+  sessionHasEnded,
 } from '../projects/project-open-item';
 import { projectAwaitingStart, projectNotStartedRefusal } from '../projects/project-started';
 import {
@@ -113,8 +115,15 @@ import {
 } from '../projects/project-handoff.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { storeDerivedProjectStatus } from '../projects/project-done-derived';
+import { completionEvidenceRevisedFact } from '../projects/completion-input';
+import { criterionStandingRefusal, quotedCriterion } from './task-evidence-decision';
 import {
-} from '../projects/completion-input';
+  arrivalMessage,
+  movedEvidenceTurnId,
+  resubmitMessage,
+  resubmitStandard,
+  type MovedEvidence,
+} from './moved-task-evidence';
 import {
   planPreflightRefusalBody,
   planPreflightRefusals,
@@ -6164,6 +6173,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * person's, naming the request. A run in progress goes with the task (the same decision), so its
    * live claim does not refuse the move: 0389 lets exactly this transaction, named by the
    * transaction-local `orbit.move_task_handoff_id`, through `task_claimed_project_move_guard`.
+   * So does evidence nobody has decided, which the target decides from then on: handed over after
+   * the commit (`handOverMovedEvidence`).
    */
   async applyMoveApproval(
     ownerId: string,
@@ -6359,6 +6370,181 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     await this.deliverTaskExceptions([taskId]);
     await this.openItems?.resolveByFact([taskId]);
     await this.openItems?.deliverForTasks([taskId]);
+    // And the evidence it brought along, which the project it is in now decides (the same decision
+    // that moves the run with it): handed to that project's decider, or — when the move left it
+    // quoting a standard the task is no longer held to — sent back to be filed again.
+    await this.handOverMovedEvidence(ownerId, {
+      taskId,
+      fromProjectId: from,
+      toProjectId: to,
+      withdrawnCriterionDefinitionId: moved.criterionDefinitionId,
+    });
+  }
+
+  /**
+   * A confirmed move's evidence hand-over (`moved-task-evidence.ts` says what and why), after the
+   * move's commit and from the rows it committed, the way every other delivery of that edge is.
+   *
+   * Nothing is said when there is nothing undecided: a task that is not EVIDENCE_JUDGMENT, one that
+   * has settled, one with no evidence, and one whose latest revision is answered. Nor when the task
+   * is no longer where this move put it — a later move hands over its own.
+   *
+   * A revision the decision door would take in the target is routed through the evidence door again,
+   * keyed with the target (`completionEvidenceRevisedFact`'s `movedFromProjectId`). One it would
+   * refuse is sent back: each live run of the task is told what to quote instead, written into the
+   * turn it is running where it can be, and an Automatic target's live coordinator is told the task
+   * arrived owing a new revision. Each message is keyed by the revision and the target, so a repeat
+   * says nothing twice; neither revives a conversation that has ended.
+   *
+   * Like every delivery on this edge, a failure is logged and never reported as a failed move: the
+   * move committed. What a failed hand-over leaves is the state before this unit existed — the
+   * revision on the target owner's card, or on the run's own waiting-on-you list.
+   */
+  private async handOverMovedEvidence(
+    ownerId: string,
+    move: {
+      taskId: string;
+      fromProjectId: string;
+      toProjectId: string;
+      withdrawnCriterionDefinitionId: string | null;
+    },
+  ): Promise<void> {
+    try {
+      const task = await this.prisma.task.findFirst({
+        where: {
+          id: move.taskId,
+          ownerId,
+          projectId: move.toProjectId,
+          completionCriterion: 'EVIDENCE_JUDGMENT',
+          status: { in: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS] },
+        },
+        select: {
+          id: true,
+          title: true,
+          projectId: true,
+          criterionDefinitionId: true,
+          criterionRevision: true,
+          acceptanceCriteria: true,
+          completionEvidence: {
+            orderBy: { revision: 'desc' },
+            take: 1,
+            select: {
+              id: true,
+              revision: true,
+              criterionRevision: true,
+              evidenceDigest: true,
+              evidence: true,
+              decisions: { select: { id: true }, take: 1 },
+            },
+          },
+        },
+      });
+      const [latest] = task?.completionEvidence ?? [];
+      if (!task || !latest || latest.decisions.length > 0) return;
+
+      // The door's own predicate, asked of the task as it stands in the target.
+      if ((await criterionStandingRefusal(this.prisma, task, latest.evidence)) === null) {
+        await this.completionInputs?.routeCompletionEvidence(completionEvidenceRevisedFact({
+          projectId: move.toProjectId,
+          taskId: task.id,
+          revision: latest.revision.toString(),
+          criterionRevision: latest.criterionRevision,
+          evidenceDigest: latest.evidenceDigest,
+          movedFromProjectId: move.fromProjectId,
+        }));
+        return;
+      }
+
+      const projects = await this.prisma.project.findMany({
+        where: { id: { in: [move.fromProjectId, move.toProjectId] }, ownerId },
+        select: {
+          id: true,
+          title: true,
+          coordinatorEnabled: true,
+          coordinatorSessionId: true,
+          coordinatorSession: { select: SESSION_ENDING_SELECT },
+        },
+      });
+      const from = projects.find((project) => project.id === move.fromProjectId);
+      const to = projects.find((project) => project.id === move.toProjectId);
+      if (!from || !to) return;
+      const declared = task.criterionDefinitionId
+        ? await this.prisma.projectAcceptanceCriterionDefinition.findFirst({
+            where: { id: task.criterionDefinitionId, projectId: move.toProjectId },
+            select: { id: true, text: true },
+          })
+        : null;
+      const moved: MovedEvidence = {
+        taskId: task.id,
+        title: task.title,
+        revision: latest.revision.toString(),
+        from: { id: from.id, title: from.title },
+        to: { id: to.id, title: to.title },
+        quoted: quotedCriterion(latest.evidence),
+        withdrawnCriterionDefinitionId: move.withdrawnCriterionDefinitionId,
+        standard: resubmitStandard({ id: task.id, acceptanceCriteria: task.acceptanceCriteria, declared }),
+      };
+
+      const runs = (await this.prisma.session.findMany({
+        where: { ownerId, taskId: task.id },
+        select: { id: true, ...SESSION_ENDING_SELECT },
+        orderBy: { id: 'asc' },
+      })).filter((run) => !sessionHasEnded(run));
+      const told: string[] = [];
+      for (const run of runs) {
+        if (await this.tellMovedEvidence(ownerId, run.id, {
+          clientTurnId: movedEvidenceTurnId('run', latest.id, move.toProjectId),
+          content: resubmitMessage(moved),
+          steerIfLive: true,
+        })) told.push(run.id);
+      }
+      // The coordinator of an Automatic target, as the evidence door itself would reach it: a project
+      // whose switch is off is told no evidence fact, and an ended conversation is not revived.
+      if (to.coordinatorEnabled && to.coordinatorSessionId && to.coordinatorSession
+        && !sessionHasEnded(to.coordinatorSession)) {
+        await this.tellMovedEvidence(ownerId, to.coordinatorSessionId, {
+          clientTurnId: movedEvidenceTurnId('coordinator', latest.id, move.toProjectId),
+          content: arrivalMessage(moved, told),
+          steerIfLive: false,
+        });
+      }
+    } catch (error) {
+      this.logger.warn(`evidence of task ${move.taskId} was not handed over to project `
+        + `${move.toProjectId} after its move: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  /**
+   * One message of the hand-over above, as a platform turn under a key derived from the revision.
+   * True when it is on the conversation; false when the conversation refused it for a state of the
+   * world (gone, ended, busy being written, unable to run) — the refusals every delivery here takes
+   * as such. A fault is raised to the caller, which logs it.
+   */
+  private async tellMovedEvidence(
+    ownerId: string,
+    sessionId: string,
+    turn: { clientTurnId: string; content: string; steerIfLive: boolean },
+  ): Promise<boolean> {
+    try {
+      await this.sessions.createTurn(ownerId, sessionId, {
+        clientTurnId: turn.clientTurnId,
+        content: turn.content,
+        intent: 'NEXT_TURN',
+      }, turn.steerIfLive ? { steerIfLive: true } : undefined);
+      return true;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException
+        || error instanceof ConflictException
+        || error instanceof ForbiddenException
+        || error instanceof BadRequestException
+      ) {
+        this.logger.log(`moved-evidence message to session ${sessionId} was not written: `
+          + `${error.message}`);
+        return false;
+      }
+      throw error;
+    }
   }
 
   /**
