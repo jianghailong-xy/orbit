@@ -62,3 +62,40 @@ describe('Activity', () => {
     expect(phone).toContain('.wk-act > .wk-status-row .project-integration-facts { display: block; line-height: 1.6; }');
   });
 });
+
+/**
+ * The home on a phone (design §12.3.1, mocks 30 ③ and 31 ①): the head, the line under it, the search, then
+ * the content — the principles, the documents by category, and Browse by category · A–Z index, which is the
+ * phone's alone. Nothing of how the wiki is kept stands on it any more, so the phone block has no rule for
+ * the old blocks: no status row under the head, no two columns to stack. The documents are the plan page's
+ * phone rows, which the home draws at every width.
+ */
+describe('the home on a phone', () => {
+  it('keeps the head, the line under it and the search in that order, the content after them', () => {
+    expect(phone).toContain('.wk-page > .wk-title-row { order: 0; }');
+    expect(phone).toContain('.wk-page > .wk-search { order: 2; margin-top: 12px; height: 40px; }');
+    expect(phone).toContain('.wk-page > .wk-layout, .wk-page > .wk-body { order: 3; }');
+    // The line comes right after the head in the page, so it needs no order of its own; the status row is
+    // Activity's, under its own title.
+    expect(css).toContain('.wk-home-state { margin-top: 6px;');
+    expect(phone).not.toContain('.wk-home-state');
+    expect(phone).not.toMatch(/\.wk-page > \.wk-status-row[ .{]/);
+  });
+
+  it('has no rule for the blocks that went to Activity', () => {
+    expect(phone).not.toContain('.wk-cols');
+  });
+
+  it('ends on Browse by category · A–Z index, which a desktop has atop the directory instead', () => {
+    expect(css).toContain('.wk-home-more { display: none;');
+    // Written as the block's other rules are, so it outranks the base rule wherever the sheet puts that.
+    expect(phone).toContain('.wk-home > .wk-home-more { display: flex; }');
+  });
+
+  it('draws a document as the plan page’s phone row on every width, its lead a shade darker than a question', () => {
+    expect(css).toContain('\n.wk-pl-doc.phone { grid-template-columns: 34px minmax(0, 1fr) 12px;');
+    expect(css).not.toContain('\n  .wk-pl-doc.phone {');
+    expect(css).toContain('.wk-pl-doc .main > .q.lead { color: var(--text-2); }');
+    expect(css).toContain('.wk-pl-doc.todo .main > .t { color: var(--text-3); }');
+  });
+});
