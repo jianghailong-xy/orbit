@@ -105,6 +105,15 @@ for (const step of plan.steps) {
       if (r) for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await send('Input.dispatchMouseEvent', { type, x: r.x, y: r.y, button: 'left', clickCount: 1 });
       await sleep(step.ms ?? 1200);
     }
+    else if (step.realClickText) {
+      const r = await evaluate(`(() => { const roots = [...document.querySelectorAll(${JSON.stringify(step.within ?? 'body')})].filter((el) => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden');
+        const all = roots.flatMap((root) => [...root.querySelectorAll('*')]).filter((el) => el.textContent.trim() === ${JSON.stringify(step.realClickText)} && el.getClientRects().length);
+        const el = all.sort((a, b) => a.querySelectorAll('*').length - b.querySelectorAll('*').length)[0]; if (!el) return null;
+        const b = el.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; })()`);
+      console.log('realClickText', step.realClickText, '=>', JSON.stringify(r));
+      if (r) for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await send('Input.dispatchMouseEvent', { type, x: r.x, y: r.y, button: 'left', clickCount: 1 });
+      await sleep(step.ms ?? 1000);
+    }
     else if (step.sleep) await sleep(step.sleep);
     else if (step.dump) writeFileSync(`${OUT}/${step.dump}.txt`, await evaluate('document.body.innerText'));
     else if (step.shot) {

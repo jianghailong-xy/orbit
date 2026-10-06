@@ -1,20 +1,20 @@
-==> stub ready on 127.0.0.1:8765 (pid 3788, after 2s); [{"id": "a1", "name": "orbit", "provider": "deepseek-harness", "lastProvider": "
-Test Case '-[DshProbeUITests.DshShotTests test1PickEngine]' passed (136.928 seconds).
-Test Case '-[DshProbeUITests.DshShotTests test2ModeAndModelMenus]' passed (110.800 seconds).
-Test Case '-[DshProbeUITests.DshShotTests test3OperationChain]' passed (74.500 seconds).
-Test Case '-[DshProbeUITests.DshShotTests test4ChainStatesDark]' passed (55.657 seconds).
-Test Case '-[DshProbeUITests.DshShotTests test5Unavailable]' passed (164.618 seconds).
-	 Executed 5 tests, with 0 failures (0 unexpected) in 542.503 (542.519) seconds
-	 Executed 5 tests, with 0 failures (0 unexpected) in 542.503 (542.521) seconds
-	 Executed 5 tests, with 0 failures (0 unexpected) in 542.503 (542.525) seconds
+==> stub ready on 127.0.0.1:8765 (pid 3547, after 2s); [{"id": "a1", "name": "orbit", "provider": "deepseek-harness", "lastProvider": "
+Test Case '-[DshProbeUITests.DshShotTests test1PickEngine]' passed (116.372 seconds).
+Test Case '-[DshProbeUITests.DshShotTests test2ModeAndModelMenus]' passed (87.970 seconds).
+Test Case '-[DshProbeUITests.DshShotTests test3OperationChain]' passed (74.380 seconds).
+Test Case '-[DshProbeUITests.DshShotTests test4ChainStatesDark]' passed (56.798 seconds).
+Test Case '-[DshProbeUITests.DshShotTests test5Unavailable]' passed (199.395 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 534.915 (534.930) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 534.915 (534.931) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 534.915 (534.934) seconds
 ** TEST SUCCEEDED **
-==> stub ready on 127.0.0.1:8765 (pid 39083, after 2s); [{"id": "a1", "name": "orbit", "provider": "deepseek-harness", "lastProvider": "
-Test Case '-[DshMacProbeUITests.DshShotTests test1PickEngine]' passed (23.233 seconds).
-Test Case '-[DshMacProbeUITests.DshShotTests test2ModeAndModelMenus]' passed (28.077 seconds).
-Test Case '-[DshMacProbeUITests.DshShotTests test3OperationChain]' passed (56.286 seconds).
-Test Case '-[DshMacProbeUITests.DshShotTests test4ChainStatesDark]' passed (33.718 seconds).
-Test Case '-[DshMacProbeUITests.DshShotTests test5Unavailable]' passed (113.861 seconds).
-	 Executed 5 tests, with 0 failures (0 unexpected) in 255.175 (255.186) seconds
-	 Executed 5 tests, with 0 failures (0 unexpected) in 255.175 (255.187) seconds
-	 Executed 5 tests, with 0 failures (0 unexpected) in 255.175 (255.188) seconds
+==> stub ready on 127.0.0.1:8765 (pid 39505, after 2s); [{"id": "a1", "name": "orbit", "provider": "deepseek-harness", "lastProvider": "
+Test Case '-[DshMacProbeUITests.DshShotTests test1PickEngine]' passed (35.085 seconds).
+Test Case '-[DshMacProbeUITests.DshShotTests test2ModeAndModelMenus]' passed (30.756 seconds).
+Test Case '-[DshMacProbeUITests.DshShotTests test3OperationChain]' passed (56.109 seconds).
+Test Case '-[DshMacProbeUITests.DshShotTests test4ChainStatesDark]' passed (30.724 seconds).
+Test Case '-[DshMacProbeUITests.DshShotTests test5Unavailable]' passed (124.946 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 277.620 (277.628) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 277.620 (277.630) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 277.620 (277.633) seconds
 ** TEST SUCCEEDED **

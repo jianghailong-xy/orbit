@@ -160,6 +160,7 @@ def s1():
     stage = STATE["stage"]
     status = {"approval": "RUNNING", "allowed": "RUNNING"}.get(stage, "AWAITING_INPUT")
     return session("S1", "列出仓库并写 NOTES.md", "a1", "r1", status, 4,
+                   permissionMode=(STATE["created"] or {}).get("permissionMode") or "default",
                    pendingApprovals=1 if stage == "approval" else 0,
                    lastAssistantText="根目录有 AGENTS.md、README.md、docs 和 src。")
 

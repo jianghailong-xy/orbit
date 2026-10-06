@@ -1,66 +1,68 @@
     POST /__reset body: 
-00:02:58 "POST /__reset HTTP/1.1" 200 -
+01:01:55 "POST /__reset HTTP/1.1" 200 -
     POST /__reset body: 
-00:04:27 "POST /__reset HTTP/1.1" 200 -
+01:02:35 "POST /__reset HTTP/1.1" 200 -
     POST /__reset body: 
-00:04:58 "POST /__reset HTTP/1.1" 200 -
+01:03:42 "POST /__reset HTTP/1.1" 200 -
     POST /__reset body: 
-00:05:42 "POST /__reset HTTP/1.1" 200 -
+01:04:41 "POST /__reset HTTP/1.1" 200 -
     POST /__reset body: 
-00:06:50 "POST /__reset HTTP/1.1" 200 -
-    POST /api/sessions body: {"model":"[\"deepseek\", \"deepseek-v4-pro\"]","permissionMode":"auto","agentId":"a1","prompt":"列出仓库根目录，并加一个 NOTES.md 记下你看到了什么","effort":""}
-00:07:19 "POST /api/sessions HTTP/1.1" 201 -
+01:05:10 "POST /__reset HTTP/1.1" 200 -
+    POST /api/sessions body: {"permissionMode":"default","effort":"","prompt":"列出仓库根目录，并加一个 NOTES.md 记下你看到了什么","agentId":"a1","model":"[\"deepseek\", \"deepseek-v4-pro\"]"}
+01:05:47 "POST /api/sessions HTTP/1.1" 201 -
+    PATCH /api/users/me/preferences body: {"defaultPermissionMode":"default"}
+01:05:47 "PATCH /api/users/me/preferences HTTP/1.1" 404 -
     POST /api/sessions/S1/approvals/ap1/decision body: {"behavior":"allow"}
-00:07:29 "POST /api/sessions/S1/approvals/ap1/decision HTTP/1.1" 200 -
+01:05:56 "POST /api/sessions/S1/approvals/ap1/decision HTTP/1.1" 200 -
     POST /api/sessions/S1/interrupt body: 
-00:07:39 "POST /api/sessions/S1/interrupt HTTP/1.1" 200 -
-    POST /api/sessions/S1/turns body: {"kind":"message","content":"继续：把 NOTES.md 再补一行测试命令","clientTurnId":"1A7D60E4-6149-493E-9CC9-DD65B4522E68"}
-00:07:56 "POST /api/sessions/S1/turns HTTP/1.1" 201 -
+01:06:05 "POST /api/sessions/S1/interrupt HTTP/1.1" 200 -
+    POST /api/sessions/S1/turns body: {"content":"继续：把 NOTES.md 再补一行测试命令","clientTurnId":"757C660E-36B3-4144-A54C-3C179042B88B","kind":"message"}
+01:06:18 "POST /api/sessions/S1/turns HTTP/1.1" 201 -
     POST /__reset body: 
-00:08:03 "POST /__reset HTTP/1.1" 200 -
+01:06:25 "POST /__reset HTTP/1.1" 200 -
     POST /__set body: {"stage": "approval"}
-00:08:03 "POST /__set HTTP/1.1" 200 -
+01:06:25 "POST /__set HTTP/1.1" 200 -
     POST /__reset body: 
-00:08:24 "POST /__reset HTTP/1.1" 200 -
+01:06:45 "POST /__reset HTTP/1.1" 200 -
     POST /__set body: {"stage": "allowed"}
-00:08:24 "POST /__set HTTP/1.1" 200 -
+01:06:45 "POST /__set HTTP/1.1" 200 -
     POST /__reset body: 
-00:08:36 "POST /__reset HTTP/1.1" 200 -
+01:06:59 "POST /__reset HTTP/1.1" 200 -
     POST /__set body: {"stage": "stopped"}
-00:08:36 "POST /__set HTTP/1.1" 200 -
+01:06:59 "POST /__set HTTP/1.1" 200 -
     POST /__reset body: 
-00:08:47 "POST /__reset HTTP/1.1" 200 -
+01:07:11 "POST /__reset HTTP/1.1" 200 -
     POST /__set body: {"stage": "resumed"}
-00:08:47 "POST /__set HTTP/1.1" 200 -
+01:07:11 "POST /__set HTTP/1.1" 200 -
     POST /__reset body: 
-00:08:59 "POST /__reset HTTP/1.1" 200 -
+01:07:22 "POST /__reset HTTP/1.1" 200 -
     POST /__reset body: 
-00:09:10 "POST /__reset HTTP/1.1" 200 -
+01:07:35 "POST /__reset HTTP/1.1" 200 -
     POST /__reset body: 
-00:09:22 "POST /__reset HTTP/1.1" 200 -
+01:07:48 "POST /__reset HTTP/1.1" 200 -
     POST /__reset body: 
-00:09:32 "POST /__reset HTTP/1.1" 200 -
+01:08:02 "POST /__reset HTTP/1.1" 200 -
     POST /__reset body: 
-00:09:41 "POST /__reset HTTP/1.1" 200 -
+01:08:14 "POST /__reset HTTP/1.1" 200 -
     POST /__reset body: 
-00:09:53 "POST /__reset HTTP/1.1" 200 -
+01:08:28 "POST /__reset HTTP/1.1" 200 -
     POST /__reset body: 
-00:10:05 "POST /__reset HTTP/1.1" 200 -
+01:08:44 "POST /__reset HTTP/1.1" 200 -
     POST /__set body: {"keys": "none"}
-00:10:05 "POST /__set HTTP/1.1" 200 -
+01:08:44 "POST /__set HTTP/1.1" 200 -
     POST /__reset body: 
-00:10:22 "POST /__reset HTTP/1.1" 200 -
+01:09:03 "POST /__reset HTTP/1.1" 200 -
     POST /__reset body: 
-00:10:32 "POST /__reset HTTP/1.1" 200 -
+01:09:20 "POST /__reset HTTP/1.1" 200 -
     POST /__reset body: 
-00:10:43 "POST /__reset HTTP/1.1" 200 -
+01:09:32 "POST /__reset HTTP/1.1" 200 -
     POST /__reset body: 
-00:10:52 "POST /__reset HTTP/1.1" 200 -
+01:09:43 "POST /__reset HTTP/1.1" 200 -
     POST /__reset body: 
-00:11:02 "POST /__reset HTTP/1.1" 200 -
+01:09:59 "POST /__reset HTTP/1.1" 200 -
     POST /__reset body: 
-00:11:15 "POST /__reset HTTP/1.1" 200 -
+01:10:13 "POST /__reset HTTP/1.1" 200 -
     POST /__reset body: 
-00:11:28 "POST /__reset HTTP/1.1" 200 -
+01:10:25 "POST /__reset HTTP/1.1" 200 -
     POST /__set body: {"keys": "none"}
-00:11:28 "POST /__set HTTP/1.1" 200 -
+01:10:25 "POST /__set HTTP/1.1" 200 -

@@ -15,6 +15,10 @@ export default { theme, steps: [
   { shot: t('web-2b-model-menu') }, { dump: t('web-2b-model-menu') },
   { hover: 'Effort', within: '.composer-model-menu', ms: 1500 }, { shot: t('web-2c-effort-menu') }, { dump: t('web-2c-effort-menu') },
   { key: 'Escape', sel: 'body', ms: 600 },
+  // Default: Harness's files are read-only and a write asks once (P4) — the approval below is what
+  // that mode does. Auto would write inside the workspace without asking.
+  { realClick: MODE, ms: 1200 }, { realClickText: 'Default', within: '.ant-select-dropdown', ms: 1200 },
+  { evalOut: t('chain-mode'), js: `document.querySelector('${MODE}')?.textContent ?? ''` },
   { type: '列出仓库根目录，并加一个 NOTES.md 记下你看到了什么', sel: 'textarea' },
   { clickSel: 'button[aria-label="Send"]', ms: 3000 },
   { wait: '我先列一下', ms: 15000 }, { shot: t('web-3-running') },

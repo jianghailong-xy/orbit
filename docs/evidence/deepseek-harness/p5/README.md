@@ -15,6 +15,10 @@ through push-triggered probe branches (never merged).
 - **Model / thinking level.** From the assigned runner's `modelCatalog.dsh` (opaque ACP values, the
   row's `reasoningLevels`, e.g. Off/Low/High/Max). A model the runner has not reported offers Default
   only; nothing falls back to a Claude model (`defaultModel` is `''`).
+- **Approvals.** A Harness card offers Approve / Reject (web) and Allow / Deny (native) only — no
+  "Always allow" / "Allow & remember": the runner's Harness bridge answers each ask once and drops
+  remember rules (dsh_permissions.go). Decided by the session's runtime (`approvalRememberOffered`,
+  `Approvals.rememberOffered`); every other runtime keeps remember.
 - **Permission modes.** Only Default, Auto and Don't Ask are selectable; Plan, Accept Edits and
   Bypass are disabled with the shared table's note (web) / "— not on DeepSeek Harness" (native), and
   a stored unsupported mode is clamped to Default. Parity: web test compares with
@@ -71,22 +75,28 @@ than the 409 the server returns at create time.
   `MainView` probe apps, `DshShotTests` XCUITests that fail on any state that does not render);
   results on `probe/p5-dsh-shots-results`.
 
-## Runs and results (code under test: `538b5a476` — P5 merged with `origin/main` 5b132c135)
+## Runs and results (code under test: `c5cc1e0fe` — P5 merged with `origin/main` 5b132c135, plus the remember and Mac-menu fixes)
 
-- Native shots: GitHub Actions run 37391018790 on probe `probe/p5-dsh-shots` (93ae0b333 = `538b5a476`
+- The approval chain is created in **Default** on every platform (the clients pick Default in the
+  Mode menu; the fixtures echo the requested mode): under P4's semantics Default makes the NOTES.md
+  write ask, Auto would not. Every create body carries `"permissionMode":"default"`
+  (`web/requests.log`, `ios/writes.txt`, `mac/writes.txt`), and the native tests fail without it.
+- Native shots: GitHub Actions run 37396127964 on probe `probe/p5-dsh-shots` (cef716b87 = `c5cc1e0fe`
   + `.dsh-probe/` + a push-triggered workflow; copies in `probe-harness/`), results branch
-  `probe/p5-dsh-shots-results` (23f740962). iPhone (newest simulator) 5/5 and Mac 5/5 XCUITests passed.
-  The tests `XCTFail` on any state that does not render, on a missing engine switch, and on any of the
-  four writes missing from the stub's log (`native-test-summary.txt`, `ios/writes.txt`,
-  `mac/writes.txt`, `*-notes.txt`). iPhone pictures are stored at half size.
-- Client compile gates: run 37388517360 on `probe/p5-dsh-clients` (`538b5a476` + gates-only
-  client.yml, `probe-harness/client-gates.yml`): macOS OrbitKit `swift test` 2965 executed / 5 skipped /
+  `probe/p5-dsh-shots-results` (3bb160b83). iPhone (newest simulator) 5/5 and Mac 5/5 XCUITests passed.
+  The tests `XCTFail` on any state that does not render, on a missing engine switch or Mode item, and
+  on any of the writes missing from the stub's log (`native-test-summary.txt`, `*-notes.txt`). iPhone
+  pictures are stored at half size.
+- Client compile gates: run 37396122482 on `probe/p5-dsh-clients` (`c5cc1e0fe` + gates-only
+  client.yml, `probe-harness/client-gates.yml`): macOS OrbitKit `swift test` 2966 executed / 5 skipped /
   0 failures, OrbitApp `swift build` success, iOS simulator build success.
-- OrbitKit on Linux (swift:6.1 docker): 2965 executed / 5 skipped / 0 failures.
-- Merge check on `538b5a476` (`merge-check-538b5a476.txt`): `npm run build` 0, `npm test -w
-  @orbit/shared` 0 (388), `npm test -w @orbit/apiserver` 0 (4422), `npm test -w @orbit/web` 0
-  (3928), `go test ./...` in src/runner-go 0.
-- Web frames in `web/` were taken on `538b5a476`; `web/requests.log` holds both passes.
+- OrbitKit on Linux (swift:6.1 docker, `cef6c8e0d`; `c5cc1e0fe` changes only OrbitApp's ComposerView):
+  2966 executed / 5 skipped / 0 failures.
+- Merge check on `c5cc1e0fe` (`merge-check-c5cc1e0fe.txt`): `npm run build` 0, `npm test -w
+  @orbit/shared` 0, `npm test -w @orbit/apiserver` 0 (4422), `npm test -w @orbit/web` 0 (3931),
+  `go test ./...` in src/runner-go 0.
+- Web frames in `web/` were taken on `cef6c8e0d`, whose web code is identical to `c5cc1e0fe`;
+  `web/requests.log` holds both passes.
 
 Probe branches `probe/p5-dsh-shots`, `probe/p5-dsh-clients` and their `-results` branches are
 temporary and never merged. Earlier shots runs are not evidence — notably 37343111078, whose tests
@@ -96,8 +106,10 @@ could not fail and whose console frames show a cached transcript (no stream in t
 
 - No real runner, dsh process or model: every state comes from the fixtures above. Real dsh +
   runner end to end is P6.
-- macOS: the composer's model/effort menu was not photographed open (`mac/2b-model-menu-*` shows the
-  closed pill); the levels are covered by OrbitKit tests and by the iPhone and web menus.
+- macOS: the model menu is photographed open (`mac/2b-model-menu-*`), its Effort submenu is not; the
+  levels are covered by OrbitKit tests and by the iPhone and web menus. The Mac shots also showed that
+  every row of the composer's menus carried a tick (pre-existing, not Harness-specific); fixed in
+  `c5cc1e0fe`.
 - When the assigned runner reports no Harness catalogue (an old runner), a session's opaque model
   value is shown raw in the composer; a workspace still set to a deleted Harness key shows the slug
   with the generic removed-provider fallback ("Claude via deepseek-harness").

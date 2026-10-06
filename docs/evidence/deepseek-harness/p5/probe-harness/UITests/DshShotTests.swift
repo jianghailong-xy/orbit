@@ -118,7 +118,7 @@ final class DshShotTests: ProbeCase {
             settle(1)
             // The model/effort control: the current model's name.
             #if os(macOS)
-            let menu = app.menuButtons.matching(NSPredicate(format: "label BEGINSWITH 'DeepSeek V4'")).firstMatch
+            let menu = app.menuButtons.matching(NSPredicate(format: "label CONTAINS 'DeepSeek V4' OR title CONTAINS 'DeepSeek V4'")).firstMatch
             let model = menu.exists ? menu : button(app, beginning: "DeepSeek V4")
             #else
             let model = button(app, beginning: "DeepSeek V4")
@@ -135,6 +135,9 @@ final class DshShotTests: ProbeCase {
 
     func test3OperationChain() {
         let app = launch("compose", until: "DeepSeek", "chain-compose")
+        // Default: Harness's files are read-only and a write asks once (P4) — the approval below is
+        // what that mode does. (Auto would write inside the workspace without asking.)
+        pickMode(app, "Default", "chain-mode")
         type(app, "列出仓库根目录，并加一个 NOTES.md 记下你看到了什么", "chain-compose")
         shot("3a-compose-typed-light")
         send(app, "chain-send")
@@ -166,10 +169,29 @@ final class DshShotTests: ProbeCase {
         note("requests so far:\n" + requestsLog())
         // The chain is the app's own presses: each must have reached the stub as its request.
         expectRequest("\"POST /api/sessions HTTP", "chain-create")
+        expectRequest("\"permissionMode\":\"default\"", "chain-create-in-default")
         expectRequest("/api/sessions/S1/approvals/ap1/decision", "chain-approve")
         expectRequest("/api/sessions/S1/interrupt", "chain-stop")
         expectRequest("/api/sessions/S1/turns", "chain-continue")
         app.terminate()
+    }
+
+    /// Open the Mode pill and pick `mode`; fail if the menu or the item is not there.
+    func pickMode(_ app: XCUIApplication, _ mode: String, _ name: String) {
+        let menu = modeMenu(app)
+        guard menu.waitForExistence(timeout: 10) else { XCTFail("\(name): no Mode menu"); return }
+        menu.tap()
+        settle(1)
+        #if os(macOS)
+        let item = app.menuItems.matching(NSPredicate(format: "title BEGINSWITH %@", mode)).firstMatch
+        #else
+        let item = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", mode)).allElementsBoundByIndex
+            .first(where: { $0.isHittable && $0.frame.minY > 100 }) ?? app.buttons[mode]
+        #endif
+        guard item.waitForExistence(timeout: 5) else { XCTFail("\(name): no \(mode) item"); tree(app, name); return }
+        item.tap()
+        settle(1)
+        note("\(name): picked \(mode)")
     }
 
     /// A state the chain needs: fail (keeping the picture and the tree) if it never shows.
