@@ -854,6 +854,13 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// sent, and from a server that predates the field.
     public let sessionMessage: JSONValue?
     public var senderCard: SessionMessage? { SessionMessage.parseCard(sessionMessage) }
+    /// The outcomes a reply turn hands back (`sessionReplies`) — held raw for `SessionReply.parse`,
+    /// the reader the echo's payload is read by, so the queue draws the reply cards the echo will be
+    /// drawn as. Nil on every other turn, and from a server that predates the field.
+    public let sessionReplies: JSONValue?
+    public var replyCards: [SessionReply]? {
+        sessionReplies.flatMap { SessionReply.parse(.object(["sessionReplies": $0])) }
+    }
     /// A confirmation review's two turns — the request a reviewer is handed and the reviewer's
     /// return handed to the run — held raw for the readers the echo's payload is read by
     /// (`ConfirmationReviewTurns.swift`). Nil on every other turn, and from an older server.
@@ -871,7 +878,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     public init(turnId: String, kind: String? = nil, content: String,
                 attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil,
                 projectStarted: JSONValue? = nil, sessionMessage: JSONValue? = nil,
-                authoredByOrbit: Bool? = nil, confirmationReviewRequest: JSONValue? = nil,
+                sessionReplies: JSONValue? = nil, authoredByOrbit: Bool? = nil, confirmationReviewRequest: JSONValue? = nil,
                 confirmationReturn: JSONValue? = nil) {
         self.turnId = turnId
         self.kind = kind
@@ -880,6 +887,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
         self.openItemDelivery = openItemDelivery
         self.projectStarted = projectStarted
         self.sessionMessage = sessionMessage
+        self.sessionReplies = sessionReplies
         self.authoredByOrbit = authoredByOrbit
         self.confirmationReviewRequest = confirmationReviewRequest
         self.confirmationReturn = confirmationReturn

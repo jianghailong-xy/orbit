@@ -1001,6 +1001,13 @@ struct TranscriptView: View {
                                          undelivered: bubble.undelivered,
                                          onCancelQueued: bubble.turnId == nil
                                              ? nil : { Task { await console.cancelQueued(bubble) } })
+            } else if let replies = bubble.sessionReplies {
+                // The outcomes of this session's requests, handed back: nobody typed the turn, so it
+                // gets the reply cards the transcript draws once a runner takes it, off the
+                // projection (`QueuedTurnInfo.replyCards`) — web parity: `q.sessionReplies`.
+                SessionReplyCardsView(replies: replies, ts: bubble.ts, undelivered: bubble.undelivered,
+                                      onCancelQueued: bubble.turnId == nil || bubble.steer
+                                          ? nil : { Task { await console.cancelQueued(bubble) } })
             } else if let started = bubble.startedCard {
                 // The message telling the coordinator its project was started: the card the
                 // transcript draws once a runner takes it, off the projection (`startedCard`).

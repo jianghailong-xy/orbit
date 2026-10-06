@@ -8,6 +8,7 @@ import type {
   ProjectStartedCard,
   SessionCapabilities,
   SessionMessageCard,
+  SessionReplyCard,
   SessionMoveTargets,
   SessionRequestView,
   SessionProjectMembership,
@@ -636,6 +637,9 @@ export interface ActiveSessionTurn {
    *  carry it. Its words are that session's, not the reader's. Absent on every turn nobody's session
    *  sent. */
   sessionMessage?: SessionMessageCard;
+  /** The outcomes of this session's own requests a reply turn hands back (`SessionReplyCard`), as
+   *  the runner's echo will carry them. Absent on every other turn. */
+  sessionReplies?: SessionReplyCard[];
   /** The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
    *  delivery — so nobody typed its words. Absent on every turn somebody sent. */
   authoredByOrbit?: true;
