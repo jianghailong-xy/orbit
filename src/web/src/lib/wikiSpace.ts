@@ -142,10 +142,22 @@ export function wikiProposalsBanner(
 ): string | null {
   const total = wikiProposalsWaiting(spaces);
   if (total === 0) return null;
-  const elsewhere = spaces
-    .filter((space) => space.id !== currentId && (space.pendingOps ?? 0) > 0)
-    .map((space) => wikiCountInSpace(space.pendingOps, names.get(space.id) ?? space.title));
+  const elsewhere = wikiProposalsElsewhere(spaces, currentId, names).map((share) => wikiCountInSpace(share.count, share.name));
   return [wikiProposalsToReview(total), ...elsewhere].join(' ');
+}
+
+/**
+ * Each other space with proposals waiting, by its name: the shares the first banner says after its count,
+ * and the desktop's Review card after its own (`· 2 in wikova`).
+ */
+export function wikiProposalsElsewhere(
+  spaces: ReadonlyArray<Named & Counted>,
+  currentId: string,
+  names: ReadonlyMap<string, string> = wikiSpaceNames(spaces),
+): Array<{ name: string; count: number }> {
+  return spaces
+    .filter((space) => space.id !== currentId && (space.pendingOps ?? 0) > 0)
+    .map((space) => ({ name: names.get(space.id) ?? space.title, count: space.pendingOps }));
 }
 
 /** A space as the picker lists it (mock 31 ④): its name, and what waits in it when anything does. */

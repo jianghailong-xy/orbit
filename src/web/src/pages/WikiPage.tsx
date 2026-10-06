@@ -290,9 +290,9 @@ function RunRoute({ space, runParam }: { space: SpaceRow; runParam: string }) {
  * crumb row carries the list button instead (mock 14 ①). Review and the settings are not reading
  * views and keep the frame as it was.
  *
- * ACTIVITY (design §12.3.2) stands beside the directory too, with none of its rows lit, and takes the
- * status row under its own title (mock 33 ②); a phone draws it under its own head instead of this one
- * (mock 31 ②), as Review's mock does (09).
+ * ACTIVITY (design §12.3.2) stands beside the directory too, with none of its rows lit, under the home's
+ * head and its line, and takes the status row under its own title (mock 33 ④ ⑤); a phone draws it
+ * under its own head instead of this one (mock 31 ②), as Review's mock does (09).
  */
 function WikiFrame({
   space,
@@ -321,7 +321,7 @@ function WikiFrame({
         </div>
       </div>
 
-      {space && home && <WikiHomeState spaceId={space.id} />}
+      {space && (home || activity) && <WikiHomeState spaceId={space.id} />}
 
       {space && (
         <div className="wk-search" role="search">

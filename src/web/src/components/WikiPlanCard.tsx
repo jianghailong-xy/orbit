@@ -49,7 +49,8 @@ function usePlanLook(space: WikiSpace) {
  * Activity's plan banners (design §12.3.3): the plan's banner once for each kind of thing the plan waits
  * on the owner for — how many it is in `data-waiting`, so the page's amber banners add up to the head's
  * badge — and, with nothing waiting, the plan's one banner as it stands. Another space's
- * (`elsewhere`, its name) are only what waits there, each saying which space it is.
+ * (`elsewhere`, its name) are only what waits there, each saying which space it is, and a desktop draws
+ * them too: its Plan card is this space's alone.
  */
 export function WikiPlanBanners({ space, elsewhere = null }: { space: WikiSpace; elsewhere?: string | null }) {
   const { plan, look, counts, maintenance } = usePlanLook(space);
@@ -62,7 +63,7 @@ export function WikiPlanBanners({ space, elsewhere = null }: { space: WikiSpace;
       {banners.map((banner) => (
         <Link
           key={banner.look}
-          className={`wk-banner wk-plan-banner ${banner.tone}`}
+          className={`wk-banner wk-plan-banner ${banner.tone}${elsewhere ? ' elsewhere' : ''}`}
           data-waiting={banner.tone === 'amber' ? banner.count : undefined}
           to={banner.to === 'settings' ? wikiSettingsPath(space.slug) : wikiPlanPath(space.slug)}
         >
