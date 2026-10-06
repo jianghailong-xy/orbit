@@ -1,0 +1,109 @@
+{
+  "limitMs": 100,
+  "exitStartedAfterMs": 43.5,
+  "exitTransitionDuration": "0s",
+  "closedAfterMs": 46,
+  "closeRead": {
+    "phase": "dom-change",
+    "afterEscapeMs": 46,
+    "connected": false,
+    "hidden": false,
+    "overflow": [
+      "visible",
+      "hidden"
+    ],
+    "locked": true
+  },
+  "unlockedAfterMs": 56.5,
+  "readyAfterCloseMs": 10.5,
+  "firstRead": {
+    "phase": "first-read-after-hidden-and-focus",
+    "afterEscapeMs": 54.5,
+    "connected": false,
+    "hidden": false,
+    "overflow": [
+      "visible",
+      "hidden"
+    ],
+    "locked": true
+  },
+  "finalRead": {
+    "phase": "final-read",
+    "afterEscapeMs": 56.60000002384186,
+    "connected": false,
+    "hidden": false,
+    "overflow": [
+      "visible",
+      "auto"
+    ],
+    "locked": false
+  },
+  "samples": [
+    {
+      "phase": "final-escape",
+      "afterEscapeMs": 0,
+      "connected": true,
+      "hidden": false,
+      "overflow": [
+        "visible",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "dom-change",
+      "afterEscapeMs": 43.5,
+      "connected": true,
+      "hidden": false,
+      "overflow": [
+        "visible",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "dom-change",
+      "afterEscapeMs": 46,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "visible",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "first-read-after-hidden-and-focus",
+      "afterEscapeMs": 54.5,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "visible",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "dom-change",
+      "afterEscapeMs": 56.5,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "visible",
+        "auto"
+      ],
+      "locked": false
+    },
+    {
+      "phase": "final-read",
+      "afterEscapeMs": 56.60000002384186,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "visible",
+        "auto"
+      ],
+      "locked": false
+    }
+  ]
+}

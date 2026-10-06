@@ -1,0 +1,10 @@
+{
+  "archiveCommitChecked": "38e9e38ee4325c6547dafe49d1ba069cde3cc320",
+  "result": "incomplete archive detected by Git-object verification",
+  "missingPaths": [
+    "docs/evidence/base-ui-migration/p2.2/revision-7/coordinator-input/diagnostics/accepted-notification-control-stderr.log",
+    "docs/evidence/base-ui-migration/p2.2/revision-7/coordinator-input/diagnostics/final-unchanged-repeat-stderr.log"
+  ],
+  "cause": "Repository *.log ignore rule omitted copied original stderr logs from normal git add. Files remained on disk and original hashes were preserved.",
+  "remedy": "Explicitly stage these original files with git add -f, keep the first archive commit, and repeat the Git-object audit. No test rerun or source change is needed."
+}

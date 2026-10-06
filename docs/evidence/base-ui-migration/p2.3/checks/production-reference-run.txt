@@ -1,0 +1,31 @@
+[WebServer] (node:2024807) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 8 tests using 1 worker
+
+(node:2024955) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium-light-desktop] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.2s)
+(node:2025461) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 [chromium-light-phone] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.2s)
+(node:2026086) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  3 [chromium-dark-desktop] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.0s)
+(node:2026269) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  4 [chromium-dark-phone] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.0s)
+(node:2026373) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  5 [webkit-light-desktop] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.7s)
+(node:2026540) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  6 [webkit-light-phone] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.4s)
+(node:2026784) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  7 [webkit-dark-desktop] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.5s)
+(node:2026936) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  8 [webkit-dark-phone] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.3s)
+
+  8 passed (21.6s)

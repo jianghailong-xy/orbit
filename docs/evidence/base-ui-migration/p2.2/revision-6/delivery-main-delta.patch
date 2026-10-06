@@ -1,0 +1,688 @@
+diff --git a/src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift b/src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift
+index e65b4bbf3..f50e8cd31 100644
+--- a/src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift
++++ b/src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift
+@@ -123,7 +123,8 @@ struct ConsoleView: View {
+         Group {
+             if let console = registry.peek(sessionID) {
+                 VStack(spacing: 0) {
+-                    TranscriptView(console: console, hidesStickyQuestion: foldsChrome(console))
++                    TranscriptView(console: console, hidesStickyQuestion: foldsChrome(console),
++                                   reviewingCard: approvalReview != nil || promotionReview != nil)
+                     // Pending approvals (incl. the AskUserQuestion form) render inline at the tail of
+                     // the transcript now — as the agent's latest turn, web-style — not in a fixed panel
+                     // here. See TranscriptView.
+@@ -546,10 +547,15 @@ private struct ConsoleNavTitle: View {
+ 
+ struct TranscriptView: View {
+     @Environment(AppModel.self) private var app
++    @Environment(\.openApprovalReview) private var openApprovalReview
++    @Environment(\.openPromotionReview) private var openPromotionReview
+     let console: ConsoleModel
+     /// The sticky "↑ Your question" header folds away while a phone's composer holds the keyboard,
+     /// with the rest of the console's chrome (`ConsoleView.foldsChrome`).
+     var hidesStickyQuestion = false
++    /// Keep the preview's place while its sheet refreshes or the conversation keeps streaming.
++    var reviewingCard = false
++    @State private var reviewSessionID: String?
+     private let bottomID = TranscriptRow.bottom.id
+     // Mirrors web's `atBottom` (AgentView.tsx): flips false once the user scrolls up off the live
+     // tail. Drives the floating jump-to-latest button AND gates the auto-follow below, so reading
+@@ -700,7 +706,7 @@ struct TranscriptView: View {
+                 let prependAnchor = console.takePrependAnchor()
+                 // A window opened at a record ends at a gap, so its bottom is never the live tail to
+                 // follow — pinning there would only walk the window down page by page.
+-                if atBottom && !console.detached {
++                if atBottom && !console.detached && !reviewingCard {
+                     proxy.scrollTo(bottomID, anchor: .bottom)
+                 } else if let prependAnchor {
+                     proxy.scrollTo(ruler.topAnchorID ?? prependAnchor, anchor: .top)
+@@ -718,6 +724,15 @@ struct TranscriptView: View {
+             .onChange(of: atBottom, initial: true) { _, pinned in
+                 console.setReadingHistory(!pinned)
+             }
++            .onChange(of: reviewingCard, initial: true) {
++                if reviewingCard {
++                    reviewSessionID = console.sessionID
++                    atBottom = false
++                } else {
++                    if reviewSessionID == console.sessionID { atBottom = false }
++                    reviewSessionID = nil
++                }
++            }
+             .onChange(of: console.sessionID) {
+                 atBottom = true; stranded = false; ruler.reset(); stuckID = nil
+                 console.setReadingHistory(false)
+@@ -747,16 +762,15 @@ struct TranscriptView: View {
+             // from.
+             .onChange(of: console.scrollRequest) { _, request in
+                 guard let request else { return }
++                atBottom = false
+                 #if os(iOS)
+                 // Same coast fix as the jump-to-latest disc: cancel the momentum first, or the
+                 // deceleration swallows the scroll.
+                 transcriptScroll.halt()
+-                DispatchQueue.main.async { holdScroll(to: request.rowID, anchor: .center) }
+-                #else
+-                withAnimation(.easeOut(duration: 0.2)) {
+-                    proxy.scrollTo(request.rowID, anchor: .center)
+-                }
+                 #endif
++                DispatchQueue.main.async {
++                    holdScroll(to: request.rowID, anchor: .center, opensReview: true)
++                }
+             }
+             // A link to one record (`SessionRecordLink`): scroll to its row. The reader is taken off
+             // the live tail first, said outright as the sticky header's jump says it — a programmatic
+@@ -775,9 +789,17 @@ struct TranscriptView: View {
+             // The scrolls `heldScroll` carried here, made inside this update — after the List has taken
+             // its rows, so the index path SwiftUI picks for the row is one UIKit has.
+             .onChange(of: heldScroll) { _, held in
+-                guard let held else { return }
+-                withAnimation(.easeOut(duration: 0.2)) {
++                guard let held, held.sessionID == console.sessionID else { return }
++                if held.opensReview {
++                    guard let row = rows.first(where: { $0.id == held.rowID }) else { return }
++                    // Settle the preview's position before presenting; an animation could be
++                    // interrupted by the sheet and leave its row off-screen on return.
+                     proxy.scrollTo(held.rowID, anchor: held.anchor)
++                    openReview(for: row)
++                } else {
++                    withAnimation(.easeOut(duration: 0.2)) {
++                        proxy.scrollTo(held.rowID, anchor: held.anchor)
++                    }
+                 }
+             }
+             .onAppear { proxy.scrollTo(bottomID, anchor: .bottom); recomputeStuck() }
+@@ -1014,8 +1036,23 @@ struct TranscriptView: View {
+ 
+     /// Carry a scroll into the next update rather than making it from here (see `heldScroll`). A new
+     /// tick each time, so asking twice for the same row scrolls twice.
+-    private func holdScroll(to rowID: String, anchor: UnitPoint) {
+-        heldScroll = HeldScroll(rowID: rowID, anchor: anchor, tick: (heldScroll?.tick ?? 0) &+ 1)
++    private func holdScroll(to rowID: String, anchor: UnitPoint, opensReview: Bool = false) {
++        heldScroll = HeldScroll(rowID: rowID, anchor: anchor, tick: (heldScroll?.tick ?? 0) &+ 1,
++                                sessionID: console.sessionID, opensReview: opensReview)
++    }
++
++    /// The bar opens the same review as tapping a preview. Inline cards remain scroll-only.
++    private func openReview(for row: TranscriptRow) {
++        guard case .decisionCard(let card) = row else { return }
++        switch card.kind {
++        case .promotionApproval(let promotionID):
++            openPromotionReview(promotionID)
++        case .criteriaDecision, .acceptanceConfirmation, .startProject, .criteriaChange,
++             .ownerConfirmation, .coordinatorQuestion:
++            openApprovalReview(.delivered(card))
++        default:
++            break
++        }
+     }
+ 
+     // Sticky header that names the turn above the fold and scrolls back to it — web's
+@@ -1264,6 +1301,8 @@ private struct HeldScroll: Equatable {
+     let rowID: String
+     let anchor: UnitPoint
+     let tick: Int
++    let sessionID: String
++    let opensReview: Bool
+ }
+ 
+ #if os(iOS)
+diff --git a/src/macos/OrbitApp/Sources/OrbitApp/Views/NeedsYouBannerView.swift b/src/macos/OrbitApp/Sources/OrbitApp/Views/NeedsYouBannerView.swift
+index 2763a5329..b244aec4b 100644
+--- a/src/macos/OrbitApp/Sources/OrbitApp/Views/NeedsYouBannerView.swift
++++ b/src/macos/OrbitApp/Sources/OrbitApp/Views/NeedsYouBannerView.swift
+@@ -20,7 +20,7 @@ import OrbitKit
+ /// nothing can arrive below it and it cannot leave the screen. The two cards a project's ruler is
+ /// decided from stop nothing — the coordinator keeps working and its messages push them up — so a
+ /// question delivered forty messages ago is off-screen and unfindable, which is precisely what this
+-/// bar exists to fix. So it stays, says what is below rather than where to go, and a press scrolls.
++/// bar exists to fix. A press reveals that card and opens its review when available.
+ ///
+ /// The in-conversation question WINS when both exist. Not because it is more urgent — a session
+ /// blocked elsewhere is stopped work — but because the bar can only carry one destination, this
+@@ -41,7 +41,7 @@ struct NeedsYouBannerView: View {
+     /// Questions in THIS conversation that stop no turn, if any. Nil from a list, and from a console
+     /// holding none.
+     var below: WaitingBelow? = nil
+-    /// Where a press goes when the bar is pointing down: the console scrolls to that row.
++    /// The console reveals this row and opens its existing review, if it has one.
+     var onOpenBelow: ((String) -> Void)? = nil
+ 
+     var body: some View {
+@@ -56,7 +56,7 @@ struct NeedsYouBannerView: View {
+                 // escalation that became the owner's, a pause only they can lift), and a reader
+                 // told to look for a question finds a card reading "Escalated to you" — the same
+                 // wrong noun the line above stopped using.
+-                hint: "Scrolls to what is waiting in this conversation") {
++                hint: "Shows what is waiting in this conversation") {
+                 onOpenBelow?(below.rowID)
+             }
+         } else if let banner = model.needsYouBanner(excluding: excluding) {
+diff --git a/src/macos/OrbitKit/Tests/OrbitKitTests/TranscriptScrollWiringTests.swift b/src/macos/OrbitKit/Tests/OrbitKitTests/TranscriptScrollWiringTests.swift
+index cf46d6d09..267955760 100644
+--- a/src/macos/OrbitKit/Tests/OrbitKitTests/TranscriptScrollWiringTests.swift
++++ b/src/macos/OrbitKit/Tests/OrbitKitTests/TranscriptScrollWiringTests.swift
+@@ -128,6 +128,114 @@ final class TranscriptScrollWiringTests: XCTestCase {
+                                     "the four hops each carry their scroll as a held request")
+     }
+ 
++    /// The waiting-card bar is both a reading jump and an invitation to answer. Unpin before the
++    /// next publish, halt iOS momentum, and carry the review request into the same safe update as
++    /// the scroll; opening a sheet directly in the bar callback would race the row's relocation.
++    func testTheWaitingCardJumpUnpinsBeforeDeferringItsScrollAndReview() throws {
++        let view = try transcriptView()
++        let callback = try XCTUnwrap(blocks(opening: ".onChange(of: console.scrollRequest) {",
++                                            in: view).first)
++        let ordered = ["atBottom = false", "transcriptScroll.halt()", "DispatchQueue.main.async",
++                       "holdScroll(to: request.rowID, anchor: .center, opensReview: true)"]
++        let positions = ordered.map { callback.range(of: $0)?.lowerBound }
++        XCTAssertFalse(positions.contains(nil), "the waiting-card jump lost a step: \(ordered)")
++        XCTAssertEqual(positions.compactMap { $0 }, positions.compactMap { $0 }.sorted(),
++                       "unpin and halt before requesting the deferred scroll and review")
++        XCTAssertFalse(callback.contains("scrollTo("), "the next List update owns the scroll")
++        XCTAssertFalse(callback.contains("openReview("), "the review follows that update's scroll")
++        XCTAssertFalse(callback.contains("openApprovalReview("))
++        XCTAssertFalse(callback.contains("openPromotionReview("))
++    }
++
++    /// A card can disappear between the press and the next update. Only a row that survived may
++    /// be scrolled to or opened, and the nonanimated scroll finishes before its sheet is raised.
++    func testTheDeferredReviewUsesALiveRowAndScrollsBeforeOpening() throws {
++        let view = try transcriptView()
++        let update = try XCTUnwrap(blocks(opening: ".onChange(of: heldScroll) {", in: view).first)
++        XCTAssertTrue(update.contains("guard let held, held.sessionID == console.sessionID else { return }"),
++                      "a queued jump from the previous conversation must not open this one's sheet")
++        let review = try XCTUnwrap(blocks(opening: "if held.opensReview {", in: update).first)
++        let ordered = ["rows.first(where: { $0.id == held.rowID })",
++                       "proxy.scrollTo(held.rowID, anchor: held.anchor)", "openReview(for: row)"]
++        let positions = ordered.map { review.range(of: $0)?.lowerBound }
++        XCTAssertFalse(positions.contains(nil), "the review lost its live row, scroll, or open: \(ordered)")
++        XCTAssertEqual(positions.compactMap { $0 }, positions.compactMap { $0 }.sorted(),
++                       "resolve the current row, reveal it, then open its review")
++        XCTAssertTrue(review.contains("else { return }"), "a removed row must not open a stale review")
++        XCTAssertFalse(review.contains("withAnimation"), "the sheet must not cover an unfinished scroll")
++        XCTAssertEqual(view.components(separatedBy: "openReview(for:").count - 1, 1,
++                       "only the held update may open the review after scrolling")
++    }
++
++    /// Record links, the sticky question, and jump-to-latest all use held scrolls too. Opening a
++    /// review is opt-in only for the waiting-card bar; none of the reading jumps acquires a sheet.
++    func testOrdinaryHeldScrollsDoNotOptIntoOpeningAReview() throws {
++        let view = try transcriptView()
++        XCTAssertTrue(view.contains("opensReview: Bool = false"),
++                      "ordinary held scroll callers keep their existing reading-only behavior")
++        XCTAssertEqual(view.components(separatedBy: "opensReview: true").count - 1, 1,
++                       "only the waiting-card request opts into a review")
++        let ordinary = try XCTUnwrap(blocks(opening: ".onChange(of: heldScroll) {", in: view).first)
++        XCTAssertTrue(ordinary.contains("withAnimation(.easeOut(duration: 0.2))"),
++                      "ordinary reading jumps retain their existing scroll animation")
++    }
++
++    /// Only cards drawn as previews have reviews. The merge keeps its existing sheet, the six
++    /// other preview families share theirs, and inline evidence/exception/receipt rows only scroll.
++    func testTheWaitingCardJumpOpensOnlyTheExistingPreviewSheets() throws {
++        let view = try transcriptView()
++        let route = try XCTUnwrap(blocks(opening: "private func openReview(for row: TranscriptRow) {",
++                                         in: view).first)
++        XCTAssertTrue(route.contains("guard case .decisionCard(let card) = row else { return }"),
++                      "ordinary transcript rows and pending tool cards keep their inline behavior")
++        let promotion = try section(route, from: "case .promotionApproval(let promotionID):",
++                                    to: "case .criteriaDecision")
++        XCTAssertTrue(promotion.contains("openPromotionReview(promotionID)"))
++        XCTAssertFalse(promotion.contains("openApprovalReview("), "merge uses its own existing review")
++        let shared = try section(route, from: "case .criteriaDecision", to: "default:")
++        for kind in [".criteriaDecision", ".acceptanceConfirmation", ".startProject", ".criteriaChange",
++                     ".ownerConfirmation", ".coordinatorQuestion"] {
++            XCTAssertTrue(shared.contains(kind), "\(kind) has a preview and must open its review")
++        }
++        XCTAssertTrue(shared.contains("openApprovalReview(.delivered(card))"),
++                      "the review receives the addressed card, not a copy of its displayed content")
++        for inline in [".evidenceDecision", ".escalatedItem", ".fusePause", "Receipt", "case .approval"] {
++            XCTAssertFalse(route.contains(inline), "\(inline) is inline and must not gain a sheet")
++        }
++        XCTAssertTrue(route.contains("default:\n            break"), "other rows remain scroll-only")
++    }
++
++    /// Both review sheets may refresh the console while they are open. Streaming after that read
++    /// must not pull the transcript off the preview the owner will return to when closing the sheet.
++    func testReviewPresentationKeepsThePreviewAwayFromTheLiveTail() throws {
++        let source = code(try source(Self.viewPath))
++        XCTAssertTrue(source.contains("reviewingCard: approvalReview != nil || promotionReview != nil"),
++                      "both existing sheet hosts tell the transcript that the owner is reviewing")
++        let view = try transcriptView()
++        let follow = try XCTUnwrap(blocks(opening: ".onChange(of: console.stateRevision) {", in: view).first)
++        XCTAssertTrue(follow.contains("if atBottom && !console.detached && !reviewingCard {"),
++                      "a sheet's refresh or streamed update must not follow the live tail")
++        let presentation = try XCTUnwrap(blocks(opening: ".onChange(of: reviewingCard, initial: true) {",
++                                                in: view).first)
++        let opened = try XCTUnwrap(blocks(opening: "if reviewingCard {", in: presentation).first)
++        XCTAssertTrue(opened.contains("reviewSessionID = console.sessionID"),
++                      "opening or restoring a sheet remembers the conversation being reviewed")
++        XCTAssertTrue(opened.contains("atBottom = false"), "opening the review preserves its preview")
++        let closed = try section(presentation, from: "} else {", to: "reviewSessionID = nil")
++        let sameSession = "if reviewSessionID == console.sessionID { atBottom = false }"
++        XCTAssertTrue(closed.contains(sameSession),
++                      "closing a sheet only unpins the conversation that presented it")
++        XCTAssertFalse(closed.replacingOccurrences(of: sameSession, with: "").contains("atBottom"),
++                       "dismissing the old conversation's sheet must not unpin the new conversation")
++        XCTAssertTrue(presentation.contains("reviewSessionID = nil"),
++                      "the dismissed review releases its remembered conversation")
++        let held = try XCTUnwrap(blocks(opening:
++            "private func holdScroll(to rowID: String, anchor: UnitPoint, opensReview: Bool = false) {",
++                                       in: view).first)
++        XCTAssertTrue(held.contains("sessionID: console.sessionID, opensReview: opensReview"),
++                      "the deferred request keeps its originating conversation and review intent")
++    }
++
+     /// The reading-history trim is published a turn later. `setReadingHistory` is called from inside
+     /// the transcript's own update; a publish there lands between the scroll that update asks for next
+     /// (`onAppear`, a session switch) and the List update that makes it, and the trim is the publish
+diff --git a/src/macos/OrbitKit/Tests/OrbitKitTests/TypingFoldWiringTests.swift b/src/macos/OrbitKit/Tests/OrbitKitTests/TypingFoldWiringTests.swift
+index 1ed53172b..8421a413c 100644
+--- a/src/macos/OrbitKit/Tests/OrbitKitTests/TypingFoldWiringTests.swift
++++ b/src/macos/OrbitKit/Tests/OrbitKitTests/TypingFoldWiringTests.swift
+@@ -101,7 +101,7 @@ final class TypingFoldWiringTests: XCTestCase {
+         XCTAssertTrue(inset.contains(".background(.bar, ignoresSafeAreaEdges: .top)"),
+                       "without the nav bar's backdrop the transcript scrolls under the clock")
+ 
+-        XCTAssertTrue(view.contains("TranscriptView(console: console, hidesStickyQuestion: foldsChrome(console))"))
++        XCTAssertTrue(view.contains("TranscriptView(console: console, hidesStickyQuestion: foldsChrome(console),"))
+         XCTAssertTrue(view.contains("if #available(iOS 18, macOS 15, *), !hidesStickyQuestion, let q = stuckBubble {"))
+     }
+ 
+diff --git a/src/web/src/components/DecisionRail.tsx b/src/web/src/components/DecisionRail.tsx
+index 4e97c3390..83603e200 100644
+--- a/src/web/src/components/DecisionRail.tsx
++++ b/src/web/src/components/DecisionRail.tsx
+@@ -237,8 +237,8 @@ export const WAITING_ON_YOU_LABEL = 'WAITING ON YOU';
+  * the standing: a delivered card stays when the criteria move, and a project started at another end
+  * leaves it on screen with nothing left to press. So nothing here decides when that card is drawn;
+  * the page passes on what the card reported. Starting binds a version of the set and is pressed on
+- * the card with that set readable above the button, so a press here scrolls to the card and asks the
+- * server nothing.
++ * the card with that set readable above the button, so a press here reveals its details and asks
++ * the server nothing.
+  *
+  * A conversation draws at most one; prefer its visible preview when the full card is in a dialog.
+  * Returns whether it arrived, as
+@@ -246,10 +246,7 @@ export const WAITING_ON_YOU_LABEL = 'WAITING ON YOU';
+  */
+ export function revealSettlementCard(scope: ParentNode = document): boolean {
+   const card = scope.querySelector<HTMLElement>('#settlement-preview, .settlement-card');
+-  if (!card) return false;
+-  card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+-  markReached(card);
+-  return true;
++  return revealCard(card);
+ }
+ 
+ /**
+@@ -268,10 +265,7 @@ export function settlementPointer(question: true | SettlementQuestion): string {
+  *  it arrived, as `revealDecisionCard` does. */
+ export function revealCriteriaCard(intentId: string, scope: Document = document): boolean {
+   const card = scope.getElementById(`criteria-decision-${intentId}`);
+-  if (!card) return false;
+-  card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+-  markReached(card);
+-  return true;
++  return revealCard(card);
+ }
+ 
+ /**
+@@ -289,10 +283,7 @@ export function ownerConfirmationPointer(title: string): string {
+  */
+ export function revealOwnerConfirmationCard(scope: ParentNode = document): boolean {
+   const card = scope.querySelector<HTMLElement>('#owner-confirmation-preview, [data-owner-confirmation]');
+-  if (!card) return false;
+-  card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+-  markReached(card);
+-  return true;
++  return revealCard(card);
+ }
+ 
+ /** One card the owner answers by pressing rather than by replying, as the page draws it. */
+@@ -319,9 +310,28 @@ export function exceptionPointer(row: Pick<ProjectOpenItemRow, 'title' | 'assign
+  */
+ export function revealOpenItemCard(itemId: string, scope: ParentNode = document): boolean {
+   const card = scope.querySelector<HTMLElement>(`[data-open-item="${itemId}"]`);
++  return revealCard(card);
++}
++
++/** A transcript pauses following its tail before a pinned bar opens one of its previews. */
++export const REVIEW_CARD_REVEALED = 'orbit-review-card-revealed';
++
++/** Navigate to a card, opening its existing preview trigger when it has one. Never press an answer. */
++export function revealCard(
++  card: HTMLElement | null | undefined,
++  block: ScrollLogicalPosition = 'center',
++  highlight = true,
++): boolean {
+   if (!card) return false;
+-  card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+-  markReached(card);
++  const preview = card.matches('.review-card-preview')
++    ? card as HTMLButtonElement
++    : card.querySelector<HTMLButtonElement>('.review-card-preview');
++  const target = preview?.closest<HTMLElement>('.review-card') ?? card;
++  // Finish positioning before the dialog locks scrolling. Its return focus stays at this preview.
++  if (preview) target.dispatchEvent(new Event(REVIEW_CARD_REVEALED, { bubbles: true }));
++  target.scrollIntoView({ block, behavior: preview ? 'instant' : 'smooth' });
++  if (highlight) markReached(target);
++  if (preview?.getAttribute('aria-expanded') === 'false') preview.click();
+   return true;
+ }
+ 
+@@ -432,10 +442,7 @@ export function revealDecisionCard(
+ ): boolean {
+   const key = decisionRowKey(row);
+   const card = scope.querySelector<HTMLElement>(`[data-decision-row="${key}"]`);
+-  if (!card) return false;
+-  card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+-  markReached(card);
+-  return true;
++  return revealCard(card);
+ }
+ 
+ /** Age as a reader reads it. Whole units only: a queue is not a stopwatch. */
+diff --git a/src/web/src/components/ReviewCard.test.tsx b/src/web/src/components/ReviewCard.test.tsx
+index 0321a046f..589835842 100644
+--- a/src/web/src/components/ReviewCard.test.tsx
++++ b/src/web/src/components/ReviewCard.test.tsx
+@@ -1,28 +1,113 @@
+ // @vitest-environment jsdom
+ import { readFileSync } from 'node:fs';
+-import { act, type ReactNode } from 'react';
++import { act, useState, type ComponentProps, type ReactNode } from 'react';
+ import { createRoot, type Root } from 'react-dom/client';
+ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+ import { ApprovalPanel } from './ApprovalPanel';
+ import type { ApprovalInfo } from '../api';
++import { ReviewCard } from './ReviewCard';
++import {
++  DecisionStrip, revealCard, revealCriteriaCard, revealOwnerConfirmationCard,
++  revealSettlementCard, type PendingDecisionQueue,
++} from './DecisionRail';
+ 
+ let root: Root;
+ let host: HTMLDivElement;
++const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
++const scrollIntoView = vi.fn();
+ 
+ beforeEach(() => {
+   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+   host = document.createElement('div');
+   document.body.append(host);
+   root = createRoot(host);
++  HTMLElement.prototype.scrollIntoView = scrollIntoView;
++  scrollIntoView.mockClear();
+ });
+ 
+ afterEach(async () => {
+   await act(async () => root.unmount());
+   host.remove();
++  HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
+   document.head.querySelectorAll('[data-review-test-style]').forEach((style) => style.remove());
+   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+ });
+ 
++const queue: PendingDecisionQueue = {
++  decidingSessionId: 'session', count: 0, oldestAgeSeconds: null, pending: [],
++};
++
++function TargetCard({ id, title, onDecide }: { id: string; title: string; onDecide: () => void }) {
++  const [open, setOpen] = useState(false);
++  return <ReviewCard id={id} title={title} summary="Review before deciding" open={open} onOpenChange={setOpen}>
++    <div className="approval-card"><div className="approval-body">The full details</div>
++      <button type="button" onClick={onDecide}>Confirm</button></div>
++  </ReviewCard>;
++}
++
++describe('the top bar opens the existing review dialog', () => {
++  const cases: Array<{ name: string; id: string; pointer: Partial<ComponentProps<typeof DecisionStrip>> }> = [
++    { name: 'start', id: 'settlement-preview', pointer: { confirmation: 'START', onRevealConfirmation: () => revealSettlementCard() } },
++    { name: 'criteria confirmation', id: 'settlement-preview', pointer: { confirmation: 'CONFIRMATION', onRevealConfirmation: () => revealSettlementCard() } },
++    { name: 'criteria change', id: 'settlement-preview', pointer: { confirmation: 'CRITERIA_CHANGE', onRevealConfirmation: () => revealSettlementCard() } },
++    { name: 'owner confirmation', id: 'owner-confirmation-preview', pointer: {
++      ownerConfirmation: { title: 'Finish the task', ageSeconds: 1 }, onRevealOwnerConfirmation: () => revealOwnerConfirmationCard(),
++    } },
++    { name: 'criteria proposal', id: 'criteria-decision-proposal', pointer: {
++      criteria: { pending: [{ intentId: 'proposal', ageSeconds: 1, decidability: { decidable: true } }] } as ComponentProps<typeof DecisionStrip>['criteria'],
++      onOpenCriteria: (row) => revealCriteriaCard(row.intentId),
++    } },
++  ];
++
++  it.each(cases)('opens only the $name dialog without confirming it', async ({ name, id, pointer }) => {
++    const decide = vi.fn();
++    await render(<><DecisionStrip queue={queue} open={false} onToggle={() => {}} {...pointer} />
++      <TargetCard id="another-preview" title="Another card" onDecide={decide} />
++      <TargetCard id={id} title={name} onDecide={decide} /></>);
++    const target = host.querySelector<HTMLElement>(`#${id}`)!;
++    await click(host.querySelector<HTMLButtonElement>('.decision-strip-line')!);
++    expect(scrollIntoView.mock.contexts).toEqual([target]);
++    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'instant' });
++    expect(dialog()!.querySelector('.orbit-overlay-title')!.textContent).toBe(name);
++    expect(decide).not.toHaveBeenCalled();
++    await click(close());
++    expect(dialog()).toBeNull();
++    expect(scrollIntoView.mock.contexts).toEqual([target]);
++    await click(host.querySelector<HTMLButtonElement>('.decision-strip-line')!);
++    expect(dialog()!.querySelector('.orbit-overlay-title')!.textContent).toBe(name);
++    expect(scrollIntoView.mock.contexts).toEqual([target, target]);
++    expect(decide).not.toHaveBeenCalled();
++  });
++
++  it('does nothing when a bar target has already disappeared', () => {
++    expect(revealSettlementCard()).toBe(false);
++    expect(revealOwnerConfirmationCard()).toBe(false);
++    expect(revealCriteriaCard('missing')).toBe(false);
++    expect(scrollIntoView).not.toHaveBeenCalled();
++    expect(dialog()).toBeNull();
++  });
++
++  it('opens a preview nested in a sticky message target and keeps ordinary messages scroll-only', async () => {
++    const decide = vi.fn();
++    await render(<><button type="button" onClick={() => revealCard(host.querySelector('#message'), 'start', false)}>Jump</button>
++      <div id="message"><TargetCard id="promotion-preview" title="Merge project" onDecide={decide} /></div></>);
++    await click(host.querySelector('button')!);
++    expect(scrollIntoView.mock.contexts).toEqual([host.querySelector('#promotion-preview')]);
++    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start', behavior: 'instant' });
++    expect(dialog()!.textContent).toContain('Merge project');
++    expect(decide).not.toHaveBeenCalled();
++    await click(close());
++    await render(<><button type="button" onClick={() => revealCard(host.querySelector('#message'), 'start', false)}>Jump</button>
++      <div id="message"><button type="button" onClick={decide}>Original action</button></div></>);
++    scrollIntoView.mockClear();
++    await click(host.querySelector('button')!);
++    expect(scrollIntoView.mock.contexts).toEqual([host.querySelector('#message')]);
++    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start', behavior: 'smooth' });
++    expect(dialog()).toBeNull();
++    expect(decide).not.toHaveBeenCalled();
++  });
++});
++
+ const approval = (toolName: string, input: unknown): ApprovalInfo => ({ id: toolName, toolName, input }) as ApprovalInfo;
+ const question = approval('AskUserQuestion', { questions: [{
+   question: 'Which branch should receive the change?',
+diff --git a/src/web/src/components/StartProjectCard.test.tsx b/src/web/src/components/StartProjectCard.test.tsx
+index 6190a44c1..9f7a59f46 100644
+--- a/src/web/src/components/StartProjectCard.test.tsx
++++ b/src/web/src/components/StartProjectCard.test.tsx
+@@ -711,11 +711,12 @@ describe('the compact project preview', () => {
+     await until(() => node.querySelector('.review-card-preview') !== null, 'the preview');
+     const preview = node.querySelector<HTMLElement>('#settlement-preview')!;
+     preview.scrollIntoView = vi.fn();
+-    expect(revealSettlementCard()).toBe(true);
+-    expect(preview.scrollIntoView).toHaveBeenCalled();
+     await key();
+     expect(bodies).toEqual([]);
+-    await act(async () => { node.querySelector<HTMLButtonElement>('.review-card-preview')!.click(); });
++    await act(async () => { expect(revealSettlementCard()).toBe(true); });
++    expect(preview.scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'instant' });
++    expect(document.querySelector('.review-card-dialog[data-open]')).not.toBeNull();
++    expect(bodies).toEqual([]);
+     const field = () => settingRow(cardIn(node)!, 'Merge check').querySelector<HTMLInputElement>('input')!;
+     await type(field(), 'npm run my-check');
+     await act(async () => { document.querySelector<HTMLButtonElement>('.review-card-dialog [aria-label="Close"]')!.click(); });
+diff --git a/src/web/src/components/WorkspaceView.scrollToBottom.test.tsx b/src/web/src/components/WorkspaceView.scrollToBottom.test.tsx
+index ac5f89596..5c8131acc 100644
+--- a/src/web/src/components/WorkspaceView.scrollToBottom.test.tsx
++++ b/src/web/src/components/WorkspaceView.scrollToBottom.test.tsx
+@@ -1,5 +1,5 @@
+ // @vitest-environment jsdom
+-import { act } from 'react';
++import { act, useState } from 'react';
+ import { createRoot, type Root } from 'react-dom/client';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { App as AntApp } from 'antd';
+@@ -7,6 +7,8 @@ import { MemoryRouter } from 'react-router-dom';
+ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+ import { NEAR_BOTTOM } from '../lib/tailPinning';
+ import type { Runner } from './TasksSidePanel';
++import { revealCard } from './DecisionRail';
++import { ReviewCard } from './ReviewCard';
+ 
+ /**
+  * When the jump-to-bottom button (`.scroll-to-bottom`) is on screen.
+@@ -322,6 +324,45 @@ async function mountTranscript(): Promise<FakeEventSource> {
+ }
+ 
+ describe('the jump-to-bottom button', { timeout: 60_000 }, () => {
++  it('holds a bar-opened preview through streaming and dismissal until the reader returns to the tail', async () => {
++    const stream = await mountTranscript();
++    const previewHost = document.createElement('div');
++    scroller().append(previewHost);
++    const previewRoot = createRoot(previewHost);
++    function Preview() {
++      const [open, setOpen] = useState(false);
++      return <ReviewCard title="Review the plan" summary="The pending plan" open={open} onOpenChange={setOpen}>
++        <p>Plan details</p>
++      </ReviewCard>;
++    }
++    try {
++      await act(async () => previewRoot.render(<Preview />));
++      await act(async () => { revealCard(previewHost); });
++      expect(document.querySelector('.review-card-dialog[data-open]')).not.toBeNull();
++      // Even a preview at the tail must not re-enable follow while it is being reviewed.
++      const heldAt = scrollTop;
++      await reportScroll();
++      await grow(600);
++      await publish(stream, { seq: 100, type: 'text_delta', payload: { text: 'while reviewing' } });
++      expect(scrollTop).toBe(heldAt);
++      await act(async () => {
++        document.querySelector<HTMLButtonElement>('.review-card-dialog [aria-label="Close"]')!.click();
++      });
++      expect(document.querySelector('.review-card-dialog[data-open]')).toBeNull();
++      await grow(600);
++      await publish(stream, { seq: 101, type: 'text_delta', payload: { text: 'after closing' } });
++      expect(scrollTop).toBe(heldAt);
++      await act(async () => button()!.click());
++      await reportScroll();
++      await grow(600);
++      await publish(stream, { seq: 102, type: 'text_delta', payload: { text: 'following again' } });
++      expect(gap()).toBe(0);
++    } finally {
++      await act(async () => previewRoot.unmount());
++      previewHost.remove();
++    }
++  });
++
+   it('shows once the tail has sat out of view under a pinned reader, and goes once it is back', async () => {
+     await mountTranscript();
+ 
+diff --git a/src/web/src/components/WorkspaceView.tsx b/src/web/src/components/WorkspaceView.tsx
+index 993d59359..8c55d6426 100644
+--- a/src/web/src/components/WorkspaceView.tsx
++++ b/src/web/src/components/WorkspaceView.tsx
+@@ -280,6 +280,8 @@ import {
+   SessionDecisionStrip,
+   decisionRowKey,
+   revealCriteriaCard,
++  revealCard,
++  REVIEW_CARD_REVEALED,
+   revealSettlementCard,
+   type PendingDecisionRow,
+ } from './DecisionRail';
+@@ -2146,6 +2148,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
+   // Smart auto-scroll: only keep pinned to the bottom when the user is already there, so
+   // reading history (or jumping to the sticky prompt) isn't yanked back by streaming updates.
+   const atBottomRef = useRef(true);
++  // A bar-opened review stays at its preview until the reader navigates or sends again.
++  const reviewPositionHeldRef = useRef(false);
+   // Render mirror of atBottomRef: drives the floating "jump to bottom" button, which shows
+   // while the user has scrolled up off the live tail (and while `stranded`). (The ref alone
+   // can't re-render.)
+@@ -2300,7 +2304,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
+     // Pin to the bottom while at (or near) it; un-pin only when the READER scrolls up. Both the
+     // reasoning behind that and the clients' copy of the rule live in tailPinning.ts.
+     const sample = sampleTail(el);
+-    atBottomRef.current = pinnedToTail(
++    atBottomRef.current = !reviewPositionHeldRef.current && pinnedToTail(
+       atBottomRef.current,
+       lastSampleRef.current,
+       sample,
+@@ -2375,6 +2379,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
+   // is traded for the tail (backToLatestRef), and the record leaves the URL — a reload now opens at the
+   // latest message, which is where the reader went.
+   const backToLatest = useCallback(() => {
++    reviewPositionHeldRef.current = false;
+     atBottomRef.current = true;
+     setAtBottom(true);
+     backToLatestRef.current?.();
+@@ -2389,6 +2394,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
+   }, [setSearchParams]);
+   // Snap back to the live tail; the scroll events it fires re-pin atBottomRef via measure().
+   const scrollToBottom = useCallback(() => {
++    reviewPositionHeldRef.current = false;
+     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+   }, []);
+   // Called on send: re-pin to the live tail so a message fired while scrolled up snaps back to the
+@@ -3677,6 +3683,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
+       return {};
+     });
+     atBottomRef.current = true; // a freshly opened/switched session starts pinned to the latest
++    reviewPositionHeldRef.current = false;
+     lastSampleRef.current = TAIL_SAMPLE_ZERO;
+     setAtBottom(true); // hide the jump-to-bottom button until the new session reports otherwise
+     window.clearTimeout(strandTimerRef.current); // nor is it stranded off a tail not yet drawn
+@@ -4495,8 +4502,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
+     // one that falls because they dragged up, and the transcript stops following the live reply
+     // (tailPinning.ts). `pointerdown` is what catches a scrollbar drag, which fires none of the rest.
+     const onReaderInput = (): void => {
++      reviewPositionHeldRef.current = false;
+       readerInputAtRef.current = performance.now();
+     };
++    const onReviewRevealed = (): void => {
++      reviewPositionHeldRef.current = true;
++      atBottomRef.current = false;
++      setAtBottom(false);
++    };
++    el.addEventListener(REVIEW_CARD_REVEALED, onReviewRevealed);
+     const readerEvents = ['wheel', 'touchmove', 'pointerdown', 'keydown'] as const;
+     for (const type of readerEvents) el.addEventListener(type, onReaderInput, { passive: true });
+     // The events-driven pin above only re-scrolls when the transcript's *content* changes, so
+@@ -4533,6 +4547,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
+     el.addEventListener('load', onLoad, { capture: true });
+     return () => {
+       el.removeEventListener('scroll', onScroll);
++      el.removeEventListener(REVIEW_CARD_REVEALED, onReviewRevealed);
+       for (const type of readerEvents) el.removeEventListener(type, onReaderInput);
+       el.removeEventListener('load', onLoad, { capture: true });
+       ro.disconnect();
+@@ -9036,11 +9051,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
+             onClick={() => {
+               const seq = stuck?.seq;
+               if (!seq) return;
+-              scrollRef.current
+-                ?.querySelector<HTMLElement>(
+-                  `.chat-user[data-seq="${seq}"], [data-sticky-label][data-seq="${seq}"]`,
+-                )
+-                ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
++              const card = scrollRef.current?.querySelector<HTMLElement>(
++                `.chat-user[data-seq="${seq}"], [data-sticky-label][data-seq="${seq}"]`,
++              );
++              revealCard(card, 'start', false);
+             }}
+           >
+             {/* The arrow points up at the turn the bar names, whoever's turn it was. */}

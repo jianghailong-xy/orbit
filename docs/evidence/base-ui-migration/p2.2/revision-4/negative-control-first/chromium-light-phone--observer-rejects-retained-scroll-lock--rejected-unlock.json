@@ -1,0 +1,60 @@
+{
+  "limitMs": 100,
+  "unlockedAfterMs": null,
+  "firstRead": {
+    "phase": "first-read-after-hidden-and-focus",
+    "afterEscapeMs": 1.5,
+    "overflow": [
+      "hidden",
+      "hidden"
+    ],
+    "locked": true
+  },
+  "finalRead": {
+    "phase": "final-read",
+    "afterEscapeMs": 100.30000001192093,
+    "overflow": [
+      "hidden",
+      "hidden"
+    ],
+    "locked": true
+  },
+  "samples": [
+    {
+      "phase": "final-escape",
+      "afterEscapeMs": 0.09999999403953552,
+      "overflow": [
+        "hidden",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "first-read-after-hidden-and-focus",
+      "afterEscapeMs": 1.5,
+      "overflow": [
+        "hidden",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "deadline",
+      "afterEscapeMs": 100.30000001192093,
+      "overflow": [
+        "hidden",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "final-read",
+      "afterEscapeMs": 100.30000001192093,
+      "overflow": [
+        "hidden",
+        "hidden"
+      ],
+      "locked": true
+    }
+  ]
+}

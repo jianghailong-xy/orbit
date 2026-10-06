@@ -1,0 +1,45 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --project chromium-light-desktop --project webkit-dark-phone --grep matches the current|existing states|chip appearance|disabled-button
+
+[WebServer] (node:2417550) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 22 tests using 1 worker
+
+(node:2418254) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › ui-migration/choices.browser.mjs:81:3 › attachment matches the current surface, density and option states (6.6s)
+  ✓   2 [chromium-light-desktop] › ui-migration/choices.browser.mjs:81:3 › access matches the current surface, density and option states (3.1s)
+  ✓   3 [chromium-light-desktop] › ui-migration/choices.browser.mjs:81:3 › expiry matches the current surface, density and option states (3.8s)
+  ✓   4 [chromium-light-desktop] › ui-migration/choices.browser.mjs:81:3 › account matches the current surface, density and option states (3.8s)
+  ✓   5 [chromium-light-desktop] › ui-migration/choices.browser.mjs:81:3 › search matches the current surface, density and option states (3.3s)
+  ✓   6 [chromium-light-desktop] › ui-migration/choices.browser.mjs:81:3 › popover matches the current surface, density and option states (3.1s)
+  ✓   7 [chromium-light-desktop] › ui-migration/choices.browser.mjs:81:3 › tooltip matches the current surface, density and option states (2.9s)
+  ✓   8 [chromium-light-desktop] › ui-migration/choices.browser.mjs:156:1 › empty, disabled, hover and focus choice surfaces match the existing states (13.2s)
+  ✓   9 [chromium-light-desktop] › ui-migration/choices.browser.mjs:482:42 › multiple chip appearance matches current labels and email fields (4.8s)
+  ✓  10 [chromium-light-desktop] › ui-migration/choices.browser.mjs:482:42 › tags chip appearance matches current labels and email fields (4.0s)
+  ✓  11 [chromium-light-desktop] › ui-migration/choices.browser.mjs:638:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen (1.3s)
+(node:2424015) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  12 [webkit-dark-phone] › ui-migration/choices.browser.mjs:81:3 › attachment matches the current surface, density and option states (2.5s)
+  ✓  13 [webkit-dark-phone] › ui-migration/choices.browser.mjs:81:3 › access matches the current surface, density and option states (2.3s)
+  ✓  14 [webkit-dark-phone] › ui-migration/choices.browser.mjs:81:3 › expiry matches the current surface, density and option states (2.6s)
+  ✓  15 [webkit-dark-phone] › ui-migration/choices.browser.mjs:81:3 › account matches the current surface, density and option states (2.5s)
+  ✓  16 [webkit-dark-phone] › ui-migration/choices.browser.mjs:81:3 › search matches the current surface, density and option states (2.8s)
+  ✓  17 [webkit-dark-phone] › ui-migration/choices.browser.mjs:81:3 › popover matches the current surface, density and option states (2.3s)
+  ✓  18 [webkit-dark-phone] › ui-migration/choices.browser.mjs:81:3 › tooltip matches the current surface, density and option states (2.2s)
+  ✓  19 [webkit-dark-phone] › ui-migration/choices.browser.mjs:156:1 › empty, disabled, hover and focus choice surfaces match the existing states (10.1s)
+  ✓  20 [webkit-dark-phone] › ui-migration/choices.browser.mjs:482:42 › multiple chip appearance matches current labels and email fields (3.4s)
+  ✓  21 [webkit-dark-phone] › ui-migration/choices.browser.mjs:482:42 › tags chip appearance matches current labels and email fields (2.5s)
+  ✓  22 [webkit-dark-phone] › ui-migration/choices.browser.mjs:638:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen (1.3s)
+
+  22 passed (1.5m)

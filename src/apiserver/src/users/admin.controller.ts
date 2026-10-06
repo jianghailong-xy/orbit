@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminRoleGuard } from './admin-role.guard';
@@ -24,6 +25,7 @@ import { createOrResetUser } from './users.util';
  * request.
  */
 @UseGuards(JwtAuthGuard, AdminRoleGuard)
+@PatForbidden('ADMIN')
 @Controller('admin')
 export class AdminController {
   constructor(private readonly prisma: PrismaService) {}

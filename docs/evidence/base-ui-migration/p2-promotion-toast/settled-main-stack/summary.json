@@ -1,0 +1,196 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T12:07:54.254Z",
+    "duration": 17764.763,
+    "expected": 8,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack-styles.json",
+          "sha256": "ce102b2f77097038f0af6128271ff6a1637018098105886f18bf9ed30bb14997"
+        },
+        {
+          "file": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+          "sha256": "3cef7539e6675a56869d47e39d6a135fad077b9e980a92ab80ce2f030f486f0e"
+        },
+        {
+          "file": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+          "sha256": "85a11048de334ea5de397c493511c0b960c2069872be4e6b28a038ebdb504a38"
+        },
+        {
+          "file": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack-styles.json",
+          "sha256": "665fe6c022e90d32e3827246b12e46edc29639f0446bbfed9ced20711ca26a9f"
+        },
+        {
+          "file": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+          "sha256": "7de7023bdb02ed63b37940552f4a0bcdad1cefbb052af522d35e028c6544bde1"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack-styles.json",
+          "sha256": "67c3ab27b5fa71cba1b4327e116c7e1b84767aec4d594a7f9a0e27172a110b89"
+        },
+        {
+          "file": "chromium-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+          "sha256": "1f6b86585895c02a2f19e4c04380f73c704b1424a1038472d4675e5968fa7c96"
+        },
+        {
+          "file": "chromium-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+          "sha256": "3a5ea682622208d82af78c14bc987c129a01f4b5b1139b115bfe824f9672f49d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack-styles.json",
+          "sha256": "2137bb4e36d0fcc7a7ca2b4e1057e523b2b6f9cf6cda75cc745ef72af7ebba89"
+        },
+        {
+          "file": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+          "sha256": "5cea82a6923a3f2a785fce041f13a13d2afc6d95ba839f58e4d786ce293df86c"
+        },
+        {
+          "file": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+          "sha256": "85a11048de334ea5de397c493511c0b960c2069872be4e6b28a038ebdb504a38"
+        },
+        {
+          "file": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack-styles.json",
+          "sha256": "ca00cd4be719f08a04c3ea56edc5b63bbc3c68e62870986534b1bc251cf74d19"
+        },
+        {
+          "file": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+          "sha256": "a8aa56b8b64260b3d09838c22571e19af65f96d80ebbc0422b72f0be2ae2e448"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack-styles.json",
+          "sha256": "f36262f2a65517c52e6e5ee490d468e100e74ef41da5c33d6a8b00e2e8daeb84"
+        },
+        {
+          "file": "chromium-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+          "sha256": "ac09cfb8d341ef2395c37b958f017bf7a1d6449fd1106b9a0716fbddfa9da2cc"
+        },
+        {
+          "file": "chromium-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+          "sha256": "3a5ea682622208d82af78c14bc987c129a01f4b5b1139b115bfe824f9672f49d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack-styles.json",
+          "sha256": "a7ea41836afa6607295010ea657cc4e5e87b2b0fae94d2794915746ca4421fb8"
+        },
+        {
+          "file": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+          "sha256": "113bec55c6d5c9aa6f64dd6cd0a3cd6e75604cfee5e68285dfd66024b53e7115"
+        },
+        {
+          "file": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+          "sha256": "5e7ec847209c51f0c15fda381fe2451a68cf58ca6a0a06246b8a2c711ed538d1"
+        },
+        {
+          "file": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack-styles.json",
+          "sha256": "cea97983a97a5edcc8681ff756cee187364f066dca4b7724423e51f40c0da314"
+        },
+        {
+          "file": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+          "sha256": "9e213309b47f65719962d7fcbed957bc3aef942d44790606c93e41483e56d786"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack-styles.json",
+          "sha256": "c437f0584f677e0776d3f36714f8b9a67429367a5402f5e28034f871f76ac1d2"
+        },
+        {
+          "file": "webkit-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+          "sha256": "4e5caeb413ec7f8489ecfbbe4624fc04e11e6753e630cca79a78881d7728aa00"
+        },
+        {
+          "file": "webkit-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+          "sha256": "273d1ca978b144617c711a0b8103c84de47a2a99ceba3fe0145752cd754957a0"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack-styles.json",
+          "sha256": "54b62124b65ef1877cac8c2a64f0b74d7a538f5f43f77c1c644d258e5d3ccbf8"
+        },
+        {
+          "file": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+          "sha256": "012f2a2794aa7416bbf01563fd8f2eabcaaa5ec0d93059af919acfd823478f1b"
+        },
+        {
+          "file": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+          "sha256": "5e7ec847209c51f0c15fda381fe2451a68cf58ca6a0a06246b8a2c711ed538d1"
+        },
+        {
+          "file": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack-styles.json",
+          "sha256": "a7dbe1c63b05ab7131292d8cb07fb9ca774dd8da5a84f09bcd0e4bac168bed21"
+        },
+        {
+          "file": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+          "sha256": "c68c9475be7f38ddfd53f89c47c8ae815c0cfe96cc8e857729d51d24260ee000"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack-styles.json",
+          "sha256": "469365f5d5daba779e6d20c36f3c48eceea64c4ea539bdaf8804d8d95b66ee71"
+        },
+        {
+          "file": "webkit-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+          "sha256": "a938c9d41de37b0880b72bc2547d62343e6a5c2714b979a54b59aa468dc56b36"
+        },
+        {
+          "file": "webkit-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+          "sha256": "273d1ca978b144617c711a0b8103c84de47a2a99ceba3fe0145752cd754957a0"
+        }
+      ]
+    }
+  ]
+}

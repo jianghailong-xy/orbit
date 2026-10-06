@@ -156,7 +156,8 @@ final class SessionProjectPageWiringTests: XCTestCase {
     func testTheTwoShellsOpenTheProjectSessionsPageTheirOwnWay() throws {
         let compact = code(try appSource("Views/CompactShell.swift"))
         let frames = try slice(compact, from: "case .compose(let agentID, let folderID):", to: "default:")
-        XCTAssertTrue(frames.contains("case .sessionProject(let address):"))
+        XCTAssertTrue(frames.contains("case .sessionProject(let address, asDestination: false):"))
+        XCTAssertTrue(frames.contains("case .sessionProject(let address, asDestination: true):"))
         XCTAssertTrue(frames.contains("SessionProjectPage(address: address)"))
 
         let agents = code(try appSource("Views/AgentsView.swift"))
@@ -313,9 +314,14 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(load.contains("sessionDetails.store(row)"))
         let open = try slice(app, from: "func openProjectMember(_ session: Session, push: Bool) {", to: "\n    }")
         XCTAssertTrue(open.contains("sessionDetails.store(session)"))
-        XCTAssertTrue(open.contains("selectedAgentID = agentID"), "opening a cross-workspace member follows its workspace")
-        XCTAssertTrue(open.contains("self.push(node)"))
-        XCTAssertTrue(open.contains("nav.selectConsole(node)"))
+        let pushed = try slice(open, from: "if push {", to: "} else {")
+        XCTAssertTrue(pushed.contains("self.push(node)"))
+        XCTAssertFalse(pushed.contains("selectedAgentID"),
+                       "a phone leaves the Workspace beneath alone, so back lands on the one the project's page "
+                       + "was entered from (owner, 2026-10-06)")
+        let selected = try slice(open, from: "} else {", to: "nav.selectConsole(node)")
+        XCTAssertTrue(selected.contains("selectedAgentID = agentID"),
+                      "a wide shell's column follows a cross-workspace member into its workspace")
     }
 
     func testThePageDrawsProgressCoordinatorThenOrdinaryMemberRows() throws {

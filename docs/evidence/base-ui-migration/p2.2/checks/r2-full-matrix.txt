@@ -1,0 +1,122 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs
+
+[WebServer] (node:3087972) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 496 tests using 1 worker
+
+(node:3088143) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓    1 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:50:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.3s)
+  ✓    2 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:50:51 › reduce Dialog Popover Select exits restore one layer at a time (1.7s)
+  ✓    3 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion attachment has no transition and dismisses cleanly (976ms)
+  ✓    4 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion expiry has no transition and dismisses cleanly (1.1s)
+  ✓    5 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion search has no transition and dismisses cleanly (1.2s)
+  ✓    6 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion multiple has no transition and dismisses cleanly (1.1s)
+  ✓    7 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion popover has no transition and dismisses cleanly (1.1s)
+  ✓    8 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion tooltip has no transition and dismisses cleanly (906ms)
+  ✓    9 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal attachment can reopen during exit without stale unmount (1.8s)
+  ✓   10 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal expiry can reopen during exit without stale unmount (1.8s)
+  ✓   11 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal search can reopen during exit without stale unmount (1.8s)
+  ✓   12 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal popover can reopen during exit without stale unmount (1.8s)
+  ✓   13 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches attachment (2.8s)
+  ✓   14 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal top entrance and exit motion matches attachment (2.9s)
+  ✓   15 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal flipped entrance and exit motion matches attachment (2.8s)
+  ✓   16 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches expiry (2.6s)
+  ✓   17 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal top entrance and exit motion matches expiry (3.0s)
+  ✓   18 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal flipped entrance and exit motion matches expiry (2.9s)
+  ✓   19 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches search (3.0s)
+  ✓   20 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal top entrance and exit motion matches search (2.9s)
+  ✓   21 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal flipped entrance and exit motion matches search (2.7s)
+  ✓   22 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches multiple (2.6s)
+  ✓   23 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal top entrance and exit motion matches multiple (2.8s)
+  ✓   24 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal flipped entrance and exit motion matches multiple (2.8s)
+  ✓   25 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches popover (2.7s)
+  ✓   26 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal top entrance and exit motion matches popover (2.8s)
+  ✓   27 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal flipped entrance and exit motion matches popover (2.8s)
+  ✓   28 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches tooltip (2.9s)
+  ✓   29 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal top entrance and exit motion matches tooltip (2.7s)
+  ✓   30 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal flipped entrance and exit motion matches tooltip (2.9s)
+  ✓   31 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:112:83 › popover center zoom origin matches (2.7s)
+  ✓   32 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:112:83 › popover end zoom origin matches (2.7s)
+  ✓   33 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:112:83 › tooltip center zoom origin matches (2.7s)
+  ✓   34 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:112:83 › tooltip end zoom origin matches (3.1s)
+  ✓   35 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:131:41 › submenu left edge zoom matches and stays in view (3.6s)
+  ✓   36 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:131:41 › submenu right edge zoom matches and stays in view (3.6s)
+  ✓   37 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › attachment matches the current surface, density and option states (3.6s)
+  ✓   38 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › access matches the current surface, density and option states (3.5s)
+  ✓   39 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › expiry matches the current surface, density and option states (4.0s)
+  ✓   40 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › account matches the current surface, density and option states (3.9s)
+  ✓   41 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › search matches the current surface, density and option states (3.8s)
+  ✓   42 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › popover matches the current surface, density and option states (3.8s)
+  ✓   43 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states (4.0s)
+  ✓   44 [chromium-light-desktop] › ui-migration/choices.browser.mjs:158:1 › empty, disabled, hover and focus choice surfaces match the existing states (21.2s)
+  ✓   45 [chromium-light-desktop] › ui-migration/choices.browser.mjs:198:1 › menu arrows, disabled items, submenu, checkbox and focus return work (1.5s)
+  ✓   46 [chromium-light-desktop] › ui-migration/choices.browser.mjs:231:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.8s)
+  ✓   47 [chromium-light-desktop] › ui-migration/choices.browser.mjs:263:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values (1.6s)
+  ✓   48 [chromium-light-desktop] › ui-migration/choices.browser.mjs:292:1 › search preserves selection, filters groups, handles no results, composition and explicit clear (1.8s)
+  ✓   49 [chromium-light-desktop] › ui-migration/choices.browser.mjs:323:1 › remote search accepts server labels and resets an action picker without local filtering (1.2s)
+  ✓   50 [chromium-light-desktop] › ui-migration/choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme (2.6s)
+  ✘   51 [chromium-light-desktop] › ui-migration/choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme (2.7s)
+
+
+  1) [chromium-light-desktop] › ui-migration/choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme 
+
+    Test was interrupted.
+
+    Error: expect(locator).not.toBeVisible() failed
+
+    Locator:  getByRole('dialog', { name: 'Legacy share', exact: true })
+    Expected: not visible
+    Received: visible
+
+    Call log:
+      - Expect "not toBeVisible" getByRole('dialog', { name: 'Legacy share', exact: true }) with timeout 15000ms
+      - waiting for getByRole('dialog', { name: 'Legacy share', exact: true })
+        - locator resolved to <div role="dialog" tabindex="-1" aria-modal="true" aria-labelledby="_r_28_" class="ant-modal css-dev-only-do-not-override-oc1rc0 ant-zoom-leave ant-zoom-leave-start ant-zoom">…</div>
+        2 × unexpected value "visible"
+          - locator resolved to <div role="dialog" tabindex="-1" aria-modal="true" aria-labelledby="_r_28_" class="ant-modal css-dev-only-do-not-override-oc1rc0 ant-zoom-leave ant-zoom-leave-active ant-zoom">…</div>
+        - unexpected value "visible"
+      - Test ended.
+
+
+      374 |   await shot(info, 'choices-in-dialog', dialog);
+      375 |   await page.keyboard.press('Escape');
+    > 376 |   await expect(dialog).not.toBeVisible();
+          |                            ^
+      377 |   await expect(trigger).toBeFocused();
+      378 |   await attach(info, 'nested-choices', { legacy, topLayerOnly: true, portalInsideOwner: true, tabBothDirections: true, fullTabCycle: !legacy, scrollLocked: true, returned: true });
+      379 | });
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:376:28
+
+    Error Context: .choices-results/choices.browser.mjs-legacy-21267--layer-Escape-Tab-and-theme-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-legacy-21267--layer-Escape-Tab-and-theme-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-legacy-21267--layer-Escape-Tab-and-theme-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 interrupted
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme 
+  445 did not run
+  50 passed (2.5m)
+npm error Lifecycle script `test:ui-choices` failed with error:
+npm error code 130
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/choices.config.mjs

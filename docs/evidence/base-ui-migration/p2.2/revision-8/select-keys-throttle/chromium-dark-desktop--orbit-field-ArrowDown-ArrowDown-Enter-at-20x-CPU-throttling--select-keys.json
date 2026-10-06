@@ -1,0 +1,151 @@
+{
+  "target": "orbit-field",
+  "rate": 20,
+  "runs": [
+    {
+      "run": 0,
+      "before": "never",
+      "after": "7",
+      "listboxOpen": false,
+      "keys": [
+        {
+          "key": "ArrowDown",
+          "t": 331.3,
+          "target": "combobox:Expires",
+          "listbox": false,
+          "highlighted": null
+        },
+        {
+          "key": "ArrowDown",
+          "t": 680.2,
+          "target": "option:Never",
+          "listbox": true,
+          "highlighted": "Never"
+        },
+        {
+          "key": "Enter",
+          "t": 730.6,
+          "target": "option:7 days",
+          "listbox": true,
+          "highlighted": "7 days"
+        }
+      ]
+    },
+    {
+      "run": 1,
+      "before": "never",
+      "after": "7",
+      "listboxOpen": false,
+      "keys": [
+        {
+          "key": "ArrowDown",
+          "t": 311.5,
+          "target": "combobox:Expires",
+          "listbox": false,
+          "highlighted": null
+        },
+        {
+          "key": "ArrowDown",
+          "t": 668.2,
+          "target": "option:Never",
+          "listbox": true,
+          "highlighted": "Never"
+        },
+        {
+          "key": "Enter",
+          "t": 745.9,
+          "target": "option:7 days",
+          "listbox": true,
+          "highlighted": "7 days"
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "before": "never",
+      "after": "7",
+      "listboxOpen": false,
+      "keys": [
+        {
+          "key": "ArrowDown",
+          "t": 270.5,
+          "target": "combobox:Expires",
+          "listbox": false,
+          "highlighted": null
+        },
+        {
+          "key": "ArrowDown",
+          "t": 579.3,
+          "target": "option:Never",
+          "listbox": true,
+          "highlighted": "Never"
+        },
+        {
+          "key": "Enter",
+          "t": 637.6,
+          "target": "option:7 days",
+          "listbox": true,
+          "highlighted": "7 days"
+        }
+      ]
+    },
+    {
+      "run": 3,
+      "before": "never",
+      "after": "7",
+      "listboxOpen": false,
+      "keys": [
+        {
+          "key": "ArrowDown",
+          "t": 328,
+          "target": "combobox:Expires",
+          "listbox": false,
+          "highlighted": null
+        },
+        {
+          "key": "ArrowDown",
+          "t": 702.8,
+          "target": "option:Never",
+          "listbox": true,
+          "highlighted": "Never"
+        },
+        {
+          "key": "Enter",
+          "t": 773.3,
+          "target": "option:7 days",
+          "listbox": true,
+          "highlighted": "7 days"
+        }
+      ]
+    },
+    {
+      "run": 4,
+      "before": "never",
+      "after": "7",
+      "listboxOpen": false,
+      "keys": [
+        {
+          "key": "ArrowDown",
+          "t": 305.2,
+          "target": "combobox:Expires",
+          "listbox": false,
+          "highlighted": null
+        },
+        {
+          "key": "ArrowDown",
+          "t": 674.2,
+          "target": "option:Never",
+          "listbox": true,
+          "highlighted": "Never"
+        },
+        {
+          "key": "Enter",
+          "t": 739.5,
+          "target": "option:7 days",
+          "listbox": true,
+          "highlighted": "7 days"
+        }
+      ]
+    }
+  ]
+}

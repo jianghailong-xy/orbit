@@ -1,0 +1,4 @@
+src/web/src/components/ui/Menu.tsx(87,23): error TS2322: Type 'RefObject<HTMLElement | null>' is not assignable to type '((RefObject<HTMLButtonElement | null> | ((instance: HTMLButtonElement | null) => void | (() => VoidOrUndefinedOnly))) & (RefObject<...> | ((instance: HTMLElement | null) => void | (() => VoidOrUndefinedOnly)))) | null | undefined'.
+  Type 'RefObject<HTMLElement | null>' is not assignable to type '((instance: HTMLButtonElement | null) => void | (() => VoidOrUndefinedOnly)) & RefObject<HTMLElement | null>'.
+    Type 'RefObject<HTMLElement | null>' is not assignable to type '(instance: HTMLButtonElement | null) => void | (() => VoidOrUndefinedOnly)'.
+      Type 'RefObject<HTMLElement | null>' provides no match for the signature '(instance: HTMLButtonElement | null): void | (() => VoidOrUndefinedOnly)'.

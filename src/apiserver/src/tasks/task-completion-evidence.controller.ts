@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Headers, Param, Post, UseGuards } from '@nestjs/common';
 import { CreatorType } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden, PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import {
@@ -16,6 +17,7 @@ import { TaskCompletionEvidenceService } from './task-completion-evidence.servic
 export class TaskCompletionEvidenceController {
   constructor(private readonly evidence: TaskCompletionEvidenceService) {}
 
+  @PatScope('tasks:write')
   @Post()
   submit(
     @CurrentUser() user: AuthUser,
@@ -30,6 +32,7 @@ export class TaskCompletionEvidenceController {
     );
   }
 
+  @PatScope('tasks:write')
   @Post('legacy-import')
   importLegacyComment(
     @CurrentUser() user: AuthUser,
@@ -56,6 +59,7 @@ export class TaskCompletionEvidenceController {
    * project that has no dispatching session from the run it is drawn in, the only conversation left
    * to draw it in (`evidence-review.ts#ownerDecidesInTheRun`).
    */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post('decision')
   decide(
     @CurrentUser() user: AuthUser,
@@ -72,6 +76,7 @@ export class TaskCompletionEvidenceController {
     );
   }
 
+  @PatScope('tasks:read')
   @Get()
   list(@CurrentUser() user: AuthUser, @Param('taskId', PublicIdPipe) taskId: string) {
     return this.evidence.list(user.userId, taskId);

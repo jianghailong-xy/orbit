@@ -14,6 +14,7 @@ import {
 import { PublicIdPipe } from '../common/public-id';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { AttachmentsService } from './attachments.service';
 import { MAX_UPLOAD_BYTES, UploadedFile } from './attachments.media';
@@ -26,6 +27,7 @@ export class AttachmentsController {
   // multipart/form-data with a `file` field. We use multipart (not base64 JSON) because
   // the app sets no raised body limit, so Express' ~100kb JSON cap would 413 real images;
   // multipart also avoids base64's ~33% inflation. `limits.fileSize` bounds buffered memory.
+  @PatScope('tasks:write')
   @Post()
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_UPLOAD_BYTES } }))
   upload(
@@ -42,6 +44,7 @@ export class AttachmentsController {
 
   // Task inputs only — see AttachmentsService.removeTaskInput for why a transcript's image is
   // not deletable through here.
+  @PatScope('tasks:write')
   @Delete(':id')
   @HttpCode(204)
   removeTaskInput(
@@ -51,6 +54,7 @@ export class AttachmentsController {
     return this.attachments.removeTaskInput(user.userId, id);
   }
 
+  @PatScope('tasks:read')
   @Get(':id')
   async download(
     @CurrentUser() user: AuthUser,

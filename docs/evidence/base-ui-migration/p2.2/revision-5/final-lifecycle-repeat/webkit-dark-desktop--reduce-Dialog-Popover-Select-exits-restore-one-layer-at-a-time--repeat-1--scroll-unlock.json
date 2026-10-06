@@ -1,0 +1,109 @@
+{
+  "limitMs": 100,
+  "exitStartedAfterMs": 27,
+  "exitTransitionDuration": "0s",
+  "closedAfterMs": 30,
+  "closeRead": {
+    "phase": "dom-change",
+    "afterEscapeMs": 30,
+    "connected": false,
+    "hidden": false,
+    "overflow": [
+      "scroll",
+      "hidden"
+    ],
+    "locked": true
+  },
+  "unlockedAfterMs": 35,
+  "readyAfterCloseMs": 5,
+  "firstRead": {
+    "phase": "first-read-after-hidden-and-focus",
+    "afterEscapeMs": 66,
+    "connected": false,
+    "hidden": false,
+    "overflow": [
+      "visible",
+      "visible"
+    ],
+    "locked": false
+  },
+  "finalRead": {
+    "phase": "final-read",
+    "afterEscapeMs": 66,
+    "connected": false,
+    "hidden": false,
+    "overflow": [
+      "visible",
+      "visible"
+    ],
+    "locked": false
+  },
+  "samples": [
+    {
+      "phase": "final-escape",
+      "afterEscapeMs": 0,
+      "connected": true,
+      "hidden": false,
+      "overflow": [
+        "scroll",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "dom-change",
+      "afterEscapeMs": 27,
+      "connected": true,
+      "hidden": false,
+      "overflow": [
+        "scroll",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "dom-change",
+      "afterEscapeMs": 30,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "scroll",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "dom-change",
+      "afterEscapeMs": 35,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "visible",
+        "visible"
+      ],
+      "locked": false
+    },
+    {
+      "phase": "first-read-after-hidden-and-focus",
+      "afterEscapeMs": 66,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "visible",
+        "visible"
+      ],
+      "locked": false
+    },
+    {
+      "phase": "final-read",
+      "afterEscapeMs": 66,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "visible",
+        "visible"
+      ],
+      "locked": false
+    }
+  ]
+}

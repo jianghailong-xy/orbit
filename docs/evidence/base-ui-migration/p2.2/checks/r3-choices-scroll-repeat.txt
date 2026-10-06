@@ -1,0 +1,34 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --project chromium-light-desktop --grep reduce Dialog Popover Select exits restore one layer at a time --repeat-each 5
+
+[WebServer] (node:96862) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 5 tests using 1 worker
+
+(node:97005) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:50:51 › reduce Dialog Popover Select exits restore one layer at a time (1.4s)
+(node:97229) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:50:51 › reduce Dialog Popover Select exits restore one layer at a time (1.1s)
+(node:97340) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  3 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:50:51 › reduce Dialog Popover Select exits restore one layer at a time (1.2s)
+(node:97446) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  4 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:50:51 › reduce Dialog Popover Select exits restore one layer at a time (1.3s)
+(node:97553) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  5 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:50:51 › reduce Dialog Popover Select exits restore one layer at a time (1.3s)
+
+  5 passed (8.6s)

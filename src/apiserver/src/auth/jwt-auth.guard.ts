@@ -11,6 +11,7 @@ import { JwtService } from '@nestjs/jwt';
 import type { AuthUser } from '../common/current-user.decorator';
 import { visitorAddress } from '../shared/public-surface.guard';
 import { ALLOW_QUERY_TOKEN } from './allow-query-token.decorator';
+import { patDeclaration, patForbiddenBody } from './pat-scope.decorator';
 import { PAT_PREFIX, PatService } from './pat.service';
 
 @Injectable()
@@ -66,12 +67,8 @@ export class JwtAuthGuard implements CanActivate {
         },
       };
       req.user = user;
-      // Fail-closed (§6.2): a token reaches a route only once the route declares the scope it needs
-      // (@PatScope) — and no route declares one yet, so no route is open to a token.
-      throw new ForbiddenException({
-        code: 'PAT_SCOPE_MISSING',
-        message: 'This route declares no access token scope, so a personal access token cannot call it',
-      });
+      this.admitToken(context, grant.scopes);
+      return true;
     }
 
     try {
@@ -81,6 +78,30 @@ export class JwtAuthGuard implements CanActivate {
       return true;
     } catch {
       throw new UnauthorizedException('invalid token');
+    }
+  }
+
+  /**
+   * Whether this route is open to a verified token (§6.2), from what the route declares: a refusal
+   * (@PatForbidden) is a 403 whatever the token holds; a scope (@PatScope) must be one it was granted;
+   * and a route that declares neither is a 403 as well — fail-closed, so a route added without a
+   * decision is closed to tokens rather than open to them.
+   */
+  private admitToken(context: ExecutionContext, scopes: string[]): void {
+    const declared = patDeclaration(this.reflector, context.getHandler(), context.getClass());
+    if (declared.kind === 'FORBIDDEN') throw new ForbiddenException(patForbiddenBody(declared.reason));
+    if (declared.kind === 'UNDECLARED') {
+      throw new ForbiddenException({
+        code: 'PAT_ROUTE_UNDECLARED',
+        message: 'This route declares no access token scope, so a personal access token cannot call it',
+      });
+    }
+    if (!scopes.includes(declared.scope)) {
+      throw new ForbiddenException({
+        code: 'PAT_SCOPE_MISSING',
+        scope: declared.scope,
+        message: `This access token was not granted the ${declared.scope} scope this route needs`,
+      });
     }
   }
 }

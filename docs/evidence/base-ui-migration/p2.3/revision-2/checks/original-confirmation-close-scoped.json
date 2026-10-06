@@ -1,0 +1,18 @@
+{
+  "argv": [
+    "node",
+    "node_modules/@playwright/test/cli.js",
+    "test",
+    "--config",
+    "/tmp/orbit-p23-reference/src/web/ui-migration/reference-confirm-close.config.mjs",
+    "--project",
+    "chromium-light-desktop",
+    "--project",
+    "webkit-light-phone"
+  ],
+  "cwd": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc",
+  "startedFrom": "0e3b3a61cadc73bda93f06985dbd866e4d1fba79",
+  "finishedAt": "2026-10-04T07:45:21.588868+00:00",
+  "seconds": 3.7513411499967333,
+  "exitCode": 0
+}

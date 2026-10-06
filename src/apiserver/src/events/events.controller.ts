@@ -2,6 +2,7 @@ import { Controller, MessageEvent, Sse, UseGuards } from '@nestjs/common';
 import { interval, map, merge, Observable } from 'rxjs';
 import { AllowQueryToken } from '../auth/allow-query-token.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { RealtimeService } from '../realtime/realtime.service';
 
@@ -25,6 +26,7 @@ export class EventsController {
   constructor(private readonly realtime: RealtimeService) {}
 
   @AllowQueryToken() // browser EventSource can't set headers; native clients use Authorization
+  @PatScope('events:read')
   @Sse('events')
   events(@CurrentUser() user: AuthUser): Observable<MessageEvent> {
     return merge(
