@@ -37,9 +37,10 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.directory.*
 import io.orbitd.android.navigation.*
-import io.orbitd.android.ui.OrbitTheme
+import io.orbitd.android.management.*
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.push.PushNoticeHost
+import io.orbitd.android.push.NotificationSettings
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 
@@ -51,7 +52,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         if (savedInstanceState == null) acceptIntent(intent)
         val auth = ViewModelProvider(this, ViewModelProvider.AndroidViewModelFactory(application))[AuthViewModel::class.java]
-        setContent { OrbitTheme { PushNoticeHost((application as OrbitApplication).push) { OrbitShell(auth, application as OrbitApplication, incoming) } } }
+        setContent { AccountAppearance(application as OrbitApplication) {
+            PushNoticeHost((application as OrbitApplication).push) { OrbitShell(auth, application as OrbitApplication, incoming) }
+        } }
     }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); acceptIntent(intent) }
     private fun acceptIntent(intent: Intent) {
@@ -111,6 +114,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
     // Saved UI keys must survive a process restart; request ownership still uses the live handle.
     key(accountKey) {
         val api = remember(signedIn.handle) { DirectoryApi(app.session, signedIn.handle) }
+        val management = remember(signedIn.handle) { ManagementApi(app.session, signedIn.handle) }
         val data by rememberDirectoryData(app, signedIn.handle)
         val live by remember(app) { app.realtime.state.map { it.handle to it.invalidationRevision }.distinctUntilChanged() }
             .collectAsState(null to 0L)
@@ -172,6 +176,9 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                             Icon(painterResource(if (navigation.canGoBack) R.drawable.ic_back else R.drawable.ic_menu), if (navigation.canGoBack) "Back" else "Open navigation")
                         }
                     }, actions = {
+                        if (route.destination == Destination.WORKSPACE) IconButton(onClick = {
+                            open(OrbitRoute(Destination.SETTINGS, id = "workspace", workspaceId = route.id))
+                        }) { Icon(painterResource(R.drawable.ic_settings), "Workspace settings") }
                         if (navigation.canGoBack) IconButton(onClick = { scope.launch { focus.clearFocus(); drawer.open() } }) { Icon(painterResource(R.drawable.ic_menu), "Open navigation") }
                         IconButton(onClick = { app.realtime.refreshDirectory() }) { Icon(painterResource(R.drawable.ic_refresh), "Refresh directory") }
                     })
@@ -186,10 +193,11 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.SEARCH -> SearchScreen(api, ::open)
                                 Destination.SESSION -> SessionReader(app, signedIn.handle, route, api, data, ::open)
                                 Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open)
-                                Destination.SETTINGS -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    AuthScreen(authState, authMessage, auth::login, auth::logout)
-                                    Button(onClick = { open(OrbitRoute(Destination.BUILD)) }) { Text("Build information") }
-                                }
+                                Destination.SETTINGS -> SettingsScreen(management, route, revision, ::open, auth::logout,
+                                    changed = { app.realtime.refreshDirectory() }, notifications = { NotificationSettings(app.push) })
+                                Destination.RUNNER -> RunnerManagement(management, route.id, revision,
+                                    onChanged = { app.realtime.refreshDirectory() },
+                                    onWorkspace = { open(OrbitRoute(Destination.SETTINGS, id = "workspace", workspaceId = it)) })
                                 Destination.BUILD -> BuildInformation { navigation = navigation.back() }
                                 else -> ObjectDestination(route, api, data, revision, ::open) { app.realtime.refreshDirectory() }
                             }
@@ -209,6 +217,11 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.SEARCH -> "Search sessions"
     Destination.DRAFT -> "New session"
     Destination.WIKI_ENTRY -> "Wiki"
+    Destination.SETTINGS -> when (route.id) {
+        "profile" -> "Profile & preferences"; "providers" -> "Providers"; "skills" -> "Skills"
+        "workspace" -> "Workspace settings"; "runners" -> "Runners"; "sharing" -> "Shared links"
+        "admin" -> "Admin"; "notifications" -> "Notifications"; else -> "Settings"
+    }
     else -> route.destination.name.lowercase().replaceFirstChar(Char::uppercase)
 }
 

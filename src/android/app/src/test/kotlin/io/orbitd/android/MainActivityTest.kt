@@ -77,10 +77,10 @@ class MainActivityTest {
         compose.waitUntil(5_000) { appSession().state.value is AuthState.SignedIn }
         compose.onNodeWithContentDescription("Open navigation").performClick()
         compose.onNodeWithText("Settings").performScrollTo().performClick()
-        compose.onNodeWithText("Signed in").assertIsDisplayed()
+        compose.onNodeWithText("Edit profile").assertIsDisplayed()
         compose.activityRule.scenario.recreate()
-        compose.onNodeWithText("Signed in").assertIsDisplayed()
-        compose.onNodeWithText("Sign out").performClick()
+        compose.onNodeWithText("Edit profile").assertIsDisplayed()
+        compose.onNodeWithText("Sign out").performScrollTo().performClick()
         awaitLogin()
         compose.onNodeWithText("Password").assertIsDisplayed()
         compose.onNodeWithText("fixture-password").assertDoesNotExist()
