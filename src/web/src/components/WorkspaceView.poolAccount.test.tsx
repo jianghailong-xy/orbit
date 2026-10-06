@@ -294,7 +294,7 @@ describe('the status bar of a session on an account pool', { timeout: 60_000 }, 
     expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 12%');
     const card = mounted().querySelector<HTMLElement>('.np-card')!;
     // The hero names the engine; the pool is the provider it spends, picked in the composer.
-    expect(card.getAttribute('aria-label')).toBe('Engine: Claude via Claude accounts');
+    expect(card.getAttribute('aria-label')).toBe('Engine: Claude');
   });
 
   it("on a shared pool, names the key the session's claim chose and what the others spent of its cap", async () => {
@@ -311,6 +311,6 @@ describe('the status bar of a session on an account pool', { timeout: 60_000 }, 
     expect(account()?.textContent).toBe('orbit-org-1');
     expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 25%');
     const card = mounted().querySelector<HTMLElement>('.np-card')!;
-    expect(card.getAttribute('aria-label')).toBe('Engine: Codex via Team Codex');
+    expect(card.getAttribute('aria-label')).toBe('Engine: Codex');
   });
 });

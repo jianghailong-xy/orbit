@@ -116,12 +116,11 @@ public struct EngineChoice: Equatable, Sendable, Identifiable {
     /// there is no better one to pick — and where it is fixed.
     public var unavailable: String? { provider.unavailable }
     public var fixEngine: String? { provider.fixEngine }
-    /// How the hero says which provider it runs on: nothing extra for the engine's own sign-in (bar
-    /// how it signs in, for Antigravity), "via DeepSeek" for anything else (web `engineProviderDetail`).
+    /// The small label beside the engine's name: how its own sign-in signs in (Antigravity's "env
+    /// key"), and nothing for a provider of it — which provider is the composer's Provider menu's to
+    /// say (web `engineProviderDetail`).
     public var providerDetail: String? {
-        if provider.slug == slug { return provider.labelDetail }
-        // A key named for its engine (DeepSeek Harness) would only repeat it.
-        return provider.label == label || provider.setup ? nil : "via \(provider.label)"
+        provider.slug == slug ? provider.labelDetail : nil
     }
 }
 
@@ -305,7 +304,24 @@ public enum SessionProviderChoices {
                               brandKey: DshRuntime.presetSlug, modelLabel: "", unavailable: "Add API key",
                               fixEngine: DshRuntime.connectFix, setup: true)]
             : []
-        return engineChoices + poolChoices + byok + dshSetup
+        // OpenCode, once the runner reports it installed — it has no sign-in to offer, so a machine
+        // without it has nothing to fix here either. Its own config first, then every key it may spend
+        // (`OpenCodeKeys`): it speaks each dialect a configured key does, so the same key is listed
+        // under its own engine above and here, as `opencode/<slug>` (web parity).
+        let openCode: [ProviderChoice] = health("opencode")?.installed == true
+            ? [ProviderChoice(slug: "opencode", label: AgentDefaults.providerName("opencode", configured: nil),
+                              kind: .engine, brandKey: nil,
+                              modelLabel: modelLabel(for: "opencode", configured: configured, catalog: catalog))]
+                + configured
+                    .filter { $0.runsOnOpenCode == true && !poolSlugs.contains($0.slug) }
+                    .map { provider in
+                        let choice = OpenCodeKeys.choice(provider.slug)
+                        return ProviderChoice(slug: choice, label: provider.label, kind: .byok,
+                                              brandKey: provider.presetSlug,
+                                              modelLabel: modelLabel(for: choice, configured: configured, catalog: catalog))
+                    }
+            : []
+        return engineChoices + poolChoices + byok + dshSetup + openCode
     }
 
     /// The providers a session that already exists may be moved to: the ones that borrow the same
@@ -347,6 +363,8 @@ public enum SessionProviderChoices {
     /// an OpenCode session every Claude provider on the account. A Gemini key borrows Antigravity,
     /// so it executes on the same CLI as the engine's own slug.
     public static func executingRuntime(_ provider: String, configured: [ConfiguredProvider]) -> String {
+        // A key run on OpenCode is run by OpenCode, whichever CLI the key itself borrows.
+        if OpenCodeKeys.choiceKey(provider) != nil { return "opencode" }
         if let custom = configured.first(where: { $0.slug == provider }) {
             let borrowed = custom.runtime ?? ""
             return ["codex", "kimi", "antigravity", "dsh"].contains(borrowed) ? borrowed : "claude"

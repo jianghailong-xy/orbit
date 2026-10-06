@@ -49,6 +49,7 @@ import {
   ApprovalInfo,
   ApprovalStatus,
   AgentProvider,
+  openCodeKeyOf,
   type BgShell,
   CLAUDE_HISTORY_MAX_TRANSCRIPTS,
   deriveBackgroundShells,
@@ -174,7 +175,9 @@ import {
   accountPoolRuntime,
   execRuntime,
   isBuiltinProvider,
+  openCodeKeyRows,
   resolveProviderExec,
+  runsOnOpenCode,
   sessionExecRuntime,
 } from '../providers/custom-provider';
 import { ownsModel } from '../providers/preset-overlay';
@@ -969,6 +972,18 @@ export class SessionsService {
     if (borrowedRuntime && (!Object.values(AgentProvider).includes(borrowedRuntime as AgentProvider) ||
       borrowedRuntime === AgentProvider.OPENCODE)) {
       throw new BadRequestException(`provider runtime not available: "${borrowedRuntime}"`);
+    }
+    // An OpenCode model on one of the caller's configured keys (shared `openCodeKeys`) has to name a
+    // key that can run there, or the claim would only refuse it later.
+    const openCodeKey = provider === AgentProvider.OPENCODE ? openCodeKeyOf(dto.model) : null;
+    if (openCodeKey) {
+      const row = await this.prisma.modelProvider.findFirst({
+        where: { slug: openCodeKey.slug, OR: [{ ownerId: null }, { ownerId }] },
+        select: { enabled: true, runtime: true, apiKeyEnc: true },
+      });
+      if (!row || !runsOnOpenCode(row)) {
+        throw new BadRequestException(`provider not available on OpenCode: "${openCodeKey.slug}"`);
+      }
     }
     await this.assertOwnedRefs(ownerId, { workspaceId: dto.workspaceId, assignedRunnerId });
     // §3.2: a session opened from a folder's page is filed in that folder, which has to be one of
@@ -7994,6 +8009,11 @@ export class SessionsService {
         declaredProvider: poolRuntime ?? next.provider,
         declaredProviderBuiltin: poolRuntime ? true : next.providerBuiltin,
         customRow: next.customRow,
+        // A model naming a configured key is refused here, with its reason, when the key cannot run.
+        openCodeKeys:
+          next.provider === AgentProvider.OPENCODE && openCodeKeyOf(dto.model ?? session.model)
+            ? await openCodeKeyRows(tx, ownerId)
+            : undefined,
         sessionModel: dto.model ?? (next.keepsModel ? session.model : null),
         usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
         runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,
@@ -8105,6 +8125,10 @@ export class SessionsService {
       // — so it joins the provider on the spawn-only side even on the runtime that HAS a control
       // channel. (On Codex `acceptsLiveConfig` is false, so this term changes nothing there.)
       const respawns = !acceptsLiveConfig || next.changed || fastModeMoved;
+      // The key an OpenCode model names lives in the process environment (resolveProviderExec).
+      const openCodeKeyMoved =
+        exec.provider === AgentProvider.OPENCODE &&
+        openCodeKeyOf(exec.model)?.slug !== openCodeKeyOf(session.model)?.slug;
       // A switch that re-resolves the MODEL must not be said to the running engine, whatever else
       // moved beside it. Every value on this PATCH was resolved against the provider the session
       // is moving TO, while the process a control frame reaches is still talking to the one it is
@@ -8166,7 +8190,9 @@ export class SessionsService {
             // The identity only. It tells the runner its process environment is stale — the
             // credential behind it is resolved when the inbox delivers this turn, so a decrypted
             // provider key never lands in conversation_turn.
-            provider: next.changed ? next.provider : undefined,
+            // An OpenCode session moving between keys (or onto its machine's own config) needs a new
+            // OPENCODE_CONFIG_CONTENT just as a provider switch does, so it names its provider too.
+            provider: next.changed || openCodeKeyMoved ? next.provider : undefined,
           }),
           clientTurnId: randomUUID(),
         });

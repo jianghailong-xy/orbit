@@ -106,6 +106,17 @@ final class ConsoleModel {
     /// own. Non-nil means the create request carries it AND the pick is remembered on the agent
     /// once the session exists — so the next draft here opens on it without the override.
     private(set) var draftProviderOverride: String?
+    /// Draft only: the picker identity of that pick when it is not the provider itself — a configured
+    /// key run on OpenCode (`OpenCodeKeys.choice`), whose session is created on `opencode`. It is
+    /// the model space the draft seeds from, so a re-seed cannot drop the key for OpenCode's own.
+    private(set) var draftChoice: String?
+    /// The picker identity this draft or session is on (web `providerChoiceFor`): the provider,
+    /// except that OpenCode on a configured key is on that key — whose models the composer lists and
+    /// whose row the Provider menu ticks.
+    var providerChoice: String {
+        if isDraft, let draftChoice { return draftChoice }
+        return OpenCodeKeys.choice(provider: provider, model: modelID)
+    }
     /// Draft only: a Codex account picked under Codex in the composer's Provider menu (`default` or a slot
     /// id). Nil leaves it to the workspace: its own pick, else Automatic — the account with the most
     /// room, which the server chooses when it creates the session.
@@ -1872,7 +1883,7 @@ final class ConsoleModel {
     var providerSwitchChoices: [ProviderChoice] {
         guard isDraft || isLive || availability != .blocked else { return [] }
         return SessionProviderChoices.sameRuntime(
-            provider,
+            providerChoice,
             in: SessionProviderChoices.choices(configured: configuredProviders,
                                                catalog: modelCatalog, engines: runnerEngines,
                                                pools: allPools,
@@ -1902,8 +1913,16 @@ final class ConsoleModel {
             else { pickDraftProvider(slug) }
             return
         }
-        if slug == provider {
+        if slug == providerChoice {
             if let account { await switchAccount(account) }
+            return
+        }
+        // Within OpenCode a key is part of the model (`OpenCodeKeys`), so moving between its own config
+        // and its keys is a model change, onto the default of the one picked (web parity).
+        if provider == "opencode", slug == "opencode" || OpenCodeKeys.choiceKey(slug) != nil {
+            let next = AgentDefaults.defaultModel(for: slug, catalog: modelCatalog, configured: configuredProviders)
+            let clamped = selectModel(next)
+            await applyConfig(model: next, permissionMode: clamped ? permissionMode.rawValue : nil)
             return
         }
         // Read before the assignment below, because what the note is ABOUT is the move from one to
@@ -1956,18 +1975,21 @@ final class ConsoleModel {
     /// marked pristine again on purpose: a model chosen for the outgoing provider is not a choice
     /// about this one, and keeping it would pin an id the new provider may not even offer.
     func pickDraftProvider(_ slug: String) {
-        guard isDraft, slug != provider else { return }
-        draftProviderOverride = slug
-        provider = slug
+        guard isDraft, slug != providerChoice else { return }
+        // A key run on OpenCode creates the session on `opencode`; the key rides in its model.
+        let engine = OpenCodeKeys.choiceKey(slug) == nil ? slug : "opencode"
+        draftChoice = engine == slug ? nil : slug
+        draftProviderOverride = engine
+        provider = engine
         modelID = draftModelSeed(AgentDefaults.defaultModel(
             for: slug, catalog: modelCatalog, configured: configuredProviders))
         modelSelectionRevision = ModelSelectionRevision()
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(
-                permissionMode, for: modelID, provider: slug, configured: configuredProviders,
+                permissionMode, for: modelID, provider: engine, configured: configuredProviders,
                 catalog: modelCatalog)
         }
-        effort = AgentDefaults.normalizedEffort(effort, for: slug, model: modelID,
+        effort = AgentDefaults.normalizedEffort(effort, for: engine, model: modelID,
                                                 catalog: modelCatalog,
                                                 configured: configuredProviders)
     }
@@ -1977,7 +1999,7 @@ final class ConsoleModel {
     /// picked. Like the provider, it binds the session being drafted and rewrites no workspace setting.
     func pickDraftAccount(_ slug: String, _ account: String?) {
         guard isDraft else { return }
-        if slug != provider { pickDraftProvider(slug) }
+        if slug != providerChoice { pickDraftProvider(slug) }
         draftCodexAccount = slug == "codex" ? account : nil
         draftClaudeAccount = slug == "claude" ? account : nil
     }
@@ -2040,7 +2062,7 @@ final class ConsoleModel {
             // resolve the picked provider's own default instead of dragging the agent's back in.
             let fallback = draftProviderOverride == nil
                 ? defaultModel
-                : AgentDefaults.defaultModel(for: provider, catalog: modelCatalog,
+                : AgentDefaults.defaultModel(for: providerChoice, catalog: modelCatalog,
                                              configured: configuredProviders)
             modelID = draftModelSeed(fallback)
         }
@@ -2057,7 +2079,7 @@ final class ConsoleModel {
 
     private func draftModelSeed(_ fallback: String, runtimeDefaults: [String: String]? = nil) -> String {
         AgentDefaults.newSessionModel(
-            for: provider, accountModels: accountDefaultModels(), fallback: fallback,
+            for: providerChoice, accountModels: accountDefaultModels(), fallback: fallback,
             catalog: modelCatalog, configured: configuredProviders, runtimeDefaults: runtimeDefaults)
     }
 
@@ -2743,6 +2765,7 @@ final class ConsoleModel {
             // The pick was this session's binding; nothing to write back. The next draft here
             // opens on it anyway, because the default is read from what the project last ran.
             draftProviderOverride = nil
+            draftChoice = nil
             draftCodexAccount = nil
             draftClaudeAccount = nil
             // The Mode pick is different: without a write-back it lived on this one session, while

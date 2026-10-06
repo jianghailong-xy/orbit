@@ -25,8 +25,11 @@ final class SessionProviderChoicesTests: XCTestCase {
         XCTAssertTrue(choices.suffix(2).allSatisfy { $0.kind == .byok })
     }
 
-    func testNeverOffersOpenCodeBecauseItIsNotALoginEngine() {
+    func testOffersNoOpenCodeUntilTheRunnerReportsItInstalled() {
         XCTAssertFalse(SessionProviderChoices.choices(configured: []).contains { $0.slug == "opencode" })
+        XCTAssertFalse(SessionProviderChoices.choices(
+            configured: [], engines: [RunnerEngineHealth(engine: "opencode", installed: false, auth: "unknown")])
+            .contains { $0.slug == "opencode" })
     }
 
     /// The compatibility entry is offered only with a server-confirmed environment key.
@@ -644,7 +647,7 @@ final class SessionProviderChoicesTests: XCTestCase {
         let engines = SessionProviderChoices.engines(SessionProviderChoices.choices(configured: configured),
                                                      configured: configured, preferred: ["deepseek", "moonshot"])
         XCTAssertEqual(engines.map(\.provider.slug), ["deepseek", "codex", "moonshot"])
-        XCTAssertEqual(engines[0].providerDetail, "via DeepSeek")
+        XCTAssertNil(engines[0].providerDetail)
     }
 
     func testEnginesSkipASignedOutEngineForAKeyThatCanRunAndCarryTheReasonWhenNothingCan() {
@@ -665,6 +668,51 @@ final class SessionProviderChoicesTests: XCTestCase {
         let gone = SessionProviderChoices.current("gone-away", in: [], configured: [])
         let engine = SessionProviderChoices.engine(for: gone, configured: [])
         XCTAssertEqual(engine.slug, "claude")
-        XCTAssertEqual(engine.providerDetail, "via gone-away")
+        XCTAssertNil(engine.providerDetail)
+    }
+
+    // MARK: - OpenCode and the keys it may spend (web parity)
+
+    func testOpenCodeListsItsOwnConfigThenEveryKeyItMaySpend() {
+        let key = ConfiguredProvider(slug: "deepseek", label: "DeepSeek", runtime: "claude",
+                                     models: [ConfiguredProviderModel(value: "deepseek-v4-pro", label: "DeepSeek V4 Pro")],
+                                     defaultModel: "deepseek-v4-pro", presetSlug: "deepseek", runsOnOpenCode: true)
+        let subscription = ConfiguredProvider(slug: "anthropic-sub", label: "Subscription", runtime: "claude",
+                                              presetSlug: "anthropic", runsOnOpenCode: false)
+        let configured = [key, subscription, moonshot]
+        let choices = SessionProviderChoices.choices(
+            configured: configured, engines: [health("opencode", installed: true, auth: "unknown")])
+        let openCode = choices.filter { SessionProviderChoices.executingRuntime($0.slug, configured: configured) == "opencode" }
+        XCTAssertEqual(openCode.map(\.slug), ["opencode", "opencode/deepseek"])
+        XCTAssertEqual(openCode.map(\.label), ["OpenCode", "DeepSeek"])
+        XCTAssertEqual(openCode[1].modelLabel, "DeepSeek V4 Pro")
+        // The key stays under its own engine as well.
+        XCTAssertTrue(choices.contains { $0.slug == "deepseek" })
+
+        let engine = SessionProviderChoices.engines(choices, configured: configured, preferred: ["opencode/deepseek"])
+            .first { $0.slug == "opencode" }
+        XCTAssertEqual(engine?.label, "OpenCode")
+        XCTAssertNil(engine?.providerDetail)
+        XCTAssertEqual(SessionProviderChoices.sameRuntime("opencode/deepseek", in: choices, configured: configured).map(\.slug),
+                       ["opencode", "opencode/deepseek"])
+
+        XCTAssertEqual(AgentDefaults.models(for: "opencode/deepseek", catalog: nil, configured: configured).map(\.id),
+                       ["orbit-deepseek/deepseek-v4-pro"])
+        XCTAssertEqual(AgentDefaults.defaultModel(for: "opencode/deepseek", catalog: nil, configured: configured),
+                       "orbit-deepseek/deepseek-v4-pro")
+    }
+
+    func testOpenCodeKeysRoundTripAndNameNothingElse() {
+        let id = OpenCodeKeys.model("deepseek-2", "deepseek-v4-pro")
+        XCTAssertEqual(OpenCodeKeys.key(of: id)?.slug, "deepseek-2")
+        XCTAssertEqual(OpenCodeKeys.key(of: "orbit-glm/glm-5/turbo")?.model, "glm-5/turbo")
+        XCTAssertNil(OpenCodeKeys.key(of: "anthropic/claude-opus-5"))
+        XCTAssertNil(OpenCodeKeys.key(of: "orbit-/x"))
+        XCTAssertNil(OpenCodeKeys.key(of: "orbit-deepseek/"))
+        XCTAssertEqual(OpenCodeKeys.choice(provider: "opencode", model: id), "opencode/deepseek-2")
+        XCTAssertEqual(OpenCodeKeys.choice(provider: "opencode", model: ""), "opencode")
+        XCTAssertEqual(OpenCodeKeys.choice(provider: "claude", model: id), "claude")
+        XCTAssertEqual(OpenCodeKeys.choiceKey("opencode/glm"), "glm")
+        XCTAssertNil(OpenCodeKeys.choiceKey("opencode"))
     }
 }

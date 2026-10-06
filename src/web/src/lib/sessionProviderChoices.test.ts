@@ -9,7 +9,7 @@ import {
   runtimeSummary,
   sameRuntimeChoices,
 } from './sessionProviderChoices';
-import type { ConfiguredProvider } from './workspaceDefaults';
+import { runtimeForProvider, type ConfiguredProvider } from './workspaceDefaults';
 import { PROVIDER_GLYPHS } from './providerGlyphs';
 import { encodeId } from './idCodec';
 import type { CodexLogin } from './codexLogin';
@@ -771,9 +771,61 @@ describe('engineChoices', () => {
     expect(kimi.provider.fixEngine).toBe('kimi');
   });
 
-  it('says "via" the provider only when it is not the engine itself', () => {
+  it("labels an engine with how its own sign-in signs in, never with a provider of it", () => {
     const [claude] = engineChoices(all, configured, ['deepseek']);
-    expect(engineProviderDetail(claude)).toBe('via DeepSeek');
-    expect(engineProviderDetail(engineChoices(all, configured)[0])).toBeUndefined();
+    expect(engineProviderDetail(claude)).toBeUndefined();
+    expect(engineProviderDetail(engineChoices(all, configured).find((e) => e.slug === 'antigravity')!)).toBe('env key');
+  });
+});
+
+describe('OpenCode and the keys it may spend', () => {
+  const anthropicKey: ConfiguredProvider = {
+    slug: 'anthropic',
+    label: 'Anthropic (Claude)',
+    runtime: 'claude',
+    models: [],
+    defaultModel: 'claude-opus-5',
+    presetSlug: 'anthropic',
+    modelsFromRuntime: true,
+    runsOnOpenCode: true,
+  };
+  const configured: ConfiguredProvider[] = [
+    { ...deepseek, runsOnOpenCode: true },
+    { ...moonshot, runsOnOpenCode: true },
+    anthropicKey,
+    // A Claude subscription token: the server says no.
+    { ...anthropicKey, slug: 'anthropic-sub', label: 'Subscription', runsOnOpenCode: false },
+  ];
+  const installed = [{ engine: 'opencode' as const, installed: true, auth: 'unknown' as const }];
+
+  it('offers nothing for OpenCode until the runner reports it installed', () => {
+    expect(providerChoices(configured, catalog).some((c) => runtimeForProvider(c.slug, configured) === 'opencode')).toBe(false);
+    expect(
+      providerChoices(configured, catalog, undefined, [{ engine: 'opencode', installed: false, auth: 'unknown' }])
+        .some((c) => c.slug === 'opencode'),
+    ).toBe(false);
+  });
+
+  it('lists its own config, then every key it may spend — each key under its own engine as well', () => {
+    const choices = providerChoices(configured, catalog, undefined, installed);
+    const openCode = choices.filter((c) => runtimeForProvider(c.slug, configured) === 'opencode');
+    expect(openCode.map((c) => c.slug)).toEqual(['opencode', 'opencode/deepseek', 'opencode/moonshot', 'opencode/anthropic']);
+    expect(openCode.map((c) => c.label)).toEqual(['OpenCode', 'DeepSeek', 'Kimi (Moonshot)', 'Anthropic (Claude)']);
+    expect(openCode[1].modelLabel).toBe('DeepSeek V4 Pro');
+    expect(choices.some((c) => c.slug === 'deepseek')).toBe(true);
+  });
+
+  it('picks OpenCode engine by engine, and says which key it would spend', () => {
+    const choices = providerChoices(configured, catalog, undefined, installed);
+    const openCode = engineChoices(choices, configured, ['opencode/deepseek']).find((e) => e.slug === 'opencode')!;
+    expect(openCode.label).toBe('OpenCode');
+    expect(openCode.provider.slug).toBe('opencode/deepseek');
+    expect(engineProviderDetail(openCode)).toBeUndefined();
+    expect(sameRuntimeChoices('opencode/deepseek', choices, configured).map((c) => c.slug)).toEqual([
+      'opencode',
+      'opencode/deepseek',
+      'opencode/moonshot',
+      'opencode/anthropic',
+    ]);
   });
 });
