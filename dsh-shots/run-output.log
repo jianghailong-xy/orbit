@@ -1,0 +1,146 @@
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+==> stub ready on 127.0.0.1:8765 (pid 3547, after 2s); [{"id": "a1", "name": "orbit", "provider": "deepseek-harness", "lastProvider": "
+==> ios
+Test Case '-[DshProbeUITests.DshShotTests test1PickEngine]' started.
+Test Case '-[DshProbeUITests.DshShotTests test1PickEngine]' passed (116.372 seconds).
+Test Case '-[DshProbeUITests.DshShotTests test2ModeAndModelMenus]' started.
+Test Case '-[DshProbeUITests.DshShotTests test2ModeAndModelMenus]' passed (87.970 seconds).
+Test Case '-[DshProbeUITests.DshShotTests test3OperationChain]' started.
+Test Case '-[DshProbeUITests.DshShotTests test3OperationChain]' passed (74.380 seconds).
+Test Case '-[DshProbeUITests.DshShotTests test4ChainStatesDark]' started.
+Test Case '-[DshProbeUITests.DshShotTests test4ChainStatesDark]' passed (56.798 seconds).
+Test Case '-[DshProbeUITests.DshShotTests test5Unavailable]' started.
+Test Case '-[DshProbeUITests.DshShotTests test5Unavailable]' passed (199.395 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 534.915 (534.930) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 534.915 (534.931) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 534.915 (534.934) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 39505, after 2s); [{"id": "a1", "name": "orbit", "provider": "deepseek-harness", "lastProvider": "
+==> mac
+Test Case '-[DshMacProbeUITests.DshShotTests test1PickEngine]' started.
+Test Case '-[DshMacProbeUITests.DshShotTests test1PickEngine]' passed (35.085 seconds).
+Test Case '-[DshMacProbeUITests.DshShotTests test2ModeAndModelMenus]' started.
+Test Case '-[DshMacProbeUITests.DshShotTests test2ModeAndModelMenus]' passed (30.756 seconds).
+Test Case '-[DshMacProbeUITests.DshShotTests test3OperationChain]' started.
+Test Case '-[DshMacProbeUITests.DshShotTests test3OperationChain]' passed (56.109 seconds).
+Test Case '-[DshMacProbeUITests.DshShotTests test4ChainStatesDark]' started.
+Test Case '-[DshMacProbeUITests.DshShotTests test4ChainStatesDark]' passed (30.724 seconds).
+Test Case '-[DshMacProbeUITests.DshShotTests test5Unavailable]' started.
+Test Case '-[DshMacProbeUITests.DshShotTests test5Unavailable]' passed (124.946 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 277.620 (277.628) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 277.620 (277.630) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 277.620 (277.633) seconds
+** TEST SUCCEEDED **
+.dsh-probe/run.sh: line 78: 39505 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+/Users/runner/work/orbit/orbit/.dsh-probe/shots/ios:
+total 23096
+drwxr-xr-x  63 runner  staff    2016 Oct  6 01:19 .
+drwxr-xr-x   4 runner  staff     128 Oct  6 00:51 ..
+-rw-r--r--   1 runner  staff  264334 Oct  6 01:03 1-compose-dark.png
+-rw-r--r--   1 runner  staff  358901 Oct  6 01:02 1-compose-light.png
+-rw-r--r--   1 runner  staff  345560 Oct  6 01:03 1b-provider-picker-dark.png
+-rw-r--r--   1 runner  staff  446259 Oct  6 01:02 1b-provider-picker-light.png
+-rw-r--r--   1 runner  staff  345785 Oct  6 01:05 2-mode-menu-dark.png
+-rw-r--r--   1 runner  staff  393852 Oct  6 01:04 2-mode-menu-light.png
+-rw-r--r--   1 runner  staff  264385 Oct  6 01:05 2b-model-menu-dark.png
+-rw-r--r--   1 runner  staff  360546 Oct  6 01:04 2b-model-menu-light.png
+-rw-r--r--   1 runner  staff  381276 Oct  6 01:05 3a-compose-typed-light.png
+-rw-r--r--   1 runner  staff  270781 Oct  6 01:05 3b-running-light.png
+-rw-r--r--   1 runner  staff  237799 Oct  6 01:06 4-approval-dark.png
+-rw-r--r--   1 runner  staff  270804 Oct  6 01:05 4-approval-light.png
+-rw-r--r--   1 runner  staff  226134 Oct  6 01:06 5-approved-running-dark.png
+-rw-r--r--   1 runner  staff  263487 Oct  6 01:06 5-approved-running-light.png
+-rw-r--r--   1 runner  staff  235381 Oct  6 01:07 6-stopped-dark.png
+-rw-r--r--   1 runner  staff  271099 Oct  6 01:06 6-stopped-light.png
+-rw-r--r--   1 runner  staff  342877 Oct  6 01:07 7-resumed-dark.png
+-rw-r--r--   1 runner  staff  393909 Oct  6 01:06 7-resumed-light.png
+-rw-r--r--   1 runner  staff  166043 Oct  6 01:09 8-invalid-key-dark.png
+-rw-r--r--   1 runner  staff  204727 Oct  6 01:07 8-invalid-key-light.png
+-rw-r--r--   1 runner  staff  165304 Oct  6 01:09 8b-no-key-dark.png
+-rw-r--r--   1 runner  staff  202901 Oct  6 01:07 8b-no-key-light.png
+-rw-r--r--   1 runner  staff  141906 Oct  6 01:09 8c-not-installed-dark.png
+-rw-r--r--   1 runner  staff  177738 Oct  6 01:07 8c-not-installed-light.png
+-rw-r--r--   1 runner  staff  122746 Oct  6 01:09 8d-old-runner-queued-dark.png
+-rw-r--r--   1 runner  staff  159507 Oct  6 01:08 8d-old-runner-queued-light.png
+-rw-r--r--   1 runner  staff  370235 Oct  6 01:10 9-picker-old-runner-dark.png
+-rw-r--r--   1 runner  staff  262372 Oct  6 01:10 9-picker-old-runner-hero-dark.png
+-rw-r--r--   1 runner  staff  358414 Oct  6 01:08 9-picker-old-runner-hero-light.png
+-rw-r--r--   1 runner  staff  467298 Oct  6 01:08 9-picker-old-runner-light.png
+-rw-r--r--   1 runner  staff  367800 Oct  6 01:10 9b-picker-not-installed-dark.png
+-rw-r--r--   1 runner  staff  259951 Oct  6 01:10 9b-picker-not-installed-hero-dark.png
+-rw-r--r--   1 runner  staff  356255 Oct  6 01:08 9b-picker-not-installed-hero-light.png
+-rw-r--r--   1 runner  staff  465194 Oct  6 01:08 9b-picker-not-installed-light.png
+-rw-r--r--   1 runner  staff  335831 Oct  6 01:10 9c-picker-no-key-dark.png
+-rw-r--r--   1 runner  staff  438016 Oct  6 01:09 9c-picker-no-key-light.png
+drwxr-xr-x  44 runner  staff    1408 Oct  6 01:11 attachments
+-rw-r--r--@  1 runner  staff    1416 Oct  6 01:03 DshShotTeststest1PickEngine-notes.txt
+-rw-r--r--@  1 runner  staff    1069 Oct  6 01:05 DshShotTeststest2ModeAndModelMenus-notes.txt
+-rw-r--r--@  1 runner  staff   12807 Oct  6 01:06 DshShotTeststest3OperationChain-notes.txt
+-rw-r--r--@  1 runner  staff      96 Oct  6 01:07 DshShotTeststest4ChainStatesDark-notes.txt
+-rw-r--r--@  1 runner  staff       0 Oct  6 01:10 DshShotTeststest5Unavailable-notes.txt
+-rw-r--r--   1 runner  staff    1333 Oct  6 01:19 not-served.txt
+-rw-r--r--   1 runner  staff   51996 Oct  6 01:10 requests.log
+-rw-r--r--   1 runner  staff      49 Oct  6 00:54 requests.log.out
+-rw-r--r--@  1 runner  staff   15729 Oct  6 01:07 tree-8-invalid-key.txt
+-rw-r--r--@  1 runner  staff   15723 Oct  6 01:07 tree-8b-no-key.txt
+-rw-r--r--@  1 runner  staff   15512 Oct  6 01:08 tree-8c-not-installed.txt
+-rw-r--r--@  1 runner  staff   13354 Oct  6 01:08 tree-8d-old-runner-queued.txt
+-rw-r--r--@  1 runner  staff   22054 Oct  6 01:05 tree-approval.txt
+-rw-r--r--@  1 runner  staff   17417 Oct  6 01:03 tree-compose-dark.txt
+-rw-r--r--@  1 runner  staff   17375 Oct  6 01:02 tree-compose-light.txt
+-rw-r--r--@  1 runner  staff   19335 Oct  6 01:05 tree-mode-menu-dark.txt
+-rw-r--r--@  1 runner  staff   19335 Oct  6 01:04 tree-mode-menu-light.txt
+-rw-r--r--@  1 runner  staff   17417 Oct  6 01:05 tree-model-menu-dark.txt
+-rw-r--r--@  1 runner  staff   17417 Oct  6 01:04 tree-model-menu-light.txt
+-rw-r--r--@  1 runner  staff   20880 Oct  6 01:03 tree-provider-picker-dark.txt
+-rw-r--r--@  1 runner  staff   20880 Oct  6 01:02 tree-provider-picker-light.txt
+-rw-r--r--@  1 runner  staff   23016 Oct  6 01:06 tree-running.txt
+-rw-r--r--   1 runner  staff    2840 Oct  6 01:19 writes.txt
+-rw-r--r--   1 runner  staff  671586 Oct  6 01:11 xcodebuild-ios.log
+
+/Users/runner/work/orbit/orbit/.dsh-probe/shots/mac:
+total 9576
+drwxr-xr-x  44 runner  staff    1408 Oct  6 01:19 .
+drwxr-xr-x   4 runner  staff     128 Oct  6 00:51 ..
+-rw-r--r--   1 runner  staff   92997 Oct  6 01:19 1-compose-dark.png
+-rw-r--r--   1 runner  staff  109404 Oct  6 01:19 1-compose-light.png
+-rw-r--r--   1 runner  staff  115584 Oct  6 01:19 1b-provider-picker-dark.png
+-rw-r--r--   1 runner  staff  164215 Oct  6 01:19 1b-provider-picker-light.png
+-rw-r--r--   1 runner  staff  107973 Oct  6 01:19 2-mode-menu-dark.png
+-rw-r--r--   1 runner  staff  127787 Oct  6 01:19 2-mode-menu-light.png
+-rw-r--r--   1 runner  staff  102806 Oct  6 01:19 2b-model-menu-dark.png
+-rw-r--r--   1 runner  staff  122906 Oct  6 01:19 2b-model-menu-light.png
+-rw-r--r--   1 runner  staff  115299 Oct  6 01:19 3a-compose-typed-light.png
+-rw-r--r--   1 runner  staff  123619 Oct  6 01:19 3b-running-light.png
+-rw-r--r--   1 runner  staff  115980 Oct  6 01:19 4-approval-dark.png
+-rw-r--r--   1 runner  staff  123591 Oct  6 01:19 4-approval-light.png
+-rw-r--r--   1 runner  staff  113019 Oct  6 01:19 5-approved-running-dark.png
+-rw-r--r--   1 runner  staff  119284 Oct  6 01:19 5-approved-running-light.png
+-rw-r--r--   1 runner  staff  113830 Oct  6 01:19 6-stopped-dark.png
+-rw-r--r--   1 runner  staff  121230 Oct  6 01:19 6-stopped-light.png
+-rw-r--r--   1 runner  staff  126578 Oct  6 01:19 7-resumed-dark.png
+-rw-r--r--   1 runner  staff  136431 Oct  6 01:19 7-resumed-light.png
+-rw-r--r--   1 runner  staff   91503 Oct  6 01:19 8-invalid-key-dark.png
+-rw-r--r--   1 runner  staff  102197 Oct  6 01:19 8-invalid-key-light.png
+-rw-r--r--   1 runner  staff   91744 Oct  6 01:19 8b-no-key-dark.png
+-rw-r--r--   1 runner  staff  102446 Oct  6 01:19 8b-no-key-light.png
+-rw-r--r--   1 runner  staff   83721 Oct  6 01:19 8c-not-installed-dark.png
+-rw-r--r--   1 runner  staff   94738 Oct  6 01:19 8c-not-installed-light.png
+-rw-r--r--   1 runner  staff   79865 Oct  6 01:19 8d-old-runner-queued-dark.png
+-rw-r--r--   1 runner  staff   89888 Oct  6 01:19 8d-old-runner-queued-light.png
+-rw-r--r--   1 runner  staff  112263 Oct  6 01:19 9-picker-old-runner-dark.png
+-rw-r--r--   1 runner  staff   92066 Oct  6 01:19 9-picker-old-runner-hero-dark.png
+-rw-r--r--   1 runner  staff  108846 Oct  6 01:19 9-picker-old-runner-hero-light.png
+-rw-r--r--   1 runner  staff  156892 Oct  6 01:19 9-picker-old-runner-light.png
+-rw-r--r--   1 runner  staff  111782 Oct  6 01:19 9b-picker-not-installed-dark.png
+-rw-r--r--   1 runner  staff   91245 Oct  6 01:19 9b-picker-not-installed-hero-dark.png
+-rw-r--r--   1 runner  staff  107732 Oct  6 01:19 9b-picker-not-installed-hero-light.png
+-rw-r--r--   1 runner  staff  156292 Oct  6 01:19 9b-picker-not-installed-light.png
+-rw-r--r--   1 runner  staff  110634 Oct  6 01:19 9c-picker-no-key-dark.png
+-rw-r--r--   1 runner  staff  155627 Oct  6 01:19 9c-picker-no-key-light.png
+drwxr-xr-x  39 runner  staff    1248 Oct  6 01:19 attachments
+-rw-r--r--   1 runner  staff    1112 Oct  6 01:19 not-served.txt
+-rw-r--r--   1 runner  staff   39943 Oct  6 01:19 requests.log
+-rw-r--r--   1 runner  staff      49 Oct  6 01:11 requests.log.out
+-rw-r--r--   1 runner  staff    2840 Oct  6 01:19 writes.txt
+-rw-r--r--   1 runner  staff  665679 Oct  6 01:19 xcodebuild-mac.log

@@ -1,0 +1,300 @@
+    t =    14.90s     Launch io.orbitd.dshmacprobe
+2026-10-06 01:17:50.537 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 01:17:50.538 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    15.54s         Wait for accessibility to load
+    t =    16.29s         Setting up automation session
+    t =    16.31s         Wait for io.orbitd.dshmacprobe to idle
+    t =    16.32s Checking existence of `Any (First Match)`
+    t =    16.63s Checking existence of `StaticText (First Match)`
+    t =    17.02s Checking existence of `TextView (First Match)`
+    t =    18.29s Checking existence of `Any (First Match)`
+    t =    18.39s Checking existence of `StaticText (First Match)`
+    t =    20.97s Checking existence of `Window (First Match)`
+    t =    20.97s Checking existence of `Window (First Match)`
+    t =    20.98s Find the Window (First Match)
+    t =    21.05s Added attachment named '8c-not-installed-light'
+    t =    21.06s Requesting snapshot of accessibility hierarchy for app with pid 56370
+    t =    21.26s Requesting snapshot of accessibility hierarchy for app with pid 56370
+    t =    21.41s Terminate io.orbitd.dshmacprobe:56370
+    t =    22.48s Open io.orbitd.dshmacprobe
+    t =    22.49s     Launch io.orbitd.dshmacprobe
+2026-10-06 01:17:58.129 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 01:17:58.129 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    23.20s         Wait for accessibility to load
+    t =    23.92s         Setting up automation session
+    t =    23.94s         Wait for io.orbitd.dshmacprobe to idle
+    t =    23.95s Checking existence of `Any (First Match)`
+    t =    24.16s Checking existence of `StaticText (First Match)`
+    t =    24.25s Checking existence of `TextView (First Match)`
+    t =    25.38s Checking existence of `Any (First Match)`
+    t =    25.52s Checking existence of `StaticText (First Match)`
+    t =    28.06s Checking existence of `Window (First Match)`
+    t =    28.07s Checking existence of `Window (First Match)`
+    t =    28.08s Find the Window (First Match)
+    t =    28.15s Added attachment named '8d-old-runner-queued-light'
+    t =    28.15s Requesting snapshot of accessibility hierarchy for app with pid 56825
+    t =    28.34s Requesting snapshot of accessibility hierarchy for app with pid 56825
+    t =    28.45s Terminate io.orbitd.dshmacprobe:56825
+    t =    29.55s Open io.orbitd.dshmacprobe
+    t =    29.55s     Launch io.orbitd.dshmacprobe
+2026-10-06 01:18:05.194 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 01:18:05.194 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    30.25s         Wait for accessibility to load
+    t =    31.05s         Setting up automation session
+    t =    31.09s         Wait for io.orbitd.dshmacprobe to idle
+    t =    32.09s Checking existence of `Any (First Match)`
+    t =    35.03s Checking existence of `Window (First Match)`
+    t =    35.05s Checking existence of `Window (First Match)`
+    t =    35.06s Find the Window (First Match)
+    t =    35.17s Added attachment named '9-picker-old-runner-hero-light'
+    t =    35.17s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Engine:"'
+    t =    35.53s Checking existence of `Button (Element at index 0)`
+    t =    35.66s Find the Button (Element at index 0)
+    t =    35.88s Checking existence of `"Engine: DeepSeek Harness. Switch" Button`
+    t =    36.03s Checking existence of `"Engine: DeepSeek Harness. Switch" Button`
+    t =    36.17s Tap "Engine: DeepSeek Harness. Switch" Button
+    t =    36.17s     Wait for io.orbitd.dshmacprobe to idle
+    t =    36.18s     Find the "Engine: DeepSeek Harness. Switch" Button
+    t =    36.37s     Check for interrupting elements affecting "Engine: DeepSeek Harness. Switch" Button
+    t =    36.50s     Synthesize event
+    t =    37.27s     Wait for io.orbitd.dshmacprobe to idle
+    t =    39.43s Checking existence of `Any (First Match)`
+    t =    39.55s Checking existence of `Window (First Match)`
+    t =    39.56s Checking existence of `Window (First Match)`
+    t =    39.56s Find the Window (First Match)
+    t =    39.64s Added attachment named '9-picker-old-runner-light'
+    t =    39.64s Terminate io.orbitd.dshmacprobe:57193
+    t =    40.80s Open io.orbitd.dshmacprobe
+    t =    40.80s     Launch io.orbitd.dshmacprobe
+2026-10-06 01:18:16.476 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 01:18:16.476 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    41.54s         Wait for accessibility to load
+    t =    42.34s         Setting up automation session
+    t =    42.38s         Wait for io.orbitd.dshmacprobe to idle
+    t =    42.39s Checking existence of `Any (First Match)`
+    t =    42.72s Checking existence of `StaticText (First Match)`
+    t =    42.85s Checking existence of `TextView (First Match)`
+    t =    43.92s Checking existence of `Any (First Match)`
+    t =    46.87s Checking existence of `Window (First Match)`
+    t =    46.88s Checking existence of `Window (First Match)`
+    t =    46.89s Find the Window (First Match)
+    t =    47.01s Added attachment named '9b-picker-not-installed-hero-light'
+    t =    47.02s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Engine:"'
+    t =    47.23s Checking existence of `Button (Element at index 0)`
+    t =    47.39s Find the Button (Element at index 0)
+    t =    47.53s Checking existence of `"Engine: DeepSeek Harness. Switch" Button`
+    t =    47.67s Checking existence of `"Engine: DeepSeek Harness. Switch" Button`
+    t =    47.81s Tap "Engine: DeepSeek Harness. Switch" Button
+    t =    47.81s     Wait for io.orbitd.dshmacprobe to idle
+    t =    47.81s     Find the "Engine: DeepSeek Harness. Switch" Button
+    t =    47.98s     Check for interrupting elements affecting "Engine: DeepSeek Harness. Switch" Button
+    t =    48.02s     Synthesize event
+    t =    48.64s     Wait for io.orbitd.dshmacprobe to idle
+    t =    50.78s Checking existence of `Any (First Match)`
+    t =    50.88s Checking existence of `Window (First Match)`
+    t =    50.89s Checking existence of `Window (First Match)`
+    t =    50.89s Find the Window (First Match)
+    t =    50.98s Added attachment named '9b-picker-not-installed-light'
+    t =    50.98s Terminate io.orbitd.dshmacprobe:57415
+    t =    52.15s Open io.orbitd.dshmacprobe
+    t =    52.15s     Launch io.orbitd.dshmacprobe
+2026-10-06 01:18:27.785 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 01:18:27.786 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    52.96s         Wait for accessibility to load
+    t =    53.59s         Setting up automation session
+    t =    53.61s         Wait for io.orbitd.dshmacprobe to idle
+    t =    53.62s Checking existence of `Any (First Match)`
+    t =    53.85s Checking existence of `StaticText (First Match)`
+    t =    56.44s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Engine:"'
+    t =    56.67s Checking existence of `Button (Element at index 0)`
+    t =    56.83s Find the Button (Element at index 0)
+    t =    56.97s Checking existence of `"Engine: Claude via deepseek-harness. Switch" Button`
+    t =    57.16s Checking existence of `"Engine: Claude via deepseek-harness. Switch" Button`
+    t =    57.35s Tap "Engine: Claude via deepseek-harness. Switch" Button
+    t =    57.35s     Wait for io.orbitd.dshmacprobe to idle
+    t =    57.35s     Find the "Engine: Claude via deepseek-harness. Switch" Button
+    t =    57.50s     Check for interrupting elements affecting "Engine: Claude via deepseek-harness. Switch" Button
+    t =    57.55s     Synthesize event
+    t =    58.12s     Wait for io.orbitd.dshmacprobe to idle
+    t =    60.45s Waiting 8.0s for Any (First Match) to exist
+    t =    61.47s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    61.47s         Checking existence of `Any (First Match)`
+    t =    61.62s Checking existence of `Window (First Match)`
+    t =    61.65s Checking existence of `Window (First Match)`
+    t =    61.66s Find the Window (First Match)
+    t =    61.76s Added attachment named '9c-picker-no-key-light'
+    t =    61.76s Terminate io.orbitd.dshmacprobe:57792
+    t =    62.87s Open io.orbitd.dshmacprobe
+    t =    62.87s     Launch io.orbitd.dshmacprobe
+2026-10-06 01:18:38.513 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 01:18:38.513 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    64.18s         Wait for accessibility to load
+    t =    64.51s         Setting up automation session
+    t =    64.54s         Wait for io.orbitd.dshmacprobe to idle
+    t =    64.55s Checking existence of `Any (First Match)`
+    t =    65.13s Checking existence of `StaticText (First Match)`
+    t =    65.24s Checking existence of `TextView (First Match)`
+    t =    66.35s Checking existence of `Any (First Match)`
+    t =    66.65s Checking existence of `StaticText (First Match)`
+    t =    69.31s Checking existence of `Window (First Match)`
+    t =    69.31s Checking existence of `Window (First Match)`
+    t =    69.31s Find the Window (First Match)
+    t =    69.41s Added attachment named '8-invalid-key-dark'
+    t =    69.41s Terminate io.orbitd.dshmacprobe:58309
+    t =    70.64s Open io.orbitd.dshmacprobe
+    t =    70.64s     Launch io.orbitd.dshmacprobe
+2026-10-06 01:18:46.272 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 01:18:46.273 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    71.22s         Wait for accessibility to load
+    t =    71.97s         Setting up automation session
+    t =    72.02s         Wait for io.orbitd.dshmacprobe to idle
+    t =    72.38s Checking existence of `Any (First Match)`
+    t =    72.68s Checking existence of `StaticText (First Match)`
+    t =    72.94s Checking existence of `TextView (First Match)`
+    t =    74.31s Checking existence of `Any (First Match)`
+    t =    74.43s Checking existence of `StaticText (First Match)`
+    t =    77.03s Checking existence of `Window (First Match)`
+    t =    77.05s Checking existence of `Window (First Match)`
+    t =    77.05s Find the Window (First Match)
+    t =    77.14s Added attachment named '8b-no-key-dark'
+    t =    77.14s Terminate io.orbitd.dshmacprobe:58482
+    t =    78.23s Open io.orbitd.dshmacprobe
+    t =    78.23s     Launch io.orbitd.dshmacprobe
+2026-10-06 01:18:53.893 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 01:18:53.893 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    78.93s         Wait for accessibility to load
+    t =    79.70s         Setting up automation session
+    t =    79.74s         Wait for io.orbitd.dshmacprobe to idle
+    t =    79.75s Checking existence of `Any (First Match)`
+    t =    80.04s Checking existence of `StaticText (First Match)`
+    t =    80.17s Checking existence of `TextView (First Match)`
+    t =    81.27s Checking existence of `Any (First Match)`
+    t =    81.56s Checking existence of `StaticText (First Match)`
+    t =    84.21s Checking existence of `Window (First Match)`
+    t =    84.21s Checking existence of `Window (First Match)`
+    t =    84.22s Find the Window (First Match)
+    t =    84.30s Added attachment named '8c-not-installed-dark'
+    t =    84.30s Terminate io.orbitd.dshmacprobe:58527
+    t =    85.41s Open io.orbitd.dshmacprobe
+    t =    85.41s     Launch io.orbitd.dshmacprobe
+2026-10-06 01:19:01.048 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 01:19:01.048 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    86.01s         Wait for accessibility to load
+    t =    86.73s         Setting up automation session
+    t =    86.76s         Wait for io.orbitd.dshmacprobe to idle
+    t =    86.77s Checking existence of `Any (First Match)`
+    t =    86.95s Checking existence of `StaticText (First Match)`
+    t =    87.07s Checking existence of `TextView (First Match)`
+    t =    88.12s Checking existence of `Any (First Match)`
+    t =    88.39s Checking existence of `StaticText (First Match)`
+    t =    90.98s Checking existence of `Window (First Match)`
+    t =    90.99s Checking existence of `Window (First Match)`
+    t =    90.99s Find the Window (First Match)
+    t =    91.09s Added attachment named '8d-old-runner-queued-dark'
+    t =    91.09s Terminate io.orbitd.dshmacprobe:58908
+    t =    92.13s Open io.orbitd.dshmacprobe
+    t =    92.13s     Launch io.orbitd.dshmacprobe
+2026-10-06 01:19:07.763 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 01:19:07.763 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    92.74s         Wait for accessibility to load
+    t =    93.39s         Setting up automation session
+    t =    93.41s         Wait for io.orbitd.dshmacprobe to idle
+    t =    93.42s Checking existence of `Any (First Match)`
+    t =    93.70s Checking existence of `StaticText (First Match)`
+    t =    96.72s Checking existence of `Window (First Match)`
+    t =    96.73s Checking existence of `Window (First Match)`
+    t =    96.74s Find the Window (First Match)
+    t =    97.05s Added attachment named '9-picker-old-runner-hero-dark'
+    t =    97.05s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Engine:"'
+    t =    97.30s Checking existence of `Button (Element at index 0)`
+    t =    97.39s Find the Button (Element at index 0)
+    t =    97.55s Checking existence of `"Engine: DeepSeek Harness. Switch" Button`
+    t =    97.67s Checking existence of `"Engine: DeepSeek Harness. Switch" Button`
+    t =    97.85s Tap "Engine: DeepSeek Harness. Switch" Button
+    t =    97.85s     Wait for io.orbitd.dshmacprobe to idle
+    t =    97.86s     Find the "Engine: DeepSeek Harness. Switch" Button
+    t =    98.05s     Check for interrupting elements affecting "Engine: DeepSeek Harness. Switch" Button
+    t =    98.09s     Synthesize event
+    t =    98.75s     Wait for io.orbitd.dshmacprobe to idle
+    t =   101.09s Checking existence of `Any (First Match)`
+    t =   101.23s Checking existence of `Window (First Match)`
+    t =   101.25s Checking existence of `Window (First Match)`
+    t =   101.25s Find the Window (First Match)
+    t =   101.36s Added attachment named '9-picker-old-runner-dark'
+    t =   101.36s Terminate io.orbitd.dshmacprobe:59334
+    t =   102.45s Open io.orbitd.dshmacprobe
+    t =   102.45s     Launch io.orbitd.dshmacprobe
+2026-10-06 01:19:18.092 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 01:19:18.092 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   103.00s         Wait for accessibility to load
+    t =   103.84s         Setting up automation session
+    t =   103.86s         Wait for io.orbitd.dshmacprobe to idle
+    t =   104.93s Checking existence of `Any (First Match)`
+    t =   107.77s Checking existence of `Window (First Match)`
+    t =   107.79s Checking existence of `Window (First Match)`
+    t =   107.80s Find the Window (First Match)
+    t =   108.02s Added attachment named '9b-picker-not-installed-hero-dark'
+    t =   108.03s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Engine:"'
+    t =   108.32s Checking existence of `Button (Element at index 0)`
+    t =   108.46s Find the Button (Element at index 0)
+    t =   108.63s Checking existence of `"Engine: DeepSeek Harness. Switch" Button`
+    t =   108.76s Checking existence of `"Engine: DeepSeek Harness. Switch" Button`
+    t =   108.90s Tap "Engine: DeepSeek Harness. Switch" Button
+    t =   108.90s     Wait for io.orbitd.dshmacprobe to idle
+    t =   108.90s     Find the "Engine: DeepSeek Harness. Switch" Button
+    t =   109.09s     Check for interrupting elements affecting "Engine: DeepSeek Harness. Switch" Button
+    t =   109.18s     Synthesize event
+    t =   109.85s     Wait for io.orbitd.dshmacprobe to idle
+    t =   112.20s Checking existence of `Any (First Match)`
+    t =   112.35s Checking existence of `Window (First Match)`
+    t =   112.36s Checking existence of `Window (First Match)`
+    t =   112.36s Find the Window (First Match)
+    t =   112.41s Added attachment named '9b-picker-not-installed-dark'
+    t =   112.41s Terminate io.orbitd.dshmacprobe:59393
+2026-10-06 01:19:29.145919+0000 DshMacProbeUITests-Runner[50562:136670] [] nw_path_necp_check_for_updates Failed to copy updated result (22)
+    t =   113.53s Open io.orbitd.dshmacprobe
+    t =   113.53s     Launch io.orbitd.dshmacprobe
+2026-10-06 01:19:29.158 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 01:19:29.158 xcodebuild[39517:110956] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   114.28s         Wait for accessibility to load
+    t =   115.26s         Setting up automation session
+    t =   115.27s         Wait for io.orbitd.dshmacprobe to idle
+    t =   115.28s Checking existence of `Any (First Match)`
+    t =   115.66s Checking existence of `StaticText (First Match)`
+    t =   118.29s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Engine:"'
+    t =   118.44s Checking existence of `Button (Element at index 0)`
+    t =   118.55s Find the Button (Element at index 0)
+    t =   118.77s Checking existence of `"Engine: Claude via deepseek-harness. Switch" Button`
+    t =   118.95s Checking existence of `"Engine: Claude via deepseek-harness. Switch" Button`
+    t =   119.15s Tap "Engine: Claude via deepseek-harness. Switch" Button
+    t =   119.15s     Wait for io.orbitd.dshmacprobe to idle
+    t =   119.16s     Find the "Engine: Claude via deepseek-harness. Switch" Button
+    t =   119.32s     Check for interrupting elements affecting "Engine: Claude via deepseek-harness. Switch" Button
+    t =   119.37s     Synthesize event
+    t =   119.86s     Wait for io.orbitd.dshmacprobe to idle
+    t =   122.16s Waiting 8.0s for Any (First Match) to exist
+    t =   123.17s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   123.18s         Checking existence of `Any (First Match)`
+    t =   123.30s Checking existence of `Window (First Match)`
+    t =   123.35s Checking existence of `Window (First Match)`
+    t =   123.35s Find the Window (First Match)
+    t =   123.40s Added attachment named '9c-picker-no-key-dark'
+    t =   123.40s Terminate io.orbitd.dshmacprobe:60032
+    t =   124.50s Tear Down
+Test Case '-[DshMacProbeUITests.DshShotTests test5Unavailable]' passed (124.946 seconds).
+Test Suite 'DshShotTests' passed at 2026-10-06 01:19:40.578.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 277.620 (277.628) seconds
+Test Suite 'DshMacProbeUITests.xctest' passed at 2026-10-06 01:19:40.579.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 277.620 (277.630) seconds
+Test Suite 'All tests' passed at 2026-10-06 01:19:40.579.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 277.620 (277.633) seconds
+2026-10-06 01:19:41.505 xcodebuild[39517:110956] [MT] IDETestOperationsObserverDebug: 286.953 elapsed -- Testing started completed.
+2026-10-06 01:19:41.505 xcodebuild[39517:110956] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-06 01:19:41.505 xcodebuild[39517:110956] [MT] IDETestOperationsObserverDebug: 286.953 sec, +286.953 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.dsh-probe/results/mac.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

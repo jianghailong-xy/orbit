@@ -1,0 +1,14 @@
+Test Case '-[DshMacProbeUITests.DshShotTests test1PickEngine]' started.
+Test Case '-[DshMacProbeUITests.DshShotTests test1PickEngine]' passed (35.085 seconds).
+Test Case '-[DshMacProbeUITests.DshShotTests test2ModeAndModelMenus]' started.
+Test Case '-[DshMacProbeUITests.DshShotTests test2ModeAndModelMenus]' passed (30.756 seconds).
+Test Case '-[DshMacProbeUITests.DshShotTests test3OperationChain]' started.
+Test Case '-[DshMacProbeUITests.DshShotTests test3OperationChain]' passed (56.109 seconds).
+Test Case '-[DshMacProbeUITests.DshShotTests test4ChainStatesDark]' started.
+Test Case '-[DshMacProbeUITests.DshShotTests test4ChainStatesDark]' passed (30.724 seconds).
+Test Case '-[DshMacProbeUITests.DshShotTests test5Unavailable]' started.
+Test Case '-[DshMacProbeUITests.DshShotTests test5Unavailable]' passed (124.946 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 277.620 (277.628) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 277.620 (277.630) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 277.620 (277.633) seconds
+** TEST SUCCEEDED **

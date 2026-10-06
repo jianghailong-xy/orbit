@@ -1,0 +1,14 @@
+Test Case '-[DshProbeUITests.DshShotTests test1PickEngine]' started.
+Test Case '-[DshProbeUITests.DshShotTests test1PickEngine]' passed (116.372 seconds).
+Test Case '-[DshProbeUITests.DshShotTests test2ModeAndModelMenus]' started.
+Test Case '-[DshProbeUITests.DshShotTests test2ModeAndModelMenus]' passed (87.970 seconds).
+Test Case '-[DshProbeUITests.DshShotTests test3OperationChain]' started.
+Test Case '-[DshProbeUITests.DshShotTests test3OperationChain]' passed (74.380 seconds).
+Test Case '-[DshProbeUITests.DshShotTests test4ChainStatesDark]' started.
+Test Case '-[DshProbeUITests.DshShotTests test4ChainStatesDark]' passed (56.798 seconds).
+Test Case '-[DshProbeUITests.DshShotTests test5Unavailable]' started.
+Test Case '-[DshProbeUITests.DshShotTests test5Unavailable]' passed (199.395 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 534.915 (534.930) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 534.915 (534.931) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 534.915 (534.934) seconds
+** TEST SUCCEEDED **
