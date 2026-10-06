@@ -49,6 +49,7 @@ import {
 } from './dto';
 import { AutoRetryService } from './auto-retry.service';
 import { MergeReceiptService } from './merge-receipt.service';
+import { SessionOwnerGuard } from './session-owner.guard';
 import { SessionsService } from './sessions.service';
 import { ifNoneMatchHits, isOpenListView, openListEtag } from './open-list-version';
 import { assertClientTurnIdNotReserved } from './watch-turn-key';
@@ -966,6 +967,7 @@ export class SessionsController {
    *  whether it arrived by replay or live. */
   @AllowQueryToken()
   @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
+  @UseGuards(SessionOwnerGuard)
   @Sse(':id/events')
   events(
     @CurrentUser() user: AuthUser,
