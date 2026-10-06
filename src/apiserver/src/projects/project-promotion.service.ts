@@ -297,7 +297,8 @@ export class ProjectPromotionService {
 
   /**
    * The two reads answer only the caller's own project: another account's — or none — is not found,
-   * as every other read of a project answers it, rather than an empty answer that reads as one.
+   * as every other read of a project answers it, rather than the empty answer that means "your
+   * project has nothing on offer".
    */
   private async assertOwnProject(userId: string, projectId: string): Promise<void> {
     const own = await this.prisma.project.findFirst({ where: { id: projectId, ownerId: userId }, select: { id: true } });
