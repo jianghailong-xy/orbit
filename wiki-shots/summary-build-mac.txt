@@ -1,0 +1,10 @@
+Test Case '-[WikiMacProbeUITests.WikiMacShotsTests testTheDirectoryBesideTheContent]' started.
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/Mac/WikiMacShotsTests.swift:26: error: -[WikiMacProbeUITests.WikiMacShotsTests testTheDirectoryBesideTheContent] : XCTAssertTrue failed - the document's page
+Test Case '-[WikiMacProbeUITests.WikiMacShotsTests testTheDirectoryBesideTheContent]' failed (62.683 seconds).
+Test Suite 'WikiMacShotsTests' failed at 2026-10-06 22:07:50.138.
+	 Executed 1 test, with 1 failure (0 unexpected) in 62.683 (62.684) seconds
+Test Suite 'WikiMacProbeUITests.xctest' failed at 2026-10-06 22:07:50.138.
+	 Executed 1 test, with 1 failure (0 unexpected) in 62.683 (62.686) seconds
+Test Suite 'All tests' failed at 2026-10-06 22:07:50.139.
+	 Executed 1 test, with 1 failure (0 unexpected) in 62.683 (62.691) seconds
+** TEST FAILED **

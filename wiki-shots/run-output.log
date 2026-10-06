@@ -1,0 +1,44 @@
+==> stubs ready after 2s
+iPhone iPhone 17 Pro com.apple.CoreSimulator.SimRuntime.iOS-26-5
+iPad iPad Air 11-inch (M4) com.apple.CoreSimulator.SimRuntime.iOS-26-5
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B, iPad CD273885-3D56-471B-AD88-07FFF01EA675
+Test Case '-[WikiMacProbeUITests.WikiMacShotsTests testTheDirectoryBesideTheContent]' started.
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/Mac/WikiMacShotsTests.swift:26: error: -[WikiMacProbeUITests.WikiMacShotsTests testTheDirectoryBesideTheContent] : XCTAssertTrue failed - the document's page
+Test Case '-[WikiMacProbeUITests.WikiMacShotsTests testTheDirectoryBesideTheContent]' failed (62.683 seconds).
+	 Executed 1 test, with 1 failure (0 unexpected) in 62.683 (62.684) seconds
+	 Executed 1 test, with 1 failure (0 unexpected) in 62.683 (62.686) seconds
+	 Executed 1 test, with 1 failure (0 unexpected) in 62.683 (62.691) seconds
+** TEST FAILED **
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testPrinciplesThenANewSpace]' started.
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testPrinciplesThenANewSpace]' passed (118.206 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 118.206 (118.215) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 118.206 (118.218) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 118.206 (118.223) seconds
+** TEST SUCCEEDED **
+Traceback (most recent call last):
+  File "<stdin>", line 3, in <module>
+FileNotFoundError: [Errno 2] No such file or directory: '/Users/runner/work/orbit/orbit/.wiki-probe/shots/attachments-pad/manifest.json'
+.wiki-probe/run.sh: line 90:  3620 Terminated: 15          SLOW=25 python3 -u stub.py 8767 "$OUT/requests-slow.log" slow > "$OUT/stub-slow.out" 2>&1
+.wiki-probe/run.sh: line 90:  3618 Terminated: 15          python3 -u stub.py 8765 "$OUT/requests-one.log" one > "$OUT/stub-one.out" 2>&1
+.wiki-probe/run.sh: line 90:  3619 Terminated: 15          python3 -u stub.py 8766 "$OUT/requests-three.log" three > "$OUT/stub-three.out" 2>&1
+total 3136
+drwxr-xr-x  20 runner  staff     640 Oct  6 22:31 .
+drwxr-xr-x  16 runner  staff     512 Oct  6 22:08 ..
+-rw-r--r--   1 runner  staff  563278 Oct  6 22:28 11-phone-drawer-three.png
+-rw-r--r--   1 runner  staff  318921 Oct  6 22:28 12-phone-principles.png
+-rw-r--r--   1 runner  staff  151035 Oct  6 22:29 13-phone-new-space.png
+-rw-r--r--   1 runner  staff  231653 Oct  6 22:31 41-mac-wiki.png
+-rw-r--r--   1 runner  staff  257900 Oct  6 22:31 42-mac-doc.png
+drwxr-xr-x   8 runner  staff     256 Oct  6 22:31 attachments-mac
+drwxr-xr-x   2 runner  staff      64 Oct  6 22:31 attachments-pad
+drwxr-xr-x   7 runner  staff     224 Oct  6 22:31 attachments-phone
+-rw-r--r--   1 runner  staff     168 Oct  6 22:31 not-served.txt
+-rw-r--r--   1 runner  staff    3030 Oct  6 22:07 requests-one.log
+-rw-r--r--   1 runner  staff      51 Oct  6 21:55 requests-slow.log
+-rw-r--r--   1 runner  staff    4345 Oct  6 22:29 requests-three.log
+-rw-r--r--   1 runner  staff      55 Oct  6 21:55 stub-one.out
+-rw-r--r--   1 runner  staff      56 Oct  6 21:55 stub-slow.out
+-rw-r--r--   1 runner  staff      57 Oct  6 21:55 stub-three.out
+-rw-r--r--@  1 runner  staff   13268 Oct  6 22:29 tree-phone-new-space.txt
+-rw-r--r--@  1 runner  staff   23056 Oct  6 22:28 tree-phone-principles.txt
+-rw-r--r--@  1 runner  staff    1216 Oct  6 22:29 WikiPhoneShotsTeststestPrinciplesThenANewSpace-notes.txt

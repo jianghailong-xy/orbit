@@ -1,0 +1,6 @@
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testPrinciplesThenANewSpace]' started.
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testPrinciplesThenANewSpace]' passed (118.206 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 118.206 (118.215) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 118.206 (118.218) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 118.206 (118.223) seconds
+** TEST SUCCEEDED **

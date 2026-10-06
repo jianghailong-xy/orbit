@@ -1,0 +1,53 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "32857e3d89d0d225a79fb2dabe2887730800ffdc",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "B6DC6E8C-12E6-4820-808D-447EE70360B0.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "42-mac-doc_0_CF27F2B5-3BCF-494F-ABEE-1666F00B0540.png",
+        "timestamp" : 1791324469.542
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "32857e3d89d0d225a79fb2dabe2887730800ffdc",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "6EDDD219-8B32-4AB4-BC61-EBDD7CF4183A",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Synthesized Event 2026-10-06 at 10.07.15 PM",
+        "timestamp" : 1791324435.943
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "32857e3d89d0d225a79fb2dabe2887730800ffdc",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "0AE16195-D034-4156-AA5E-16A16391174D.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "41-mac-wiki_0_91816E26-03C3-4A97-B452-08EAFAE53195.png",
+        "timestamp" : 1791324430.737
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "32857e3d89d0d225a79fb2dabe2887730800ffdc",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "81BA1908-0AD6-496E-901F-D4248898C24A",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Synthesized Event 2026-10-06 at 10.07.02 PM",
+        "timestamp" : 1791324422.224
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "32857e3d89d0d225a79fb2dabe2887730800ffdc",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "A70C2A7B-2918-4DF7-BA1E-96E26E06AFFA.mp4",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Screen Recording 2026-10-06 at 10.06.49 PM.mp4",
+        "timestamp" : 1791324409.566
+      }
+    ],
+    "testIdentifier" : "WikiMacShotsTests/testTheDirectoryBesideTheContent()",
+    "testIdentifierURL" : "test://com.apple.xcode/WikiProbe/WikiMacProbeUITests/WikiMacShotsTests/testTheDirectoryBesideTheContent"
+  }
+]

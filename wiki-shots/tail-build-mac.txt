@@ -1,0 +1,300 @@
+    builtin-infoPlistUtility /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Intermediates.noindex/WikiProbe.build/Debug/WikiMacProbeUITests.build/empty-WikiMacProbeUITests.plist -producttype com.apple.product-type.bundle.ui-testing -expandbuildsettings -platform macosx -additionalcontentfile /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Intermediates.noindex/WikiProbe.build/Debug/WikiMacProbeUITests.build/ProductTypeInfoPlistAdditions.plist -o /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/PlugIns/WikiMacProbeUITests.xctest/Contents/Info.plist
+
+Ld /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/PlugIns/WikiMacProbeUITests.xctest/Contents/MacOS/WikiMacProbeUITests normal (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-macos14.0 -bundle -isysroot /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk -O0 -L/Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -L/Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug -L/Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib -F/Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -F/Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug -iframework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks -filelist /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Intermediates.noindex/WikiProbe.build/Debug/WikiMacProbeUITests.build/Objects-normal/arm64/WikiMacProbeUITests.LinkFileList -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @loader_path/../Frameworks -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -rpath -Xlinker @loader_path/Frameworks -Xlinker -object_path_lto -Xlinker /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Intermediates.noindex/WikiProbe.build/Debug/WikiMacProbeUITests.build/Objects-normal/arm64/WikiMacProbeUITests_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -dependency_info -Xlinker /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Intermediates.noindex/WikiProbe.build/Debug/WikiMacProbeUITests.build/Objects-normal/arm64/WikiMacProbeUITests_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Intermediates.noindex/WikiProbe.build/Debug/WikiMacProbeUITests.build/Objects-normal/arm64/WikiMacProbeUITests.swiftmodule @/Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Intermediates.noindex/WikiProbe.build/Debug/WikiMacProbeUITests.build/Objects-normal/arm64/WikiMacProbeUITests-linker-args.resp -Xlinker -needed_framework -Xlinker XCTest -framework XCTest -Xlinker -needed-lXCTestSwiftSupport -lXCTestSwiftSupport -Xlinker -no_adhoc_codesign -o /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/PlugIns/WikiMacProbeUITests.xctest/Contents/MacOS/WikiMacProbeUITests
+
+CopySwiftLibs /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/PlugIns/WikiMacProbeUITests.xctest (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/PlugIns/WikiMacProbeUITests.xctest/Contents/MacOS/WikiMacProbeUITests --scan-folder /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/PlugIns/WikiMacProbeUITests.xctest/Contents/Frameworks --scan-folder /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/PlugIns/WikiMacProbeUITests.xctest/Contents/PlugIns --scan-folder /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/PlugIns/WikiMacProbeUITests.xctest/Contents/Library/SystemExtensions --scan-folder /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/PlugIns/WikiMacProbeUITests.xctest/Contents/Extensions --platform macosx --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.pwFrmi/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/PlugIns/WikiMacProbeUITests.xctest/Contents/Frameworks --strip-bitcode --scan-executable /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Intermediates.noindex/WikiProbe.build/Debug/WikiMacProbeUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os --back-deploy-swift-span
+
+ExtractAppIntentsMetadata (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.pwFrmi/Metal.xctoolchain --module-name WikiMacProbeUITests --sdk-root /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk --xcode-version 17F113 --platform-family macOS --deployment-target 14.0 --bundle-identifier io.orbitd.wikimacprobe.uitests --output /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/PlugIns/WikiMacProbeUITests.xctest/Contents/Resources --target-triple arm64-apple-macos14.0 --binary-file /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/PlugIns/WikiMacProbeUITests.xctest/Contents/MacOS/WikiMacProbeUITests --dependency-file /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Intermediates.noindex/WikiProbe.build/Debug/WikiMacProbeUITests.build/Objects-normal/arm64/WikiMacProbeUITests_dependency_info.dat --stringsdata-file /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Intermediates.noindex/WikiProbe.build/Debug/WikiMacProbeUITests.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Intermediates.noindex/WikiProbe.build/Debug/WikiMacProbeUITests.build/Objects-normal/arm64/WikiMacProbeUITests.SwiftFileList --metadata-file-list /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Intermediates.noindex/WikiProbe.build/Debug/WikiMacProbeUITests.build/WikiMacProbeUITests.DependencyMetadataFileList --static-metadata-file-list /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Intermediates.noindex/WikiProbe.build/Debug/WikiMacProbeUITests.build/WikiMacProbeUITests.DependencyStaticMetadataFileList --swift-const-vals-list /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Intermediates.noindex/WikiProbe.build/Debug/WikiMacProbeUITests.build/Objects-normal/arm64/WikiMacProbeUITests.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-10-06 22:06:31.758 appintentsmetadataprocessor[19632:61392] Starting appintentsmetadataprocessor export
+2026-10-06 22:06:31.774 appintentsmetadataprocessor[19632:61392] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+MkDir /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    /bin/mkdir -p /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app
+
+CopyPlistFile /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Info.plist /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Contents/Info.plist (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-copyPlist --validate --convert xml1 --macro-expansion WRAPPEDPRODUCTNAME WikiMacProbeUITests-Runner --macro-expansion WRAPPEDPRODUCTBUNDLEIDENTIFIER io.orbitd.wikimacprobe.uitests.xctrunner --macro-expansion TESTPRODUCTNAME WikiMacProbeUITests --macro-expansion TESTPRODUCTBUNDLEIDENTIFIER io.orbitd.wikimacprobe.uitests --copy-value UIDeviceFamily /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/PlugIns/WikiMacProbeUITests.xctest/Contents/Info.plist --outdir /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents -- /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Contents/Info.plist
+
+CopyAndPreserveArchs /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/MacOS/WikiMacProbeUITests-Runner (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/lipo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Contents/MacOS/XCTRunner -output /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/MacOS/WikiMacProbeUITests-Runner -extract arm64
+
+Copy /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/PkgInfo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Contents/PkgInfo (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Contents/PkgInfo /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents
+
+Copy /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCUnit.framework (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCUnit.framework /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCUIAutomation.framework (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCUIAutomation.framework /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks
+
+CodeSign /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib
+/Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework
+/Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework
+/Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework
+/Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework
+/Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework
+/Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework
+/Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework
+/Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/PlugIns/WikiMacProbeUITests.xctest (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Intermediates.noindex/WikiProbe.build/Debug/WikiMacProbeUITests.build/WikiMacProbeUITests.xctest.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/PlugIns/WikiMacProbeUITests.xctest
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/PlugIns/WikiMacProbeUITests.xctest (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/PlugIns/WikiMacProbeUITests.xctest
+
+Touch /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/PlugIns/WikiMacProbeUITests.xctest (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app/Contents/PlugIns/WikiMacProbeUITests.xctest
+
+CodeSign /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app (in target 'WikiMacProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Intermediates.noindex/WikiProbe.build/Debug/WikiMacProbeUITests.build/WikiMacProbeUITests.xctest.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app
+/Users/runner/work/orbit/orbit/.wiki-probe/.dd-mac/Build/Products/Debug/WikiMacProbeUITests-Runner.app: replacing existing signature
+
+2026-10-06 22:06:44.620290+0000 WikiMacProbeUITests-Runner[20627:63537] [Default] Running tests...
+Test Suite 'All tests' started at 2026-10-06 22:06:47.448.
+Test Suite 'WikiMacProbeUITests.xctest' started at 2026-10-06 22:06:47.452.
+Test Suite 'WikiMacShotsTests' started at 2026-10-06 22:06:47.453.
+Test Case '-[WikiMacProbeUITests.WikiMacShotsTests testTheDirectoryBesideTheContent]' started.
+    t =     0.00s Start Test at 2026-10-06 22:06:47.455
+    t =     2.15s Set Up
+    t =     2.24s Open io.orbitd.wikimacprobe
+    t =     2.25s     Launch io.orbitd.wikimacprobe
+2026-10-06 22:06:51.083 xcodebuild[6174:29564] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 22:06:51.085 xcodebuild[6174:29564] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     7.17s         Wait for accessibility to load
+    t =     8.77s         Setting up automation session
+    t =     9.01s         Wait for io.orbitd.wikimacprobe to idle
+    t =     9.01s Checking existence of `StaticText (First Match)`
+    t =     9.71s Checking existence of `Button (First Match)`
+    t =    10.88s Checking existence of `StaticText (First Match)`
+    t =    11.09s Checking existence of `StaticText (First Match)`
+    t =    11.20s Checking existence of `StaticText (First Match)`
+    t =    11.26s Find the StaticText (First Match)
+    t =    11.32s Find the "Wiki" StaticText
+    t =    11.40s Find the "Wiki" StaticText
+    t =    11.48s Find the "Wiki" StaticText
+    t =    11.56s Find the "Wiki" StaticText
+    t =    13.63s Click "Wiki" StaticText
+    t =    13.63s     Wait for io.orbitd.wikimacprobe to idle
+    t =    13.64s     Find the "Wiki" StaticText
+    t =    13.73s     Check for interrupting elements affecting "Wiki" StaticText
+    t =    13.81s     Synthesize event
+    t =    14.78s     Wait for io.orbitd.wikimacprobe to idle
+    t =    15.20s Checking existence of `StaticText (First Match)`
+    t =    15.54s Checking existence of `Button (First Match)`
+    t =    15.78s Checking existence of `Button (First Match)`
+    t =    15.90s Find the Button (First Match)
+    t =    16.20s Find the "Browse by category" Button
+    t =    16.28s Find the "Browse by category" Button
+    t =    16.35s Find the "Browse by category" Button
+    t =    16.43s Find the "Browse by category" Button
+    t =    16.52s Checking existence of `StaticText (First Match)`
+    t =    16.79s Checking existence of `Button (First Match)`
+    t =    16.93s Checking existence of `Button (First Match)`
+    t =    17.04s Find the Button (First Match)
+    t =    17.13s Find the "A–Z index" Button
+    t =    17.21s Find the "A–Z index" Button
+    t =    17.29s Find the "A–Z index" Button
+    t =    17.38s Find the "A–Z index" Button
+    t =    17.45s Checking existence of `StaticText (First Match)`
+    t =    17.60s Checking existence of `Button (First Match)`
+    t =    17.69s Checking existence of `Button (First Match)`
+    t =    17.77s Find the Button (First Match)
+    t =    17.88s Find the "Plan" Button
+    t =    17.99s Find the "Plan" Button
+    t =    18.11s Find the "Plan" Button
+    t =    18.23s Find the "Plan" Button
+    t =    18.37s Checking existence of `StaticText (First Match)`
+    t =    18.52s Checking existence of `StaticText (First Match)`
+    t =    18.60s Checking existence of `StaticText (First Match)`
+    t =    18.78s Find the StaticText (First Match)
+    t =    18.90s Find the "35 documents · 5 written" StaticText
+    t =    19.12s Find the "35 documents · 5 written" StaticText
+    t =    19.34s Find the "35 documents · 5 written" StaticText
+    t =    19.55s Find the "35 documents · 5 written" StaticText
+    t =    19.88s Checking existence of `StaticText (First Match)`
+    t =    20.12s Checking existence of `Button (First Match)`
+    t =    20.31s Checking existence of `Button (First Match)`
+    t =    20.54s Checking existence of `Button (First Match)`
+    t =    23.28s Added attachment named '41-mac-wiki'
+    t =    23.29s Get all elements bound by index for: Elements matching predicate 'label CONTAINS "Session 运行与恢复"'
+    t =    23.74s Checking existence of `Button (Element at index 0)`
+    t =    24.05s Find the Button (Element at index 0)
+    t =    24.32s Checking existence of `Button (Element at index 1)`
+    t =    24.66s Find the Button (Element at index 1)
+    t =    24.93s Find the "3.1, Session 运行与恢复, session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。" Button
+    t =    25.29s Find the "3.1, Session 运行与恢复" Button
+    t =    25.55s Checking existence of `"3.1, Session 运行与恢复" Button`
+    t =    25.92s Find the "3.1, Session 运行与恢复" Button
+    t =    26.19s Find the "3.1, Session 运行与恢复" Button
+    t =    26.46s Find the "3.1, Session 运行与恢复" Button
+    t =    26.79s Find the "3.1, Session 运行与恢复" Button
+    t =    27.25s Find the "3.1, Session 运行与恢复" Button
+    t =    27.60s Click "3.1, Session 运行与恢复" Button
+    t =    27.60s     Wait for io.orbitd.wikimacprobe to idle
+    t =    27.60s     Find the "3.1, Session 运行与恢复" Button
+    t =    27.89s     Check for interrupting elements affecting "3.1, Session 运行与恢复" Button
+    t =    27.91s     Synthesize event
+    t =    28.49s     Wait for io.orbitd.wikimacprobe to idle
+    t =    28.49s Checking existence of `StaticText (First Match)`
+    t =    28.76s Checking existence of `Button (First Match)`
+    t =    29.88s Checking existence of `StaticText (First Match)`
+    t =    30.23s Checking existence of `Button (First Match)`
+    t =    31.53s Checking existence of `StaticText (First Match)`
+    t =    31.87s Checking existence of `Button (First Match)`
+    t =    33.15s Checking existence of `StaticText (First Match)`
+    t =    33.54s Checking existence of `Button (First Match)`
+    t =    34.85s Checking existence of `StaticText (First Match)`
+    t =    35.09s Checking existence of `Button (First Match)`
+    t =    36.29s Checking existence of `StaticText (First Match)`
+    t =    36.69s Checking existence of `Button (First Match)`
+    t =    38.15s Checking existence of `StaticText (First Match)`
+    t =    38.59s Checking existence of `Button (First Match)`
+    t =    39.80s Checking existence of `StaticText (First Match)`
+    t =    40.11s Checking existence of `Button (First Match)`
+    t =    41.34s Checking existence of `StaticText (First Match)`
+    t =    41.80s Checking existence of `Button (First Match)`
+    t =    43.13s Checking existence of `StaticText (First Match)`
+    t =    43.48s Checking existence of `Button (First Match)`
+    t =    44.69s Checking existence of `StaticText (First Match)`
+    t =    45.03s Checking existence of `Button (First Match)`
+    t =    46.24s Checking existence of `StaticText (First Match)`
+    t =    46.53s Checking existence of `Button (First Match)`
+    t =    47.71s Checking existence of `StaticText (First Match)`
+    t =    48.01s Checking existence of `Button (First Match)`
+    t =    49.25s Checking existence of `StaticText (First Match)`
+    t =    49.55s Checking existence of `Button (First Match)`
+    t =    50.75s Checking existence of `StaticText (First Match)`
+    t =    51.07s Checking existence of `Button (First Match)`
+    t =    52.25s Checking existence of `StaticText (First Match)`
+    t =    52.43s Checking existence of `Button (First Match)`
+    t =    53.61s Checking existence of `StaticText (First Match)`
+    t =    53.87s Checking existence of `Button (First Match)`
+    t =    55.03s Checking existence of `StaticText (First Match)`
+    t =    55.31s Checking existence of `Button (First Match)`
+    t =    56.49s Checking existence of `StaticText (First Match)`
+    t =    56.81s Checking existence of `Button (First Match)`
+    t =    58.07s Checking existence of `StaticText (First Match)`
+    t =    58.33s Checking existence of `Button (First Match)`
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/Mac/WikiMacShotsTests.swift:26: error: -[WikiMacProbeUITests.WikiMacShotsTests testTheDirectoryBesideTheContent] : XCTAssertTrue failed - the document's page
+    t =    62.09s Added attachment named '42-mac-doc'
+    t =    62.10s Tear Down
+Test Case '-[WikiMacProbeUITests.WikiMacShotsTests testTheDirectoryBesideTheContent]' failed (62.683 seconds).
+Test Suite 'WikiMacShotsTests' failed at 2026-10-06 22:07:50.138.
+	 Executed 1 test, with 1 failure (0 unexpected) in 62.683 (62.684) seconds
+Test Suite 'WikiMacProbeUITests.xctest' failed at 2026-10-06 22:07:50.138.
+	 Executed 1 test, with 1 failure (0 unexpected) in 62.683 (62.686) seconds
+Test Suite 'All tests' failed at 2026-10-06 22:07:50.139.
+	 Executed 1 test, with 1 failure (0 unexpected) in 62.683 (62.691) seconds
+2026-10-06 22:07:55.764 xcodebuild[6174:29564] [MT] IDETestOperationsObserverDebug: 82.863 elapsed -- Testing started completed.
+2026-10-06 22:07:55.765 xcodebuild[6174:29564] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-06 22:07:55.765 xcodebuild[6174:29564] [MT] IDETestOperationsObserverDebug: 82.864 sec, +82.863 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.wiki-probe/results/mac.xcresult
+
+Failing tests:
+	WikiMacShotsTests.testTheDirectoryBesideTheContent()
+
+** TEST FAILED **
+
+Testing started

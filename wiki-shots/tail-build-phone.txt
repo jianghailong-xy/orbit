@@ -1,0 +1,300 @@
+ExtractAppIntentsMetadata (in target 'WikiProbe' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.pwFrmi/Metal.xctoolchain --module-name WikiProbe --sdk-root /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk --xcode-version 17F113 --platform-family iOS --deployment-target 17.0 --bundle-identifier io.orbitd.wikiprobe --output /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app --target-triple arm64-apple-ios17.0-simulator --binary-file /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/WikiProbe --dependency-file /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/Objects-normal/arm64/WikiProbe_dependency_info.dat --stringsdata-file /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/Objects-normal/arm64/WikiProbe.SwiftFileList --metadata-file-list /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/WikiProbe.DependencyMetadataFileList --static-metadata-file-list /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/WikiProbe.DependencyStaticMetadataFileList --swift-const-vals-list /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/Objects-normal/arm64/WikiProbe.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-10-06 22:16:37.124 appintentsmetadataprocessor[45229:124248] Starting appintentsmetadataprocessor export
+2026-10-06 22:16:37.198 appintentsmetadataprocessor[45229:124248] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+CopySwiftLibs /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app (in target 'WikiProbe' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/WikiProbe.debug.dylib --scan-folder /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/Frameworks --scan-folder /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/PlugIns --scan-folder /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/SystemExtensions --scan-folder /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.pwFrmi/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+
+AppIntentsSSUTraining (in target 'WikiProbe' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/Info.plist --temp-dir-path /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/ssu --bundle-id io.orbitd.wikiprobe --product-path /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app --extracted-metadata-path /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/Metadata.appintents --metadata-file-list /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/WikiProbe.DependencyMetadataFileList --source-file /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/Info.plist --archive-ssu-assets
+2026-10-06 22:16:37.547 appintentsnltrainingprocessor[45341:124518] Parsing options for appintentsnltrainingprocessor
+2026-10-06 22:16:37.558 appintentsnltrainingprocessor[45341:124518] Starting AppIntents SSU YAML Generation
+2026-10-06 22:16:37.567 appintentsnltrainingprocessor[45341:124518] No AppShortcuts found - Skipping.
+
+CodeSign /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/WikiProbe.debug.dylib (in target 'WikiProbe' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/WikiProbe.debug.dylib
+
+CodeSign /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/__preview.dylib (in target 'WikiProbe' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/__preview.dylib
+
+CodeSign /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app (in target 'WikiProbe' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app (in target 'WikiProbe' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app
+
+Validate /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app (in target 'WikiProbe' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-validationUtility /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app -shallow-bundle -infoplist-subpath Info.plist
+
+Touch /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app (in target 'WikiProbe' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app
+
+ProcessInfoPlistFile /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/Info.plist /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/empty-WikiProbeUITests.plist (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-infoPlistUtility /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/empty-WikiProbeUITests.plist -producttype com.apple.product-type.bundle.ui-testing -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/ProductTypeInfoPlistAdditions.plist -o /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/Info.plist
+
+Ld /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/WikiProbeUITests normal (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios17.0-simulator -bundle -isysroot /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -O0 -L/Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -L/Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator -L/Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F/Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator -iframework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -iframework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/Developer/Library/Frameworks -filelist /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/Objects-normal/arm64/WikiProbeUITests.LinkFileList -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @loader_path/Frameworks -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/Objects-normal/arm64/WikiProbeUITests_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/Objects-normal/arm64/WikiProbeUITests_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/Objects-normal/arm64/WikiProbeUITests.swiftmodule @/Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/Objects-normal/arm64/WikiProbeUITests-linker-args.resp -Xlinker -needed_framework -Xlinker XCTest -framework XCTest -Xlinker -needed-lXCTestSwiftSupport -lXCTestSwiftSupport -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __entitlements -Xlinker /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/WikiProbeUITests.xctest-Simulated.xcent -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __ents_der -Xlinker /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/WikiProbeUITests.xctest-Simulated.xcent.der -Xlinker -no_adhoc_codesign -o /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/WikiProbeUITests
+
+CopySwiftLibs /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/WikiProbeUITests --scan-folder /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/Frameworks --scan-folder /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/PlugIns --scan-folder /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/SystemExtensions --scan-folder /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.pwFrmi/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/Frameworks --strip-bitcode --scan-executable /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+
+ExtractAppIntentsMetadata (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.pwFrmi/Metal.xctoolchain --module-name WikiProbeUITests --sdk-root /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk --xcode-version 17F113 --platform-family iOS --deployment-target 17.0 --bundle-identifier io.orbitd.wikiprobe.uitests --output /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest --target-triple arm64-apple-ios17.0-simulator --binary-file /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/WikiProbeUITests --dependency-file /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/Objects-normal/arm64/WikiProbeUITests_dependency_info.dat --stringsdata-file /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/Objects-normal/arm64/WikiProbeUITests.SwiftFileList --metadata-file-list /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/WikiProbeUITests.DependencyMetadataFileList --static-metadata-file-list /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/WikiProbeUITests.DependencyStaticMetadataFileList --swift-const-vals-list /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/Objects-normal/arm64/WikiProbeUITests.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-10-06 22:16:43.243 appintentsmetadataprocessor[45482:124893] Starting appintentsmetadataprocessor export
+2026-10-06 22:16:43.248 appintentsmetadataprocessor[45482:124893] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+AppIntentsSSUTraining (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/Info.plist --temp-dir-path /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/ssu --bundle-id io.orbitd.wikiprobe.uitests --product-path /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest --extracted-metadata-path /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/Metadata.appintents --metadata-file-list /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/WikiProbeUITests.DependencyMetadataFileList --source-file /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/Info.plist --archive-ssu-assets
+2026-10-06 22:16:43.316 appintentsnltrainingprocessor[45483:124896] Parsing options for appintentsnltrainingprocessor
+2026-10-06 22:16:43.317 appintentsnltrainingprocessor[45483:124896] Starting AppIntents SSU YAML Generation
+2026-10-06 22:16:43.317 appintentsnltrainingprocessor[45483:124896] No AppShortcuts found - Skipping.
+
+MkDir /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    /bin/mkdir -p /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app
+
+CopyAndPreserveArchs /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/WikiProbeUITests-Runner (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/lipo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/XCTRunner -output /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/WikiProbeUITests-Runner -extract arm64
+
+CopyPlistFile /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/Info.plist /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Info.plist (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-copyPlist --validate --convert xml1 --macro-expansion WRAPPEDPRODUCTNAME WikiProbeUITests-Runner --macro-expansion WRAPPEDPRODUCTBUNDLEIDENTIFIER io.orbitd.wikiprobe.uitests.xctrunner --macro-expansion TESTPRODUCTNAME WikiProbeUITests --macro-expansion TESTPRODUCTBUNDLEIDENTIFIER io.orbitd.wikiprobe.uitests --copy-value UIDeviceFamily /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/Info.plist --outdir /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app -- /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Info.plist
+
+Copy /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PkgInfo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/PkgInfo (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/PkgInfo /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app
+
+Copy /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/Frameworks/libXCTestSwiftSupport.dylib /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/Frameworks/XCUnit.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/Frameworks/XCUIAutomation.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/Frameworks/XCTestSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/Frameworks/XCTestCore.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/Frameworks/XCTest.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/Frameworks/XCTAutomationSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/Frameworks/Testing.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/Frameworks
+
+CodeSign /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest
+
+CodeSign /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app
+/Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app: replacing existing signature
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest
+
+Touch /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest
+
+2026-10-06 22:26:47.567 xcodebuild[25674:132840]  iOSSimulator: 📱<DVTiPhoneSimulator (0x9d3403480), iPhone 17 Pro, unknown class, 26.5 (23F77), 22452A91-4697-4369-8812-53ADB77EB73B> unable to connect to "com.apple.instruments.deviceservice.lockdown" - timed out after 120 seconds
+2026-10-06 22:27:04.204916+0000 WikiProbeUITests-Runner[47970:132806] [Default] Running tests...
+objc[47970]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x106cac310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x105c8c398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'Selected tests' started at 2026-10-06 22:27:23.083.
+Test Suite 'WikiProbeUITests.xctest' started at 2026-10-06 22:27:23.087.
+Test Suite 'WikiPhoneShotsTests' started at 2026-10-06 22:27:23.087.
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testPrinciplesThenANewSpace]' started.
+    t =     0.01s Start Test at 2026-10-06 22:27:23.094
+    t =     1.54s Set Up
+    t =     1.59s Open io.orbitd.wikiprobe
+    t =     1.59s     Launch io.orbitd.wikiprobe
+2026-10-06 22:27:28.292 xcodebuild[25674:77206] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 22:27:28.295 xcodebuild[25674:77206] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    39.60s         Setting up automation session
+    t =    42.69s         Wait for io.orbitd.wikiprobe to idle
+    t =    51.30s Waiting 60.0s for "Open navigation" Button to exist
+    t =    52.41s     Checking `Expect predicate `existsNoRetry == 1` for object "Open navigation" Button`
+    t =    52.42s         Checking existence of `"Open navigation" Button`
+    t =    56.59s Tap "Open navigation" Button
+    t =    56.59s     Wait for io.orbitd.wikiprobe to idle
+    t =    56.59s     Find the "Open navigation" Button
+    t =    56.81s     Check for interrupting elements affecting "line.3.horizontal" Button
+    t =    57.05s     Synthesize event
+    t =    57.65s     Wait for io.orbitd.wikiprobe to idle
+    t =    58.67s Waiting 20.0s for Button (First Match) to exist
+    t =    59.74s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    59.74s         Checking existence of `Button (First Match)`
+    t =    60.01s Checking existence of `Button (First Match)`
+    t =    60.13s Find the Button (First Match)
+    t =    60.23s Find the "Wiki, 4 waiting on you" Button
+    t =    60.34s Find the "Wiki, 4 waiting on you" Button
+    t =    60.45s Find the "Wiki, 4 waiting on you" Button
+    t =    60.57s Find the "Wiki, 4 waiting on you" Button
+    t =    61.95s Added attachment named '11-phone-drawer-three'
+    t =    61.99s Find the "Wiki, 4 waiting on you" Button
+    t =    62.16s Find the "Wiki, 4 waiting on you" Button
+    t =    62.31s Tap "Wiki, 4 waiting on you" Button
+    t =    62.31s     Wait for io.orbitd.wikiprobe to idle
+    t =    62.32s     Find the "Wiki, 4 waiting on you" Button
+    t =    62.47s     Check for interrupting elements affecting "Wiki, 4 waiting on you" Button
+    t =    62.55s     Synthesize event
+    t =    62.87s     Wait for io.orbitd.wikiprobe to idle
+    t =    63.64s Waiting 20.0s for Any (First Match) to exist
+    t =    64.70s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    64.71s         Checking existence of `Any (First Match)`
+    t =    65.19s Checking existence of `Any (First Match)`
+    t =    65.46s Find the Any (First Match)
+    t =    65.80s Find the "Principles" StaticText
+    t =    66.29s Find the "Principles" StaticText
+    t =    66.77s Find the "Principles" StaticText
+    t =    67.28s Find the "Principles" StaticText
+    t =    67.69s Waiting 20.0s for Any (First Match) to exist
+    t =    68.72s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    68.72s         Checking existence of `Any (First Match)`
+    t =    69.19s Checking existence of `Any (First Match)`
+    t =    69.61s Find the Any (First Match)
+    t =    70.72s Find the "All 6 ›" Button
+    t =    71.30s Find the "All 6 ›" Button
+    t =    72.02s Find the "All 6 ›" Button
+    t =    73.03s Find the "All 6 ›" Button
+    t =    74.52s Waiting 20.0s for Any (First Match) to exist
+    t =    75.59s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    75.59s         Checking existence of `Any (First Match)`
+    t =    76.23s Checking existence of `Any (First Match)`
+    t =    77.66s Find the Any (First Match)
+    t =    79.62s Find the "协调会话间要交换可复核一手证据, 9/6" Button
+    t =    80.22s Find the "协调会话间要交换可复核一手证据, 9/6" Button
+    t =    80.67s Find the "协调会话间要交换可复核一手证据, 9/6" Button
+    t =    81.03s Find the "协调会话间要交换可复核一手证据, 9/6" Button
+    t =    81.43s Checking existence of `Any (First Match)`
+    t =    81.88s Checking existence of `Any (First Match)`
+    t =    82.44s Checking existence of `Any (First Match)`
+    t =    83.05s Waiting 20.0s for Any (First Match) to exist
+    t =    84.09s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    84.09s         Checking existence of `Any (First Match)`
+    t =    84.58s Checking existence of `Any (First Match)`
+    t =    84.91s Find the Any (First Match)
+    t =    85.75s Find the "35 documents · 5 written" StaticText
+    t =    86.18s Find the "35 documents · 5 written" StaticText
+    t =    86.62s Find the "35 documents · 5 written" StaticText
+    t =    87.28s Find the "35 documents · 5 written" StaticText
+    t =    90.26s Added attachment named '12-phone-principles'
+    t =    90.27s Requesting snapshot of accessibility hierarchy for app with pid 70717
+    t =    91.29s Requesting snapshot of accessibility hierarchy for app with pid 70717
+    t =    91.61s Waiting 10.0s for "The codebase this wiki describes" Button to exist
+    t =    92.63s     Checking `Expect predicate `existsNoRetry == 1` for object "The codebase this wiki describes" Button`
+    t =    92.63s         Checking existence of `"The codebase this wiki describes" Button`
+    t =    93.94s Tap "The codebase this wiki describes" Button
+    t =    93.94s     Wait for io.orbitd.wikiprobe to idle
+    t =    93.95s     Find the "The codebase this wiki describes" Button
+    t =    94.14s     Check for interrupting elements affecting "The codebase this wiki describes" Button
+    t =    95.65s     Synthesize event
+    t =    96.03s     Wait for io.orbitd.wikiprobe to idle
+    t =    96.99s Waiting 10.0s for Button (First Match) to exist
+    t =    98.16s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    98.22s         Checking existence of `Button (First Match)`
+    t =    98.59s Tap Button (First Match)
+    t =    98.59s     Wait for io.orbitd.wikiprobe to idle
+    t =    98.60s     Find the Button (First Match)
+    t =    98.89s     Check for interrupting elements affecting "wikids" Button
+    t =    99.10s     Synthesize event
+    t =    99.79s     Wait for io.orbitd.wikiprobe to idle
+    t =   101.78s Waiting 30.0s for Any (First Match) to exist
+    t =   102.86s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   102.86s         Checking existence of `Any (First Match)`
+    t =   103.19s Checking existence of `Any (First Match)`
+    t =   103.46s Find the Any (First Match)
+    t =   103.81s Find the "No documents yet" StaticText
+    t =   104.13s Find the "No documents yet" StaticText
+    t =   104.41s Find the "No documents yet" StaticText
+    t =   104.72s Find the "No documents yet" StaticText
+    t =   105.05s Waiting 20.0s for Any (First Match) to exist
+    t =   106.09s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   106.09s         Checking existence of `Any (First Match)`
+    t =   106.33s Checking existence of `Any (First Match)`
+    t =   106.66s Find the Any (First Match)
+    t =   107.00s Find the "This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space." StaticText
+    t =   107.32s Find the "This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space." StaticText
+    t =   107.70s Find the "This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space." StaticText
+    t =   108.04s Find the "This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space." StaticText
+    t =   108.42s Waiting 20.0s for Any (First Match) to exist
+    t =   109.51s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   109.51s         Checking existence of `Any (First Match)`
+    t =   110.18s Checking existence of `Any (First Match)`
+    t =   111.04s Find the Any (First Match)
+    t =   111.50s Find the "Set up maintenance" Button
+    t =   112.30s Find the "Set up maintenance" Button
+    t =   112.68s Find the "Set up maintenance" Button
+    t =   112.98s Find the "Set up maintenance" Button
+    t =   113.30s Checking existence of `Any (First Match)`
+    t =   113.84s Checking existence of `Any (First Match)`
+    t =   114.35s Checking existence of `Any (First Match)`
+    t =   116.94s Added attachment named '13-phone-new-space'
+    t =   116.94s Requesting snapshot of accessibility hierarchy for app with pid 70717
+    t =   117.34s Requesting snapshot of accessibility hierarchy for app with pid 70717
+    t =   117.49s Tear Down
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testPrinciplesThenANewSpace]' passed (118.206 seconds).
+Test Suite 'WikiPhoneShotsTests' passed at 2026-10-06 22:29:21.302.
+	 Executed 1 test, with 0 failures (0 unexpected) in 118.206 (118.215) seconds
+Test Suite 'WikiProbeUITests.xctest' passed at 2026-10-06 22:29:21.305.
+	 Executed 1 test, with 0 failures (0 unexpected) in 118.206 (118.218) seconds
+Test Suite 'Selected tests' passed at 2026-10-06 22:29:21.305.
+	 Executed 1 test, with 0 failures (0 unexpected) in 118.206 (118.223) seconds
+2026-10-06 22:30:53.542 xcodebuild[25674:77206] [MT] IDETestOperationsObserverDebug: 849.151 elapsed -- Testing started completed.
+2026-10-06 22:30:53.549 xcodebuild[25674:77206] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-06 22:30:53.549 xcodebuild[25674:77206] [MT] IDETestOperationsObserverDebug: 849.151 sec, +849.151 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.wiki-probe/results/phone.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started
