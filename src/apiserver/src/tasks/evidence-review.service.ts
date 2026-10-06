@@ -24,9 +24,14 @@ export type EvidenceReviewDelivery = 'DELIVERED' | EvidenceReviewDeliveryRefusal
  *
  * The delivery of a confirmation request to its reviewer, applied to an evidence revision
  * (`OwnerConfirmationReviewService.deliver`, docs/owner-confirmation-review-contract.md §2 D2): after
- * the commit that wrote the revision, one queued `NEXT_TURN` platform turn keyed by the revision, no
+ * the commit that wrote the revision, one `NEXT_TURN` platform turn keyed by the revision, no
  * words of anybody's, never reviving a conversation that has ended, and the owner's card covering
- * every refusal. It differs in keeping nothing of its own: the turn is the delivery, so a refusal
+ * every refusal.
+ *
+ * Written into the turn the session is running when it can be (`steerIfLive`, the way a background
+ * job's exit is): a dispatching session usually is running one — watching the very tasks it filed —
+ * and a review queued behind it waited out the whole 30-minute hold unread, so the owner was asked
+ * every time (2026-10-06: four revisions, all PENDING while every message after them steered in). It differs in keeping nothing of its own: the turn is the delivery, so a refusal
  * writes nothing and a fault leaves the revision undelivered — and either way not held, which puts it
  * in front of the owner at once.
  */
@@ -66,6 +71,7 @@ export class EvidenceReviewService {
         reviewerSessionId,
         { clientTurnId: evidenceReviewTurnId(evidenceId), content: '', intent: 'NEXT_TURN' },
         {
+          steerIfLive: true,
           participateSendTransaction: (tx) => bindEvidenceReviewDelivery(
             tx, { id: evidenceId, taskId, ownerId }, reviewerSessionId,
           ),
