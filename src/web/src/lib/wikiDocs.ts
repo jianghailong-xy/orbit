@@ -126,11 +126,10 @@ const plural = (count: number, one: string, many: string): string => `${wikiCoun
 
 /**
  * A space's documents, as the native space picker says them under its repository (design §12.3.4, mock
- * 31 ④): how many its confirmed plan has, or none yet. The web's select names the spaces alone; the words
- * are kept here with the documents' others so OrbitKit's `WikiCopy` says the same.
+ * 31 ④): how many its confirmed plan has — or, with none, `WIKI_NO_DOCUMENTS`. The web's select names the
+ * spaces alone; the words are kept here with the documents' others so OrbitKit's `WikiCopy` says the same.
  */
 export const wikiDocumentCount = (count: number): string => plural(count, 'document', 'documents');
-export const WIKI_NO_DOCUMENTS_YET = 'No documents yet';
 
 export const wikiMoreLines = (count: number): string => `… ${plural(count, 'more line', 'more lines')}`;
 export const wikiMoreSections = (count: number): string => plural(count, 'more section', 'more sections');

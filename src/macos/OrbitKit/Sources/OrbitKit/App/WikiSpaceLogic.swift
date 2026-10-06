@@ -228,7 +228,7 @@ public enum WikiSpaceLogic {
     public static func menuRows(_ spaces: [WikiSpace], names: [String: String]? = nil) -> [MenuRow] {
         let names = names ?? self.names(spaces)
         return spaces.map { space in
-            let documents = space.docs.map { WikiCopy.documentCount($0.total) } ?? WikiCopy.noDocumentsYet
+            let documents = space.docs.map { WikiCopy.documentCount($0.total) } ?? WikiCopy.noDocuments
             let repository = space.repoUrlNorm.flatMap { $0.isEmpty ? nil : $0 }
             return MenuRow(id: space.id, slug: space.slug, name: names[space.id] ?? space.title ?? space.slug,
                            lines: [repository, documents].compactMap { $0 }, waiting: waitingIn(space))

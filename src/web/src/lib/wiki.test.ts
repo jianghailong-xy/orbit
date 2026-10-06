@@ -34,7 +34,7 @@ import {
   wikiAllPrinciples,
   wikiShortDay,
 } from './wiki';
-import { WIKI_NO_DOCUMENTS_YET, wikiDocumentCount } from './wikiDocs';
+import { WIKI_NO_DOCUMENTS, wikiDocumentCount } from './wikiDocs';
 
 /**
  * The Wiki's derivations, which is where its words and its readings live.
@@ -324,7 +324,7 @@ describe('the words of Activity and of what waits', () => {
     expect(wikiDocumentCount(35)).toBe('35 documents');
     expect(wikiDocumentCount(1)).toBe('1 document');
     expect(wikiDocumentCount(1234)).toBe('1,234 documents');
-    expect(WIKI_NO_DOCUMENTS_YET).toBe('No documents yet');
+    expect(WIKI_NO_DOCUMENTS).toBe('No documents yet');
   });
 });
 

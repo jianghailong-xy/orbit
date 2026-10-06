@@ -240,7 +240,7 @@ final class WikiCopyParityTests: XCTestCase {
                    in: Self.docsLib)
         assertSays(docs, "const plural = (count: number, one: string, many: string): string => "
                    + "`${wikiCount(count)} ${count === 1 ? one : many}`;", in: Self.docsLib)
-        assertSays(docs, "export const WIKI_NO_DOCUMENTS_YET = '\(WikiCopy.noDocumentsYet)';", in: Self.docsLib)
+        assertSays(docs, "export const WIKI_NO_DOCUMENTS = '\(WikiCopy.noDocuments)';", in: Self.docsLib)
     }
 
     /// The four one-word vocabularies — trust, kind, op, status — entry for entry.

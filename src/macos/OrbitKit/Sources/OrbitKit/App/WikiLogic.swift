@@ -50,7 +50,7 @@ public enum WikiCopy {
     public static func documentCount(_ count: Int) -> String {                          // wikiDocumentCount
         "\(WikiArticleCopy.count(count)) \(count == 1 ? "document" : "documents")"
     }
-    public static let noDocumentsYet = "No documents yet"                               // WIKI_NO_DOCUMENTS_YET
+    public static let noDocuments = "No documents yet"                                  // WIKI_NO_DOCUMENTS
 
     // The bands of the home page, in the order both clients draw them.
     public static let principles = "Principles"                         // WIKI_PRINCIPLES
