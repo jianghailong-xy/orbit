@@ -372,9 +372,10 @@ suite('an account pool through the doors that take a provider, on real PostgreSQ
     }
 
     // Past the door — the row written by hand, as nothing in the product can — the reload still
-    // resolves the pool within the session's owner only: the Claude default, which signs in itself.
+    // resolves the pool within the session's owner only, where it names nothing: refused, not
+    // re-spawned on the Claude default, and the reload is not given out.
     await db.session.update({ where: { id: theirLive }, data: { provider: pool.slug, providerBuiltin: false } });
-    await db.conversationTurn.create({
+    const queued = await db.conversationTurn.create({
       data: {
         sessionId: theirLive,
         seq: 1,
@@ -384,9 +385,8 @@ suite('an account pool through the doors that take a provider, on real PostgreSQ
         status: 'PENDING',
       },
     });
-    const reload = await dequeueReload(theirLive, stranger.runnerId);
-    assert.deepEqual(reload.env, {});
-    assert.deepEqual(carriesAKey(reload.env), []);
+    await assert.rejects(dequeueReload(theirLive, stranger.runnerId), /provider not available/);
+    assert.equal((await db.conversationTurn.findUniqueOrThrow({ where: { id: queued.id } })).status, 'PENDING');
     assert.equal((await recorded(theirLive)).poolMemberProviderId, null);
   });
 
