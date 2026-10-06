@@ -1751,6 +1751,25 @@ struct SessionLiveIndicator: View {
     }
 }
 
+/// Whether the animated row cues in this subtree — `SpinnerGlyph` and `BreathingGlyph` — are on
+/// screen, and so may redraw. True everywhere by default; the compact shell's agents stack sets it
+/// false for the session list a page has been pushed over.
+///
+/// That list is not torn down by the push — keeping it mounted is what keeps its rows and scroll
+/// position for the pop back — but not one pixel of it is on screen. One
+/// `TimelineView(.animation)` per running row went on redrawing at the display's cadence anyway, so
+/// the cost of the list scaled with how many sessions were running even while the list was behind a
+/// conversation. The drawer's own cues are held back the same way by its `live:` parameter; this is
+/// that switch, for the rows themselves.
+private struct LiveRowCuesKey: EnvironmentKey { static let defaultValue = true }
+
+extension EnvironmentValues {
+    var liveRowCues: Bool {
+        get { self[LiveRowCuesKey.self] }
+        set { self[LiveRowCuesKey.self] = newValue }
+    }
+}
+
 /// A symbol that breathes — a slow opacity pulse, the web's `status-glyph-active`. It is the one
 /// motion in this vocabulary that is neither rotation nor a dot, and it means one thing: there is
 /// work happening here, without the agent generating. Drawn in the neutral tone, which is the tone
@@ -1763,10 +1782,12 @@ struct BreathingGlyph: View {
     private let trough: Double = 0.42  // the web's 50% keyframe
     private let frameInterval: Double = 1.0 / 30.0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.liveRowCues) private var liveRowCues
     var body: some View {
-        if reduceMotion {
+        if reduceMotion || !liveRowCues {
             // The words are the state; the motion is only emphasis, and this is the ambient loop
-            // that reduced-motion exists to switch off.
+            // that reduced-motion exists to switch off — or one drawn for a list that is not on
+            // screen at all (see `liveRowCues`).
             symbol
         } else {
             TimelineView(.animation(minimumInterval: frameInterval)) { context in
@@ -1804,16 +1825,26 @@ struct SpinnerGlyph: View {
     /// quarter of the redraws. The angle stays a pure function of wall-clock time, so the rate has no
     /// effect on how fast it appears to spin.
     private let frameInterval: Double = 1.0 / 30.0
+    @Environment(\.liveRowCues) private var liveRowCues
     var body: some View {
-        TimelineView(.animation(minimumInterval: frameInterval)) { context in
-            let angle = context.date.timeIntervalSinceReferenceDate
-                .truncatingRemainder(dividingBy: period) / period * 360
-            Circle()
-                .trim(from: 0, to: 0.7)
-                .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                .frame(width: 13, height: 13)
-                .rotationEffect(.degrees(angle))
+        if liveRowCues {
+            TimelineView(.animation(minimumInterval: frameInterval)) { context in
+                arc(angle: context.date.timeIntervalSinceReferenceDate
+                    .truncatingRemainder(dividingBy: period) / period * 360)
+            }
+        } else {
+            // A list that is not on screen (see `liveRowCues`): the arc is drawn once, still. Nobody
+            // can see it — what matters is that no display link runs for it, and that the angle is a
+            // pure function of the clock again the moment the list is the page showing.
+            arc(angle: 0)
         }
+    }
+    private func arc(angle: Double) -> some View {
+        Circle()
+            .trim(from: 0, to: 0.7)
+            .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+            .frame(width: 13, height: 13)
+            .rotationEffect(.degrees(angle))
     }
 }
 
