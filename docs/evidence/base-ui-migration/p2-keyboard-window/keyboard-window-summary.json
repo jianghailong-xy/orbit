@@ -28414,5 +28414,233 @@
     "decision": "both-correct: no change"
    }
   }
+ },
+ "regression-select-keys-burst": {
+  "scope": "this tree, the unchanged ../p2-select-keys/select-keys-burst.browser.mjs (20 burst + 3 paced per combination)",
+  "playwright": {
+   "expected": 276,
+   "unexpected": 0,
+   "skipped": 0,
+   "flaky": 0
+  },
+  "targets": {
+   "antd-multiple down-down-enter burst": {
+    "samples": 20,
+    "reference": "Bug | Ops",
+    "results": {
+     "Bug | Ops": 20
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "antd-multiple down-down-enter paced": {
+    "samples": 3,
+    "reference": "Bug | Ops",
+    "results": {
+     "Bug | Ops": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "antd-sample down-down-enter burst": {
+    "samples": 20,
+    "reference": "7 days",
+    "results": {
+     "7 days | 7 days": 20
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "antd-sample down-down-enter paced": {
+    "samples": 3,
+    "reference": "7 days",
+    "results": {
+     "7 days | 7 days": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "antd-sample down-up-enter burst": {
+    "samples": 20,
+    "reference": "Never",
+    "results": {
+     "Never | Never": 20
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "antd-sample down-up-enter paced": {
+    "samples": 3,
+    "reference": "Never",
+    "results": {
+     "Never | Never": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "antd-search down-down-enter burst": {
+    "samples": 20,
+    "reference": "7 days | 7 days",
+    "results": {
+     "7 days | 7 days": 20
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "antd-search down-down-enter paced": {
+    "samples": 3,
+    "reference": "7 days | 7 days",
+    "results": {
+     "7 days | 7 days": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-combobox down-down-enter burst": {
+    "samples": 20,
+    "reference": "7 days",
+    "results": {
+     "7 days": 20
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-combobox down-down-enter paced": {
+    "samples": 3,
+    "reference": "7 days",
+    "results": {
+     "7 days": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-field down-down-enter burst": {
+    "samples": 20,
+    "reference": "7",
+    "results": {
+     "7": 20
+    },
+    "differ": 0,
+    "handedOver": 20
+   },
+   "orbit-field down-down-enter paced": {
+    "samples": 3,
+    "reference": "7",
+    "results": {
+     "7": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-field down-enter burst": {
+    "samples": 20,
+    "reference": "never",
+    "results": {
+     "never": 20
+    },
+    "differ": 0,
+    "handedOver": 20
+   },
+   "orbit-field down-enter paced": {
+    "samples": 3,
+    "reference": "never",
+    "results": {
+     "never": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-field down-up-enter burst": {
+    "samples": 20,
+    "reference": "never",
+    "results": {
+     "never": 20
+    },
+    "differ": 0,
+    "handedOver": 20
+   },
+   "orbit-field down-up-enter paced": {
+    "samples": 3,
+    "reference": "never",
+    "results": {
+     "never": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-menu down-down-enter burst": {
+    "samples": 20,
+    "reference": "image",
+    "results": {
+     "none": 20
+    },
+    "differ": 20,
+    "handedOver": 0
+   },
+   "orbit-menu down-down-enter paced": {
+    "samples": 3,
+    "reference": "image",
+    "results": {
+     "image": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-multiselect down-down-enter burst": {
+    "samples": 20,
+    "reference": "Bug | Ops",
+    "results": {
+     "Bug | Ops": 20
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-multiselect down-down-enter paced": {
+    "samples": 3,
+    "reference": "Bug | Ops",
+    "results": {
+     "Bug | Ops": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-sample down-down-enter burst": {
+    "samples": 20,
+    "reference": "7 days",
+    "results": {
+     "7 days": 20
+    },
+    "differ": 0,
+    "handedOver": 20
+   },
+   "orbit-sample down-down-enter paced": {
+    "samples": 3,
+    "reference": "7 days",
+    "results": {
+     "7 days": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-sample down-up-enter burst": {
+    "samples": 20,
+    "reference": "Never",
+    "results": {
+     "Never": 20
+    },
+    "differ": 0,
+    "handedOver": 20
+   },
+   "orbit-sample down-up-enter paced": {
+    "samples": 3,
+    "reference": "Never",
+    "results": {
+     "Never": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   }
+  },
+  "sequences": {}
  }
 }

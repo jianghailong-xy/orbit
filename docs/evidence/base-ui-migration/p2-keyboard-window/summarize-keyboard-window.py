@@ -128,10 +128,40 @@ for dataset, studies in DATASETS.items():
     present = [study for study in studies if (HERE / study / 'summary.json').exists()]
     if present:
         report[f'dataset:{dataset}'] = entry_of(present, ' + '.join(present))
+
+
+def select_keys_burst(study):
+    """The previous task's burst probe (../p2-select-keys, unchanged) run again on this tree: grouped and judged as
+    its own summarize-select-keys.py does (a fixed expectation, or the paced majority), which is not run here
+    because it rewrites that directory's summary."""
+    samples = [json.loads(file.read_text()) for file in sorted((HERE / study).glob('*--select-keys.json'))]
+    paced = collections.defaultdict(collections.Counter)
+    for data in samples:
+        if data['mode'] == 'paced':
+            paced[data['target'], data['sequence']][data['after']] += 1
+    rows = {}
+    for data in samples:
+        reference = data['expected'] or paced[data['target'], data['sequence']].most_common(1)[0][0]
+        row = rows.setdefault(f"{data['target']} {data['sequence']} {data['mode']}", {
+            'samples': 0, 'reference': reference, 'results': collections.Counter(), 'differ': 0, 'handedOver': 0})
+        row['samples'] += 1
+        row['results'][data['after']] += 1
+        row['handedOver'] += any(not key['trusted'] for key in data['keyLog'])
+        row['differ'] += (data['after'].split(' | ')[0] if data['expected'] else data['after']) != reference
+    return rows
+
+
+if (HERE / 'regression-select-keys-burst' / 'summary.json').exists():
+    stats = json.loads((HERE / 'regression-select-keys-burst' / 'summary.json').read_text())['stats']
+    report['regression-select-keys-burst'] = {
+        'scope': 'this tree, the unchanged ../p2-select-keys/select-keys-burst.browser.mjs (20 burst + 3 paced per combination)',
+        'playwright': {k: stats[k] for k in ['expected', 'unexpected', 'skipped', 'flaky']},
+        'targets': select_keys_burst('regression-select-keys-burst'), 'sequences': {}}
 (HERE / 'keyboard-window-summary.json').write_text(json.dumps(report, indent=1, ensure_ascii=False) + '\n')
 for study, entry in report.items():
     print(study, entry['playwright'])
     for key, row in entry['targets'].items():
-        print('  ', key, {k: (dict(v) if isinstance(v, collections.Counter) else v) for k, v in row.items() if k in ('paced', 'burst', 'burstWrong', 'windowHits', 'handedOver')})
+        print('  ', key, {k: (dict(v) if isinstance(v, collections.Counter) else v) for k, v in row.items()
+                         if k in ('paced', 'burst', 'burstWrong', 'windowHits', 'handedOver', 'results', 'differ')})
     for sequence, verdict in entry['sequences'].items():
         print('  =>', sequence, verdict['decision'])
