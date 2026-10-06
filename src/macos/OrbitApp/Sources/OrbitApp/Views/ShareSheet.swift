@@ -83,13 +83,6 @@ struct ShareSheet: View {
             }
         }
         .task { await load() }
-        .confirmationDialog(SharePanelCopy.turnOffTitle, isPresented: $confirmingTurnOff,
-                            titleVisibility: .visible) {
-            Button(SharePanelCopy.turnOff, role: .destructive) { Task { await turnOff() } }
-            Button(SharePanelCopy.cancel, role: .cancel) {}
-        } message: {
-            Text(SharePanelCopy.turnOffDetail)
-        }
         #if os(macOS)
         .frame(minWidth: 460, minHeight: 560)
         #endif
@@ -109,6 +102,15 @@ struct ShareSheet: View {
                 Label(SharePanelCopy.access, systemImage: panel.access == .onlyYou ? "lock" : "globe")
             }
             .disabled(busy)
+            // On the picker that asks, so the panel opens against it rather than at the top of the
+            // form.
+            .confirmationDialog(SharePanelCopy.turnOffTitle, isPresented: $confirmingTurnOff,
+                                titleVisibility: .visible) {
+                Button(SharePanelCopy.turnOff, role: .destructive) { Task { await turnOff() } }
+                Button(SharePanelCopy.cancel, role: .cancel) {}
+            } message: {
+                Text(SharePanelCopy.turnOffDetail)
+            }
         } footer: {
             Text(panel.accessDetail)
         }
