@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WikiAnchorCheck, WikiEntry } from '@orbit/shared';
 import {
   WIKI_REJECT_MENU,
@@ -18,6 +18,18 @@ import {
   wikiProposalsFrom,
   wikiProposalsToReview,
   wikiTabOf,
+  WIKI_ACTIVITY,
+  moveWikiSeen,
+  readWikiSeen,
+  readWikiSeenBefore,
+  wikiActivityPath,
+  wikiCountInSpace,
+  wikiInSpace,
+  wikiNewSinceLastLooked,
+  wikiSeenKey,
+  wikiSpaceWaiting,
+  wikiWaitingOnYou,
+  writeWikiSeen,
 } from './wiki';
 
 /**
@@ -283,5 +295,71 @@ describe('the entry’s own link', () => {
     expect(wikiEntryPath('orbit', uuid)).toBe(`/wiki/orbit/e/${wikiEntryPath('orbit', uuid).split('/').pop()}`);
     expect(wikiEntryPath('orbit', uuid)).toContain('/wiki/orbit/e/');
     expect(wikiEntryPath('orbit', uuid)).not.toContain(uuid);
+  });
+});
+
+/**
+ * Activity's words and the number waiting on the owner (design §12.3.7): declared here, once, for the
+ * pages and for OrbitKit's copy-parity tests to read.
+ */
+describe('the words of Activity and of what waits', () => {
+  it('says them as the design writes them', () => {
+    expect(WIKI_ACTIVITY).toBe('Activity');
+    expect(wikiWaitingOnYou(3)).toBe('3 waiting on you');
+    expect(wikiNewSinceLastLooked(4)).toBe('4 new since you last looked');
+    expect(wikiCountInSpace(2, 'wikova')).toBe('· 2 in wikova');
+    expect(wikiInSpace('wikova')).toBe('· in wikova');
+    expect(wikiSpaceWaiting(2)).toBe('· 2 waiting');
+    expect(wikiProposalsToReview(1)).toBe('1 proposal to review');
+    expect(`${wikiProposalsToReview(3)} ${wikiCountInSpace(2, 'wikova')}`).toBe('3 proposals to review · 2 in wikova');
+    expect(wikiActivityPath('orbit')).toBe('/wiki/orbit/activity');
+  });
+});
+
+/**
+ * "Since you last looked" on Activity, which a reader reaches from the home: the home moves the space's
+ * stamp as it opens, and Activity reads what it said before that, so what changed since the reader's
+ * last visit is still marked one page later.
+ */
+describe('the stamp a page after the home reads', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('is what the stamp said before this tab moved it, and the stamp itself until it has', () => {
+    const items = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => items.get(key) ?? null,
+      setItem: (key: string, value: string) => void items.set(key, value),
+      removeItem: (key: string) => void items.delete(key),
+    });
+    const key = wikiSeenKey('stamp-test', 'home');
+    writeWikiSeen(key, 1_000);
+    expect(readWikiSeenBefore(key)).toBe(1_000);
+
+    // The home opens: the stamp moves to now, and the visit before is kept for Activity.
+    moveWikiSeen(key, 5_000);
+    expect(readWikiSeen(key)).toBe(5_000);
+    expect(readWikiSeenBefore(key)).toBe(1_000);
+
+    // Activity opens and moves it in its turn: the next page compares against the home's visit.
+    moveWikiSeen(key, 9_000);
+    expect(readWikiSeen(key)).toBe(9_000);
+    expect(readWikiSeenBefore(key)).toBe(5_000);
+  });
+
+  it('keeps what the stamp said when one opening moves it twice, as React does in development', () => {
+    const items = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => items.get(key) ?? null,
+      setItem: (key: string, value: string) => void items.set(key, value),
+      removeItem: (key: string) => void items.delete(key),
+    });
+    const key = wikiSeenKey('stamp-twice', 'home');
+    writeWikiSeen(key, 1_000);
+    moveWikiSeen(key, 50_000);
+    moveWikiSeen(key, 50_002);
+    expect(readWikiSeenBefore(key)).toBe(1_000);
+    expect(readWikiSeen(key)).toBe(50_002);
   });
 });

@@ -117,7 +117,7 @@ export interface WikiSpaceWithUsage extends WikiSpace {
   usage?: WikiUsage;
 }
 
-/** A space as the list read answers it: the document, plus the count the sidebar shows. */
+/** A space as the list read answers it: the document, plus the proposals waiting in Review. */
 export interface WikiSpaceRow extends WikiSpace {
   pendingOps: number;
 }
@@ -198,6 +198,8 @@ export const wikiTopicPath = (spaceSlug: string, topicSlug: string): string =>
 export const wikiEntryPath = (spaceSlug: string, entryId: string): string =>
   `${WIKI_PATH}/${spaceSlug}/e/${encodeId(entryId)}`;
 export const WIKI_REVIEW_PATH = `${WIKI_PATH}/review`;
+/** The space's Activity page (design §12.3.2): what used to stand on the home besides its content. */
+export const wikiActivityPath = (spaceSlug: string): string => `${WIKI_PATH}/${spaceSlug}/activity`;
 
 // ── The words ───────────────────────────────────────────────────────────────────────────────────
 
@@ -207,9 +209,25 @@ export const WIKI_SEARCH_SHORTCUT = '⌘K';
 export const WIKI_NEW_ENTRY = 'New entry';
 export const WIKI_REVIEW_TITLE = 'Review';
 
-/** The sidebar's amber count, and the tooltip that says what it counts. */
+/** The proposals waiting in Review: Activity's first banner, and the home's phone banner. */
 export const wikiProposalsToReview = (count: number): string =>
   `${count} proposal${count === 1 ? '' : 's'} to review`;
+
+/**
+ * The Activity page and the number waiting on the owner (design §12.3.2–§12.3.4, §12.3.7). The number is
+ * every space's proposals and the things each plan waits on the owner for (`wikiWaiting`); the sidebar's
+ * Wiki row and the head's Activity badge show it, and say it the way the Projects row says its own.
+ */
+export const WIKI_ACTIVITY = 'Activity';
+export const wikiWaitingOnYou = (count: number): string => `${count} waiting on you`;
+/** Beside Recently changed: how many of its rows came after the reader last looked. */
+export const wikiNewSinceLastLooked = (count: number): string => `${count} new since you last looked`;
+/** The share of Activity's first banner that is another space's: `3 proposals to review · 2 in wikova`. */
+export const wikiCountInSpace = (count: number, space: string): string => `· ${count} in ${space}`;
+/** After another space's plan banner, which space it is: `Plan draft ready to confirm · in wikova`. */
+export const wikiInSpace = (space: string): string => `· in ${space}`;
+/** After a space's name in the picker, what waits on the owner in it: `wikova · 2 waiting`. */
+export const wikiSpaceWaiting = (count: number): string => `· ${count} waiting`;
 /** The same count under Review's own title. */
 export const wikiProposalsFrom = (count: number, sessions: number): string =>
   `${count} proposal${count === 1 ? '' : 's'} from ${sessions} session${sessions === 1 ? '' : 's'}`;
@@ -721,6 +739,33 @@ export function writeWikiSeen(key: string, at: number = Date.now()): void {
     // A browser with storage turned off loses the dots and nothing else; there is no fallback worth
     // building for a decoration.
   }
+}
+
+/** What each stamp said before this tab last moved it, and when this tab moved it. */
+const seenBefore = new Map<string, number>();
+const movedAt = new Map<string, number>();
+
+/**
+ * Move a stamp to now, keeping what it said for the next page of the same visit.
+ *
+ * The space's stamp (`wikiSeenKey(space, 'home')`) is read by two pages: the home moves it as it opens,
+ * and Activity — which a reader reaches from the home — marks what changed since the reader last
+ * looked. Read after the home has moved it, the stamp would say "just now" and Activity would mark
+ * nothing; `readWikiSeenBefore` reads what it said before.
+ *
+ * A second move within a second of the first is the same page opening — React runs an effect twice in
+ * development — and keeps what the stamp said before the first.
+ */
+export function moveWikiSeen(key: string, at: number = Date.now()): void {
+  const last = movedAt.get(key);
+  if (last === undefined || at - last >= 1_000) seenBefore.set(key, readWikiSeen(key));
+  movedAt.set(key, at);
+  writeWikiSeen(key, at);
+}
+
+/** A stamp as it stood before this tab last moved it — or as it stands, when this tab has not. */
+export function readWikiSeenBefore(key: string): number {
+  return seenBefore.get(key) ?? readWikiSeen(key);
 }
 
 /** The entries that changed after `since`. Nothing seen before means everything is new. */

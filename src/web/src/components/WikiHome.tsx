@@ -48,8 +48,8 @@ import {
   wikiProposalsToReview,
   wikiSeenKey,
   wikiTopicPath,
+  moveWikiSeen,
   readWikiSeen,
-  writeWikiSeen,
   type WikiTrust,
 } from '../lib/wiki';
 import { wikiRecentRows } from '../lib/wikiReviewMode';
@@ -57,7 +57,7 @@ import { wikiRecentRows } from '../lib/wikiReviewMode';
 /** Every principle: the most one read answers (the server's cap), far above any space's own rules. */
 const PRINCIPLES_READ = 200;
 /** The decision log's rows: the newest four. */
-const RECENT_DECISIONS = 4;
+export const RECENT_DECISIONS = 4;
 
 /**
  * The Wiki home: what the space holds, and what wants the owner's attention.
@@ -90,7 +90,7 @@ export function WikiHome({ space }: { space: WikiSpaceWithUsage }) {
   // what makes the NEXT visit compare against this one.
   const [seen] = useState(() => readSeen(space.slug));
   useEffect(() => {
-    writeWikiSeen(wikiSeenKey(space.slug, 'home'));
+    moveWikiSeen(wikiSeenKey(space.slug, 'home'));
   }, [space.slug]);
 
   // Oldest first, unlike every other list on this page: the principles are a pinned set a reader
@@ -156,25 +156,7 @@ export function WikiHome({ space }: { space: WikiSpaceWithUsage }) {
           {decisions.length === 0 ? (
             <WikiEmpty>{WIKI_NO_DECISIONS}</WikiEmpty>
           ) : (
-            decisions.slice(0, RECENT_DECISIONS).map((entry) => (
-              <div className="wk-dec" key={entry.id}>
-                <span className="d">{entry.validFrom.slice(0, 10)}</span>
-                <div className="wk-row-main">
-                  <div className="t">
-                    <Link to={wikiEntryPath(space.slug, entry.id)}>{entry.title}</Link>
-                  </div>
-                  {entry.supersededById && (
-                    <div className="s">
-                      <span>supersedes</span>
-                      <span className="x">
-                        {entryById.get(entry.supersededById)?.title ?? entry.supersededById}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <WikiDecisionBadge entry={entry} />
-              </div>
-            ))
+            <WikiDecisionRows decisions={decisions.slice(0, RECENT_DECISIONS)} entryById={entryById} spaceSlug={space.slug} />
           )}
         </WikiCard>
       </div>
@@ -214,8 +196,41 @@ export function WikiHome({ space }: { space: WikiSpaceWithUsage }) {
   );
 }
 
+/** The decision log's rows: when, what, what it replaced, and whether it is still in force. */
+export function WikiDecisionRows({
+  decisions,
+  entryById,
+  spaceSlug,
+}: {
+  decisions: readonly WikiEntry[];
+  entryById: ReadonlyMap<string, WikiEntry>;
+  spaceSlug: string;
+}) {
+  return (
+    <>
+      {decisions.map((entry) => (
+        <div className="wk-dec" key={entry.id}>
+          <span className="d">{entry.validFrom.slice(0, 10)}</span>
+          <div className="wk-row-main">
+            <div className="t">
+              <Link to={wikiEntryPath(spaceSlug, entry.id)}>{entry.title}</Link>
+            </div>
+            {entry.supersededById && (
+              <div className="s">
+                <span>supersedes</span>
+                <span className="x">{entryById.get(entry.supersededById)?.title ?? entry.supersededById}</span>
+              </div>
+            )}
+          </div>
+          <WikiDecisionBadge entry={entry} />
+        </div>
+      ))}
+    </>
+  );
+}
+
 /** The right rail's first card: the proposals waiting, and the way into Review. */
-function ReviewCard({
+export function ReviewCard({
   space,
   pending,
   changesets,
@@ -264,14 +279,18 @@ function ReviewCard({
   );
 }
 
-/** One row of the change feed: what happened, to what, and — when there is one — the note under it. */
-function TimelineRow({ item, spaceSlug }: { item: WikiTimelineItem; spaceSlug: string }) {
+/**
+ * One row of the change feed: what happened, to what, and — when there is one — the note under it.
+ * `fresh` is Activity's: blue when it came after the reader last looked, grey when before; left out,
+ * the dot is the entry's trust.
+ */
+export function TimelineRow({ item, spaceSlug, fresh }: { item: WikiTimelineItem; spaceSlug: string; fresh?: boolean }) {
   const note = wikiChangeNote(item);
   const retired = item.status === 'retired' || item.status === 'superseded' || item.status === 'rejected';
   const trust = (item.trust ?? 'proposed') as WikiTrust;
   return (
     <li className={retired ? 'retired' : ''}>
-      <WikiDot tone={retired ? 'muted' : WIKI_TRUST_TONE[trust]} />
+      <WikiDot tone={fresh !== undefined ? (fresh ? 'blue' : 'muted') : retired ? 'muted' : WIKI_TRUST_TONE[trust]} />
       <div>
         <div className="wk-tl-h">
           <b>{wikiChangeVerb(item)}</b>
@@ -292,7 +311,7 @@ function TimelineRow({ item, spaceSlug }: { item: WikiTimelineItem; spaceSlug: s
 }
 
 /** The right rail's last card: what the agents have actually done with this wiki. */
-function UsageCard({ space }: { space: WikiSpaceWithUsage }) {
+export function UsageCard({ space }: { space: WikiSpaceWithUsage }) {
   const usage = space.usage;
   const total = usage?.entries.reduce((sum, entry) => sum + entry.total, 0) ?? 0;
   if (!usage || total === 0) {
