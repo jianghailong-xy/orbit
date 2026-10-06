@@ -30,7 +30,12 @@ func antigravityTokenFile(geminiDir string) string {
 // its credential directory — or one it cannot even look at, which is no reason to fall back to a key
 // either (probeAntigravityAuth).
 func antigravityGoogleSignInSaved() bool {
-	info, err := os.Stat(antigravityGoogleTokenPath())
+	return antigravityGoogleSignInSavedIn(antigravityGoogleDir())
+}
+
+// antigravityGoogleSignInSavedIn is antigravityGoogleSignInSaved for one account's Gemini directory.
+func antigravityGoogleSignInSavedIn(dir string) bool {
+	info, err := os.Stat(antigravityTokenFile(dir))
 	if err != nil {
 		return !errors.Is(err, os.ErrNotExist)
 	}
@@ -52,10 +57,11 @@ func antigravityCredentialEnvKey(key string) bool {
 
 // antigravityGoogleCommand is the shared entry for login, auth/usage, and Google model reads.
 // HOME, XDG and the empty working directory last only for this invocation; the Gemini directory
-// persists. An unreachable private D-Bus socket keeps agy away from the system's shared keyring.
-// Only the usage probe keeps agy's log, in this invocation's private temporary directory.
+// persists — Default's, or the account's env names (antigravityGoogleDirIn). An unreachable private
+// D-Bus socket keeps agy away from the system's shared keyring. Only the usage probe keeps agy's log,
+// in this invocation's private temporary directory.
 func antigravityGoogleCommand(ctx context.Context, binPath string, env []string, probeLog bool, args ...string) (*exec.Cmd, func(), error) {
-	dir, err := filepath.Abs(antigravityGoogleDir())
+	dir, err := filepath.Abs(antigravityGoogleDirIn(env))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -68,7 +74,7 @@ func antigravityGoogleCommand(ctx context.Context, binPath string, env []string,
 			return nil, nil, err
 		}
 	}
-	if err := os.Chmod(antigravityGoogleTokenPath(), 0o600); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := os.Chmod(antigravityTokenFile(dir), 0o600); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, nil, err
 	}
 	settingsPath := filepath.Join(configDir, "settings.json")
@@ -106,8 +112,8 @@ func antigravityGoogleCommand(ctx context.Context, binPath string, env []string,
 	cleanEnv := make([]string, 0, len(env))
 	for _, entry := range env {
 		key, _, _ := strings.Cut(entry, "=")
-		if antigravityCredentialEnvKey(key) || key == "SSH_CONNECTION" || key == "SSH_CLIENT" || key == "SSH_TTY" ||
-			key == "DISPLAY" || key == "WAYLAND_DISPLAY" || key == "XAUTHORITY" {
+		if antigravityCredentialEnvKey(key) || key == antigravityAccountDirVar || key == "SSH_CONNECTION" ||
+			key == "SSH_CLIENT" || key == "SSH_TTY" || key == "DISPLAY" || key == "WAYLAND_DISPLAY" || key == "XAUTHORITY" {
 			continue
 		}
 		cleanEnv = append(cleanEnv, entry)
@@ -233,7 +239,7 @@ type antigravityGoogleUsageCommand struct {
 }
 
 func probeAntigravityAuth(ctx context.Context, binPath string, env []string) (authState, string, *PlanUsage) {
-	if info, err := os.Stat(antigravityGoogleTokenPath()); err == nil && !info.IsDir() {
+	if info, err := os.Stat(antigravityTokenFile(antigravityGoogleDirIn(env))); err == nil && !info.IsDir() {
 		result := probeAntigravityGoogle(ctx, binPath, env)
 		return result.auth, "google", result.usage
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {

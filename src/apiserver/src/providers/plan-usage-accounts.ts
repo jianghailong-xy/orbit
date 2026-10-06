@@ -12,10 +12,12 @@ import {
   accountOfEnv,
   accountToMoveTo,
   accountToStartOn,
+  isAccountEngine,
   planUsageBlockedUntil,
+  withEnginePlanUsage,
   type AccountEngine,
 } from '@orbit/shared';
-import { DEFAULT_ACCOUNT, accountEnvVar, accountOnRunner } from './account';
+import { ACCOUNT_CHOICE, DEFAULT_ACCOUNT, accountEnvVar, accountOnRunner } from './account';
 import { runnerAccountPausedUntil } from '../common/account-pause';
 
 /** An account a runner added: 4 random bytes in lowercase hex (src/runner-go/account_slot.go).
@@ -79,9 +81,9 @@ export function runAccount(
   runnerEngines: unknown,
 ): string | null | undefined {
   const dirVar = accountEnvVar(provider);
-  if (!dirVar) return undefined;
+  if (!dirVar || !isAccountEngine(provider)) return undefined;
   const env = isObject(workspaceEnv) ? workspaceEnv : null;
-  const chosen = provider === 'claude' ? choices?.claudeAccount : choices?.codexAccount;
+  const chosen = choices?.[ACCOUNT_CHOICE[provider]];
   const picked = accountOnRunner(provider, chosen, runnerEngines);
   const accounts = sanitizeRunnerEngines(runnerEngines)?.find((engine) => engine.engine === provider)?.accounts;
   const withChoice = picked ? { ...(env ?? {}), [dirVar]: accountDir(picked) } : env;
@@ -90,16 +92,26 @@ export function runAccount(
 
 /**
  * Whether a workspace leaves its sessions' `engine` account to Orbit — Automatic: it picked none for
- * that engine, and its env selects no other config directory (CODEX_HOME, CLAUDE_CONFIG_DIR) and no
- * key of its own. Otherwise its choice or its env decides, and Orbit neither picks nor moves.
+ * that engine, and its env selects no other config directory (CODEX_HOME, CLAUDE_CONFIG_DIR,
+ * ORBIT_ANTIGRAVITY_GOOGLE_DIR) and no key of its own. Otherwise its choice or its env decides, and
+ * Orbit neither picks nor moves.
  */
 export function workspaceLeavesAccountToOrbit(
   engine: AccountEngine,
-  workspace: { env?: unknown; codexAccount?: string | null; claudeAccount?: string | null } | null | undefined,
+  workspace: AccountWorkspace | null | undefined,
   runnerEngines: unknown,
 ): boolean {
-  if (engine === 'claude' ? workspace?.claudeAccount : workspace?.codexAccount) return false;
+  if (workspace?.[ACCOUNT_CHOICE[engine]]) return false;
   return runAccount(engine, workspace?.env, null, runnerEngines) === DEFAULT_ACCOUNT;
+}
+
+/** What the account helpers read of a workspace: its env and its choice for each engine. */
+export type AccountWorkspace = { env?: unknown } & WorkspaceAccountChoices;
+
+/** A runner's planUsage as the account helpers weigh it: its heartbeat snapshot with Antigravity's
+ *  quota folded in from the engine health it is reported with (withEnginePlanUsage). */
+function weighedPlanUsage(planUsage: unknown, runnerEngines: unknown): PlanUsage | null {
+  return withEnginePlanUsage(isObject(planUsage) ? (planUsage as PlanUsage) : null, sanitizeRunnerEngines(runnerEngines));
 }
 
 /**
@@ -111,14 +123,14 @@ export function workspaceLeavesAccountToOrbit(
  */
 export function automaticAccount(
   engine: AccountEngine,
-  workspace: { env?: unknown; codexAccount?: string | null; claudeAccount?: string | null } | null | undefined,
+  workspace: AccountWorkspace | null | undefined,
   runnerEngines: unknown,
   planUsage: unknown,
   now: Date,
   accountPauses?: unknown,
 ): string | null {
   if (!workspaceLeavesAccountToOrbit(engine, workspace, runnerEngines)) return null;
-  const usage = isObject(planUsage) ? (planUsage as PlanUsage) : null;
+  const usage = weighedPlanUsage(planUsage, runnerEngines);
   return accountToStartOn(engine, accountsOf(engine, runnerEngines, accountPauses, now), usage, now);
 }
 
@@ -150,17 +162,16 @@ export function automaticCodexAccount(
 export function accountBeforeDispatch(
   engine: AccountEngine,
   session: { account?: string | null; pinned?: boolean },
-  workspace: { env?: unknown; codexAccount?: string | null; claudeAccount?: string | null } | null | undefined,
+  workspace: AccountWorkspace | null | undefined,
   runnerEngines: unknown,
   planUsage: unknown,
   now: Date,
   accountPauses?: unknown,
 ): { from: string; to: string; paused?: boolean } | null {
   if (session.pinned || !workspaceLeavesAccountToOrbit(engine, workspace, runnerEngines)) return null;
-  const choice = engine === 'claude' ? { claudeAccount: session.account } : { codexAccount: session.account };
-  const from = runAccount(engine, workspace?.env, choice, runnerEngines);
+  const from = runAccount(engine, workspace?.env, { [ACCOUNT_CHOICE[engine]]: session.account }, runnerEngines);
   if (!from) return null;
-  const usage = isObject(planUsage) ? (planUsage as PlanUsage) : null;
+  const usage = weighedPlanUsage(planUsage, runnerEngines);
   const paused = runnerAccountPausedUntil(accountPauses, engine, from, now) !== null;
   if (!paused && !planUsageBlockedUntil(usage, engine, now, from)) return null;
   const to = accountToMoveTo(engine, accountsOf(engine, runnerEngines, accountPauses, now), usage, now, from);
@@ -170,17 +181,16 @@ export function accountBeforeDispatch(
 export function accountAfterUsageLimit(
   engine: AccountEngine,
   session: { account?: string | null; pinned?: boolean },
-  workspace: { env?: unknown; codexAccount?: string | null; claudeAccount?: string | null } | null | undefined,
+  workspace: AccountWorkspace | null | undefined,
   runnerEngines: unknown,
   planUsage: unknown,
   now: Date,
   accountPauses?: unknown,
 ): { from: string; to: string } | null {
   if (session.pinned || !workspaceLeavesAccountToOrbit(engine, workspace, runnerEngines)) return null;
-  const choice = engine === 'claude' ? { claudeAccount: session.account } : { codexAccount: session.account };
-  const from = runAccount(engine, workspace?.env, choice, runnerEngines);
+  const from = runAccount(engine, workspace?.env, { [ACCOUNT_CHOICE[engine]]: session.account }, runnerEngines);
   if (!from) return null;
-  const usage = isObject(planUsage) ? (planUsage as PlanUsage) : null;
+  const usage = weighedPlanUsage(planUsage, runnerEngines);
   const to = accountToMoveTo(engine, accountsOf(engine, runnerEngines, accountPauses, now), usage, now, from);
   return to ? { from, to } : null;
 }
@@ -222,16 +232,17 @@ const accountsOf = (engine: AccountEngine, runnerEngines: unknown, pauses?: unkn
 
 /** Pause on the account this session actually spends, including a directory selected by env. */
 export function sessionAccountPausedUntil(
-  session: { provider: string | null; providerBuiltin: boolean; codexAccount?: string | null; claudeAccount?: string | null },
-  workspace: ({ env?: unknown } & WorkspaceAccountChoices) | null | undefined,
+  session: { provider: string | null; providerBuiltin: boolean } & WorkspaceAccountChoices,
+  workspace: AccountWorkspace | null | undefined,
   runner: { engines: unknown; accountPauses?: unknown },
   now = new Date(),
 ): Date | null {
   const engine = session.provider;
-  if (!session.providerBuiltin || (engine !== 'codex' && engine !== 'claude')) return null;
+  if (!session.providerBuiltin || !isAccountEngine(engine)) return null;
   const account = runAccount(engine, workspace?.env, {
     codexAccount: session.codexAccount ?? workspace?.codexAccount,
     claudeAccount: session.claudeAccount ?? workspace?.claudeAccount,
+    antigravityAccount: session.antigravityAccount ?? workspace?.antigravityAccount,
   }, runner.engines);
   return runnerAccountPausedUntil(runner.accountPauses, engine, account, now);
 }
@@ -240,4 +251,5 @@ export function sessionAccountPausedUntil(
 export interface WorkspaceAccountChoices {
   codexAccount?: string | null;
   claudeAccount?: string | null;
+  antigravityAccount?: string | null;
 }

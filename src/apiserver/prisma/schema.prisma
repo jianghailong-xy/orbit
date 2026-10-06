@@ -887,6 +887,11 @@ model Workspace {
   // (8 lowercase hex), never a path. NULL is Default, the CLAUDE_CONFIG_DIR the runner's own
   // environment selects (providers/account.ts). Same rules as codexAccount above.
   claudeAccount       String?   @map("claude_account")
+  // Which Antigravity Google account this workspace's Antigravity sessions run on (migration 0387): the
+  // id of a slot the runner added (8 lowercase hex, src/runner-go/antigravity_account_slot.go) or
+  // `default`, never a path. Same rules as codexAccount above; dispatch hands the slot's directory to
+  // the runner as ORBIT_ANTIGRAVITY_GOOGLE_DIR.
+  antigravityAccount  String?   @map("antigravity_account")
   agentKey            String?   @map("agent_key")
   enabled             Boolean   @default(true)
   // When workDir is NOT a git repo, the runner auto-`git init`s it (default .gitignore +
@@ -1186,6 +1191,10 @@ model Session {
   // workspace's (Workspace.claudeAccount).
   claudeAccount        String?   @map("claude_account")
   claudeAccountPinned  Boolean   @default(false) @map("claude_account_pinned")
+  // Its Antigravity Google account, the same pair again (migration 0387); NULL follows the workspace's
+  // (Workspace.antigravityAccount).
+  antigravityAccount       String?  @map("antigravity_account")
+  antigravityAccountPinned Boolean  @default(false) @map("antigravity_account_pinned")
   // The only runner-engine generation allowed to dequeue this session's inbox. Retired values
   // remain here as tombstones until the next activation, so legacy NULL polls stay fenced.
   inboxLeaseGeneration String?   @map("inbox_lease_generation") @db.Uuid

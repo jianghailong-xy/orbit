@@ -95,8 +95,6 @@ test('only an account of an engine that keeps accounts, by an id an account can 
     await assert.rejects(h.patch(engine, account, { name: 'Main' }), BadRequestException, `${engine}/${account}`);
   }
   await assert.rejects(h.patch('opencode', 'default', { name: 'Main' }), BadRequestException);
-  // Reported on the Runners page since it is installed there, but it keeps no accounts either.
-  await assert.rejects(h.patch('antigravity', 'default', { name: 'Main' }), BadRequestException);
   assert.deepEqual(h.writes, []);
 });
 
@@ -120,4 +118,14 @@ test('somebody else’s runner, and an account this runner does not report, are 
   await assert.rejects(h.patch('codex', 'default', { name: 'Main' }), NotFoundException);
   await assert.rejects(harness(null).patch('claude', 'default', { name: 'Main' }), NotFoundException);
   assert.deepEqual(h.writes, []);
+});
+
+test("an Antigravity Google account is renamed as Claude's and Codex's are", async () => {
+  const google: RunnerEngineAccount = { id: WORK, name: 'Work', home: '/home/ada/.orbit/antigravity-accounts/3fa91c2e', auth: 'yes' };
+  const h = harness([{
+    engine: 'antigravity', installed: true, auth: 'yes', authSource: 'google',
+    accounts: [{ id: 'default', home: '/home/ada/.orbit/antigravity/google', auth: 'yes' }, google],
+  }]);
+  assert.deepEqual(await h.patch('antigravity', WORK, { name: 'Personal' }), { ...google, name: 'Personal' });
+  assert.equal(h.writes.length, 1);
 });

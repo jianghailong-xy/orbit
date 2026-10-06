@@ -84,7 +84,11 @@ func prepareAntigravityGeminiDir(scratchDir string, job *ClaimedSession, orbitEx
 		return "", fmt.Errorf("remove a leftover Google sign-in copy: %w", err)
 	}
 	if google {
-		if err := placeAntigravityToken(dir); err != nil {
+		account, err := antigravitySessionGoogleDir(job.Agent.Env)
+		if err != nil {
+			return "", err
+		}
+		if err := placeAntigravityToken(dir, account); err != nil {
 			return "", fmt.Errorf("copy the runner's Google sign-in into the session: %w", err)
 		}
 	}
