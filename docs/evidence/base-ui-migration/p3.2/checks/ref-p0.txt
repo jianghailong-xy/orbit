@@ -1,0 +1,417 @@
+
+Running 112 tests using 1 worker
+
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/breakpoint-961-session.png, writing actual.
+  ✓    1 [chromium-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (10.0s)
+  ✓    2 [chromium-light-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.4s)
+  ✘    3 [chromium-light-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.0s)
+  ✘    4 [chromium-light-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (2.2s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/task-share-dialog.png, writing actual.
+  ✓    5 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (3.5s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/task-public-share.png, writing actual.
+  ✓    6 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (537ms)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/project-graph-fullscreen.png, writing actual.
+  ✓    7 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (3.1s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/wiki-home.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/wiki-new-entry.png, writing actual.
+  ✓    8 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.3s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/settings-saved.png, writing actual.
+  ✓    9 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (938ms)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/profile-validation.png, writing actual.
+  ✓   10 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.2s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/notification-error.png, writing actual.
+  ✓   11 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (4.3s)
+  ✓   12 [chromium-light-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline (17.6s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/projects-loading.png, writing actual.
+  ✓   13 [chromium-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (581ms)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-desktop/projects-error.png, writing actual.
+  ✓   14 [chromium-light-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.8s)
+  -   15 [chromium-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓   16 [chromium-light-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.3s)
+  ✘   17 [chromium-light-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.1s)
+  ✘   18 [chromium-light-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (2.8s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/task-share-dialog.png, writing actual.
+  ✓   19 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (3.3s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/task-public-share.png, writing actual.
+  ✓   20 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (534ms)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/project-graph-fullscreen.png, writing actual.
+  ✓   21 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (3.3s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/wiki-home.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/wiki-contents.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/wiki-new-entry.png, writing actual.
+  ✓   22 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (1.6s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/settings-saved.png, writing actual.
+  ✓   23 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (864ms)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/profile-validation.png, writing actual.
+  ✓   24 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.1s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/notification-error.png, writing actual.
+  ✓   25 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (4.0s)
+  -   26 [chromium-light-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/projects-loading.png, writing actual.
+  ✓   27 [chromium-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (566ms)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-light-phone/projects-error.png, writing actual.
+  ✓   28 [chromium-light-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.8s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/breakpoint-961-session.png, writing actual.
+  ✓   29 [chromium-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (9.6s)
+  ✓   30 [chromium-dark-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.3s)
+  ✘   31 [chromium-dark-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.0s)
+  ✘   32 [chromium-dark-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (2.7s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/task-share-dialog.png, writing actual.
+  ✓   33 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (3.5s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/task-public-share.png, writing actual.
+  ✓   34 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (526ms)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/project-graph-fullscreen.png, writing actual.
+  ✓   35 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (3.1s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/wiki-home.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/wiki-new-entry.png, writing actual.
+  ✓   36 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.3s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/settings-saved.png, writing actual.
+  ✓   37 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (943ms)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/profile-validation.png, writing actual.
+  ✓   38 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.3s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/notification-error.png, writing actual.
+  ✓   39 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (4.4s)
+  -   40 [chromium-dark-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/projects-loading.png, writing actual.
+  ✓   41 [chromium-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (633ms)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-desktop/projects-error.png, writing actual.
+  ✓   42 [chromium-dark-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.9s)
+  -   43 [chromium-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓   44 [chromium-dark-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.2s)
+  ✘   45 [chromium-dark-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.1s)
+  ✘   46 [chromium-dark-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (2.7s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/task-share-dialog.png, writing actual.
+  ✓   47 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (3.1s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/task-public-share.png, writing actual.
+  ✓   48 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (491ms)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/project-graph-fullscreen.png, writing actual.
+  ✓   49 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (2.9s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/wiki-home.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/wiki-contents.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/wiki-new-entry.png, writing actual.
+  ✓   50 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (1.5s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/settings-saved.png, writing actual.
+  ✓   51 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (845ms)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/profile-validation.png, writing actual.
+  ✓   52 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.1s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/notification-error.png, writing actual.
+  ✓   53 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (4.0s)
+  -   54 [chromium-dark-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/projects-loading.png, writing actual.
+  ✓   55 [chromium-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (676ms)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/chromium-dark-phone/projects-error.png, writing actual.
+  ✓   56 [chromium-dark-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.9s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/breakpoint-961-session.png, writing actual.
+  ✓   57 [webkit-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (11.5s)
+  ✓   58 [webkit-light-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.9s)
+  ✘   59 [webkit-light-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.5s)
+  ✘   60 [webkit-light-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (3.2s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/task-share-dialog.png, writing actual.
+  ✓   61 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (4.3s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/task-public-share.png, writing actual.
+  ✓   62 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (752ms)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/project-graph-fullscreen.png, writing actual.
+  ✓   63 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (3.7s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/wiki-home.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/wiki-new-entry.png, writing actual.
+  ✓   64 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.8s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/settings-saved.png, writing actual.
+  ✓   65 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.2s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/profile-validation.png, writing actual.
+  ✓   66 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.6s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/notification-error.png, writing actual.
+  ✓   67 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (6.0s)
+  -   68 [webkit-light-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/projects-loading.png, writing actual.
+  ✓   69 [webkit-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.1s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-desktop/projects-error.png, writing actual.
+  ✓   70 [webkit-light-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.4s)
+  -   71 [webkit-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓   72 [webkit-light-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.7s)
+  ✘   73 [webkit-light-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.6s)
+  ✘   74 [webkit-light-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (3.5s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/task-share-dialog.png, writing actual.
+  ✓   75 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (4.0s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/task-public-share.png, writing actual.
+  ✓   76 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (743ms)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/project-graph-fullscreen.png, writing actual.
+  ✓   77 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (3.4s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/wiki-home.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/wiki-contents.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/wiki-new-entry.png, writing actual.
+  ✓   78 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (2.0s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/settings-saved.png, writing actual.
+  ✓   79 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (1.0s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/profile-validation.png, writing actual.
+  ✓   80 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.4s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/notification-error.png, writing actual.
+  ✓   81 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (4.8s)
+  -   82 [webkit-light-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/projects-loading.png, writing actual.
+  ✓   83 [webkit-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.8s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-light-phone/projects-error.png, writing actual.
+  ✓   84 [webkit-light-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (4.2s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/breakpoint-961-session.png, writing actual.
+  ✓   85 [webkit-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (17.5s)
+  ✓   86 [webkit-dark-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (12.0s)
+  ✘   87 [webkit-dark-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (13.6s)
+  ✘   88 [webkit-dark-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (30.1s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/task-share-dialog.png, writing actual.
+  ✓   89 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (19.6s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/task-public-share.png, writing actual.
+  ✓   90 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (4.4s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/project-graph-fullscreen.png, writing actual.
+  ✓   91 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (12.9s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/wiki-home.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/wiki-new-entry.png, writing actual.
+  ✓   92 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (5.8s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/settings.png, writing actual.
+  ✘   93 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (2.0s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/profile-validation.png, writing actual.
+  ✓   94 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (2.6s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/notification-error.png, writing actual.
+  ✓   95 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (7.6s)
+  -   96 [webkit-dark-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/projects-loading.png, writing actual.
+  ✓   97 [webkit-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (2.7s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-desktop/projects-error.png, writing actual.
+  ✓   98 [webkit-dark-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (4.9s)
+  -   99 [webkit-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓  100 [webkit-dark-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (4.9s)
+  ✘  101 [webkit-dark-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.8s)
+  ✘  102 [webkit-dark-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (3.3s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/task-share-dialog.png, writing actual.
+  ✓  103 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (4.2s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/task-public-share.png, writing actual.
+  ✓  104 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (752ms)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/project-graph-fullscreen.png, writing actual.
+  ✓  105 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (3.5s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/wiki-home.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/wiki-contents.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/wiki-new-entry.png, writing actual.
+  ✓  106 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (2.2s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/settings-saved.png, writing actual.
+  ✓  107 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (1.2s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/profile-validation.png, writing actual.
+  ✓  108 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.8s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/notification-error.png, writing actual.
+  ✓  109 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (5.1s)
+  -  110 [webkit-dark-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/projects-loading.png, writing actual.
+  ✓  111 [webkit-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (996ms)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-shots/webkit-dark-phone/projects-error.png, writing actual.
+  ✓  112 [webkit-dark-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.5s)
+
+
+  1) [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ─────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('Setting saved', { exact: true })
+    Expected: visible
+    Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:
+        1) <span class="toast-head">Setting saved</span> aka getByRole('region', { name: 'Notifications' }).getByText('Setting saved')
+        2) <div class="sr-only" aria-atomic="true" aria-live="polite">Setting saved</div> aka getByText('Setting saved').nth(1)
+
+    Call log:
+      - Expect "toBeVisible" getByText('Setting saved', { exact: true }) with timeout 15000ms
+      - waiting for getByText('Setting saved', { exact: true })
+
+
+       at page-scenarios.mjs:102
+
+      100 |   await firstSwitch.click();
+      101 |   await expect(firstSwitch).toHaveAttribute('aria-checked', previous === 'true' ? 'false' : 'true');
+    > 102 |   await expect(page.getByText('Setting saved', { exact: true })).toBeVisible();
+          |                                                                  ^
+      103 |   await capture('settings-saved', { switch: firstSwitch });
+      104 | }
+      105 |
+        at settingsScenario (/var/tmp/p32-ref/src/web/ui-migration/page-scenarios.mjs:102:66)
+
+    attachment #1: settings (image/png) ────────────────────────────────────────────────────────────
+    Expected: ../../../p32-final/p0-shots/webkit-dark-desktop/settings.png
+    Received: ../../../p32-final/ref-p0/pages.browser.mjs-settings-webkit-dark-desktop/settings-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../p32-final/ref-p0/pages.browser.mjs-settings-webkit-dark-desktop/attachments/computed-styles-and-timings-1596fb9a1b9193d6bc2b0cbdcf9576d2921c36a5.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../p32-final/ref-p0/pages.browser.mjs-settings-webkit-dark-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p32-final/ref-p0/pages.browser.mjs-settings-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p32-final/ref-p0/pages.browser.mjs-settings-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ──────────────────────────
+  11 skipped
+  100 passed (6.6m)

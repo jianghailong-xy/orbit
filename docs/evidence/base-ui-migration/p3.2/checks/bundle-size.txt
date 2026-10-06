@@ -1,0 +1,40 @@
+{
+  "tip": {
+    "files": [
+      "assets/Transcript-BtITXXF3.css",
+      "assets/Transcript-Vzag2pKy.js",
+      "assets/index-CEnjz7lS.css",
+      "assets/index-CdtE5_gu.js",
+      "assets/projectDependencyGraph-C7Yj51jL.js",
+      "assets/rolldown-runtime-hePW80VL.js",
+      "assets/taskDependencyGraph-B91604km.js"
+    ],
+    "js": {
+      "raw": 3313296,
+      "gzip": 1008022
+    },
+    "css": {
+      "raw": 392654,
+      "gzip": 65210
+    }
+  },
+  "delivered": {
+    "files": [
+      "assets/Transcript-BtITXXF3.css",
+      "assets/Transcript-DRDTosy7.js",
+      "assets/index-CVcUO2xu.css",
+      "assets/index-DIh0iskc.js",
+      "assets/projectDependencyGraph-DEwcr3kB.js",
+      "assets/rolldown-runtime-hePW80VL.js",
+      "assets/taskDependencyGraph-Bx_saetJ.js"
+    ],
+    "js": {
+      "raw": 3481650,
+      "gzip": 1064256
+    },
+    "css": {
+      "raw": 428187,
+      "gzip": 70718
+    }
+  }
+}
