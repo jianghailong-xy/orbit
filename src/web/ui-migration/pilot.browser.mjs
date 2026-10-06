@@ -98,7 +98,10 @@ test.describe('task detail pilot', () => {
     await expect(field(page, 'List')).toContainText('No list');
     trace.push(await observe(page, pilot, 'list clear'));
 
-    // Run now is blocked by an open prerequisite: its hint, on the pointer.
+    // Run now is blocked by an open prerequisite: its hint, on the pointer. Where the clear press left
+    // focus is in the trace above; the replaced field kept it in one WebKit run and not in the others,
+    // so the hint is shot with nothing focused.
+    await page.evaluate(() => document.activeElement?.blur());
     await page.mouse.move(0, 0);
     await panel.locator('.tdp-head-actions span').first().hover();
     await expect(page.getByRole('tooltip')).toBeVisible();
