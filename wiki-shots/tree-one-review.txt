@@ -1,0 +1,145 @@
+Attributes: Application, 0x1147161c0, pid: 14746, label: 'WikiProbe'
+Element subtree:
+ →Application, 0x1147161c0, pid: 14746, label: 'WikiProbe'
+    Window (Main), 0x114716300, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x114715680, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x1147157c0, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x114715900, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x114715a40, {{0.0, 0.0}, {402.0, 874.0}}
+              StaticText, 0x114715b80, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x114715cc0, {{251.7, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              CollectionView, 0x114715e00, {{0.0, 128.0}, {305.7, 746.0}}
+                Other, 0x114715f40, {{0.0, -1364.0}, {305.7, 3250.3}}
+                Cell, 0x114716080, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x114714500, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x114714640, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x114716440, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x114716580, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x1147166c0, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x114716800, {{0.0, 128.0}, {305.3, 44.3}}
+                        Button, 0x114716940, {{0.0, 128.0}, {305.3, 44.3}}, label: 'Projects'
+                          Image, 0x114716a80, {{26.3, 142.3}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x114714280, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                Cell, 0x114714140, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x1147143c0, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x114714780, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x1147148c0, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x114714a00, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x114714b40, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x114714c80, {{0.0, 172.3}, {305.3, 44.3}}
+                        Button, 0x114714dc0, {{0.0, 172.3}, {305.3, 44.3}}, label: 'Tasks'
+                          Image, 0x114714f00, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x114715040, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x114715180, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x1147152c0, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x114715400, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x114715540, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x114716bc0, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x114716d00, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x114716e40, {{0.0, 216.7}, {305.3, 44.3}}
+                        Button, 0x114716f80, {{0.0, 216.7}, {305.3, 44.3}}, label: 'Wiki, 1 waiting on you'
+                          Image, 0x1147170c0, {{27.0, 230.0}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x114717200, {{58.0, 228.7}, {34.3, 20.3}}, label: 'Wiki'
+                          StaticText, 0x114717340, {{277.7, 232.2}, {5.7, 13.3}}, label: '1 waiting on you'
+                Cell, 0x114717480, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x1147175c0, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x114717700, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x114717840, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x114717980, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x114717ac0, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x114717c00, {{0.0, 261.0}, {305.3, 44.7}}
+                        StaticText, 0x114717d40, {{0.0, 261.0}, {305.3, 44.7}}, label: 'Workspaces'
+                Cell, 0x114717e80, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x103257980, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x103257ac0, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x103257c00, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x103257340, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x103257840, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x103257d40, {{0.0, 305.7}, {305.3, 44.3}}
+                        Button, 0x103257e80, {{0.0, 305.7}, {305.3, 44.3}}, label: 'orbit-develop,  · hpc'
+                          Other, 0x103257480, {{24.7, 320.0}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x103257700, {{24.7, 320.0}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x1032575c0, {{58.0, 317.7}, {103.0, 20.3}}, label: 'orbit-develop'
+                          StaticText, 0x11403f340, {{161.0, 317.7}, {42.0, 20.3}}, label: ' · hpc'
+                Cell, 0x11403e6c0, {{0.0, 350.0}, {305.3, 44.3}}
+                  Other, 0x11403f840, {{0.0, 350.0}, {305.3, 44.3}}
+                    Other, 0x11403fd40, {{0.0, 350.0}, {305.3, 44.3}}
+                      Other, 0x11403ebc0, {{0.0, 350.0}, {305.3, 44.3}}
+                  Other, 0x11403df40, {{0.0, 350.0}, {305.3, 44.3}}
+                    Other, 0x11403ed00, {{0.0, 350.0}, {305.3, 44.3}}
+                      Other, 0x11403e1c0, {{0.0, 350.0}, {305.3, 44.3}}
+                        Button, 0x11403e080, {{0.0, 350.0}, {305.3, 44.3}}, label: 'orbit-macos,  · mac-mini'
+                          Other, 0x11403f200, {{24.7, 364.3}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x11403e940, {{24.7, 364.3}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x11403f0c0, {{58.0, 362.0}, {93.0, 20.3}}, label: 'orbit-macos'
+                          StaticText, 0x11403ea80, {{151.0, 362.0}, {85.0, 20.3}}, label: ' · mac-mini'
+                Other, 0x11403fe80, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x11403f980, {{299.3, 516.7}, {3.0, 354.3}}
+                Other, 0x11403fac0, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x11403fc00, {{299.3, 516.7}, {3.0, 354.3}}
+              Button, 0x11403f480, {{10.0, 788.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x11403f700, {{31.0, 801.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x11403e300, {{57.0, 799.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x11403c500, {{251.7, 788.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x11403ca00, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x11403e440, {{0.0, 62.0}, {402.0, 54.0}}, identifier: 'Review'
+                  Button, 0x11403e580, {{16.0, 62.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Activity'
+                  StaticText, 0x11403ee40, {{94.0, 66.7}, {213.7, 34.7}}, label: 'Review'
+                    Other, 0x11403f5c0, {{94.0, 66.7}, {213.7, 34.7}}
+                      StaticText, 0x11403ef80, {{172.5, 66.7}, {56.7, 20.3}}, label: 'Review'
+                      StaticText, 0x11403e800, {{94.0, 88.0}, {213.7, 13.3}}, label: '1 proposal from 1 session · oldest 2h ago'
+                Other, 0x11403c640, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x11403c780, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x11403c8c0, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x11403c3c0, {{0.0, 0.0}, {402.0, 874.0}}
+                        ScrollView, 0x114cc4000, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x114cc4140, {{0.0, 0.0}, {402.0, 874.0}}
+                            Other, 0x114cc4280, {{0.0, 0.0}, {402.0, 170.8}}
+                          Other, 0x114cc43c0, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x114cc4500, {{0.0, 116.0}, {402.0, 748.0}}
+                            SegmentedControl, 0x114cc4640, {{16.0, 132.0}, {370.0, 31.0}}
+                              Button, 0x114cc4780, {{16.0, 132.0}, {92.0, 32.0}}, label: 'All 1', Selected
+                              Button, 0x114cc48c0, {{108.0, 132.0}, {93.0, 32.0}}, label: 'Add 1'
+                              Button, 0x114cc4a00, {{201.0, 132.0}, {92.0, 32.0}}, label: 'Amend 0'
+                              Button, 0x114cc4b40, {{293.0, 132.0}, {93.0, 32.0}}, label: 'Retire 0'
+                            StaticText, 0x114cc4c80, {{36.0, 193.0}, {20.7, 13.3}}, label: 'ADD'
+                            StaticText, 0x114cc4dc0, {{68.7, 191.8}, {71.7, 15.7}}, label: 'Convention'
+                            StaticText, 0x114cc4f00, {{30.0, 212.3}, {76.3, 15.7}}, label: 'Proposed by'
+                            Button, 0x114cc5040, {{110.3, 212.3}, {100.3, 15.7}}, label: 'Orbit wiki review'
+                            StaticText, 0x114cc5180, {{214.7, 212.3}, {49.0, 15.7}}, label: '· 2h ago'
+                            StaticText, 0x114cc52c0, {{30.0, 240.0}, {305.7, 49.0}}, label: 'Wiki drawer number counts what waits on the owner'
+                            StaticText, 0x114cc5400, {{30.0, 301.0}, {49.3, 15.7}}, label: 'Sources'
+                            StaticText, 0x114cc5540, {{30.0, 319.7}, {14.7, 20.3}}, label: '—'
+                            StaticText, 0x114cc5680, {{30.0, 350.0}, {50.3, 15.7}}, label: 'Anchors'
+                            StaticText, 0x114cc57c0, {{30.0, 368.7}, {14.7, 20.3}}, label: '—'
+                            StaticText, 0x114cc5900, {{30.0, 399.0}, {91.0, 15.7}}, label: 'Similar entries'
+                            StaticText, 0x114cc5a40, {{127.0, 399.0}, {32.3, 15.7}}, label: 'None'
+                            Button, 0x114cc5b80, {{30.0, 426.7}, {342.0, 34.3}}, label: 'Accept'
+                            Button, 0x114cc5cc0, {{30.0, 471.0}, {342.0, 34.3}}, label: 'Edit'
+                            Button, 0x114cc5e00, {{30.0, 515.3}, {342.0, 34.3}}, label: 'Reject'
+                              Button, 0x114cc5f40, {{30.0, 515.3}, {342.0, 34.3}}
+                                StaticText, 0x114cc6080, {{168.8, 522.3}, {48.0, 20.3}}, label: 'Reject'
+                                Image, 0x114cc61c0, {{222.3, 529.7}, {9.7, 5.7}}, identifier: 'chevron.down', label: 'Go Down'
+                            StaticText, 0x114cc6300, {{30.0, 561.7}, {182.3, 15.7}}, label: 'Accepting makes it Confirmed'
+                            StaticText, 0x114cc6440, {{30.0, 619.3}, {91.7, 18.0}}, label: 'Auto-accept'
+                            StaticText, 0x114cc6580, {{30.0, 647.3}, {298.3, 33.7}}, label: 'These apply without asking you, and still show in Recently changed.'
+                            Image, 0x114cc66c0, {{31.7, 695.0}, {11.7, 11.3}}, identifier: 'checkmark', label: 'Selected', Selected
+                            StaticText, 0x114cc6800, {{53.0, 691.0}, {68.3, 18.0}}, label: 'Reinforce'
+                            StaticText, 0x114cc6940, {{53.0, 710.0}, {205.7, 15.7}}, label: 'Adds a source to an existing entry'
+                            Image, 0x114cc6a80, {{31.7, 739.7}, {11.7, 11.3}}, identifier: 'checkmark', label: 'Selected', Selected
+                            StaticText, 0x114cc6bc0, {{53.0, 735.7}, {71.7, 18.0}}, label: 'Challenge'
+                            StaticText, 0x114cc6d00, {{53.0, 754.7}, {272.0, 15.7}}, label: 'Flags an entry for re-check; changes nothing'
+                            StaticText, 0x114cc6e40, {{40.0, 790.3}, {310.0, 33.7}}, label: 'Always asks you · Add, Amend and Retire, and anything a session proposed after reading the web.'
+                          Other, 0x114cc6f80, {{369.0, 116.0}, {30.0, 696.0}}, label: 'Vertical scroll bar, 2 pages', value: 0%
+                            Other, 0x114cc70c0, {{396.0, 119.0}, {3.0, 671.7}}
+                          Other, 0x114cc7200, {{369.0, 116.0}, {30.0, 696.0}}, label: 'Vertical scroll bar, 2 pages', value: 0%
+                            Other, 0x114cc7340, {{396.0, 119.0}, {3.0, 671.7}}
+                Other, 0x114cc7480, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x114cc75c0, {{0.0, 0.0}, {402.0, 874.0}}
+Path to element:
+ →Application, 0x1147161c0, pid: 14746, label: 'WikiProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.wikiprobe'
+  Output: {
+    Application, 0x114cc7700, pid: 14746, label: 'WikiProbe'
+  }

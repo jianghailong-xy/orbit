@@ -1,0 +1,5 @@
+Query chain:
+ →Find: Target Application 'io.orbitd.wikiprobe'
+  ↪︎Find: Descendants matching type NavigationBar
+    ↪︎Find: Descendants matching type StaticText
+      ↪︎Find: Elements matching predicate '"Activity" IN identifiers'

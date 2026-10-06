@@ -1,0 +1,20 @@
+Test Case '-[WikiProbeUITests.WikiShotsTests testOneSpace]' started.
+Test Case '-[WikiProbeUITests.WikiShotsTests testOneSpace]' passed (66.213 seconds).
+Test Case '-[WikiProbeUITests.WikiShotsTests testThreeSpaces]' started.
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:71: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertTrue failed - a menu row says github.com/jianghailong-xy/orbit
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:71: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertTrue failed - a menu row says github.com/jianghailong-xy/wikova
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:71: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertTrue failed - a menu row says No documents yet
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:79: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertFalse failed - the menu closed
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:140: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertTrue failed - Activity's title
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:82: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertTrue failed - every space's proposals, wikova's share said
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:84: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertTrue failed - wikova's plan waits: amber, named
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:157: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : failed - nothing to press says 3 proposals to review · 2 in wikova
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:90: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertTrue failed - Review over every space: 3
+Test Case '-[WikiProbeUITests.WikiShotsTests testThreeSpaces]' failed (170.515 seconds).
+Test Suite 'WikiShotsTests' failed at 2026-10-06 18:41:57.775.
+	 Executed 2 tests, with 9 failures (0 unexpected) in 236.728 (236.731) seconds
+Test Suite 'WikiProbeUITests.xctest' failed at 2026-10-06 18:41:57.776.
+	 Executed 2 tests, with 9 failures (0 unexpected) in 236.728 (236.732) seconds
+Test Suite 'All tests' failed at 2026-10-06 18:41:57.776.
+	 Executed 2 tests, with 9 failures (0 unexpected) in 236.728 (236.734) seconds
+** TEST FAILED **

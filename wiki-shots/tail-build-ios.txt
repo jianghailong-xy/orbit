@@ -1,0 +1,300 @@
+    t =    81.53s     Checking `Expect predicate `existsNoRetry == 1` for object "Activity" StaticText`
+    t =    81.53s         Checking existence of `"Activity" StaticText`
+    t =    81.60s         Capturing element debug description
+    t =    82.51s     Checking `Expect predicate `existsNoRetry == 1` for object "Activity" StaticText`
+    t =    82.51s         Checking existence of `"Activity" StaticText`
+    t =    82.60s         Capturing element debug description
+    t =    82.60s     Checking existence of `"Activity" StaticText`
+    t =    82.67s Collecting debug information to assist test failure triage
+    t =    82.67s     Requesting snapshot of accessibility hierarchy for app with pid 17053
+    t =    82.80s Waiting 5.0s for "Activity" StaticText to exist
+    t =    83.82s     Checking `Expect predicate `existsNoRetry == 1` for object "Activity" StaticText`
+    t =    83.82s         Checking existence of `"Activity" StaticText`
+    t =    83.91s         Capturing element debug description
+    t =    84.84s     Checking `Expect predicate `existsNoRetry == 1` for object "Activity" StaticText`
+    t =    84.84s         Checking existence of `"Activity" StaticText`
+    t =    84.92s         Capturing element debug description
+    t =    85.87s     Checking `Expect predicate `existsNoRetry == 1` for object "Activity" StaticText`
+    t =    85.87s         Checking existence of `"Activity" StaticText`
+    t =    85.95s         Capturing element debug description
+    t =    86.85s     Checking `Expect predicate `existsNoRetry == 1` for object "Activity" StaticText`
+    t =    86.85s         Checking existence of `"Activity" StaticText`
+    t =    86.92s         Capturing element debug description
+    t =    87.81s     Checking `Expect predicate `existsNoRetry == 1` for object "Activity" StaticText`
+    t =    87.81s         Checking existence of `"Activity" StaticText`
+    t =    87.89s         Capturing element debug description
+    t =    87.89s     Checking existence of `"Activity" StaticText`
+    t =    87.98s Collecting debug information to assist test failure triage
+    t =    87.98s     Requesting snapshot of accessibility hierarchy for app with pid 17053
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:140: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertTrue failed - Activity's title
+    t =    88.11s Waiting 20.0s for Any (First Match) to exist
+    t =    89.13s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    89.13s         Checking existence of `Any (First Match)`
+    t =    89.40s         Capturing element debug description
+    t =    90.13s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    90.13s         Checking existence of `Any (First Match)`
+    t =    90.37s         Capturing element debug description
+    t =    91.19s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    91.19s         Checking existence of `Any (First Match)`
+    t =    91.43s         Capturing element debug description
+    t =    92.18s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    92.19s         Checking existence of `Any (First Match)`
+    t =    92.42s         Capturing element debug description
+    t =    93.16s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    93.16s         Checking existence of `Any (First Match)`
+    t =    93.51s         Capturing element debug description
+    t =    94.13s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    94.13s         Checking existence of `Any (First Match)`
+    t =    94.41s         Capturing element debug description
+    t =    95.12s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    95.12s         Checking existence of `Any (First Match)`
+    t =    95.39s         Capturing element debug description
+    t =    96.13s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    96.13s         Checking existence of `Any (First Match)`
+    t =    96.46s         Capturing element debug description
+    t =    97.20s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    97.20s         Checking existence of `Any (First Match)`
+    t =    97.72s         Capturing element debug description
+    t =    98.13s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    98.13s         Checking existence of `Any (First Match)`
+    t =    98.38s         Capturing element debug description
+    t =    99.17s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    99.17s         Checking existence of `Any (First Match)`
+    t =    99.42s         Capturing element debug description
+    t =   100.14s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   100.14s         Checking existence of `Any (First Match)`
+    t =   100.41s         Capturing element debug description
+    t =   101.13s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   101.13s         Checking existence of `Any (First Match)`
+    t =   101.43s         Capturing element debug description
+    t =   102.16s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   102.16s         Checking existence of `Any (First Match)`
+    t =   102.40s         Capturing element debug description
+    t =   103.13s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   103.13s         Checking existence of `Any (First Match)`
+    t =   103.51s         Capturing element debug description
+    t =   104.14s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   104.15s         Checking existence of `Any (First Match)`
+    t =   104.37s         Capturing element debug description
+    t =   105.18s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   105.18s         Checking existence of `Any (First Match)`
+    t =   105.36s         Capturing element debug description
+    t =   106.17s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   106.18s         Checking existence of `Any (First Match)`
+    t =   106.35s         Capturing element debug description
+    t =   107.19s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   107.19s         Checking existence of `Any (First Match)`
+    t =   107.38s         Capturing element debug description
+    t =   108.12s     Checking existence of `Any (First Match)`
+    t =   108.35s Collecting debug information to assist test failure triage
+    t =   108.35s     Requesting snapshot of accessibility hierarchy for app with pid 17053
+    t =   108.52s Checking existence of `Any (First Match)`
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:82: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertTrue failed - every space's proposals, wikova's share said
+    t =   108.73s Waiting 20.0s for Any (First Match) to exist
+    t =   109.80s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   109.80s         Checking existence of `Any (First Match)`
+    t =   110.03s Checking existence of `Any (First Match)`
+    t =   110.20s Find the Any (First Match)
+    t =   110.49s Find the "Writing documents · 5 of 35" Button
+    t =   110.68s Find the "Writing documents · 5 of 35" Button
+    t =   110.99s Find the "Writing documents · 5 of 35" Button
+    t =   111.23s Find the "Writing documents · 5 of 35" Button
+    t =   111.56s Waiting 20.0s for Any (First Match) to exist
+    t =   112.60s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   112.60s         Checking existence of `Any (First Match)`
+    t =   113.06s         Capturing element debug description
+    t =   113.59s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   113.60s         Checking existence of `Any (First Match)`
+    t =   113.79s         Capturing element debug description
+    t =   114.58s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   114.58s         Checking existence of `Any (First Match)`
+    t =   114.78s         Capturing element debug description
+    t =   115.57s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   115.58s         Checking existence of `Any (First Match)`
+    t =   115.79s         Capturing element debug description
+    t =   116.56s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   116.56s         Checking existence of `Any (First Match)`
+    t =   116.74s         Capturing element debug description
+    t =   117.59s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   117.59s         Checking existence of `Any (First Match)`
+    t =   117.86s         Capturing element debug description
+    t =   118.59s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   118.60s         Checking existence of `Any (First Match)`
+    t =   118.79s         Capturing element debug description
+    t =   119.66s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   119.66s         Checking existence of `Any (First Match)`
+    t =   119.88s         Capturing element debug description
+    t =   120.59s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   120.59s         Checking existence of `Any (First Match)`
+    t =   120.78s         Capturing element debug description
+    t =   121.60s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   121.60s         Checking existence of `Any (First Match)`
+    t =   121.78s         Capturing element debug description
+    t =   122.57s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   122.58s         Checking existence of `Any (First Match)`
+    t =   122.77s         Capturing element debug description
+    t =   123.60s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   123.61s         Checking existence of `Any (First Match)`
+    t =   123.88s         Capturing element debug description
+    t =   124.60s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   124.60s         Checking existence of `Any (First Match)`
+    t =   124.81s         Capturing element debug description
+    t =   125.64s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   125.64s         Checking existence of `Any (First Match)`
+    t =   125.89s         Capturing element debug description
+    t =   126.61s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   126.61s         Checking existence of `Any (First Match)`
+    t =   127.01s         Capturing element debug description
+    t =   127.57s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   127.57s         Checking existence of `Any (First Match)`
+    t =   127.81s         Capturing element debug description
+    t =   128.65s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   128.65s         Checking existence of `Any (First Match)`
+    t =   128.88s         Capturing element debug description
+    t =   129.60s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   129.60s         Checking existence of `Any (First Match)`
+    t =   129.92s         Capturing element debug description
+    t =   130.56s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   130.56s         Checking existence of `Any (First Match)`
+    t =   130.86s         Capturing element debug description
+    t =   131.56s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   131.56s         Checking existence of `Any (First Match)`
+    t =   131.85s         Capturing element debug description
+    t =   131.85s     Checking existence of `Any (First Match)`
+    t =   132.29s Collecting debug information to assist test failure triage
+    t =   132.29s     Requesting snapshot of accessibility hierarchy for app with pid 17053
+    t =   132.43s Checking existence of `Any (First Match)`
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:84: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertTrue failed - wikova's plan waits: amber, named
+    t =   134.99s Added attachment named '14-three-activity'
+    t =   135.00s Requesting snapshot of accessibility hierarchy for app with pid 17053
+    t =   135.45s Requesting snapshot of accessibility hierarchy for app with pid 17053
+    t =   135.58s Waiting 10.0s for Button (First Match) to exist
+    t =   136.61s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =   136.61s         Checking existence of `Button (First Match)`
+    t =   136.90s         Capturing element debug description
+    t =   137.60s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =   137.61s         Checking existence of `Button (First Match)`
+    t =   137.87s         Capturing element debug description
+    t =   138.59s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =   138.59s         Checking existence of `Button (First Match)`
+    t =   138.94s         Capturing element debug description
+    t =   139.67s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =   139.67s         Checking existence of `Button (First Match)`
+    t =   139.93s         Capturing element debug description
+    t =   140.65s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =   140.65s         Checking existence of `Button (First Match)`
+    t =   140.94s         Capturing element debug description
+    t =   141.66s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =   141.66s         Checking existence of `Button (First Match)`
+    t =   142.01s         Capturing element debug description
+    t =   142.64s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =   142.64s         Checking existence of `Button (First Match)`
+    t =   142.92s         Capturing element debug description
+    t =   143.64s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =   143.64s         Checking existence of `Button (First Match)`
+    t =   144.02s         Capturing element debug description
+    t =   144.64s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =   144.65s         Checking existence of `Button (First Match)`
+    t =   144.88s         Capturing element debug description
+    t =   145.58s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =   145.58s         Checking existence of `Button (First Match)`
+    t =   145.81s         Capturing element debug description
+    t =   145.81s     Checking existence of `Button (First Match)`
+    t =   146.07s Collecting debug information to assist test failure triage
+    t =   146.07s     Requesting snapshot of accessibility hierarchy for app with pid 17053
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:157: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : failed - nothing to press says 3 proposals to review · 2 in wikova
+    t =   146.25s Waiting 20.0s for Any (First Match) to exist
+    t =   147.29s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   147.29s         Checking existence of `Any (First Match)`
+    t =   147.59s         Capturing element debug description
+    t =   148.26s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   148.28s         Checking existence of `Any (First Match)`
+    t =   149.14s         Capturing element debug description
+    t =   149.34s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   149.34s         Checking existence of `Any (First Match)`
+    t =   149.76s         Capturing element debug description
+    t =   150.29s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   150.29s         Checking existence of `Any (First Match)`
+    t =   150.67s         Capturing element debug description
+    t =   151.30s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   151.30s         Checking existence of `Any (First Match)`
+    t =   151.54s         Capturing element debug description
+    t =   152.28s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   152.28s         Checking existence of `Any (First Match)`
+    t =   152.66s         Capturing element debug description
+    t =   153.28s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   153.29s         Checking existence of `Any (First Match)`
+    t =   153.55s         Capturing element debug description
+    t =   154.29s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   154.29s         Checking existence of `Any (First Match)`
+    t =   154.64s         Capturing element debug description
+    t =   155.26s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   155.26s         Checking existence of `Any (First Match)`
+    t =   155.60s         Capturing element debug description
+    t =   156.33s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   156.33s         Checking existence of `Any (First Match)`
+    t =   156.76s         Capturing element debug description
+    t =   157.27s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   157.27s         Checking existence of `Any (First Match)`
+    t =   157.61s         Capturing element debug description
+    t =   158.33s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   158.33s         Checking existence of `Any (First Match)`
+    t =   158.73s         Capturing element debug description
+    t =   159.25s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   159.25s         Checking existence of `Any (First Match)`
+    t =   159.72s         Capturing element debug description
+    t =   160.33s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   160.33s         Checking existence of `Any (First Match)`
+    t =   162.11s         Capturing element debug description
+    t =   162.32s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   162.32s         Checking existence of `Any (First Match)`
+    t =   162.57s         Capturing element debug description
+    t =   163.28s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   163.28s         Checking existence of `Any (First Match)`
+    t =   163.56s         Capturing element debug description
+    t =   164.31s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   164.31s         Checking existence of `Any (First Match)`
+    t =   164.54s         Capturing element debug description
+    t =   165.28s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   165.28s         Checking existence of `Any (First Match)`
+    t =   165.63s         Capturing element debug description
+    t =   166.25s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   166.25s         Checking existence of `Any (First Match)`
+    t =   166.51s         Capturing element debug description
+    t =   166.51s     Checking existence of `Any (First Match)`
+    t =   166.86s Collecting debug information to assist test failure triage
+    t =   166.86s     Requesting snapshot of accessibility hierarchy for app with pid 17053
+    t =   166.99s Checking existence of `Any (First Match)`
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:90: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertTrue failed - Review over every space: 3
+    t =   169.46s Added attachment named '15-three-review'
+    t =   169.46s Requesting snapshot of accessibility hierarchy for app with pid 17053
+    t =   169.88s Requesting snapshot of accessibility hierarchy for app with pid 17053
+    t =   170.00s Tear Down
+Test Case '-[WikiProbeUITests.WikiShotsTests testThreeSpaces]' failed (170.515 seconds).
+Test Suite 'WikiShotsTests' failed at 2026-10-06 18:41:57.775.
+	 Executed 2 tests, with 9 failures (0 unexpected) in 236.728 (236.731) seconds
+Test Suite 'WikiProbeUITests.xctest' failed at 2026-10-06 18:41:57.776.
+	 Executed 2 tests, with 9 failures (0 unexpected) in 236.728 (236.732) seconds
+Test Suite 'All tests' failed at 2026-10-06 18:41:57.776.
+	 Executed 2 tests, with 9 failures (0 unexpected) in 236.728 (236.734) seconds
+2026-10-06 18:42:26.997 xcodebuild[3993:18433] [MT] IDETestOperationsObserverDebug: 306.162 elapsed -- Testing started completed.
+2026-10-06 18:42:26.997 xcodebuild[3993:18433] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-06 18:42:26.997 xcodebuild[3993:18433] [MT] IDETestOperationsObserverDebug: 306.162 sec, +306.162 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.wiki-probe/results/ios.xcresult
+
+Failing tests:
+	WikiShotsTests.testThreeSpaces()
+	WikiShotsTests.testThreeSpaces()
+	WikiShotsTests.testThreeSpaces()
+	WikiShotsTests.testThreeSpaces()
+	WikiShotsTests.testThreeSpaces()
+	WikiShotsTests.testThreeSpaces()
+	WikiShotsTests.testThreeSpaces()
+	WikiShotsTests.testThreeSpaces()
+	WikiShotsTests.testThreeSpaces()
+
+** TEST FAILED **
+
+Testing started
