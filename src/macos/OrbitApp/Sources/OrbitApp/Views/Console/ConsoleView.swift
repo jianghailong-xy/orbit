@@ -342,12 +342,6 @@ struct ConsoleView: View {
                     }
             }
         }
-        .confirmationDialog("Delete permanently?", isPresented: $confirmPurge, titleVisibility: .visible) {
-            Button("Delete Permanently", role: .destructive) { appModel.purgeSession(sessionID) }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This session and its full transcript will be permanently deleted. This can't be undone.")
-        }
         #else
         // The same link on macOS, from the window toolbar: a detail pane's own actions sit at
         // `.primaryAction` there, as the project and task pages' menus do.
@@ -466,6 +460,14 @@ struct ConsoleView: View {
         }
         .menuOrder(.fixed)
         .accessibilityLabel("Session actions")
+        // Raised by this menu, so it hangs off the menu rather than off the page: the panel opens
+        // against the ⋯ that was pressed.
+        .confirmationDialog("Delete permanently?", isPresented: $confirmPurge, titleVisibility: .visible) {
+            Button("Delete Permanently", role: .destructive) { appModel.purgeSession(sessionID) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This session and its full transcript will be permanently deleted. This can't be undone.")
+        }
     }
     #endif
 }

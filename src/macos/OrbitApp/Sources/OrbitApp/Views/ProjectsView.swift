@@ -465,24 +465,6 @@ struct ProjectDetailView: View {
         } message: {
             Text(notice ?? "")
         }
-        .confirmationDialog(confirmTitle, isPresented: Binding(get: { confirmingStatus != nil },
-                                                              set: { if !$0 { confirmingStatus = nil } }),
-                            titleVisibility: .visible) {
-            if let status = confirmingStatus {
-                Button(confirmButton(status), role: status == .cancelled ? .destructive : nil) {
-                    Task { notice = await store.setStatus(status) }
-                }
-            }
-        } message: {
-            Text(confirmMessage(store))
-        }
-        .confirmationDialog("Delete this project?", isPresented: $confirmingDelete, titleVisibility: .visible) {
-            Button("Delete project", role: .destructive) {
-                Task { notice = await store.delete() }
-            }
-        } message: {
-            Text("Only a project with no tasks can be deleted.")
-        }
     }
 
     // MARK: page
@@ -545,25 +527,6 @@ struct ProjectDetailView: View {
             .disabled(resolveReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         } message: { blocker in
             Text(ProjectPage.resolveBlockerMessage(blocker))
-        }
-        .confirmationDialog(listToResume?.pausedList.map(ProjectPage.resumeListQuestion) ?? "",
-                            isPresented: Binding(get: { listToResume != nil },
-                                                 set: { if !$0 { listToResume = nil } }),
-                            titleVisibility: .visible, presenting: listToResume) { item in
-            if let list = item.pausedList {
-                Button(ProjectPage.resumeListPress) {
-                    Task { notice = await store.resumeList(list.id) }
-                }
-            }
-        } message: { item in
-            Text(ProjectPage.resumeListDetail(item))
-        }
-        .confirmationDialog(ProjectPage.replaceCoordinatorQuestion, isPresented: $confirmingReplace,
-                            titleVisibility: .visible) {
-            Button(ProjectPage.replaceCoordinatorConfirm, role: .destructive) { replaceCoordinator(store) }
-            Button(ProjectPage.replaceCoordinatorKeep, role: .cancel) {}
-        } message: {
-            Text(ProjectPage.replaceCoordinatorDetail)
         }
     }
 
@@ -1123,6 +1086,15 @@ struct ProjectDetailView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .disabled(store.busy)
+                    // On the menu that asks, so the panel opens against it rather than at the top of
+                    // the page.
+                    .confirmationDialog(ProjectPage.replaceCoordinatorQuestion, isPresented: $confirmingReplace,
+                                        titleVisibility: .visible) {
+                        Button(ProjectPage.replaceCoordinatorConfirm, role: .destructive) { replaceCoordinator(store) }
+                        Button(ProjectPage.replaceCoordinatorKeep, role: .cancel) {}
+                    } message: {
+                        Text(ProjectPage.replaceCoordinatorDetail)
+                    }
                 } else if status.openability.canOpen {
                     Button { openCoordinator(store, focus: nil) } label: {
                         Text(status.state == .neverOpened ? "Start coordinator" : "Start a new coordinator")
@@ -1587,6 +1559,20 @@ struct ProjectDetailView: View {
                 .buttonBorderShape(.capsule)
                 .controlSize(.small)
                 .disabled(store.busy)
+                // On the row's own button, so the panel opens against it rather than at the top of
+                // the page.
+                .confirmationDialog(listToResume?.pausedList.map(ProjectPage.resumeListQuestion) ?? "",
+                                    isPresented: Binding(get: { listToResume != nil },
+                                                         set: { if !$0 { listToResume = nil } }),
+                                    titleVisibility: .visible, presenting: listToResume) { item in
+                    if let list = item.pausedList {
+                        Button(ProjectPage.resumeListPress) {
+                            Task { notice = await store.resumeList(list.id) }
+                        }
+                    }
+                } message: { item in
+                    Text(ProjectPage.resumeListDetail(item))
+                }
         case .running where item.sessionId != nil, .queued where item.sessionId != nil:
             Button(ProjectPage.openRunSession) {
                 if let session = item.sessionId { model.route(to: .session(session)) }
@@ -1873,6 +1859,26 @@ struct ProjectDetailView: View {
             Image(systemName: "ellipsis.circle")
         }
         .disabled(store.busy)
+        // Both asks are raised by this menu, so they hang off it rather than off the page: the panel
+        // opens against the ⋯ that was pressed.
+        .confirmationDialog(confirmTitle, isPresented: Binding(get: { confirmingStatus != nil },
+                                                              set: { if !$0 { confirmingStatus = nil } }),
+                            titleVisibility: .visible) {
+            if let status = confirmingStatus {
+                Button(confirmButton(status), role: status == .cancelled ? .destructive : nil) {
+                    Task { notice = await store.setStatus(status) }
+                }
+            }
+        } message: {
+            Text(confirmMessage(store))
+        }
+        .confirmationDialog("Delete this project?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+            Button("Delete project", role: .destructive) {
+                Task { notice = await store.delete() }
+            }
+        } message: {
+            Text("Only a project with no tasks can be deleted.")
+        }
     }
 
     /// Whether the project has a public link open; nil when that could not be read, so the menu

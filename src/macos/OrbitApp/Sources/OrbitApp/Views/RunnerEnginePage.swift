@@ -76,13 +76,6 @@ private struct RunnerEngineContent: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .confirmationDialog(removalTitle, isPresented: removalAsked, titleVisibility: .visible,
-                            presenting: pendingRemoval) { line in
-            Button("Remove", role: .destructive) { remove(line) }
-            Button("Cancel", role: .cancel) {}
-        } message: { line in
-            Text(removalNote(line))
-        }
         .alert("Rename Account", isPresented: renameAsked, presenting: renaming) { line in
             TextField(line.isDefault ? "Default" : "Name", text: $renameDraft)
             // Default action, so Return in the field commits.
@@ -213,6 +206,15 @@ private struct RunnerEngineContent: View {
                             }
                             .disabled(offline)
                         }
+                    }
+                    // On the account's own row, whose swipe raises it, so the panel opens against the
+                    // row rather than at the top of the page.
+                    .confirmationDialog(removalTitle, isPresented: removalAsked, titleVisibility: .visible,
+                                        presenting: pendingRemoval) { line in
+                        Button("Remove", role: .destructive) { remove(line) }
+                        Button("Cancel", role: .cancel) {}
+                    } message: { line in
+                        Text(removalNote(line))
                     }
             }
             if RunnerPageFormat.keepsAccounts(engine) {

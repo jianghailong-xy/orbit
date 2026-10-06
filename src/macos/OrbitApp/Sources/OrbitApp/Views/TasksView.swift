@@ -57,24 +57,6 @@ struct TasksListView: View {
             #endif
             .task { await navigationRefreshLoop(tasks) }
             .task(id: tasks.queryKey) { await listRefreshLoop(tasks) }
-            .confirmationDialog("Delete this task?", isPresented: deletePresented,
-                                titleVisibility: .visible) {
-                if let task = taskToDelete {
-                    Button("Delete \(task.title)", role: .destructive) {
-                        let id = task.id
-                        taskToDelete = nil
-                        Task {
-                            if await tasks.deleteTask(id), model.selectedTaskID == id {
-                                model.selectedTaskID = nil
-                            }
-                        }
-                    }
-                    .disabled(tasks.isMutating(task.id))
-                }
-                Button("Cancel", role: .cancel) { taskToDelete = nil }
-            } message: {
-                Text("This can't be undone. Finished run sessions are kept; a run still in flight is stopped.")
-            }
             #if os(iOS)
             .toolbar { compactToolbar(tasks) }
             .environment(\.editMode, .constant(selecting ? .active : .inactive))
@@ -560,6 +542,26 @@ struct TasksListView: View {
                 .disabled(tasks.isMutating(task.id))
             }
             .contextMenu { rowMenu(tasks, task) }
+            // On the row that asks — the swipe and the long-press menu both raise it — so the panel
+            // opens against the row rather than at the top of the page.
+            .confirmationDialog("Delete this task?", isPresented: deletePresented,
+                                titleVisibility: .visible) {
+                if let task = taskToDelete {
+                    Button("Delete \(task.title)", role: .destructive) {
+                        let id = task.id
+                        taskToDelete = nil
+                        Task {
+                            if await tasks.deleteTask(id), model.selectedTaskID == id {
+                                model.selectedTaskID = nil
+                            }
+                        }
+                    }
+                    .disabled(tasks.isMutating(task.id))
+                }
+                Button("Cancel", role: .cancel) { taskToDelete = nil }
+            } message: {
+                Text("This can't be undone. Finished run sessions are kept; a run still in flight is stopped.")
+            }
     }
 
     @ViewBuilder
@@ -1202,6 +1204,22 @@ private struct TaskDetailContent: View {
                         Image(systemName: "ellipsis.circle")
                     }
                     .accessibilityLabel("Task actions")
+                    // Raised by this menu, so it hangs off the ⋯ that was pressed rather than off the
+                    // page.
+                    .confirmationDialog("Delete this task?", isPresented: $confirmingDelete,
+                                        titleVisibility: .visible) {
+                        Button("Delete task", role: .destructive) {
+                            Task {
+                                if await tasks.deleteTask(taskID), model.selectedTaskID == taskID {
+                                    model.selectedTaskID = nil
+                                }
+                            }
+                        }
+                        .disabled(tasks.isMutating(taskID))
+                        Button("Cancel", role: .cancel) { }
+                    } message: {
+                        Text("This can't be undone. Finished run sessions are kept; a run still in flight is stopped.")
+                    }
                 }
             }
         }
@@ -1268,57 +1286,6 @@ private struct TaskDetailContent: View {
         .fileImporter(isPresented: $importingInput, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result else { return }
             Task { await addInputs(urls) }
-        }
-        .confirmationDialog("Delete this task?", isPresented: $confirmingDelete,
-                            titleVisibility: .visible) {
-            Button("Delete task", role: .destructive) {
-                Task {
-                    if await tasks.deleteTask(taskID), model.selectedTaskID == taskID {
-                        model.selectedTaskID = nil
-                    }
-                }
-            }
-            .disabled(tasks.isMutating(taskID))
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("This can't be undone. Finished run sessions are kept; a run still in flight is stopped.")
-        }
-        // The way back from a status already written — offered on the three statuses that mean the
-        // work has stopped, and asked once. Answered with `TaskReopen.modalOK` rather than the
-        // question's words: the press has already been made once.
-        .confirmationDialog(TaskReopenCopy.modalTitle, isPresented: $confirmingReopen,
-                            titleVisibility: .visible) {
-            Button(TaskReopenCopy.modalOK) {
-                Task { _ = await tasks.reopen(taskID) }
-            }
-            .disabled(tasks.isMutating(taskID))
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            // The sentences the browser's question carries, in the same order — the conditional ones
-            // are included by `paragraphs` only when they are true of this row.
-            Text(TaskReopen.paragraphs(tasks.detail).joined(separator: "\n\n"))
-        }
-        .confirmationDialog(TaskDetailCopy.removeInputTitle,
-                            isPresented: Binding(get: { inputToRemove != nil },
-                                                 set: { if !$0 { inputToRemove = nil } }),
-                            titleVisibility: .visible, presenting: inputToRemove) { input in
-            Button(TaskDetailCopy.remove, role: .destructive) {
-                Task { await tasks.removeInput(taskID, inputID: input.id) }
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: { _ in
-            Text(TaskDetailCopy.removeInputDetail)
-        }
-        .confirmationDialog(TaskDetailCopy.removePrerequisiteTitle,
-                            isPresented: Binding(get: { prerequisiteToRemove != nil },
-                                                 set: { if !$0 { prerequisiteToRemove = nil } }),
-                            titleVisibility: .visible, presenting: prerequisiteToRemove) { row in
-            Button(TaskDetailCopy.remove, role: .destructive) {
-                Task { await tasks.removeDependency(taskID, dependsOn: row.id) }
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: { _ in
-            Text(TaskDetailCopy.removePrerequisiteDetail)
         }
     }
 
@@ -1586,6 +1553,22 @@ private struct TaskDetailContent: View {
             .buttonStyle(.bordered)
             .controlSize(.large)
             .disabled(tasks.isMutating(task.id))
+            // The way back from a status already written — offered on the three statuses that mean
+            // the work has stopped, and asked once, on the button that asks. Answered with
+            // `TaskReopen.modalOK` rather than the question's words: the press has already been made
+            // once.
+            .confirmationDialog(TaskReopenCopy.modalTitle, isPresented: $confirmingReopen,
+                                titleVisibility: .visible) {
+                Button(TaskReopenCopy.modalOK) {
+                    Task { _ = await tasks.reopen(taskID) }
+                }
+                .disabled(tasks.isMutating(taskID))
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                // The sentences the browser's question carries, in the same order — the conditional
+                // ones are included by `paragraphs` only when they are true of this row.
+                Text(TaskReopen.paragraphs(tasks.detail).joined(separator: "\n\n"))
+            }
         }
     }
 
@@ -1982,6 +1965,19 @@ private struct TaskDetailContent: View {
                 .foregroundStyle(.secondary)
                 .accessibilityLabel("Remove \(row.node.title) as a prerequisite")
                 .disabled(tasks.isMutating(taskID))
+                // On the row's own button, so the panel opens against it rather than at the top of
+                // the page.
+                .confirmationDialog(TaskDetailCopy.removePrerequisiteTitle,
+                                    isPresented: Binding(get: { prerequisiteToRemove != nil },
+                                                         set: { if !$0 { prerequisiteToRemove = nil } }),
+                                    titleVisibility: .visible, presenting: prerequisiteToRemove) { row in
+                    Button(TaskDetailCopy.remove, role: .destructive) {
+                        Task { await tasks.removeDependency(taskID, dependsOn: row.id) }
+                    }
+                    Button("Cancel", role: .cancel) { }
+                } message: { _ in
+                    Text(TaskDetailCopy.removePrerequisiteDetail)
+                }
             }
         }
     }
@@ -2062,6 +2058,19 @@ private struct TaskDetailContent: View {
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("Remove input")
                     .disabled(tasks.isMutating(task.id))
+                    // On the row's own button, so the panel opens against it rather than at the top
+                    // of the page.
+                    .confirmationDialog(TaskDetailCopy.removeInputTitle,
+                                        isPresented: Binding(get: { inputToRemove != nil },
+                                                             set: { if !$0 { inputToRemove = nil } }),
+                                        titleVisibility: .visible, presenting: inputToRemove) { input in
+                        Button(TaskDetailCopy.remove, role: .destructive) {
+                            Task { await tasks.removeInput(taskID, inputID: input.id) }
+                        }
+                        Button("Cancel", role: .cancel) { }
+                    } message: { _ in
+                        Text(TaskDetailCopy.removeInputDetail)
+                    }
                 }
             }
             Button { importingInput = true } label: {

@@ -1106,13 +1106,6 @@ private struct SharedLinksSettingsPage: View {
         .navigationTitle(SharedLinksList.title)
         .task { await model.sharedLinks?.load() }
         .refreshable { await model.sharedLinks?.load() }
-        .confirmationDialog(SharePanelCopy.turnOffTitle, isPresented: turnOffAsked, titleVisibility: .visible,
-                            presenting: pendingTurnOff) { link in
-            Button(SharePanelCopy.turnOff, role: .destructive) { Task { await turnOff(link) } }
-            Button(SharePanelCopy.cancel, role: .cancel) {}
-        } message: { _ in
-            Text(SharePanelCopy.turnOffDetail)
-        }
         .overlay(alignment: .bottom) {
             if let notice {
                 Text(notice)
@@ -1166,6 +1159,15 @@ private struct SharedLinksSettingsPage: View {
                     Label(SharePanelCopy.turnOff, systemImage: "xmark.circle")
                 }
             }
+        }
+        // On the link's own row — the swipe and the long-press menu both raise it — so the panel opens
+        // against that row rather than at the top of the page.
+        .confirmationDialog(SharePanelCopy.turnOffTitle, isPresented: turnOffAsked, titleVisibility: .visible,
+                            presenting: pendingTurnOff) { link in
+            Button(SharePanelCopy.turnOff, role: .destructive) { Task { await turnOff(link) } }
+            Button(SharePanelCopy.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(SharePanelCopy.turnOffDetail)
         }
     }
 
