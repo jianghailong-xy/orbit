@@ -5,12 +5,20 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { randomBytes } from 'node:crypto';
 import { generateToken, hashPassword, sha256, verifyPassword } from '../common/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { PatService } from './pat.service';
 
 /** Refresh-token lifetime (sliding — each rotation issues a fresh one with a new window). */
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+/**
+ * What the password login checks an account without a password against (docs/google-sign-in-design.md
+ * §5.1): a salt and a key no password derives, so the attempt costs one scrypt and fails exactly as a
+ * wrong password does — the same 401, after the same work.
+ */
+const NO_PASSWORD = `${randomBytes(16).toString('hex')}:${randomBytes(64).toString('hex')}`;
 
 @Injectable()
 export class AuthService {
@@ -22,9 +30,20 @@ export class AuthService {
 
   async login(email: string, password: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user || !verifyPassword(password, user.passwordHash)) {
+    if (!user || !verifyPassword(password, user.passwordHash ?? NO_PASSWORD)) {
       throw new UnauthorizedException('invalid credentials');
     }
+    return this.completeLogin(user);
+  }
+
+  /**
+   * The one exit every sign-in leaves by — the password, the first-run bootstrap and a Google ticket
+   * (docs/google-sign-in-design.md §9.2) — so they answer alike: the access token, the refresh token
+   * and the user, whichever way the person signed in. What has to follow a sign-in, such as the managed
+   * runner's provisioning intent (docs/managed-runner-design.md), goes here, after the tokens are
+   * issued. A refresh is not a sign-in and does not come through here.
+   */
+  async completeLogin(user: { id: string; email: string; name: string }) {
     return this.tokenFor(user.id, user.email, user.name);
   }
 
@@ -58,7 +77,7 @@ export class AuthService {
         role: 'ADMIN',
       },
     });
-    return this.tokenFor(user.id, user.email, user.name);
+    return this.completeLogin(user);
   }
 
   /**
@@ -68,9 +87,18 @@ export class AuthService {
    */
   async changePassword(userId: string, currentPassword: string, newPassword: string, revokeAccessTokens = false) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    // An account without a password signs in with Google only (docs/google-sign-in-design.md §5.4):
+    // it has no current password to give, and is told so — a 400, for the reason below. An
+    // administrator's password reset gives it one.
+    if (user?.passwordHash === null) {
+      throw new BadRequestException({
+        code: 'PASSWORD_NOT_SET',
+        message: 'This account signs in with Google and has no password to change — an administrator can set one',
+      });
+    }
     // Wrong current password returns 400, not 401: the web client treats any 401 as an
     // expired session and force-logs-out, which must not happen while filling this form.
-    if (!user || !verifyPassword(currentPassword, user.passwordHash)) {
+    if (!user?.passwordHash || !verifyPassword(currentPassword, user.passwordHash)) {
       throw new BadRequestException('current password is incorrect');
     }
     if (verifyPassword(newPassword, user.passwordHash)) {

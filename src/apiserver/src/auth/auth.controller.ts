@@ -4,15 +4,26 @@ import { AuthService } from './auth.service';
 import { BootstrapDto, ChangePasswordDto, LoginDto, RefreshDto } from './dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { PatForbidden } from './pat-scope.decorator';
+import { SignInProvidersService } from './sign-in-providers.service';
 
 @PatForbidden('AUTH')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly signIn: SignInProvidersService,
+  ) {}
 
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto.email, dto.password);
+  }
+
+  /** Public: the ways this deployment signs people in, so a login page offers Google only when it
+   *  is on (docs/google-sign-in-design.md §6). */
+  @Get('methods')
+  methods() {
+    return this.signIn.methods();
   }
 
   /** Public: whether the system still has zero users, so the web can funnel to /setup. */
