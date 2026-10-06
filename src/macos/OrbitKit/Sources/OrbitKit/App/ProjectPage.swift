@@ -411,13 +411,23 @@ public enum ProjectPage {
     }
 
     /// A missing read is not an empty inbox. A start request counts only while the page can answer
-    /// it; the owner's own Start… is an action, not something anybody is waiting on.
+    /// it; the owner's own Start… is an action, not something anybody is waiting on. The
+    /// coordinator's request to record the project done counts the same way, while the project is
+    /// OPEN — and the owner's own Record as done… no more than their own Start… does.
     public static func openItemsSummary(status: ProjectStatus, started: Bool?,
                                         items: ProjectOpenItemsView?) -> OpenItemsSummary? {
         guard let items else { return nil }
         let start = StartProject.pageRow(status: status, started: started, openItems: items)
-        return OpenItemsSummary(needsYou: items.needsYou.count + (start?.request == nil ? 0 : 1),
+        let done = ProjectDone.live(openItems: items, status: status.rawValue)
+        return OpenItemsSummary(needsYou: needsYouRows(items).count + (start?.request == nil ? 0 : 1)
+                                    + (done == nil ? 0 : 1),
                                 withCoordinator: items.withCoordinator.count)
+    }
+
+    /// The owner's rows, without the request to record the project done should a server ever list
+    /// it there too: it has a row of its own (`ProjectDone.PageRow`), as the browser keeps it out.
+    public static func needsYouRows(_ items: ProjectOpenItemsView) -> [ProjectOpenItemRow] {
+        items.needsYou.filter { $0.doneRequest == nil }
     }
 
     /// "You" / "Coordinator".

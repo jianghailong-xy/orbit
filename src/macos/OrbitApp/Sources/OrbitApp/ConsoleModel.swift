@@ -1781,6 +1781,7 @@ final class ConsoleModel {
         // coordinator asking to start its project lands on its row as a count (`waitingKind`
         // START_REQUEST), and the card that asks it is drawn from the read this kicks.
         let waiting = "\(session.pendingApprovals ?? 0)|\(session.waitingKind?.rawValue ?? "")"
+        sessionWaitingKind = session.waitingKind
         if waiting != waitingSignal {
             waitingSignal = waiting
             if projectID != nil {
@@ -3318,6 +3319,25 @@ final class ConsoleModel {
     /// `waitingKind`): a change is what makes the project's cards worth reading again — a
     /// coordinator asking to start its project lands on this row as a count before anything else.
     private var waitingSignal: String?
+    /// What that row says the owner is waiting on — `RECORD_AS_DONE` puts "Is this project done?" up
+    /// with no request behind it (`ProjectDone.slot`).
+    private var sessionWaitingKind: SessionWaitingKind?
+
+    // MARK: closing the project — "Is this project done?" and "Why is this project not done?"
+
+    /// The project as the closing cards read it — the projection of its facts, and its done record —
+    /// off the same document read as its criteria. Nil until that read answers; a read that fails
+    /// leaves the last answer standing.
+    private(set) var projectDone: ProjectDoneSubject?
+    /// The coordinator's open request to record the project done, while there is one
+    /// (`ProjectDone.live`).
+    private(set) var doneRequestRow: ProjectOpenItemRow?
+    /// What a press here recorded, before the document read catches up with it — the receipt the card
+    /// turns into in place (web's `doneReceipt`).
+    private(set) var doneRecord: ProjectDoneRecord?
+    /// When that press came back. A document read begun after it that still says the project is not
+    /// DONE means it was reopened since — here or at another end — and the press no longer stands.
+    private var doneRecordAt: Date?
 
     /// The task whose run this conversation is, adopted from the session payload. Nil for an
     /// ordinary conversation, and then nothing below ever asks about a confirmation: the card is
@@ -3405,6 +3425,12 @@ final class ConsoleModel {
             // is not pointed at.
             case .startProject(let itemID):
                 return waiting(StartProject.isOpen(startStanding(itemID)), question: true)
+            // "Is this project done?" while it is asking — not once it is its own receipt — and the
+            // card that explains why it is not done, which asks nothing.
+            case .projectDone:
+                return waiting(doneCardAsking, question: true)
+            case .projectNotDone:
+                return nil
             case .criteriaChange:
                 return waiting(CriteriaChanges.isOpen(acceptanceConfirmation), question: true)
             case .evidenceDecision(let taskID, let evidenceRevision):
@@ -3559,12 +3585,20 @@ final class ConsoleModel {
             acceptanceConfirmation = standing
             adoptAcceptanceReceipt()
         }
+        let documentAskedAt = Date()
         if let document = try? await api.projectCriteria(projectID: projectID) {
             projectCriteria = document.acceptanceCriteriaItems ?? []
             projectDocumentTitle = document.title
             projectStatus = document.status
             projectStarted = document.started
             projectTaskCount = document.taskCount
+            projectDone = document.doneSubject
+            // A read asked for after a press here, and still not DONE: the project was reopened, so
+            // the press's own record no longer makes the card a receipt (`ProjectDone.recorded`).
+            if document.status != "DONE", let at = doneRecordAt, documentAskedAt > at {
+                doneRecord = nil
+                doneRecordAt = nil
+            }
         }
         // The project's two owner cards. Same rule as the four above: each is independent, a read
         // that fails leaves the last answer standing, and neither may close a card.
@@ -3631,6 +3665,9 @@ final class ConsoleModel {
         // plan passed Orbit's ready check — the open START_REQUEST the open-items read above serves
         // — and never inferred from the project holding a task.
         adoptStartRequest()
+        // And the closing card: "Is this project done?" once the coordinator asks — or its receipt
+        // once the project is recorded done — and otherwise why it is not done yet.
+        adoptDoneSlot()
         if startRequestRow != nil, let graph = try? await api.projectDependencyGraph(projectID) {
             projectGraph = graph
         }
@@ -3695,6 +3732,102 @@ final class ConsoleModel {
 
     func setStartDraft(_ draft: StartSettingsDraft, for itemID: String) {
         startDrafts[itemID] = draft
+    }
+
+    /// Which closing card this conversation draws (`ProjectDone.slot`), adopted from the reads — one
+    /// at a time, the way the browser's `SessionProjectSettlementCard` switches between them: "Is
+    /// this project done?" while the coordinator's request stands (or the row says Record as done…),
+    /// its receipt once the project is recorded done, and otherwise "Why is this project not done?".
+    ///
+    /// Each card is re-derived from the reads on every render, so a request the coordinator filed
+    /// again is the same card with the new request in it. A read that has not answered changes
+    /// nothing on screen.
+    private func adoptDoneSlot() {
+        let live = ProjectDone.live(openItems: openItems, status: projectDone?.status)
+        doneRequestRow = live
+        switch ProjectDone.slot(subject: projectDone, request: live, waitingKind: sessionWaitingKind,
+                                record: doneRecord, started: projectStarted) {
+        case .none:
+            break
+        case .notDone:
+            decisionCards.removeAll { $0.kind == .projectDone }
+            deliver(.projectNotDone)
+        case .done:
+            decisionCards.removeAll { $0.kind == .projectNotDone }
+            deliver(.projectDone, placement: donePlacement(live))
+        }
+    }
+
+    /// Whether the done card is asking the owner right now: the project is not recorded done, and the
+    /// coordinator's request stands or the row says Record as done….
+    private var doneCardAsking: Bool {
+        guard let subject = projectDone, !ProjectDone.recorded(subject, record: doneRecord) else { return false }
+        return doneRequestRow != nil || sessionWaitingKind == .recordAsDone
+    }
+
+    /// Where the done card goes when it arrives: a request — the question — where it arrived, like
+    /// the start card; a project already recorded done, where that happened (`DeliveryAnchor`).
+    private func donePlacement(_ live: ProjectOpenItemRow?) -> DeliveredDecisionCard.Placement {
+        if live == nil, let subject = projectDone, ProjectDone.recorded(subject, record: doneRecord),
+           let at = doneRecord?.doneAt ?? subject.doneAt, ThinkingSummary.date(at) != nil {
+            return .at(at)
+        }
+        return .onArrival(afterItemID: DeliveryAnchor.onArrival(of: .projectDone, items: state.items))
+    }
+
+    /// Record the project done from its card (`POST /projects/:id/done`, `ProjectDone.body`): the
+    /// request the card answers and that request's own seal — or, unasked, the seal standing now —
+    /// and the gaps the card shows. The card turns into its receipt in place; a request superseded
+    /// meanwhile, or a seal that moved, is a 409 that writes nothing, said over the door's words.
+    func recordProjectDone() async {
+        guard let projectID, let subject = projectDone,
+              let body = ProjectDone.body(subject: subject, requestID: doneRequestRow?.itemId,
+                                          request: doneRequestRow?.doneRequest,
+                                          currentDigest: acceptanceConfirmation?.currentVersion.digest)
+        else { return }
+        do {
+            doneRecord = try await api.recordProjectDone(projectID: projectID, body)
+            doneRecordAt = Date()
+        } catch {
+            statusMessage = "\(ProjectDone.notRecorded) — \(APIClient.failureReason(error))."
+        }
+        await refreshRulerQuestions(force: true)
+    }
+
+    /// "Not yet…": the coordinator's request is ended with the owner's note, which reaches this
+    /// conversation's agent with the card's facts; the card gives way to why the project is not done.
+    /// Says whether the note went.
+    func declineDoneRequest(note: String) async -> Bool {
+        guard let projectID, let row = doneRequestRow else { return false }
+        do {
+            _ = try await api.declineDoneRequest(projectID: projectID, itemID: row.itemId, note: note)
+        } catch {
+            statusMessage = "\(ProjectDone.notDeclined) — \(APIClient.failureReason(error))."
+            return false
+        }
+        await refreshRulerQuestions(force: true)
+        return true
+    }
+
+    /// Reopen project, from the receipt — the same status door the project page's menu presses.
+    func reopenProject() async {
+        guard let projectID else { return }
+        do {
+            _ = try await api.updateProjectStatus(projectID, to: .open)
+            doneRecord = nil
+            doneRecordAt = nil
+        } catch {
+            statusMessage = "\(ProjectDone.notReopened) — \(APIClient.failureReason(error))."
+        }
+        await refreshRulerQuestions(force: true)
+    }
+
+    /// "Ask the coordinator to handle it": the card's own facts — the blocked criteria, what each is
+    /// waiting on and what would clear them — as one ordinary turn to this conversation's agent
+    /// (web's `delegateProjectSettlement`). The facts are the whole message; the card stays.
+    func askCoordinatorAboutDone() async {
+        guard let subject = projectDone else { return }
+        await send(overrideText: ProjectDone.settlementContext(subject))
     }
 
     /// Whether a STARTED project's criteria moved since the owner confirmed them, and the server
