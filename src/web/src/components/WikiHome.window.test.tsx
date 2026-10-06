@@ -10,15 +10,16 @@ import { WIKI_NO_ENTRIES, WIKI_NO_PRINCIPLES } from '../lib/wiki';
 import { WikiPage } from '../pages/WikiPage';
 
 /**
- * The home in a space whose principles and decisions are all OLDER than its 200 newest entries — the
- * orbit space's shape, eleven thousand entries deep — driven through the real routes against a fake
- * `/api` whose entries read answers the way `listEntries` does: filtered by `kind` and `status`, newest
- * record first, at most 200.
+ * The home's principles and Activity's decisions in a space whose principles and decisions are all OLDER
+ * than its 200 newest entries — the orbit space's shape, eleven thousand entries deep — driven through the
+ * real routes against a fake `/api` whose entries read answers the way `listEntries` does: filtered by
+ * `kind` and `status`, newest record first, at most 200.
  *
  * Out of the 200 newest entries of every kind the home used to pick its principles and its decisions,
  * so this space drew none of either and said "Nothing has been recorded in this space yet."; a Review
- * card about an entry outside that window said "An entry". Each band now reads its own kind, and a
- * Review card names its entry by the title Review's read carries.
+ * card about an entry outside that window said "An entry". Each band now reads its own kind — the
+ * principles on the home, the decisions on Activity, where the home's other blocks went (design §12.3) —
+ * and a Review card names its entry by the title Review's read carries.
  */
 
 const SPACE_ID = '0196e100-0000-7000-8000-000000000001';
@@ -157,6 +158,7 @@ async function serve(url: string): Promise<Response> {
 
 let container: HTMLDivElement;
 let root: Root;
+let mounted = false;
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -172,6 +174,7 @@ beforeEach(() => {
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
+  mounted = false;
 });
 
 afterEach(() => {
@@ -181,15 +184,22 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function open(): Promise<void> {
+async function open(path = '/wiki/orbit'): Promise<void> {
+  // Each open is a fresh page: a second one in a test must not inherit the first's router or reads.
+  if (mounted) {
+    act(() => root.unmount());
+    root = createRoot(container);
+  }
+  mounted = true;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/wiki/orbit']}>
+        <MemoryRouter initialEntries={[path]}>
           <AntApp>
             <Routes>
               <Route path="/wiki/:space" element={<WikiPage route="home" />} />
+              <Route path="/wiki/:space/activity" element={<WikiPage route="activity" />} />
             </Routes>
           </AntApp>
         </MemoryRouter>
@@ -207,7 +217,7 @@ const card = (title: string): Element | undefined =>
     (section) => words(section.querySelector('.project-open-items-title')) === title,
   );
 
-describe('the Wiki home, in a space with 200 newer entries than its principles and decisions', () => {
+describe('the Wiki home and Activity, in a space with 200 newer entries than its principles and decisions', () => {
   it('is a space whose 200 newest entries hold no principle and no decision', () => {
     const window = listEntries(new URLSearchParams('limit=200'));
     expect(window).toHaveLength(200);
@@ -215,17 +225,18 @@ describe('the Wiki home, in a space with 200 newer entries than its principles a
     expect(window.map((row) => row.id)).not.toContain(OLD_PITFALL.id);
   });
 
-  it('still lists every principle, oldest recorded first, whatever its status', async () => {
+  it('still lists every principle on the home, oldest recorded first, whatever its status', async () => {
     await open();
-    const principles = card('Principles');
-    expect([...principles!.querySelectorAll('.wk-row .tt')].map(words)).toEqual(PRINCIPLES.map((row) => row.title));
-    expect(words(principles!.querySelector('.project-open-items-hint'))).toBe('3 · written by you · pinned');
+    const principles = container.querySelector('.wk-home .wk-home-pr');
+    expect(words(principles?.querySelector('.wk-pl-cat-h b'))).toBe('Principles');
+    expect([...principles!.querySelectorAll('.wk-pl-doc .tt')].map(words)).toEqual(PRINCIPLES.map((row) => row.title));
+    expect(words(principles!.querySelector('.wk-home-n'))).toBe('3');
     expect(words(container)).not.toContain(WIKI_NO_ENTRIES);
     expect(reads).toContain(`/api/wiki/spaces/${SPACE_ID}/entries?kind=principle&limit=200`);
   });
 
-  it('still shows the four newest decisions, newest first', async () => {
-    await open();
+  it('still shows Activity the four newest decisions, newest first', async () => {
+    await open('/wiki/orbit/activity');
     const decisions = card('Recent decisions');
     expect([...decisions!.querySelectorAll('.wk-dec .t')].map(words)).toEqual([
       'Decision 6',
@@ -236,8 +247,8 @@ describe('the Wiki home, in a space with 200 newer entries than its principles a
     expect(reads).toContain(`/api/wiki/spaces/${SPACE_ID}/entries?kind=decision&limit=4`);
   });
 
-  it('names the entry a waiting challenge is about, though no entry read of the page holds it', async () => {
-    await open();
+  it('names on Activity the entry a waiting challenge is about, though no entry read of the page holds it', async () => {
+    await open('/wiki/orbit/activity');
     const review = card('Review');
     expect(words(review!.querySelector('.wk-rv-row .t'))).toBe(OLD_PITFALL.title);
     expect(words(review)).not.toContain('An entry');
@@ -245,11 +256,14 @@ describe('the Wiki home, in a space with 200 newer entries than its principles a
     expect(words(container.querySelector('.wk-banner .t'))).toBe('1 proposal to review');
   });
 
-  it('says there is no principle, not that the space holds nothing, when it has entries but no principle', async () => {
+  it('draws no Principles on the home when the space has entries but no principle, and says nothing of it', async () => {
     store = store.filter((row) => row.kind !== 'principle');
     await open();
-    expect(words(card('Principles'))).toContain(WIKI_NO_PRINCIPLES);
+    expect(container.querySelector('.wk-home-pr')).toBeNull();
+    expect(words(container)).not.toContain('Principles');
+    expect(words(container)).not.toContain(WIKI_NO_PRINCIPLES);
     expect(words(container)).not.toContain(WIKI_NO_ENTRIES);
+    await open('/wiki/orbit/activity');
     expect([...card('Recent decisions')!.querySelectorAll('.wk-dec .t')]).toHaveLength(4);
   });
 });

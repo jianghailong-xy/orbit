@@ -9,16 +9,16 @@ import { App as AntApp } from 'antd';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiChangesetView } from '@orbit/shared';
 import { WIKI_DEFAULT_SPACE_SETTINGS } from '@orbit/shared';
-import type { WikiSpaceWithUsage, WikiTimelineItem } from '../lib/wiki';
-import { WikiHome } from './WikiHome';
+import type { WikiSpaceRow, WikiTimelineItem } from '../lib/wiki';
+import { WikiActivityPage } from './WikiActivityPage';
 import { WikiRunDrawer } from './WikiRunPage';
 
 /**
  * One run (mock 17 ⑦⑧⑨, 18 ④⑤): its drawer reads the run by its own id (`GET /api/wiki/changesets/:id`),
  * says what the server counted and groups its entries, offers Revert run… exactly when the server says
- * it can and then takes it back through `POST /api/wiki/changesets/:id/revert`, and Recently changed
- * folds every run into one row with View run and Revert run… under it — whether or not anything of it
- * still waits in Review, which this door answers empty throughout.
+ * it can and then takes it back through `POST /api/wiki/changesets/:id/revert`, and Activity's Recently
+ * changed folds every run into one row with View run and Revert run… under it — whether or not anything of
+ * it still waits in Review, which this door answers empty throughout.
  *
  * The runs are the shared fixture's (`wiki-review-mode.fixture.json`), which OrbitKit is held to too.
  */
@@ -236,8 +236,8 @@ describe('one run’s drawer', () => {
   });
 });
 
-describe('Recently changed', () => {
-  const space: WikiSpaceWithUsage = {
+describe('Recently changed, on Activity', () => {
+  const space: WikiSpaceRow = {
     id: SPACE_ID,
     slug: 'orbit',
     title: 'orbit',
@@ -246,10 +246,11 @@ describe('Recently changed', () => {
     settings: WIKI_DEFAULT_SPACE_SETTINGS as never,
     createdAt: '2026-09-20T00:00:00.000Z',
     updatedAt: '2026-09-20T00:00:00.000Z',
+    pendingOps: 0,
   };
 
   it('folds every run into one row by the changeset its items name, with View run and Revert run…', async () => {
-    await render(<WikiHome space={space} />);
+    await render(<WikiActivityPage space={space} spaces={[space]} status={null} />);
     await vi.waitFor(() => expect(container.querySelectorAll('.wk-tl-run .wk-tl-n')).toHaveLength(2));
     const rows = [...container.querySelectorAll<HTMLElement>('.wk-tl > li')];
     expect(rows).toHaveLength(3);
