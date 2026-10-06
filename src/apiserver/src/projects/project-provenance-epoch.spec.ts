@@ -193,6 +193,8 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
     'persists and replay-checks completion-evidence source provenance; grants no project authority',
   'src/apiserver/src/tasks/task-completion-test-helper.ts':
     'drives fixture tasks to DONE through VERIFICATION for PostgreSQL tests; does not read Task provenance',
+  'src/apiserver/src/auth/tenant-isolation-cases.ts':
+    "sends another account's evidence source Session in the tenant isolation census's requests; does not read Task provenance",
   // Unit L7, the far side of the API. These render what the surface sent and are the reason the
   // rule has to travel IN the payload rather than in a comment: a client is where "I found this
   // here" would most plausibly be mistaken for "so it belongs here", and the card prints the

@@ -572,7 +572,8 @@ orbit api [-X METHOD] PATH [--data JSON | --data-file -] [--paginate] [--json]  
   状态 `PENDING | APPROVED | DENIED | DELIVERED`，决定者与决定时间，请求自身 10 分钟的到期。决定者被删除时级联删除。
 - 轮询应答 `{status}`：`pending`、`approved`（带签发应答的全部字段，含 `token`）、`denied`、`expired`、`delivered`。
   已拒绝、已取走的请求过了 10 分钟仍如实回答；已批准却没在 10 分钟内取走的答 `expired`，不再签发。
-  过期请求的查询、批准、拒绝都是 404。拒绝过的再批准、已批准的再拒绝是 409 `PAT_DEVICE_LOGIN_DECIDED`；
+  过期请求的查询、批准、拒绝都是 404；已由某个账号决定的请求，对其他账号的查询、批准、拒绝也是 404（租户隔离普查，
+  见 google-sign-in-design.md §11 T1）。拒绝过的再批准、已批准的再拒绝是 409 `PAT_DEVICE_LOGIN_DECIDED`；
   同一个人重复同一决定，照原样回答。
 - `start` 按签发的规则校验：名字去掉空白后非空、至多 100 字符；`scopes` 列表与 `preset`（`read-only` | `read-write`，
   由服务端按 `PAT_SCOPES` 展开）二选一；`expiresInDays` 取 30、90、365 或 `null`，不传为 90。
