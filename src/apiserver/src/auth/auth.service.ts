@@ -7,6 +7,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { generateToken, hashPassword, sha256, verifyPassword } from '../common/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
+import { PatService } from './pat.service';
 
 /** Refresh-token lifetime (sliding — each rotation issues a fresh one with a new window). */
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -16,6 +17,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly pats: PatService,
   ) {}
 
   async login(email: string, password: string) {
@@ -59,7 +61,12 @@ export class AuthService {
     return this.tokenFor(user.id, user.email, user.name);
   }
 
-  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+  /**
+   * Personal access tokens keep working across a password change unless the person asks to revoke
+   * them too (§11.3) — a script should not stop because a password changed. Answers how many tokens
+   * this revoked.
+   */
+  async changePassword(userId: string, currentPassword: string, newPassword: string, revokeAccessTokens = false) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     // Wrong current password returns 400, not 401: the web client treats any 401 as an
     // expired session and force-logs-out, which must not happen while filling this form.
@@ -69,11 +76,15 @@ export class AuthService {
     if (verifyPassword(newPassword, user.passwordHash)) {
       throw new BadRequestException('new password must be different from the current password');
     }
+    // The tokens before the password: a request that fails between the two has ended the tokens it
+    // was asked to and left the old password, which a retry finishes — never a new password with
+    // tokens still working that the person meant to end.
+    const revokedAccessTokens = revokeAccessTokens ? await this.pats.revokeAll(userId, 'PASSWORD_CHANGED') : 0;
     await this.prisma.user.update({
       where: { id: userId },
       data: { passwordHash: hashPassword(newPassword) },
     });
-    return { success: true };
+    return { success: true, revokedAccessTokens };
   }
 
   /**

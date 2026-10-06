@@ -1051,6 +1051,76 @@ export const listShareLinks = () => api<{ links: ShareLink[] }>('/share-links');
 export const turnOffShareLinks = (shareLinkIds: string[]) =>
   api<{ count: number }>('/share-links/turn-off', { method: 'POST', body: { shareLinkIds } });
 
+// ── Personal access tokens ──
+// A token a person issues so a script or the `orbit` CLI can call the API as them, with the scopes
+// and workspaces they choose (docs/personal-access-token-design.md §6.5, §9). The server keeps only
+// a hash: the token itself is in the answer that issues it, and nowhere else.
+
+/** ACTIVE works; EXPIRED ran past its expiry; REVOKED was ended by someone (`revokedReason`). */
+export type AccessTokenState = 'ACTIVE' | 'EXPIRED' | 'REVOKED';
+
+export interface AccessToken {
+  id: string;
+  name: string;
+  /** The token's last four characters, so it can be told apart from the others. */
+  tokenHint: string;
+  scopes: string[];
+  /** Empty: not confined to any workspace. */
+  workspaceIds: string[];
+  /** Those workspaces, named; one deleted since is missing. */
+  workspaces: { id: string; name: string }[];
+  /** Null: never expires. */
+  expiresAt: string | null;
+  createdVia: 'WEB' | 'CLI_DEVICE';
+  lastUsedAt: string | null;
+  lastUsedIp: string | null;
+  lastUsedUserAgent: string | null;
+  revokedAt: string | null;
+  revokedReason: 'USER' | 'EXPIRED' | 'PASSWORD_CHANGED' | 'USER_DELETED' | 'ADMIN' | null;
+  createdAt: string;
+  state: AccessTokenState;
+}
+
+/** The answer that issues a token — the one place the token ever appears. */
+export interface IssuedAccessToken {
+  id: string;
+  token: string;
+  name: string;
+  tokenHint: string;
+  scopes: string[];
+  workspaceIds: string[];
+  expiresAt: string | null;
+  createdVia: 'WEB' | 'CLI_DEVICE';
+  createdAt: string;
+}
+
+/** 30, 90 or 365 days, or null for a token that never expires. */
+export type AccessTokenLifetime = 30 | 90 | 365 | null;
+
+/** Every token the account has issued, newest first, revoked and expired ones included. */
+export const listAccessTokens = () => api<{ tokens: AccessToken[] }>('/access-tokens');
+
+export const issueAccessToken = (body: {
+  name: string;
+  scopes: string[];
+  workspaceIds?: string[];
+  expiresInDays: AccessTokenLifetime;
+}) => api<IssuedAccessToken>('/access-tokens', { method: 'POST', body });
+
+/** Revoke one of the account's tokens at once. Idempotent. */
+export const revokeAccessToken = (id: string) =>
+  api<{ id: string; revokedAt: string; revokedReason: string }>(`/access-tokens/${id}`, { method: 'DELETE' });
+
+/** Administrators: a user's tokens, as that user's own list shows them. */
+export const listUserAccessTokens = (userId: string) =>
+  api<{ tokens: AccessToken[] }>(`/admin/users/${userId}/access-tokens`);
+
+/** Administrators: revoke one of a user's tokens, recorded as revoked by an administrator. */
+export const revokeUserAccessToken = (userId: string, tokenId: string) =>
+  api<{ id: string; revokedAt: string; revokedReason: string }>(`/admin/users/${userId}/access-tokens/${tokenId}`, {
+    method: 'DELETE',
+  });
+
 /** One event in a public shared transcript (mirrors the owner SSE payload, sans live state). */
 export interface SharedEvent {
   seq: number;

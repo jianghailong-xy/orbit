@@ -44,6 +44,6 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Post('change-password')
   changePassword(@CurrentUser() user: AuthUser, @Body() dto: ChangePasswordDto) {
-    return this.auth.changePassword(user.userId, dto.currentPassword, dto.newPassword);
+    return this.auth.changePassword(user.userId, dto.currentPassword, dto.newPassword, dto.revokeAccessTokens === true);
   }
 }

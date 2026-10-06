@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtModule, type JwtSignOptions } from '@nestjs/jwt';
+import { AccessTokensController, PatSelfController } from './access-tokens.controller';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -30,7 +31,7 @@ import { PatService } from './pat.service';
       },
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, AccessTokensController, PatSelfController],
   providers: [
     AuthService,
     JwtAuthGuard,
@@ -40,7 +41,8 @@ import { PatService } from './pat.service';
     // and the request audit records that refusal as it records the guard's.
     { provide: APP_INTERCEPTOR, useClass: PatRefusalInterceptor },
   ],
-  // PatService and PatRequestAudit are exported because JwtAuthGuard is instantiated in every module that uses it.
+  // PatService and PatRequestAudit are exported because JwtAuthGuard is instantiated in every module that uses it,
+  // and PatService also because admin/* lists and revokes a user's tokens.
   exports: [JwtAuthGuard, JwtModule, PatService, PatRequestAudit],
 })
 export class AuthModule {}

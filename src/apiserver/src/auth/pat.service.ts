@@ -44,12 +44,36 @@ export type PatRevokedReason = 'USER' | 'EXPIRED' | 'PASSWORD_CHANGED' | 'USER_D
 export const PAT_MAX_ACTIVE_PER_USER = 50;
 /** The longest finite lifetime; anything longer is a token that never expires, chosen as such (§11.1). */
 export const PAT_MAX_EXPIRES_IN_DAYS = 365;
+/** The lifetimes `POST /access-tokens` offers (§6.5, §11.1); null, never expiring, is the fourth. */
+export const PAT_EXPIRY_CHOICES = [30, 90, 365] as const;
+/** The lifetime a token is issued with when none is chosen (§11.1). */
+export const PAT_DEFAULT_EXPIRES_IN_DAYS = 90;
 const PAT_NAME_MAX_LENGTH = 100;
 /** `last_used_*` is written at most this often per token (§3). */
 const LAST_USED_THROTTLE_MS = 60_000;
 const USER_AGENT_MAX_LENGTH = 512;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Where a token stands: it works, it ran past its expiry, or somebody revoked it. */
+export type PatState = 'ACTIVE' | 'EXPIRED' | 'REVOKED';
+
+/** What a token list shows of each token: everything but its hash. */
+const LISTED = {
+  id: true,
+  name: true,
+  tokenHint: true,
+  scopes: true,
+  workspaceIds: true,
+  expiresAt: true,
+  createdVia: true,
+  lastUsedAt: true,
+  lastUsedIp: true,
+  lastUsedUserAgent: true,
+  revokedAt: true,
+  revokedReason: true,
+  createdAt: true,
+} satisfies Prisma.PersonalAccessTokenSelect;
 
 /** Who a verified token acts as, and what it was granted. */
 export interface PatGrant {
@@ -193,6 +217,47 @@ export class PatService {
     return new Map(sessions.map((session) => [session.id, session.workspaceId]));
   }
 
+  /**
+   * Every token `ownerId` has issued, newest first, as their own list shows them and an
+   * administrator's does (§9, §11.4): everything but the hash — the token itself is never kept —
+   * where each stands, and the names of the workspaces a confined one reaches, which an
+   * administrator could not look up. A token past its expiry is EXPIRED whether or not it has been
+   * settled; a workspace that no longer exists is missing from `workspaces`.
+   */
+  async list(ownerId: string) {
+    const rows = await this.prisma.personalAccessToken.findMany({
+      where: { ownerId },
+      select: LISTED,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    });
+    const confinedTo = [...new Set(rows.flatMap((row) => row.workspaceIds))];
+    const names = new Map(
+      confinedTo.length === 0
+        ? []
+        : (await this.prisma.workspace.findMany({
+            where: { id: { in: confinedTo }, ownerId },
+            select: { id: true, name: true },
+          })).map((workspace) => [workspace.id, workspace.name]),
+    );
+    const now = Date.now();
+    return rows.map((row) => ({
+      ...row,
+      workspaces: row.workspaceIds.flatMap((id) => (names.has(id) ? [{ id, name: names.get(id)! }] : [])),
+      state: stateOf(row, now),
+    }));
+  }
+
+  /**
+   * The token a request was verified against, as `GET /pat/self` describes it (§6.5): its name and
+   * what it was granted. Null when the row is gone — its user deleted since the guard read it.
+   */
+  self(ownerId: string, tokenId: string) {
+    return this.prisma.personalAccessToken.findFirst({
+      where: { id: tokenId, ownerId },
+      select: { id: true, name: true, scopes: true, workspaceIds: true, expiresAt: true },
+    });
+  }
+
   /** Revoke at once. Idempotent: revoking a revoked token answers it as it already is. */
   async revoke(ownerId: string, id: string, reason: PatRevokedReason = 'USER') {
     await this.prisma.personalAccessToken.updateMany({
@@ -205,6 +270,21 @@ export class PatService {
     });
     if (!row) throw new NotFoundException('access token not found');
     return row;
+  }
+
+  /**
+   * Revoke every token of `ownerId` that still works, for `reason` — a password change that asked
+   * for it (§11.3). Those already past their expiry are settled EXPIRED first, so the reason a token
+   * stopped working stays true. Answers how many this revoked.
+   */
+  async revokeAll(ownerId: string, reason: PatRevokedReason): Promise<number> {
+    const now = new Date();
+    await this.settleExpired(ownerId, now);
+    const revoked = await this.prisma.personalAccessToken.updateMany({
+      where: { ownerId, revokedAt: null },
+      data: { revokedAt: now, revokedReason: reason },
+    });
+    return revoked.count;
   }
 
   /**
@@ -260,6 +340,12 @@ function parseScopes(scopes: string[]): PatScopeName[] {
     );
   }
   return requested as PatScopeName[];
+}
+
+function stateOf(row: { expiresAt: Date | null; revokedAt: Date | null; revokedReason: string | null }, now: number): PatState {
+  if (row.revokedReason === 'EXPIRED') return 'EXPIRED';
+  if (row.revokedAt) return 'REVOKED';
+  return row.expiresAt && row.expiresAt.getTime() <= now ? 'EXPIRED' : 'ACTIVE';
 }
 
 function expiryFrom(days: number | null, now: Date): Date | null {
