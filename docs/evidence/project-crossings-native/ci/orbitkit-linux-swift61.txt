@@ -100,3 +100,25 @@ src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:372: error: Wik
 src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:349: error: WikiCopyParityTests.testTheHomeRowsAreTheWebsRows : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says wikiRecentRows(timeline.data?.items ?? []).slice(0, 5).map((row) =>
 src/macos/OrbitKit/Tests/OrbitKitTests/WikiPlanCopyParityTests.swift:834: error: WikiPlanCopyParityTests.testThePlanBannerIsTheHomesSecond : XCTAssertFalse failed - the web home: lost ["{wikiProposalsToReview(pending.length)}", "<WikiPlanBanner space={space} />", "<div className=\"wk-cols\">", "<WikiPlanCard space={space} />", "<ReviewCard"]
 src/macos/OrbitKit/Tests/OrbitKitTests/WikiReviewModeCopyParityTests.swift:727: error: WikiReviewModeCopyParityTests.testTheRunPagesDrawTheSameBlocksInTheSameOrder : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says row.kind === 'run' ? ( <WikiRunTimelineRow
+
+== dad660a46 (main f33589b4c merged — main's wiki fixes leave 4 failures in 2 tests)
+	 Executed 3250 tests, with 5 tests skipped and 4 failures (0 unexpected) in 24.835 (24.835) seconds
+Test Suite 'ProjectCrossingsCardCopyParityTests' passed at 2026-10-06 19:35:47.239
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.113 (0.113) seconds
+Test Suite 'ProjectCrossingsDoorTests' passed at 2026-10-06 19:35:47.240
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'ProjectCrossingsTests' passed at 2026-10-06 19:35:47.241
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'ProjectCrossingsWiringTests' passed at 2026-10-06 19:35:47.381
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.139 (0.139) seconds
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsAdminView.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsSheet.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:82: error: WikiCopyParityTests.testTheHomeBandsAreTheWebPhonesInItsOrder : XCTUnwrap failed: expected non-nil value of type "Range<Index>" - no `<div className="wk-cols">`
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:501: error: WikiCopyParityTests.testTheHomeReadsItsBandsByKind : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says <WikiEmpty>{WIKI_NO_PRINCIPLES}</WikiEmpty>
+
+== clean main f33589b4c (same command)
+	 Executed 3218 tests, with 5 tests skipped and 4 failures (0 unexpected) in 23.699 (23.699) seconds
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsAdminView.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsSheet.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:82: error: WikiCopyParityTests.testTheHomeBandsAreTheWebPhonesInItsOrder : XCTUnwrap failed: expected non-nil value of type "Range<Index>" - no `<div className="wk-cols">`
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:501: error: WikiCopyParityTests.testTheHomeReadsItsBandsByKind : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says <WikiEmpty>{WIKI_NO_PRINCIPLES}</WikiEmpty>

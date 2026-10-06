@@ -37,3 +37,17 @@ npm run build && npm test -w @orbit/shared && npm test -w @orbit/apiserver && np
   ok  	orbit	218.048s
 
 == earlier runs of the exact command on 54146166e (code identical to 4dddff557 + main be0f8c22a): build, shared (398), apiserver (4545), web (4279) passed both times; go failed once on TestDshLifecycleLateEvents/lost-completion-is-reported-again (a 20 s wait, host load average ~14), then on the host disk filling (TestCommitRetriesOnIndexLock / TestCommitRemovesAnAbandonedIndexLock: 'No space left on device'). src/runner-go was byte-identical to the commits where go test passed.
+
+== the exact command, on dad660a46 (main f33589b4c merged): exit 1 at the go step only
+  Tests  398 passed (398)
+  ℹ pass 4551
+  ℹ fail 0
+  Tests  4294 passed (4294)
+  --- FAIL: TestDshLifecycleLateEvents (20.23s)
+      --- FAIL: TestDshLifecycleLateEvents/lost-completion-is-reported-again (20.04s)
+          dsh_lifecycle_test.go:1404: turn t1 never settled: {ID:t1 Kind:message Content:m1 [effect] Env:map[] TaskAcceptance:false Status:IN_FLIGHT Deliveries:2 expired:false Completions:[]}
+  src/runner-go is byte-identical in 2d746caee (exit 0 above), dad660a46 and clean main f33589b4c
+
+== the go step on clean main f33589b4c: ok (216.713s)
+
+== TestDshLifecycleLateEvents alone, -count=20: branch dad660a46 ok (20/20), clean main f33589b4c ok (20/20) — it fails only under the whole suite's load (2 of 4 full runs on this tree)

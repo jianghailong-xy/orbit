@@ -4,9 +4,10 @@ Task: [iOS/macOS 项目页加跨项目确认卡（含移动请求），文案与
 project [跨项目移动任务：agent 发起，账号所有者确认即生效](orbit-project:34b8pthjtmO06pvd8i3FW), criterion 5.
 Branch `orbit/ios-macos-web-857cee`: the card in `4dddff557`; main merged up to `30cf89786` (which brought the task
 page's own MOVE_TASK words, `TaskDetailCopy.moveTaskStateMeaning`), after which the card reads that one map
-(`2d746caee`). Everything below was checked on `2d746caee`. Executed on HPC (Linux), no local Mac: OrbitKit ran in
-`swift:6.1` docker; the macOS and iOS builds, the XCUITests and the pictures ran on GitHub Actions through
-push-triggered probe branches (never merged, deleted afterwards).
+(`2d746caee`); then main `f33589b4c` merged (`dad660a46`, no change to the card's code). The pictures are from
+`2d746caee`; every check below ran on `dad660a46`. Executed on HPC (Linux), no local Mac: OrbitKit ran in `swift:6.1`
+docker; the macOS and iOS builds, the XCUITests and the pictures ran on GitHub Actions through push-triggered probe
+branches (never merged, deleted afterwards).
 
 ## What the clients do now
 
@@ -53,21 +54,20 @@ What the apps sent (`ios/writes.txt`, `mac/writes.txt`): one
 → 201, one for X2 → 409 `MOVE_TASK_LANDING_IN_FLIGHT`, no DENY. (The two keys' order in the body varies with
 Foundation's encoder.) The same flow passed on `4dddff557` too (runs 37505299361, 37509553027).
 
-## Checks on `2d746caee`
+## Checks on `dad660a46` (main `f33589b4c` merged)
 
 | Check | Result |
 |---|---|
-| OrbitKit, Linux `swift:6.1` docker | 3230 tests; the 32 new ones (`ProjectCrossings*`) and the project-page and task-page suites pass; 12 failures in 6 tests — identical on clean main `30cf89786` (3198 tests, the same 12): `ci/orbitkit-linux-swift61.txt` (with the earlier runs on `4dddff557`/`51f0cdfee` and `7e8bad80c`/`be0f8c22a`) |
-| client.yml, run 37516956540 | font-tokens ✓, nav-push ✓, iOS build ✓ (`** BUILD SUCCEEDED **`), macOS OrbitApp `swift build` ✓ (`Build complete!`); macOS OrbitKit `swift test` ✗ with exactly the 12 failures the same step has on clean main `30cf89786` in the same run (the baseline job reports success because its step only records; `ci/baseline-out-outcomes.txt` says failure): `ci/` |
-| XCUITest, iPhone simulator + Mac | both `** TEST SUCCEEDED **`: `ios/`, `mac/` |
-| merge check, the exact command | exit 0 — shared 398, apiserver 4551, web 4293, go ok: `ci/merge-check.txt` (with the earlier step-by-step runs on `4dddff557` and clean `51f0cdfee`, and two runs on `54146166e` whose go step failed on a timing flake and on a full host disk) |
+| OrbitKit, Linux `swift:6.1` docker | 3250 tests; the 32 new ones (`ProjectCrossings*`) and the project-page and task-page suites pass; 4 failures in 2 tests — identical on clean main `f33589b4c` (3218 tests, the same 4): `ci/orbitkit-linux-swift61.txt` (with every earlier pair: `4dddff557`/`51f0cdfee`, `7e8bad80c`/`be0f8c22a`, `2d746caee`/`30cf89786`) |
+| client.yml, run 37520125621 | font-tokens ✓, nav-push ✓, iOS build ✓ (`** BUILD SUCCEEDED **`), macOS OrbitApp `swift build` ✓ (`Build complete!`); macOS OrbitKit `swift test` ✗ with exactly the 4 failures the same step has on clean main `f33589b4c` in the same run (the baseline job reports success because its step only records; `ci/baseline-out-outcomes.txt` says failure); all four `ProjectCrossings*` suites pass on macOS: `ci/` (the pictures' run on `2d746caee`, 37516956540, had the same outcome against main `30cf89786`: `ci/pictures-run-RESULTS.txt`) |
+| XCUITest, iPhone simulator + Mac (on `2d746caee`) | both `** TEST SUCCEEDED **`: `ios/`, `mac/`; `git diff 2d746caee dad660a46` leaves the card's files (`ProjectCrossings.swift`, `ProjectCrossingRow.swift`, the page's crossings section) unchanged |
+| merge check, the exact command | on `2d746caee`: exit 0 (shared 398, apiserver 4551, web 4293, go ok). On `dad660a46`: shared 398, apiserver 4551, web 4294 pass; go failed on `TestDshLifecycleLateEvents/lost-completion-is-reported-again`, a 20 s wait in the DeepSeek Harness runner — `src/runner-go` is byte-identical in `2d746caee`, `dad660a46` and clean main `f33589b4c`, the go step passes on clean main, and the test alone passes 20/20 on both trees: `ci/merge-check.txt` (with the earlier step-by-step runs on `4dddff557` and clean `51f0cdfee`, and two runs on `54146166e`) |
 
-The tests red on main — `ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle` (the
-access-token revoke dialogs in `SettingsAdminView.swift` and `SettingsSheet.swift` call `.confirmationDialog`
-directly), `WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts` (the web sidebar's wiki count moved),
-and three more `WikiCopyParityTests`, one `WikiPlanCopyParityTests` and one `WikiReviewModeCopyParityTests` (the web
-wiki home's topic list) — came with other projects' merges (`90b80b42f`, `6c4e0ac0e`, `2f9cc095f`) and are not
-touched here.
+The tests red on main `f33589b4c` — `ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle`
+(the access-token revoke dialogs in `SettingsAdminView.swift` and `SettingsSheet.swift` call `.confirmationDialog`
+directly, since `90b80b42f`) and `WikiCopyParityTests.testTheHomeBandsAreTheWebPhonesInItsOrder` /
+`testTheHomeReadsItsBandsByKind` (the web wiki home, since `2f9cc095f`) — came with other projects' merges and are
+not touched here; main's later wiki merges fixed the others that were red along the way.
 
 ## Limits
 
