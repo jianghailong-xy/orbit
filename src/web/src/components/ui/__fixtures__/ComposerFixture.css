@@ -1,0 +1,58 @@
+/* Fixture layout only. The composers keep their production classes and CSS; these rules give them
+   the widths measured on the real pages in the P0 baseline (session field 637/360px, comment field
+   559.890625/285.296875px) and room above for their upward menus. */
+.composer-fixture {
+  box-sizing: border-box;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 48px 0 24px;
+  background: var(--bg-base);
+  color: var(--text-1);
+}
+
+.composer-fixture-session .workspace-composer {
+  width: var(--fixture-width, 639px);
+  margin: 0 auto;
+}
+
+.fixture-task-panel {
+  width: var(--fixture-width, 664.59375px);
+  margin-left: auto;
+  background: var(--bg-raised);
+}
+
+.fixture-plain {
+  width: var(--fixture-width, 360px);
+  margin: 0 auto;
+}
+
+.fixture-controls {
+  position: fixed;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.composer-fixture > [data-testid='theme'] {
+  position: fixed;
+  top: 0;
+  right: 0;
+  font-size: 11px;
+}
+
+@media (max-width: 600px) {
+  .composer-fixture-session .workspace-composer {
+    width: var(--fixture-width, calc(100vw - 28px));
+  }
+
+  .fixture-task-panel {
+    width: var(--fixture-width, 100%);
+  }
+}
