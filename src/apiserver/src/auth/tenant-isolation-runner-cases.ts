@@ -892,9 +892,13 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     request: (of) => ({ params: {}, body: { claudeSessionId: '00000000-0000-4000-8000-0000000c1a0f', workspaceId: of.workspaceId } }),
   },
   // A transcript another account already imported — its engine session id, which a stranger may know.
+  // Titled, so that what the two imports are answered with is not told apart by a title spelled from the id.
   'POST /runner/sessions/import body claudeSessionId': {
     as: RUNNER,
-    request: (of, mine) => ({ params: {}, body: { claudeSessionId: of.runner.runtimeSessionId, workspaceId: mine.workspaceId } }),
+    request: (of, mine) => ({
+      params: {},
+      body: { claudeSessionId: of.runner.runtimeSessionId, workspaceId: mine.workspaceId, title: 'imported by the census' },
+    }),
   },
   'GET /runner/sessions query parentSessionId': {
     as: ['runner', 'service', 'session'],
