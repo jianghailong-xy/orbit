@@ -1255,6 +1255,36 @@ public final class APIClient: @unchecked Sendable {
         return version
     }
 
+    /// The runner for `platformKey`, fetched the way `orbit upgrade` fetches it: the manifest at
+    /// `<instance>/dl/version.json`, then `orbit-<platformKey>.gz` beside it, whose bytes must hash
+    /// to the sha256 the manifest publishes for that platform (`RunnerDownload`). Returns the
+    /// verified `.gz`; every failure is a `RunnerDownloadError`. A manifest with nothing to check
+    /// against stops it before the binary is downloaded at all.
+    public func downloadRunner(platformKey: String) async throws -> Data {
+        let manifestURL = baseURL.appendingPathComponent("dl/version.json")
+        let manifest = try await dlFile(manifestURL)
+        let expected = try RunnerDownload.expectedSHA256(manifest: manifest, platformKey: platformKey,
+                                                         manifestURL: manifestURL)
+        let asset = RunnerDownload.assetName(platformKey: platformKey)
+        let gzip = try await dlFile(baseURL.appendingPathComponent("dl/\(asset)"))
+        try RunnerDownload.verify(gzip, sha256: expected, name: asset)
+        return gzip
+    }
+
+    /// One file under /dl, never from the URL cache: a stale manifest beside a fresh binary would
+    /// fail the digest check for a reason nobody could act on.
+    private func dlFile(_ url: URL) async throws -> Data {
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue(Self.clientHeader, forHTTPHeaderField: "X-Orbit-Client")
+        guard let (data, status) = try? await rawSend(request, cancellationAware: true) else {
+            throw RunnerDownloadError.unreachable(url)
+        }
+        guard status == 200 else { throw RunnerDownloadError.http(url, status: status) }
+        return data
+    }
+
     public func startEngineUpdate(_ id: String) async throws -> RunnerInstallState {
         try await postEmpty("runners/\(id)/engine-update")
     }
