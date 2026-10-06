@@ -312,7 +312,7 @@ export class RunnersService {
   async getDeviceEnrollment(ownerId: string, userCode: string) {
     this.rateLimitDeviceLookup(ownerId);
     const s = await this.prisma.deviceEnrollment.findUnique({ where: { userCode } });
-    if (!s || s.expiresAt < new Date()) {
+    if (!s || s.expiresAt < new Date() || approvedByAnother(s, ownerId)) {
       throw new NotFoundException('enrollment request not found or expired');
     }
     // Warn (don't block) if a runner with this name is already registered, so the
@@ -339,7 +339,7 @@ export class RunnersService {
   async approveDeviceEnrollment(ownerId: string, userCode: string) {
     this.rateLimitDeviceLookup(ownerId);
     const s = await this.prisma.deviceEnrollment.findUnique({ where: { userCode } });
-    if (!s || s.expiresAt < new Date()) {
+    if (!s || s.expiresAt < new Date() || approvedByAnother(s, ownerId)) {
       throw new NotFoundException('enrollment request not found or expired');
     }
     const runnerName = s.name;
@@ -997,4 +997,13 @@ function loginStateOf(r: {
     message: r.loginMessage,
     account: status ? (r.loginAccount ?? null) : null,
   };
+}
+
+/**
+ * A device enrollment nobody has approved is open to whoever holds its code — that is the device
+ * flow. Once approved it is the approver's: to every other account the code is one that names
+ * nothing, so its machine's name and host, and whether it exists at all, stay the approver's.
+ */
+function approvedByAnother(s: { status: string; approvedById: string | null }, ownerId: string): boolean {
+  return s.status === 'APPROVED' && s.approvedById !== ownerId;
 }
