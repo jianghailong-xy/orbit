@@ -152,11 +152,12 @@ export interface RunnerFieldCase {
   /** Other fields the same object of `of`'s must appear in for the request to be well formed. */
   alongside?: readonly string[];
   /**
-   * A task of `of`'s that another transaction of A's holds while B's request is answered — a run
-   * starting on it, an edit — named for a field the route locks rows by. B's request must be answered
-   * at once and as an id that names nothing is, without taking or waiting for A's row.
+   * A row of `of`'s — `[table, id]` — that another transaction of A's holds while B's request is
+   * answered (a run starting on a task, an edit), named for a field the route locks rows by. B's
+   * request must be answered at once and as an id that names nothing is, without taking or waiting
+   * for A's row.
    */
-  heldTask?: (of: RunnerTenant) => string;
+  heldRow?: (of: RunnerTenant) => readonly [table: string, id: string];
 }
 
 const RUNNER = ['runner'] as const;
@@ -706,7 +707,7 @@ const taskCreateFieldCases = (route: string, wrap: (task: object) => object, whe
   [`${route} body ${where}supersedesTaskId`]: {
     as: RUNNER,
     request: (of: RunnerTenant) => ({ params: {}, body: wrap(taskBody({ supersedesTaskId: of.spare.taskId })) }),
-    heldTask: (of: RunnerTenant) => of.spare.taskId,
+    heldRow: (of: RunnerTenant) => ['task', of.spare.taskId] as const,
   },
   [`${route} body ${where}dependsOnTaskIds[]`]: { as: RUNNER, request: (of: RunnerTenant) => ({ params: {}, body: wrap(taskBody({ dependsOnTaskIds: [of.dependencyTaskId] })) }) },
 }) satisfies Record<string, RunnerFieldCase>;
@@ -826,6 +827,7 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
         phase: 'CONSUME', kind: 'CONSUME_RETRYING', code: 'PROVIDER_ERROR',
       },
     }),
+    heldRow: (of) => ['codex_rate_limit_reset_operation', of.runner.codexOperationId] as const,
   },
   'POST /runner/sessions/:id/artifacts/result body requestId': {
     as: RUNNER,
@@ -942,7 +944,7 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
   'PATCH /runner/tasks/:id body verifiesTaskId': {
     as: RUNNER,
     request: (of, mine) => ({ params: { id: mine.runner.verifierTaskId }, body: { verifiesTaskId: of.runner.verifiedTaskId, verdict: 'FAIL' } }),
-    heldTask: (of) => of.runner.verifiedTaskId,
+    heldRow: (of) => ['task', of.runner.verifiedTaskId] as const,
   },
   'PATCH /runner/tasks/:id body supersededByTaskId': {
     as: RUNNER,

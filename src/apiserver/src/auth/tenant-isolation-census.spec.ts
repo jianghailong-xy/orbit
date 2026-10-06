@@ -995,7 +995,7 @@ test('every runner field case is B\'s own request with A\'s object in its field 
     const isA = (value: unknown) => typeof value === 'string' && /(?:^|[^\w.])a\.\w/.test(value);
     if (!leaves.some(([at, value]) => bare(at) === bare(`${where} ${field}`) && isA(value))) wrong.push(`${key}: A's object is not in ${where} ${field}`);
     for (const [at, value] of leaves) if (isA(value) && !allowed.has(bare(at))) wrong.push(`${key}: A's ${String(value)} is in ${at} too`);
-    if (kase.heldTask && !isA(kase.heldTask(spelledRunner('a.')))) wrong.push(`${key}: holds no task of A's`);
+    if (kase.heldRow && !isA(kase.heldRow(spelledRunner('a.'))[1])) wrong.push(`${key}: holds no row of A's`);
   }
   assert.deepEqual(wrong, []);
 });

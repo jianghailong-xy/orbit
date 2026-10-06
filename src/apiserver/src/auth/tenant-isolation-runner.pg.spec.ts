@@ -538,15 +538,16 @@ test('tenant isolation: past the runner gate and through the share links, anothe
   const fieldCases = Object.entries(RUNNER_ISOLATION_FIELD_CASES);
   const routeOfField = (key: string) => key.split(' ').slice(0, 2).join(' ');
   /**
-   * B's request while another transaction holds A's task — FOR KEY SHARE, the mode a session starting
-   * on it or a progress report takes. Answered before the hold ends, or it waited on A's row.
+   * B's request while another transaction holds a row of A's — FOR KEY SHARE, the mode a session
+   * starting on a task or a progress report takes. Answered before the hold ends, or it waited on it.
    */
-  const whileHeld = async (taskId: string, ask: () => Promise<{ reply: Reply; written: string[] }>) => {
+  const whileHeld = async ([table, id]: readonly [string, string], ask: () => Promise<{ reply: Reply; written: string[] }>) => {
     const held = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
     await held.connect();
     try {
       await held.query('BEGIN');
-      await held.query(`SELECT 1 FROM "task" WHERE "id" = $1 FOR KEY SHARE`, [taskId]);
+      const row = await held.query(`SELECT 1 FROM "${table}" WHERE "id" = $1 FOR KEY SHARE`, [id]);
+      assert.equal(row.rowCount, 1, `no ${table} ${id} of A's to hold`);
       const asked = ask();
       const first = await Promise.race([asked.then(() => 'answered'), sleep(5_000).then(() => 'still waiting on A\'s row')]);
       await held.query('ROLLBACK');
@@ -566,10 +567,10 @@ test('tenant isolation: past the runner gate and through the share links, anothe
           { answer: answerOf(control.reply), writtenOfA: [] },
         );
       });
-      if (!kase.heldTask) continue;
-      await t.test(`${key} as ${as}: while A's task is held, B's own request with A's in it neither waits for it nor is answered otherwise`, async () => {
+      if (!kase.heldRow) continue;
+      await t.test(`${key} as ${as}: while A's ${kase.heldRow(a)[0]} is held, B's own request with A's in it neither waits for it nor is answered otherwise`, async () => {
         const route = routeOfField(key);
-        const held = await whileHeld(kase.heldTask!(a), () => sent(holderB, as, route, kase.request(a, b)));
+        const held = await whileHeld(kase.heldRow!(a), () => sent(holderB, as, route, kase.request(a, b)));
         const control = await sent(holderB2, as, route, kase.request(nobody(), b2));
         assert.deepEqual(
           { answered: held.whileHeld, answer: answerOf(held.reply), writtenOfA: namingA(held.written) },
