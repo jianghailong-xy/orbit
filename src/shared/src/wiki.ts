@@ -1310,6 +1310,14 @@ export interface WikiSpace {
   settings: WikiSpaceSettings;
   createdAt: string;
   updatedAt: string;
+  // The list read's (`GET /wiki/spaces`, contract `space.list`), absent from the one-space read and from a
+  // server older than them.
+  /** The things of its plan that wait on the owner, counted as the plan's own amber count beside Plan counts them. */
+  planWaiting?: number;
+  /** The workspaces bound to it, in the order they were bound. */
+  workspaceIds?: string[];
+  /** Its confirmed plan's documents, written of how many: null while it has no confirmed plan. */
+  docs?: { written: number; total: number } | null;
 }
 
 export interface WikiTopic {

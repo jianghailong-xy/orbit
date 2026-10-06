@@ -257,12 +257,15 @@ service token cannot mint another token, and revocation is checked on every requ
 ## Personal access tokens
 
 A personal access token lets a script or a terminal act as **you**: it calls the REST API the web app uses
-(`/api/...`), and what it writes is recorded as yours. Issue one in Orbit under **Settings → Access tokens**,
-with the scopes it needs (read-only, read-write, or a custom set), optionally the workspaces it is confined to,
-and a lifetime of 30, 90 or 365 days, or none. The token is shown once.
+(`/api/...`), and what it writes is recorded as yours. `orbit login` gets one through the browser; or issue one
+in Orbit under **Settings → Access tokens**, with the scopes it needs (read-only, read-write, or a custom set),
+optionally the workspaces it is confined to, and a lifetime of 30, 90 or 365 days, or none. The token is shown
+once.
 
 ```bash
-orbit login --with-token < token.txt          # add --server https://orbit.example.com on a new machine
+orbit login                                   # approve in the browser; add --server https://orbit.example.com on a new machine
+orbit login --scopes read-write --expires 30d --name "deploy box"
+orbit login --with-token < token.txt          # a token issued under Settings → Access tokens
 orbit whoami
 orbit api /api/tasks
 orbit api -X POST /api/tasks --data-file - < task.json
@@ -270,10 +273,17 @@ orbit api /api/tasks/page --paginate --json
 orbit logout                                  # revokes the token, then forgets it
 ```
 
-- `orbit login --with-token` reads the token from stdin only, so it never sits in an argument list or a shell
-  history. It checks the token with the server and saves it, with the server's URL, in `$ORBIT_HOME/user.json`
-  (`~/.orbit/user.json`, mode `0600` in a `0700` directory). The file is separate from the runner's
-  `config.json`, and the runner service never reads it. A machine needs no runner to log in.
+- `orbit login` asks the server for a token and opens `<server>/cli-login?code=…`. Signed in to Orbit there,
+  you see the token's name, scopes, lifetime and the host asking, and approve or deny it. The CLI waits up to
+  ten minutes, then saves the token it is handed. `--name` defaults to `orbit CLI on <host>`, `--scopes` to
+  `read-only` (or `read-write`, or a list such as `tasks:read,tasks:write`), and `--expires` to `90d` (`30d`,
+  `365d` or `never`). The token belongs to the account that approved it. The server keeps only its hash, and
+  the token itself is in the one answer the CLI collects.
+- `orbit login --with-token` reads an issued token from stdin only, so it never sits in an argument list or a
+  shell history.
+- Either way the CLI checks the token with the server and saves it, with the server's URL, in
+  `$ORBIT_HOME/user.json` (`~/.orbit/user.json`, mode `0600` in a `0700` directory). The file is separate from
+  the runner's `config.json`, and the runner service never reads it. A machine needs no runner to log in.
 - `ORBIT_USER_TOKEN` takes precedence over a saved login, for CI and containers. It is sent to
   `ORBIT_SERVER_URL`, or else to this machine's runner server, or else to the server the binary was built for.
 - `orbit api [-X METHOD] PATH [--data JSON | --data-file -] [--paginate] [--json]` sends one request under
@@ -282,8 +292,8 @@ orbit logout                                  # revokes the token, then forgets 
   `/api/tasks/page` answers, and prints every page. PATH can be a path only, never a URL.
 - `orbit logout` revokes the token on the server and removes `user.json`; when the server cannot be reached
   it removes nothing. `--keep-token` only removes the file.
-- A 401 means the token is invalid, revoked or expired; the server does not say which. Issue a new one and
-  run `orbit login --with-token` again.
+- A 401 means the token is invalid, revoked or expired; the server does not say which. Run `orbit login`
+  again.
 - No scope opens the owner's own decisions (confirmation cards, evidence verdicts, approvals, starting or
   finishing a project), the account, administration, or the access tokens themselves. Those stay in the app.
 
@@ -341,8 +351,9 @@ confine it to workspaces, and keep its lifetime short.
 The commands the runner runs itself never act as you, even when you are logged in in its `ORBIT_HOME`. This
 covers a task's EXECUTABLE acceptance command and a `!` command in a session. The runner marks the processes it
 starts for its sessions (engines, shell commands, background jobs) with `ORBIT_RUNNER_CHILD=1`, and there the CLI
-skips your login: such a process acts as its session if it has one, and otherwise as the machine. So `orbit wiki check` and `orbit wiki plan check` still run as the runner,
-and `orbit whoami` there says why. A terminal you open yourself has no such mark.
+skips your login: such a process acts as its session if it has one, and otherwise as the machine. So
+`orbit wiki check` and `orbit wiki plan check` still run as the runner, and `orbit whoami` there says why. A
+terminal you open yourself has no such mark.
 
 ## Security notes
 

@@ -386,8 +386,8 @@ public struct WikiMaintenanceHeld: Codable, Equatable, Sendable {
 }
 
 /// One owner's wiki for one codebase. `GET /wiki/spaces` answers these with `pendingOps` — the
-/// proposals waiting in it, which the drawer's amber number sums — and `GET /wiki/spaces/:id` with
-/// `usage` when asked for it.
+/// proposals waiting in it, which the drawer's amber number sums — and what the contract's
+/// `space.list` adds beside it; `GET /wiki/spaces/:id` with `usage` when asked for it.
 public struct WikiSpace: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let slug: String
@@ -403,11 +403,21 @@ public struct WikiSpace: Codable, Equatable, Sendable, Identifiable {
     public let pendingOps: Int?
     /// Only on the one-space read, with `include=usage`.
     public let usage: WikiUsage?
+    /// Only on the list read, and nil from a server older than it: the things of the space's plan that
+    /// wait on the owner, counted as `WikiPlanLogic.pending` counts them.
+    public let planWaiting: Int?
+    /// Only on the list read, and nil from a server older than it: the workspaces bound to the space, in
+    /// the order they were bound.
+    public let workspaceIds: [String]?
+    /// Only on the list read: the confirmed plan's documents, written of how many. Nil while the space has
+    /// no confirmed plan, and from a server older than it.
+    public let docs: WikiDocsDirectory.Counts?
 
     public init(id: String, slug: String, title: String? = nil, repoUrlNorm: String? = nil,
                 rootCommitSha: String? = nil, settings: WikiSpaceSettings? = nil,
                 createdAt: String? = nil, updatedAt: String? = nil, pendingOps: Int? = nil,
-                usage: WikiUsage? = nil) {
+                usage: WikiUsage? = nil, planWaiting: Int? = nil, workspaceIds: [String]? = nil,
+                docs: WikiDocsDirectory.Counts? = nil) {
         self.id = id
         self.slug = slug
         self.title = title
@@ -418,6 +428,9 @@ public struct WikiSpace: Codable, Equatable, Sendable, Identifiable {
         self.updatedAt = updatedAt
         self.pendingOps = pendingOps
         self.usage = usage
+        self.planWaiting = planWaiting
+        self.workspaceIds = workspaceIds
+        self.docs = docs
     }
 }
 
