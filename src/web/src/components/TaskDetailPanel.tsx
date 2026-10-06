@@ -1954,6 +1954,7 @@ export function TaskDetailPanel({
       <Dialog
         open={reopening}
         title={REOPEN_MODAL_TITLE}
+        className="tdp-reopen-dialog"
         onClose={() => {
           reopen.reset();
           setReopening(false);

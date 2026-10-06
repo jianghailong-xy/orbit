@@ -11865,6 +11865,11 @@ button.chat-jump-start:hover {
   line-height: 1.45;
   color: var(--text-2);
 }
+/* The Reopen question replaced an AntD Modal, whose line height is unitless: text of another size
+   inside keeps its own proportional line. The shared Dialog shell stays at 22px. */
+.tdp-reopen-dialog.orbit-overlay {
+  line-height: 1.5714285714285714;
+}
 /* The Reopen question's paragraphs: secondary text, and the sentence the reader is there for. */
 .tdp-reopen-paragraph {
   margin: 0 0 1em;
@@ -14003,6 +14008,11 @@ button.chat-jump-start:hover {
 /* ── Share dialog (ShareModal) ─────────────────────────────────────────────────
    docs/mocks/share-links/03-share-dialog: Access, the link, Includes with counts, the Live line,
    Expires, and a foot with the views and the two buttons. */
+/* Unitless line height, as the AntD Modal this dialog replaced: smaller text inside keeps its own
+   proportional line. The shared Dialog shell stays at 22px. */
+.share-dialog.orbit-overlay {
+  line-height: 1.5714285714285714;
+}
 .share-dialog-state {
   padding: 28px 0;
   text-align: center;

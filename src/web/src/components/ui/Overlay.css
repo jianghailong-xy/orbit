@@ -5,8 +5,7 @@
 .orbit-overlay {
   position: relative; box-sizing: border-box; margin: 0 auto;
   max-width: 100%; color: var(--text-1); background: var(--orbit-bg-elevated);
-  /* Unitless, as the replaced dialog's: smaller text inside keeps its own proportional line. */
-  font-family: var(--orbit-font-family); font-size: var(--orbit-font-size); line-height: 1.5714285714285714;
+  font-family: var(--orbit-font-family); font-size: var(--orbit-font-size); line-height: var(--orbit-line-height);
   box-shadow: var(--orbit-shadow-popup); outline: none; overflow-wrap: break-word;
 }
 .orbit-dialog, .orbit-confirm { padding: 20px 24px; border-radius: var(--orbit-radius-dialog); }
