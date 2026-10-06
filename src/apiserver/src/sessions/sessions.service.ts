@@ -804,8 +804,17 @@ export class SessionsService {
        * the canonical project title with this bit; public session creation cannot claim it.
        */
       titleManagedByProject?: boolean;
+      /**
+       * The HTTP create door's credential. A personal access token may not choose `permissionMode`
+       * at all, to any value, for the reason `updateConfig` refuses it one (§5.1 of
+       * docs/personal-access-token-design.md): a session opened in a mode that runs without asking
+       * would take approvals — which only a login may answer — out of its way. Without one the
+       * session opens in the account's default mode, as every session that names none does.
+       */
+      credential?: AuthCredential;
     },
   ) {
+    refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
     // Attachments with no words are a whole opening message, as they are on any later turn: the
     // runtime is handed the files either way. A shell command is nothing without its words.
     const attachmentsAlone =
