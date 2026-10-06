@@ -1134,6 +1134,18 @@ test('a session asks another for a reply, and every request comes to exactly one
     await deliver(recipient);
     assert.equal((await reply(recipient, request.requestId, { option: undefined, message: 'go' })).handOff, 'QUEUED');
     assert.equal((await replyTurnsOf(asker)).length, 1);
+    // While it waits, both queue views list it with the reply cards its echo will carry, so a client
+    // draws the cards rather than the blocks in the owner's bubble.
+    for (const [view, listed] of [
+      ['queue', await sessions.listQueuedTurns(ownerId, asker)],
+      ['active', await sessions.listQueuedTurns(ownerId, asker, 'active')],
+    ] as const) {
+      const cards = (listed as Array<{ sessionReplies?: Array<Record<string, unknown>> }>)
+        .flatMap((turn) => turn.sessionReplies ?? []);
+      assert.equal(cards.length, 1, `the ${view} view did not carry the reply card`);
+      assert.equal(cards[0].requestId, request.requestId);
+      assert.equal(cards[0].replyText, 'go');
+    }
     // Stopped: the queued reply turn goes with the queue, and nothing starts it running again.
     await sessions.interrupt(ownerId, asker);
     assert.equal((await replyTurnsOf(asker)).length, 0);
