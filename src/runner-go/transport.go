@@ -98,9 +98,15 @@ type transportHTTPError struct {
 	body       string
 	// retryAfter is the answer's Retry-After header, as sent: when a 429 says to come back (wiki_retry.go).
 	retryAfter string
+	// explained is what the answer means and what to do about it, said in place of the raw answer: a
+	// personal access token's 401, which every command acting as the person words the same way.
+	explained string
 }
 
 func (e *transportHTTPError) Error() string {
+	if e.explained != "" {
+		return e.explained
+	}
 	// Unit L7: a refusal that carries a stable code and an executable next step says both of them
 	// FIRST, on their own lines, and keeps the raw body underneath.
 	//
@@ -964,28 +970,7 @@ func (t *Transport) sessionEvents(ctx context.Context, sessionID string, after, 
 // the owner's whole task history — descriptions included — on each call, which is slow enough to
 // time out mid-body on a large account and lands in an agent's context as tens of megabytes.
 func (t *Transport) listTasks(status, listID, projectID string, labels []string, limit int, minPriority *int) (json.RawMessage, error) {
-	q := url.Values{}
-	if status != "" {
-		q.Set("status", status)
-	}
-	if listID != "" {
-		q.Set("listId", listID)
-	}
-	if projectID != "" {
-		q.Set("projectId", projectID)
-	}
-	// Repeated rather than comma-joined: a label may legitimately contain a comma, and the
-	// server accepts both forms.
-	for _, label := range labels {
-		q.Add("labels", label)
-	}
-	if limit > 0 {
-		q.Set("limit", strconv.Itoa(limit))
-	}
-	// A pointer because 0 is a floor a caller can mean; nil is "no floor", and sends nothing.
-	if minPriority != nil {
-		q.Set("minPriority", strconv.Itoa(*minPriority))
-	}
+	q := taskListQuery(status, listID, projectID, labels, limit, "", minPriority)
 	path := "/runner/tasks"
 	if len(q) > 0 {
 		path += "?" + q.Encode()
@@ -1093,6 +1078,36 @@ func (t *Transport) scheduleWakeup(sessionID string, body map[string]interface{}
 // means this was the last page. listTasks above can only ever answer with the newest `limit`
 // rows, so this is what makes walking an entire account possible.
 func (t *Transport) listTaskPage(status, listID, projectID string, labels []string, limit int, cursor string, minPriority *int) (json.RawMessage, string, error) {
+	q := taskListQuery(status, listID, projectID, labels, limit, cursor, minPriority)
+	path := "/runner/tasks/page"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	var out taskPage
+	if err := t.do(nil, "GET", path, nil, &out, taskOpTimeout); err != nil {
+		return nil, "", err
+	}
+	items, next := out.parts()
+	return items, next, nil
+}
+
+// taskPage is one page of tasks as the task page routes answer it, runner's and user's alike.
+type taskPage struct {
+	Items      json.RawMessage `json:"items"`
+	NextCursor *string         `json:"nextCursor"`
+}
+
+// parts is the page's rows and the cursor that continues it — "" on the last page.
+func (p taskPage) parts() (json.RawMessage, string) {
+	if p.NextCursor == nil {
+		return p.Items, ""
+	}
+	return p.Items, *p.NextCursor
+}
+
+// taskListQuery is the filters a task list asks with — one page or every page of a walk, through the
+// runner's routes or the person's.
+func taskListQuery(status, listID, projectID string, labels []string, limit int, cursor string, minPriority *int) url.Values {
 	q := url.Values{}
 	if status != "" {
 		q.Set("status", status)
@@ -1105,9 +1120,12 @@ func (t *Transport) listTaskPage(status, listID, projectID string, labels []stri
 	if projectID != "" {
 		q.Set("projectId", projectID)
 	}
+	// Repeated rather than comma-joined: a label may legitimately contain a comma, and the
+	// server accepts both forms.
 	for _, label := range labels {
 		q.Add("labels", label)
 	}
+	// A pointer because 0 is a floor a caller can mean; nil is "no floor", and sends nothing.
 	if minPriority != nil {
 		q.Set("minPriority", strconv.Itoa(*minPriority))
 	}
@@ -1117,22 +1135,7 @@ func (t *Transport) listTaskPage(status, listID, projectID string, labels []stri
 	if cursor != "" {
 		q.Set("cursor", cursor)
 	}
-	path := "/runner/tasks/page"
-	if len(q) > 0 {
-		path += "?" + q.Encode()
-	}
-	var out struct {
-		Items      json.RawMessage `json:"items"`
-		NextCursor *string         `json:"nextCursor"`
-	}
-	if err := t.do(nil, "GET", path, nil, &out, taskOpTimeout); err != nil {
-		return nil, "", err
-	}
-	next := ""
-	if out.NextCursor != nil {
-		next = *out.NextCursor
-	}
-	return out.Items, next, nil
+	return q
 }
 
 func validatePathSegmentID(id string) error {
@@ -1669,13 +1672,22 @@ var runRequestEntropy io.Reader = rand.Reader
 // is a different thing: it silently gives up the idempotency this exists for, at exactly the moment
 // something is already wrong with the machine. A refusal the caller can see is the honest answer.
 func newRunRequestToken() (string, error) {
+	id, err := randomUUID()
+	if err != nil {
+		return "", fmt.Errorf("cannot name this run request (no entropy): %w", err)
+	}
+	return publicID(id), nil
+}
+
+// randomUUID is a version 4 UUID drawn from runRequestEntropy.
+func randomUUID() (string, error) {
 	var id [16]byte
 	if _, err := io.ReadFull(runRequestEntropy, id[:]); err != nil {
-		return "", fmt.Errorf("cannot name this run request (no entropy): %w", err)
+		return "", err
 	}
 	id[6] = (id[6] & 0x0f) | 0x40 // UUID v4
 	id[8] = (id[8] & 0x3f) | 0x80 // RFC 4122 variant
-	return publicID(fmt.Sprintf("%x-%x-%x-%x-%x", id[0:4], id[4:6], id[6:8], id[8:10], id[10:16])), nil
+	return fmt.Sprintf("%x-%x-%x-%x-%x", id[0:4], id[4:6], id[6:8], id[8:10], id[10:16]), nil
 }
 
 // How far a named run request is resent, and how long it waits between attempts: three resends
@@ -1797,13 +1809,22 @@ func (t *Transport) startTask(id, triggerID string) (json.RawMessage, error) {
 	// by two encoders agreeing.
 	body := map[string]string{"triggerId": triggerID}
 	path := "/runner/tasks/" + url.PathEscape(id) + "/execute"
+	return deliverRunRequest(func() (json.RawMessage, error) {
+		var out json.RawMessage
+		err := t.do(nil, "POST", path, body, &out, taskOpTimeout)
+		return out, err
+	})
+}
+
+// deliverRunRequest sends one named run request until it is answered, resending only what
+// `isResendableRunFailure` says left it unanswered — the runner's door and the person's alike.
+func deliverRunRequest(send func() (json.RawMessage, error)) (json.RawMessage, error) {
 	var lastErr error
 	for attempt := range runRequestResendAttempts {
 		if attempt > 0 {
 			time.Sleep(runRequestResendDelay << (attempt - 1))
 		}
-		var out json.RawMessage
-		err := t.do(nil, "POST", path, body, &out, taskOpTimeout)
+		out, err := send()
 		if err == nil {
 			return out, nil
 		}

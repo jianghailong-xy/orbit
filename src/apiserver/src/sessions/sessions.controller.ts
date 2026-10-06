@@ -20,7 +20,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { PublicIdPipe } from '../common/public-id';
-import { Prisma } from '@prisma/client';
+import { Prisma, RunStatus } from '@prisma/client';
 import { concatMap, defer, from, interval, map, merge, Observable, switchMap, throwError } from 'rxjs';
 import { ApprovalDecisionRequest, RunEventType } from '@orbit/shared';
 import { replayableEventSql } from '../common/system-noise';
@@ -456,10 +456,39 @@ export class SessionsController {
     return this.sessions.search(user.userId, q, Number(limit) || 20);
   }
 
+  /**
+   * The compact rows `orbit session list` prints when it acts as the person
+   * (docs/personal-access-token-design.md §7.3): SessionsService.listForOrchestration, the answer the
+   * runner door gives the same command, so a script reads one shape whichever credential runs it.
+   * `status` and `parentSessionId` narrow it as they do there — every session but Trash, latest turn
+   * first, at most 100 — where the list above is the browser's, one view at a time and with previews.
+   * Above `:id` for the reason `search` is.
+   */
+  @PatScope('sessions:read', { workspaceConfinable: false })
+  @Get('compact')
+  listCompact(
+    @CurrentUser() user: AuthUser,
+    @Query('status') status?: string,
+    @Query('parentSessionId', PublicIdPipe) parentSessionId?: string,
+  ) {
+    // An unknown status is ignored, as on the runner door, rather than handed to Prisma as an enum value
+    // it would answer with a 500.
+    const known = status && (Object.values(RunStatus) as string[]).includes(status) ? (status as RunStatus) : undefined;
+    return this.sessions.listForOrchestration(user.userId, { status: known, parentSessionId });
+  }
+
   @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.get(user.userId, id);
+  }
+
+  /** One session as `orbit session get` prints it when it acts as the person: the narrow detail the
+   *  runner door answers that command with (SessionsService.getForOrchestration), not the browser's above. */
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
+  @Get(':id/compact')
+  getCompact(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.sessions.getForOrchestration(user.userId, id);
   }
 
   @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
