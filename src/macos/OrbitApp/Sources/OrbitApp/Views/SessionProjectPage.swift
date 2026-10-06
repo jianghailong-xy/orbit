@@ -256,11 +256,6 @@ struct SessionProjectPage: View {
     private var coordinator: Session? {
         sessions.first { $0.projectMembership?.role == .coordinator }
     }
-    private var availableCoordinator: Session? {
-        coordinator ?? (app.sessions + (app.agents?.allSessions ?? [])).first {
-            $0.projectMembership?.projectId == address.projectID && $0.projectMembership?.role == .coordinator
-        }
-    }
     private var titleText: String {
         project?.title ?? sessions.first?.projectMembership?.projectTitle ?? "Project"
     }
@@ -316,7 +311,7 @@ struct SessionProjectPage: View {
                 }
             }
             ToolbarItem(placement: .principal) { title }
-            ToolbarItem(placement: .topBarTrailing) { projectMenu }
+            ToolbarItem(placement: .topBarTrailing) { openProjectButton }
         }
         .sheet(item: $taggingSession) { SessionTagSheet(session: $0).environment(app) }
         .sheet(item: $sharingSession) { session in
@@ -375,16 +370,7 @@ struct SessionProjectPage: View {
                     .font(.orbitMeta)
                     .foregroundStyle(.secondary)
             }
-            Spacer(minLength: 4)
-            Button { openProject() } label: {
-                HStack(spacing: 4) {
-                    Text("Project")
-                    Image(systemName: "chevron.right")
-                }
-                .font(.orbitMeta.weight(.semibold))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Color.accentColor)
+            Spacer()
         }
         .padding(12)
     }
@@ -421,23 +407,11 @@ struct SessionProjectPage: View {
         app.openProjectFromConversation(address.projectID, overConsole: rowNavigation == .push)
     }
 
-    private var projectMenu: some View {
-        Menu {
-            Button { openProject() } label: {
-                Label(SessionProjectCopy.openProject, systemImage: "square.grid.2x2")
-            }
-            Button {
-                if let coordinator = availableCoordinator {
-                    app.openProjectMember(coordinator, push: rowNavigation == .push)
-                }
-            } label: {
-                Label(SessionProjectCopy.openCoordinator, systemImage: "bubble.left")
-            }
-            .disabled(availableCoordinator == nil)
-        } label: {
-            Image(systemName: "ellipsis.circle")
+    private var openProjectButton: some View {
+        Button { openProject() } label: {
+            Image(systemName: "square.grid.2x2")
         }
-        .accessibilityLabel("Project actions")
+        .accessibilityLabel(SessionProjectCopy.openProject)
     }
 
     @ViewBuilder private func sessionRow(_ session: Session) -> some View {
