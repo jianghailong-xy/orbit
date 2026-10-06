@@ -24,7 +24,12 @@
  *       PAT_SCOPE_MISSING and writes nothing, and with it the write is made; routes no scope opens
  *       (the account, the password, an owner's decision) refuse a token holding every scope, while a
  *       login JWT reaches each of them as before; revoked, expired and unknown tokens are one 401;
- *       and the event stream takes a login's `?access_token=` but never a token's.
+ *       and the event stream takes a login's `?access_token=` but never a token's;
+ *  (11) through that same apiserver, a task a token creates is its user's — creator USER and the
+ *       user's id, as from the Web — and the `activity` row it gets (0384, §6.4) names the door: PAT
+ *       and the token's id, or LOGIN and no id. Every user door that creates tasks — the single
+ *       create, the batch, the paired create — records each task it inserts once; a dry run and a
+ *       write the token was not granted record nothing.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/auth/personal-access-token.pg.spec.ts
  *
@@ -49,6 +54,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
+import { toUuid } from '@orbit/shared';
 import type { PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
@@ -59,6 +65,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { establishProjectContractForPgTest } from '../projects/project-contract-test-helper';
 import { AllowQueryToken } from './allow-query-token.decorator';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { PAT_MAX_ACTIVE_PER_USER, PAT_PREFIX, PAT_SCOPES, PatService } from './pat.service';
@@ -67,6 +74,10 @@ const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
 const MIGRATION = readFileSync(
   path.resolve(__dirname, '../../prisma/migrations/0383_personal_access_token/migration.sql'),
+  'utf8',
+);
+const ACTIVITY_MIGRATION = readFileSync(
+  path.resolve(__dirname, '../../prisma/migrations/0384_activity_credential/migration.sql'),
   'utf8',
 );
 /** build/auth → build/main.js, the apiserver's production entry point. */
@@ -710,4 +721,170 @@ test('(10) the production apiserver: a token reaches a route holding the scope i
   const withoutEvents = await call(server, 'GET', '/api/events', reader);
   assert.equal(withoutEvents.status, 403, withoutEvents.text);
   assert.equal(withoutEvents.json?.scope, 'events:read');
+});
+
+// ── (11) whose write it is, and which door it came through ────────────────────────────────────
+
+test("(11) the production apiserver: a task created through a token is its user's and its activity row names the token; through a login the row says LOGIN; every user door that creates tasks records each task it inserts, and nothing else is recorded", {
+  skip: !URL, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const url = URL!;
+  assertCoordinatorPgUrlIsIsolated(url);
+  const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+  await sql.connect();
+  const db: PrismaClient = prismaClientFor(url);
+  let server: Apiserver | undefined;
+  t.after(async () => {
+    await server?.stop();
+    await db.$disconnect().catch(() => undefined);
+    await sql.end().catch(() => undefined);
+  });
+  await verifyCoordinatorPgIdentity(sql);
+
+  // 0384, on the database this run migrated from empty: two nullable columns, and a CHECK that takes
+  // a kind of LOGIN or PAT (or none) and a token id exactly when the kind is PAT. It runs again.
+  const applied = await sql.query(
+    `SELECT finished_at IS NOT NULL AS done FROM _prisma_migrations WHERE migration_name = '0384_activity_credential'`,
+  );
+  assert.deepEqual(applied.rows, [{ done: true }]);
+  const columns = async () => (await sql.query(
+    `SELECT column_name, udt_name, is_nullable FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'activity' AND column_name LIKE 'credential%'
+      ORDER BY column_name`,
+  )).rows.map((c) => `${c.column_name} ${c.udt_name} ${c.is_nullable === 'YES' ? 'NULL' : 'NOT NULL'}`);
+  assert.deepEqual(await columns(), ['credential_id uuid NULL', 'credential_kind text NULL']);
+  const probe = randomUUID();
+  const insert = (kind: string | null, id: string | null) => sql.query(
+    `INSERT INTO activity (id, actor_id, type, credential_kind, credential_id) VALUES ($1, $2, 'probe', $3, $4)`,
+    [randomUUID(), probe, kind, id],
+  );
+  for (const [kind, id] of [[null, null], ['LOGIN', null], ['PAT', randomUUID()]] as const) await insert(kind, id);
+  for (const [kind, id] of [['PAT', null], ['LOGIN', randomUUID()], [null, randomUUID()], ['SESSION', null]] as const) {
+    await assert.rejects(
+      insert(kind, id),
+      (error: { code?: string; constraint?: string }) =>
+        error.code === '23514' && error.constraint === 'activity_credential_chk',
+      `kind ${kind} with ${id ? 'a token id' : 'no token id'} is refused`,
+    );
+  }
+  await sql.query(ACTIVITY_MIGRATION);
+  assert.deepEqual(await columns(), ['credential_id uuid NULL', 'credential_kind text NULL'], '0384 runs again');
+  await sql.query('DELETE FROM activity WHERE actor_id = $1', [probe]);
+
+  const userId = randomUUID();
+  const email = `audit-${RUN}-${userId}@personal-access-token.invalid`;
+  await db.user.create({ data: { id: userId, email, name: 'Audited', passwordHash: 'x' } });
+  // The paired create files a verification, which only a project can count.
+  const projectId = randomUUID();
+  await db.project.create({ data: { id: projectId, ownerId: userId, title: `audit ${RUN}` } });
+  await db.projectRuntime.upsert({ where: { projectId }, create: { projectId }, update: {} });
+  await establishProjectContractForPgTest(db, userId, projectId, `audit ${RUN}`);
+  const pats = new PatService(db as unknown as PrismaService);
+  const issue = (name: string, scopes: string[]) =>
+    pats.issue(userId, { name, scopes, expiresInDays: 90, createdVia: 'WEB' });
+  const writer = await issue('writer', ['tasks:read', 'tasks:write']);
+  const reader = await issue('reader', ['tasks:read']);
+  const jwtSecret = `pat-spec-${randomUUID()}`;
+  const login = await new JwtService({ secret: jwtSecret }).signAsync({ sub: userId, email });
+  server = await startApiserver(url, jwtSecret);
+
+  const task = (title: string) => ({
+    title,
+    completionCriterion: 'EXECUTABLE',
+    acceptanceCommand: 'true',
+    acceptanceExpectedExitCode: 0,
+  });
+  /** A task as stored — its creator — and every activity row about it. Ids arrive as public ids. */
+  const stored = async (publicId: string) => {
+    const id = toUuid(publicId);
+    const row = await sql.query(
+      'SELECT creator_type, creator_id, creator_session_id FROM task WHERE id = $1',
+      [id],
+    );
+    const activity = await sql.query(
+      `SELECT actor_id, type, payload, credential_kind, credential_id FROM activity WHERE payload->>'taskId' = $1`,
+      [id],
+    );
+    return { id, creator: row.rows[0], activity: activity.rows };
+  };
+  // The user's, whichever door: exactly what the Web has always written.
+  const theUsers = { creator_type: 'USER', creator_id: userId, creator_session_id: null };
+  const throughToken = (taskId: string) => ({
+    actor_id: userId,
+    type: 'task.created',
+    payload: { taskId },
+    credential_kind: 'PAT',
+    credential_id: writer.id,
+  });
+  const throughLogin = (taskId: string) => ({ ...throughToken(taskId), credential_kind: 'LOGIN', credential_id: null });
+
+  const byToken = await call(server, 'POST', '/api/tasks', writer.token, task('created through a token'));
+  assert.equal(byToken.status, 201, byToken.text);
+  const tokenTask = await stored(byToken.json.id);
+  assert.deepEqual(tokenTask.creator, theUsers);
+  assert.deepEqual(tokenTask.activity, [throughToken(tokenTask.id)]);
+
+  const byLogin = await call(server, 'POST', '/api/tasks', login, task('created through a login'));
+  assert.equal(byLogin.status, 201, byLogin.text);
+  const loginTask = await stored(byLogin.json.id);
+  assert.deepEqual(loginTask.creator, theUsers);
+  assert.deepEqual(loginTask.activity, [throughLogin(loginTask.id)]);
+
+  // The batch: one row for each task it inserts.
+  const batch = await call(server, 'POST', '/api/tasks/batch-create', writer.token, {
+    tasks: [task('batch one'), task('batch two')],
+  });
+  assert.equal(batch.status, 201, batch.text);
+  assert.equal(batch.json.length, 2, batch.text);
+  for (const created of batch.json) {
+    const written = await stored(created.id);
+    assert.deepEqual(written.creator, theUsers);
+    assert.deepEqual(written.activity, [throughToken(written.id)]);
+  }
+
+  // The paired create: the subject, and the check written beside it.
+  const paired = await call(server, 'POST', '/api/tasks', writer.token, {
+    title: 'a subject',
+    projectId,
+    completionCriterion: 'VERIFICATION',
+    completionPolicy: 'VERIFICATION_PASSED',
+    verification: { title: '[VERIFY] a subject' },
+  });
+  assert.equal(paired.status, 201, paired.text);
+  for (const id of [paired.json.id, paired.json.verification.id]) {
+    const written = await stored(id);
+    assert.deepEqual(written.creator, theUsers);
+    assert.deepEqual(written.activity, [throughToken(written.id)]);
+  }
+
+  // A dry run writes nothing, and neither does a write the token was not granted.
+  const preview = await call(server, 'POST', '/api/tasks/batch-create', writer.token, {
+    dryRun: true,
+    tasks: [task('only previewed')],
+  });
+  assert.equal(preview.status, 201, preview.text);
+  const refused = await call(server, 'POST', '/api/tasks', reader.token, task('refused its scope'));
+  assert.equal(refused.status, 403, refused.text);
+
+  // Six tasks, six rows: one each, nothing recorded twice, nothing for the preview or the refusal.
+  const titles = await sql.query('SELECT title FROM task WHERE owner_id = $1 ORDER BY title', [userId]);
+  assert.deepEqual(titles.rows.map((row) => row.title), [
+    '[VERIFY] a subject',
+    'a subject',
+    'batch one',
+    'batch two',
+    'created through a login',
+    'created through a token',
+  ]);
+  const recorded = await sql.query(
+    `SELECT credential_kind, credential_id, count(*)::int AS rows,
+            count(DISTINCT payload->>'taskId')::int AS tasks,
+            bool_and(payload->>'taskId' IN (SELECT id::text FROM task WHERE owner_id = $1)) AS all_theirs
+       FROM activity WHERE actor_id = $1 GROUP BY 1, 2 ORDER BY 1`,
+    [userId],
+  );
+  assert.deepEqual(recorded.rows, [
+    { credential_kind: 'LOGIN', credential_id: null, rows: 1, tasks: 1, all_theirs: true },
+    { credential_kind: 'PAT', credential_id: writer.id, rows: 5, tasks: 5, all_theirs: true },
+  ]);
 });

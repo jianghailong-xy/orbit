@@ -60,7 +60,7 @@ export class TasksController {
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateTaskDto) {
     requireExplicitCompletionCriterion(dto);
-    return this.tasks.create(user.userId, dto);
+    return this.tasks.create(user.userId, dto, undefined, undefined, user.credential);
   }
 
   @PatScope('tasks:read', { workspaceConfinable: 'LIST' })
@@ -246,7 +246,7 @@ export class TasksController {
     dto.tasks?.forEach((item, index) => requireExplicitCompletionCriterion(item, index));
     return dto.dryRun
       ? this.tasks.previewPlan(user.userId, dto)
-      : this.tasks.createMany(user.userId, dto);
+      : this.tasks.createMany(user.userId, dto, undefined, undefined, user.credential);
   }
 
   @PatScope('tasks:write', { workspaceConfinable: false })
