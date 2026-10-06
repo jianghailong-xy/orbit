@@ -279,7 +279,7 @@ import {
   uploadAttachment,
 } from '../api';
 import { DshRepairCard } from './Transcript';
-import { DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
+import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
 import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
@@ -9588,6 +9588,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   answerable={answerableApprovalIds.has(a.id)}
                   onChatAbout={startChatReply}
                   onDecline={startDeclineReply}
+                  rememberable={approvalRememberOffered(runtimeForProvider(shownProvider, configuredProviders))}
                 />
               ))}
               {!selectedTrashed && visibleQueuedTurns.map((q) => {

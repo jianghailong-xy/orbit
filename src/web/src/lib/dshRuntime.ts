@@ -67,6 +67,14 @@ export const DSH_STATE_HINT: Record<Exclude<DshRunnerState, 'ready'>, string> = 
   unsupportedVersion: 'This runner has a DeepSeek Harness version Orbit does not support. Reinstall it from Providers.',
 };
 
+/**
+ * Whether an approval card may offer "Always allow" on this runtime. Harness's approval bridge
+ * (runner dsh_permissions.go) answers each ask once — allow-once or reject-once — and drops
+ * remember rules; the server only forwards rules for the runner to apply, so on Harness the next
+ * call would ask again. Offering it there would promise something nothing does.
+ */
+export const approvalRememberOffered = (runtime: string): boolean => runtime !== 'dsh';
+
 /** What went wrong in a Harness session, when the runner's message says so. */
 export type DshRepair = 'needsKey' | 'invalidKey' | 'updateRunner' | 'notInstalled' | 'unsupportedPlatform';
 

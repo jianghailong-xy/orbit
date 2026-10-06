@@ -184,6 +184,21 @@ final class DshRuntimeTests: XCTestCase {
         XCTAssertFalse(none.first { $0.slug == "claude" }!.provider.setup)
     }
 
+    /// Harness's approval bridge answers each ask once and drops remember rules, so its cards offer
+    /// Allow / Deny only; every other runtime keeps Allow & remember.
+    func testApprovalRememberIsNotOfferedOnHarness() throws {
+        XCTAssertFalse(Approvals.rememberOffered(runtime: "dsh"))
+        for runtime in ["claude", "codex", "kimi", "opencode", "antigravity"] {
+            XCTAssertTrue(Approvals.rememberOffered(runtime: runtime), runtime)
+        }
+        XCTAssertEqual(SessionProviderChoices.executingRuntime("deepseek-harness", configured: [harness]), "dsh")
+        // The card and the send path both read it from the session's runtime.
+        let card = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/ApprovalCards.swift")
+        XCTAssertTrue(card.contains("guard Approvals.rememberOffered(runtime: SessionProviderChoices.executingRuntime("))
+        let console = try source("src/macos/OrbitApp/Sources/OrbitApp/ConsoleModel.swift")
+        XCTAssertTrue(console.contains("if remember, behavior == .allow, !executesDsh, let input = approval.input {"))
+    }
+
     func testRunnerPageRowAndSlashScope() {
         XCTAssertEqual(RunnerPageFormat.engineName("dsh"), "DeepSeek Harness")
         XCTAssertTrue(RunnerPageFormat.engineOrder.contains("dsh"))

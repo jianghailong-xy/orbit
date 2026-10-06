@@ -3234,7 +3234,7 @@ final class ConsoleModel {
     func decide(_ approval: PendingApproval, behavior: ApprovalBehavior,
                 answers: [String: [String]]? = nil, remember: Bool = false) async {
         var rules: [PermissionRule]?
-        if remember, behavior == .allow, let input = approval.input {
+        if remember, behavior == .allow, !executesDsh, let input = approval.input {
             rules = Approvals.rememberRules(toolName: approval.toolName ?? "", input: input)
         }
         // Optimistic: drop the card now (the SSE `approval_resolved` echoes this). On failure,
