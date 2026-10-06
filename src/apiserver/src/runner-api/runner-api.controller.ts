@@ -42,9 +42,13 @@ import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
 import { accountAfterUsageLimit, accountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
-import { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
+import {
+  ANTIGRAVITY_ACCOUNT_LOGIN_V1,
+  CLAUDE_ACCOUNT_MOVE_V1,
+  CODEX_ACCOUNT_MOVE_V1,
+} from '../providers/account-move-capability';
 import { accountEnvVar } from '../providers/account';
-import { sessionAccountPausedUntil } from '../providers/plan-usage-accounts';
+import { sessionAccountPausedUntil, type WorkspaceAccountChoices } from '../providers/plan-usage-accounts';
 import { dispatchCodexResetCommand, receiveCodexResetResult } from './codex-reset-relay';
 import {
   INTEGRATION_RESULT_REFUSAL_STATUS,
@@ -132,6 +136,9 @@ import {
   fastModeAvailable,
   type CodexRateLimitResetResultRequest,
   type RunnerModelCatalog,
+  isAccountEngine,
+  withEnginePlanUsage,
+  type AccountEngine,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
@@ -442,7 +449,29 @@ export const CODEX_ACCOUNT_REMOVE_V1 = 'codex-account-remove/v1';
  *  a Claude account named by the control plane rather than the machine's one login. */
 export const CLAUDE_ACCOUNT_LOGIN_V1 = 'claude-account-login/v1';
 export const CLAUDE_ACCOUNT_REMOVE_V1 = 'claude-account-remove/v1';
+/** Antigravity's, the same two again: a runner that declares them signs in, and removes, a Google
+ *  account named by the control plane — its own Gemini directory — rather than its one Google sign-in. */
+export { ANTIGRAVITY_ACCOUNT_LOGIN_V1 } from '../providers/account-move-capability';
+export const ANTIGRAVITY_ACCOUNT_REMOVE_V1 = 'antigravity-account-remove/v1';
 export { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
+
+/** What a runner declares before it is handed a sign-in, or a removal, of a named account of each
+ *  engine that keeps accounts — and what that engine is called when it is too old to. */
+const ACCOUNT_LOGIN_CAPABILITY = {
+  codex: CODEX_ACCOUNT_LOGIN_V1,
+  claude: CLAUDE_ACCOUNT_LOGIN_V1,
+  antigravity: ANTIGRAVITY_ACCOUNT_LOGIN_V1,
+} as const satisfies Record<AccountEngine, string>;
+const ACCOUNT_REMOVE_CAPABILITY = {
+  codex: CODEX_ACCOUNT_REMOVE_V1,
+  claude: CLAUDE_ACCOUNT_REMOVE_V1,
+  antigravity: ANTIGRAVITY_ACCOUNT_REMOVE_V1,
+} as const satisfies Record<AccountEngine, string>;
+const ACCOUNT_ENGINE_LABEL = {
+  codex: 'Codex',
+  claude: 'Claude',
+  antigravity: 'Antigravity',
+} as const satisfies Record<AccountEngine, string>;
 /** Runner guarantees a durable compaction boundary before the next Claude top-level turn. */
 export const SESSION_CLAUDE_COORDINATOR_CONTEXT_V1 =
   'session-claude-coordinator-context-v1';
@@ -1811,16 +1840,14 @@ export class RunnerApiController {
       // and sign in its machine's Default instead — replacing the very login this sign-in was meant
       // to leave alone. One engine's declaration says nothing about another's: a runner that has
       // signed in Codex accounts since the beginning has never signed in a Claude one.
-      const signsInAccounts = runnerSupportsCapability(
-        capabilities,
-        engine === 'claude' ? CLAUDE_ACCOUNT_LOGIN_V1 : CODEX_ACCOUNT_LOGIN_V1,
-      );
+      const accountEngine: AccountEngine = isAccountEngine(engine) ? engine : 'codex';
+      const signsInAccounts = runnerSupportsCapability(capabilities, ACCOUNT_LOGIN_CAPABILITY[accountEngine]);
       // Antigravity's Google sign-in is judged again on the process polling now — the relay it
       // declares and the OS it names — which the start (RunnersService.startLogin) could only
       // check against the last heartbeat's.
       const refusal =
         !signsInAccounts && (accountName || (account && account !== 'default'))
-          ? `This runner is too old to sign in another ${engine === 'claude' ? 'Claude' : 'Codex'} account — ` +
+          ? `This runner is too old to sign in another ${ACCOUNT_ENGINE_LABEL[accountEngine]} account — ` +
             'update it, then try again.'
           : engine === 'antigravity'
             ? antigravityGoogleLoginRefusal({ capabilities: withRunnerOs(parseRunnerCapabilities(capabilities) ?? [], osHeader) })
@@ -1845,7 +1872,11 @@ export class RunnerApiController {
     // it was pasted for, and this is the one heartbeat that hands it over (login-code-relay.ts).
     const heldCode =
       engine === 'antigravity' && r.loginStatus === 'awaiting_code' ? loginCodeRelay.take(runnerId, attempt) : undefined;
-    if (heldCode) return { action: 'code', engine, code: heldCode, attempt };
+    // With the account it is for, as the stored code below goes: a sign-in adding an Antigravity account
+    // runs in that account's own directory, and the runner routes the paste by account.
+    if (heldCode) {
+      return { action: 'code', engine, code: heldCode, attempt, ...(r.loginAccount ? { account: r.loginAccount } : {}) };
+    }
     if (r.loginStatus === 'awaiting_code' && r.loginCode) {
       await this.prisma.runner.update({
         where: { id: runnerId },
@@ -1911,14 +1942,14 @@ export class RunnerApiController {
     if (!account) return undefined;
     // A row written before accounts-per-engine meant Codex.
     const engine = (r.accountRemoveEngine as LoginCommand['engine']) ?? 'codex';
-    const capability = engine === 'claude' ? CLAUDE_ACCOUNT_REMOVE_V1 : CODEX_ACCOUNT_REMOVE_V1;
-    if (!runnerSupportsCapability(capabilities, capability)) {
+    const accountEngine: AccountEngine = isAccountEngine(engine) ? engine : 'codex';
+    if (!runnerSupportsCapability(capabilities, ACCOUNT_REMOVE_CAPABILITY[accountEngine])) {
       await this.prisma.runner.update({
         where: { id: runnerId },
         data: {
           codexAccountRemoveStatus: 'failed',
           codexAccountRemoveMessage:
-            `This runner is too old to remove a ${engine === 'claude' ? 'Claude' : 'Codex'} account — ` +
+            `This runner is too old to remove ${accountEngine === 'antigravity' ? 'an' : 'a'} ${ACCOUNT_ENGINE_LABEL[accountEngine]} account — ` +
             'update it, then try again.',
         },
       });
@@ -1957,7 +1988,7 @@ export class RunnerApiController {
   @HttpCode(200)
   async accountRemoveResult(@CurrentRunner() runner: { id: string }, @Body() body: AccountRemoveResult) {
     const engine = body?.engine;
-    if (engine !== 'codex' && engine !== 'claude') {
+    if (!isAccountEngine(engine)) {
       throw new BadRequestException('Unknown engine');
     }
     return this.applyAccountRemoveResult(runner.id, body, engine);
@@ -2429,6 +2460,7 @@ export class RunnerApiController {
           workspaceEnv: workspace?.env as Record<string, string> | null,
           codexAccount: s.codexAccount ?? workspace?.codexAccount,
           claudeAccount: s.claudeAccount ?? workspace?.claudeAccount,
+          antigravityAccount: s.antigravityAccount ?? workspace?.antigravityAccount,
           runnerEngines: s.assignedRunner?.engines,
         });
       let exec = resolveExec(s.model);
@@ -3300,7 +3332,7 @@ export class RunnerApiController {
       // The pause may have been requested after the claim but before inbox delivery. Only
       // executable work that has not started is held; control messages and the active turn stay.
       if (owned[0].status === RunStatus.RUNNING) {
-        if (owned[0].providerBuiltin && (owned[0].provider === 'codex' || owned[0].provider === 'claude')) {
+        if (owned[0].providerBuiltin && isAccountEngine(owned[0].provider)) {
           // Pause writes this same row. Hold the read until the lease commits, so a pause
           // either precedes this turn or waits for its delivery and lets that turn finish.
           await tx.$queryRaw`SELECT id FROM "runner" WHERE id = ${runnerId}::uuid FOR SHARE`;
@@ -3321,7 +3353,7 @@ export class RunnerApiController {
           const session = await tx.session.findUniqueOrThrow({
             where: { id: sessionId },
             include: {
-              workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
+              workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true } },
               assignedRunner: { select: { engines: true, accountPauses: true } },
             },
           });
@@ -3771,7 +3803,8 @@ export class RunnerApiController {
         usesRuntimeDefaultModel: true,
         codexAccount: true,
         claudeAccount: true,
-        workspace: { select: { model: true, env: true, codexAccount: true, claudeAccount: true } },
+        antigravityAccount: true,
+        workspace: { select: { model: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true } },
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
       },
     });
@@ -3803,6 +3836,7 @@ export class RunnerApiController {
       workspaceEnv: session.workspace?.env as Record<string, string> | null,
       codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
       claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
+      antigravityAccount: session.antigravityAccount ?? session.workspace?.antigravityAccount,
       runnerEngines: session.assignedRunner?.engines,
     });
     // A built-in engine authenticates itself, so moving onto one injects nothing — but the
@@ -6081,7 +6115,7 @@ export class RunnerApiController {
         quotaSpent && accountEnvVar(current.provider) && current.workspaceId
           ? await tx.workspace.findUnique({
               where: { id: current.workspaceId },
-              select: { env: true, codexAccount: true, claudeAccount: true },
+              select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true },
             })
           : null;
       // A pool credential that ended the run is waited out the same way, from the pool's rows rather than
@@ -7144,9 +7178,9 @@ export class RunnerApiController {
   private async quotaRetryAt(
     tx: QuotaRetryTransaction,
     runnerId: string,
-    session: { ownerId: string; provider: string; providerBuiltin?: boolean; codexAccount: string | null; claudeAccount?: string | null },
+    session: { ownerId: string; provider: string; providerBuiltin?: boolean; codexAccount: string | null; claudeAccount?: string | null; antigravityAccount?: string | null },
     text: string,
-    workspace: { env: unknown; codexAccount: string | null; claudeAccount: string | null } | null | undefined,
+    workspace: ({ env: unknown } & WorkspaceAccountChoices) | null | undefined,
   ): Promise<Date | null> {
     const now = new Date();
     const runner = await tx.runner.findUnique({
@@ -7163,7 +7197,7 @@ export class RunnerApiController {
       pool ??
       parseQuotaResetAt(text, now) ??
       planUsageBlockedUntil(
-        runner?.planUsage as PlanUsage | null,
+        withEnginePlanUsage(runner?.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner?.engines)),
         session.provider,
         now,
         runAccount(
@@ -7172,6 +7206,7 @@ export class RunnerApiController {
           {
             codexAccount: session.codexAccount ?? workspace?.codexAccount,
             claudeAccount: session.claudeAccount ?? workspace?.claudeAccount,
+            antigravityAccount: session.antigravityAccount ?? workspace?.antigravityAccount,
           },
           runner?.engines,
         ),

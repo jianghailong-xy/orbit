@@ -92,6 +92,7 @@ export class WorkspacesService {
         // account whose quota resets soonest (automaticAccount) — and `default` pins its sessions to Default.
         codexAccount: dto.codexAccount ?? null,
         claudeAccount: dto.claudeAccount ?? null,
+        antigravityAccount: dto.antigravityAccount ?? null,
         enabled: dto.enabled ?? true,
         autoInitGit: dto.autoInitGit ?? false,
         enableWorktree: dto.enableWorktree ?? false,
@@ -295,6 +296,7 @@ export class WorkspacesService {
       defaultMergeTarget: dto.defaultMergeTarget,
       codexAccount: dto.codexAccount,
       claudeAccount: dto.claudeAccount,
+      antigravityAccount: dto.antigravityAccount,
       modelRouting: dto.modelRouting,
       modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders),
     };

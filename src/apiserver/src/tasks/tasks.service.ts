@@ -21,6 +21,7 @@ import {
 } from '@prisma/client';
 import {
   AgentProvider,
+  isAccountEngine,
   planUsageBlockedUntil,
   planUsageReported,
   RunEventType,
@@ -30,6 +31,7 @@ import {
   uuidToBase62,
   type ControlTaskChanged,
   type PlanUsage,
+  withEnginePlanUsage,
 } from '@orbit/shared';
 import { createHash, randomUUID } from 'crypto';
 import {
@@ -260,7 +262,8 @@ import { readTaskProgress } from './task-progress.service';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
-import { accountEnvVar } from '../providers/account';
+import { ACCOUNT_CHOICE, accountEnvVar } from '../providers/account';
+import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { readOwnerConfirmationRows } from './owner-confirmation-read';
 import { accountPoolRuntime, isBuiltinProvider } from '../providers/custom-provider';
 import {
@@ -11203,7 +11206,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         : (
             await this.prisma.workspace.findMany({
               where: { id: { in: accountWorkspaceIds } },
-              select: { id: true, env: true, codexAccount: true, claudeAccount: true },
+              select: { id: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true },
             })
           ).map((w) => [w.id, w]),
     );
@@ -11223,22 +11226,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         continue;
       }
       const runner = runnerById.get(assignee.runnerId);
-      const usage = runner?.planUsage as unknown as PlanUsage | null | undefined;
+      // Antigravity's quota travels with its engine health, and is weighed with the rest here.
+      const usage = withEnginePlanUsage(
+        runner?.planUsage as unknown as PlanUsage | null | undefined,
+        sanitizeRunnerEngines(runner?.engines),
+      );
       const workspace = workspaceById.get(assignee.workspaceId);
-      // A Codex or Claude task on a workspace that leaves the account to Orbit gets its session started
-      // on the runner's account whose quota resets soonest (automaticAccount), so that is the quota it
-      // waits on.
-      const automatic =
-        assignee.provider === 'codex' || assignee.provider === 'claude'
-          ? automaticAccount(assignee.provider, workspace, runner?.engines, usage, now)
-          : null;
+      // A task on an engine that keeps accounts, on a workspace that leaves the account to Orbit, gets
+      // its session started on the runner's account whose quota resets soonest (automaticAccount), so
+      // that is the quota it waits on.
+      const engine = isAccountEngine(assignee.provider) ? assignee.provider : null;
+      const automatic = engine ? automaticAccount(engine, workspace, runner?.engines, usage, now) : null;
       const account = runAccount(
         assignee.provider,
         workspace?.env,
-        workspace &&
-          (assignee.provider === 'claude'
-            ? { ...workspace, claudeAccount: automatic ?? workspace.claudeAccount }
-            : { ...workspace, codexAccount: automatic ?? workspace.codexAccount }),
+        workspace && engine ? { ...workspace, [ACCOUNT_CHOICE[engine]]: automatic ?? workspace[ACCOUNT_CHOICE[engine]] } : workspace,
         runner?.engines,
       );
       if (!planUsageReported(usage, assignee.provider, account)) blind.add(t.id);

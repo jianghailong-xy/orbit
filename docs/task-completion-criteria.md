@@ -247,7 +247,11 @@ the runner, and session-scoped values are removed rather than inherited or accep
 configuration: `ORBIT_SESSION_ID`, `ORBIT_AGENT_ID`, `ORBIT_TASK_ID`, `ORBIT_SPAWN_DEPTH`,
 `ORBIT_ALLOW_ORCHESTRATION`, `ORBIT_ORCHESTRATION_TOKEN`, and `ORBIT_MCP_PERMISSION_PROMPT`.
 A person's access token, `ORBIT_USER_TOKEN`, is removed from both sources the same way
-(`docs/personal-access-token-design.md` §8).
+(`docs/personal-access-token-design.md` §8). The runner then sets `ORBIT_RUNNER_CHILD=1`, whatever
+either source said about it, as it does on every process it starts for a session. The `orbit` CLI
+in the command therefore acts as the machine, never as a login saved in the runner's `ORBIT_HOME`
+(§7.2 of the same document), so `orbit wiki check` and `orbit wiki plan check` run with the runner
+credential.
 No extra criterion-specific env is injected.
 
 A command may use PostgreSQL when the task's own workspace deliberately provides a reachable

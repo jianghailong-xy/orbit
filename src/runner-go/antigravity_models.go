@@ -198,8 +198,8 @@ const antigravityModelCatalogPlaceholderKey = "orbit-model-catalog"
 // Gemini's; when the sign-in cannot give one — refused, or no network — the API-key list stands in,
 // which every Gemini provider's sessions still run on.
 func fetchAntigravityModelCatalog(ctx context.Context) ([]ModelInfo, error) {
-	if antigravityGoogleSignInSaved() {
-		models, err := fetchAntigravityGoogleModelCatalog(ctx)
+	if dir := antigravityCatalogGoogleDir(); dir != "" {
+		models, err := fetchAntigravityGoogleModelCatalog(ctx, dir)
 		if err == nil {
 			return models, nil
 		}
@@ -208,12 +208,28 @@ func fetchAntigravityModelCatalog(ctx context.Context) ([]ModelInfo, error) {
 	return fetchAntigravityAPIModelCatalog(ctx)
 }
 
-// fetchAntigravityGoogleModelCatalog is `agy models` on the runner's Google sign-in, through the entry
-// its login and status probe use (antigravityGoogleCommand).
-func fetchAntigravityGoogleModelCatalog(ctx context.Context) ([]ModelInfo, error) {
+// antigravityCatalogGoogleDir is the account the model list is read on: Default when it keeps a sign-in,
+// else the first added account that does — every account of one runner reads the same list. Empty when
+// none keeps one.
+func antigravityCatalogGoogleDir() string {
+	slots, err := antigravityAccountKind.list()
+	if err != nil {
+		slots = []accountSlot{{ID: accountSlotDefaultID, Dir: antigravityGoogleDir()}}
+	}
+	for _, slot := range slots {
+		if antigravityGoogleSignInSavedIn(slot.Dir) {
+			return slot.Dir
+		}
+	}
+	return ""
+}
+
+// fetchAntigravityGoogleModelCatalog is `agy models` on one account's Google sign-in (dir), through the
+// entry its login and status probe use (antigravityGoogleCommand).
+func fetchAntigravityGoogleModelCatalog(ctx context.Context, dir string) ([]ModelInfo, error) {
 	cctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
-	cmd, cleanup, err := antigravityGoogleCommand(cctx, agyExecutable, nil, false, "models")
+	cmd, cleanup, err := antigravityGoogleCommand(cctx, agyExecutable, envWithValue(os.Environ(), antigravityAccountDirVar, dir), false, "models")
 	if err != nil {
 		return nil, err
 	}

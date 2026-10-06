@@ -10,6 +10,7 @@ import (
 	"go/token"
 	"go/types"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -28,6 +29,11 @@ import (
 // agent's configuration, and reads back what the process was handed. So a new place that builds an agent's
 // environment fails the census until it is a case, and as a case it fails unless what it builds went
 // through userCredentialEnvKey.
+//
+// Each case is also held to the runner's mark (§7.2): the process it starts carries ORBIT_RUNNER_CHILD=1,
+// once, though the runner's own environment and the agent's configuration both blank it — so the CLI there
+// never acts as the login saved on the machine, session or no session. A terminal the runner did not start
+// does not carry it, and acts as that login as before (runner_child_identity_test.go).
 
 const (
 	runnerUserToken    = "orbit_pat_held-by-the-runner-environment"
@@ -266,12 +272,15 @@ func TestAgentEnvironmentsWithholdUserCredentials(t *testing.T) {
 			t.Setenv("ORBIT_HOME", filepath.Join(dir, "orbit-home"))
 			t.Setenv("ORBIT_USER_TOKEN", runnerUserToken)
 			t.Setenv("PAT_TEST_RUNNER_VALUE", "runner")
+			// Blank, which the CLI reads as unmarked: inherited, it would leave the process the person's.
+			t.Setenv(envRunnerChild, "")
 			job := &ClaimedSession{
 				SessionID: userTokenSessionID, SessionUUID: userTokenSessionID,
 				AgentID: "31111111-2222-4333-8444-555555555555", TaskID: "21111111-2222-4333-8444-555555555555",
 				Agent: AgentExecConfig{Model: "model", PermissionMode: "dontAsk", Env: map[string]string{
 					"ORBIT_USER_TOKEN":     agentUserToken,
 					"PAT_TEST_AGENT_VALUE": "agent",
+					envRunnerChild:         "",
 				}},
 			}
 			env := c.env(t, job, dir)
@@ -280,6 +289,7 @@ func TestAgentEnvironmentsWithholdUserCredentials(t *testing.T) {
 					t.Fatalf("the environment lacks %q, so it is not the one this site builds: %q", want, env)
 				}
 			}
+			var marks []string
 			for _, entry := range env {
 				key, _, _ := strings.Cut(entry, "=")
 				if strings.EqualFold(key, "ORBIT_USER_TOKEN") {
@@ -287,9 +297,35 @@ func TestAgentEnvironmentsWithholdUserCredentials(t *testing.T) {
 				} else if strings.Contains(entry, runnerUserToken) || strings.Contains(entry, agentUserToken) {
 					t.Errorf("the environment carries a user token under another name: %q", entry)
 				}
+				if strings.EqualFold(key, envRunnerChild) {
+					marks = append(marks, entry)
+				}
+			}
+			if len(marks) != 1 || marks[0] != envRunnerChild+"=1" {
+				t.Errorf("the process is marked %q, want %s=1 alone: build it on envWithAgent or runnerChildEnv, "+
+					"or say it where the environment is built from nothing", marks, envRunnerChild)
 			}
 		})
 	}
+
+	// The same login shell a shell turn runs, started with the machine's own environment rather than one the
+	// runner built: nothing on the way in — the shell's profile included — marks it.
+	t.Run("a terminal the runner did not start", func(t *testing.T) {
+		if _, inherited := os.LookupEnv(envRunnerChild); inherited {
+			t.Fatalf("the suite's own environment holds %s: clearCallingSession should have dropped it", envRunnerChild)
+		}
+		cmd := exec.Command("bash", "-lc", "/usr/bin/env")
+		cmd.Env = os.Environ()
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("bash -lc env: %v", err)
+		}
+		for _, entry := range strings.Split(string(out), "\n") {
+			if key, _, _ := strings.Cut(entry, "="); strings.EqualFold(key, envRunnerChild) {
+				t.Errorf("a terminal the runner did not start is marked: %q", entry)
+			}
+		}
+	})
 }
 
 // sessionContextWriters is every function in this package, tests aside, that writes ORBIT_SESSION_ID into an
