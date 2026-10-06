@@ -7,14 +7,21 @@ import { ago, ENGINE_CLI_NAME, updateNoteOf } from './runnerEngines';
 import {
   ATTENTION_CANT_UPDATE_ITSELF,
   ATTENTION_CHECKOUT_DETAIL,
+  ATTENTION_INSTALL_FOLDER_NOT_WRITABLE,
   ATTENTION_NEVER_CHECKED_IN,
   ATTENTION_OFFLINE_ONE_SESSION_WAITS,
   ATTENTION_OFFLINE_WAKE,
+  ATTENTION_RUNNER_UPDATE_FAILED,
+  ATTENTION_UPDATER_OFF,
+  ATTENTION_UPDATES_TURN_ON,
+  ATTENTION_UPDATES_TURNED_OFF,
+  ATTENTION_UPDATE_DIDNT_GO_THROUGH,
   RUNNER_GIT_CHERRY_PICK,
   RUNNER_GIT_CONFLICT,
   RUNNER_GIT_MERGE,
   RUNNER_GIT_REBASE,
   RUNNER_GIT_REVERT,
+  RUNNER_INSTALL_FOLDER,
   RUNNER_KEEP_FREE_10_GB,
   RUNNER_KEEP_FREE_20_GB,
   RUNNER_KEEP_FREE_50_GB,
@@ -46,16 +53,19 @@ import {
   attentionDiskNoReserve,
   attentionEngineUpdateDetail,
   attentionEngineUpdateFailed,
+  attentionInstallFolderNotWritableDetail,
   attentionOfflineFor,
   attentionOfflineSessionsWait,
   attentionQuotaDetail,
   attentionQuotaDetailMany,
   attentionQuotaShort,
   attentionQuotaTitle,
+  attentionRunnerUpdateFailedDetail,
   attentionSignedOutDetail,
   attentionSignedOutDetailMany,
   attentionSignedOutShort,
   attentionSignedOutTitle,
+  attentionUpdatesTurnedOffDetail,
   runnerGb,
   runnerNamesMore,
   runnerNamesTwo,
@@ -95,6 +105,7 @@ export type AttentionRunner = Pick<
   | 'lastHeartbeatAt'
   | 'activeSessions'
   | 'runsAsRoot'
+  | 'selfUpdate'
   | 'minFreeDiskMb'
   | 'engines'
   | 'planUsage'
@@ -134,7 +145,8 @@ export type AttentionKind =
 export type AttentionTone = 'bad' | 'warn' | 'idle';
 
 export interface AttentionAction {
-  kind: 'signIn' | 'repair' | 'setReserve' | 'copyCommand' | 'updateEngines';
+  /** updateRunner: POST /runners/:id/self-update — Update Runner Now. */
+  kind: 'signIn' | 'repair' | 'setReserve' | 'copyCommand' | 'updateEngines' | 'updateRunner';
   engine?: ReportedEngine;
   /** repair: POST /workspaces/:id/repo-cleanup for any workspace in the stuck checkout. */
   workspaceId?: string;
@@ -511,28 +523,98 @@ function diskItem(
   };
 }
 
+/** The runner's own words as the start of a sentence: capitalized, with no closing full stop. */
+function runnerSaid(words: string | undefined, otherwise: string): string {
+  const said = words?.trim().replace(/\.+$/, '') ?? '';
+  return said ? said.charAt(0).toUpperCase() + said.slice(1) : otherwise;
+}
+
 /**
- * Behind the latest release on a runner that is not root. Root is what lets the updater replace
- * the binary in a root-owned install directory; a regular user stays on its version until someone
- * runs `sudo orbit upgrade` there. Unknown (null) is an older runner and is not flagged. A root
- * runner that is behind installs the release itself when no turn is running — no item for that.
+ * Behind the latest release, and not catching up by itself.
+ *
+ * A runner that reports where its updates stand (`selfUpdate`) is taken at its word:
+ * - `dirNotWritable`: the user it runs as can't write its install folder. `sudo orbit upgrade` there
+ *   moves the install somewhere it can, once.
+ * - `disabledByEnv`: its updater is off, and the reason says by what. Only ORBIT_NO_SELFUPDATE is a
+ *   switch to turn back; a development build or a platform with no release has none.
+ * - `failed`: the check or the install failed, in its own words. Update Runner Now tries again, so
+ *   this is raised only while it is online, like an engine's failed update.
+ * - `enabled`, `waitingForIdle`, `heldByRollout`: it catches up by itself — no item; About says
+ *   which. Nor for a state this client doesn't know: there is nothing it could prescribe.
+ *
+ * A runner too old to report it is judged by runsAsRoot, as before there was a report. Root is what
+ * lets the updater replace the binary in a root-owned install directory; a regular user stays on
+ * its version until someone runs `sudo orbit upgrade` there. Unknown (null) is not flagged, and a
+ * root runner that is behind installs the release itself when no turn is running.
  */
 function cannotSelfUpdateItem(
   runner: AttentionRunner,
   latestVersion: string | null,
+  offline: boolean,
 ): AttentionItem | null {
   const version = runner.version?.trim();
-  if (runner.runsAsRoot !== false || !version || !latestVersion) return null;
+  if (!version || !latestVersion) return null;
   if (compareRunnerVersions(version, latestVersion) >= 0) return null;
-  return {
-    kind: 'cannotSelfUpdate',
-    tone: 'warn',
-    short: ATTENTION_CANT_UPDATE_ITSELF,
-    title: ATTENTION_CANT_UPDATE_ITSELF,
-    detail: attentionCantUpdateItselfDetail(version, latestVersion, RUNNER_UPGRADE_COMMAND),
-    action: { kind: 'copyCommand', command: RUNNER_UPGRADE_COMMAND },
-    params: { version, latest: latestVersion },
-  };
+  const report = runner.selfUpdate;
+  if (!report) {
+    if (runner.runsAsRoot !== false) return null;
+    return {
+      kind: 'cannotSelfUpdate',
+      tone: 'warn',
+      short: ATTENTION_CANT_UPDATE_ITSELF,
+      title: ATTENTION_CANT_UPDATE_ITSELF,
+      detail: attentionCantUpdateItselfDetail(version, latestVersion, RUNNER_UPGRADE_COMMAND),
+      action: { kind: 'copyCommand', command: RUNNER_UPGRADE_COMMAND },
+      params: { version, latest: latestVersion },
+    };
+  }
+  const reported = { version, latest: latestVersion, state: report.state, reason: report.reason ?? null };
+  switch (report.state) {
+    case 'dirNotWritable':
+      return {
+        kind: 'cannotSelfUpdate',
+        tone: 'warn',
+        short: ATTENTION_INSTALL_FOLDER_NOT_WRITABLE,
+        title: ATTENTION_INSTALL_FOLDER_NOT_WRITABLE,
+        detail: attentionInstallFolderNotWritableDetail(
+          report.installDir ?? RUNNER_INSTALL_FOLDER,
+          version,
+          latestVersion,
+          RUNNER_UPGRADE_COMMAND,
+        ),
+        action: { kind: 'copyCommand', command: RUNNER_UPGRADE_COMMAND },
+        params: { version, latest: latestVersion, state: report.state, installDir: report.installDir ?? null },
+      };
+    case 'disabledByEnv': {
+      const why = runnerSaid(report.reason, ATTENTION_UPDATER_OFF);
+      const detail = attentionUpdatesTurnedOffDetail(why, version, latestVersion);
+      return {
+        kind: 'cannotSelfUpdate',
+        tone: 'warn',
+        short: ATTENTION_UPDATES_TURNED_OFF,
+        title: ATTENTION_UPDATES_TURNED_OFF,
+        detail: report.reason?.includes('ORBIT_NO_SELFUPDATE') ? `${detail} ${ATTENTION_UPDATES_TURN_ON}` : detail,
+        params: reported,
+      };
+    }
+    case 'failed':
+      if (offline) return null;
+      return {
+        kind: 'cannotSelfUpdate',
+        tone: 'warn',
+        short: ATTENTION_RUNNER_UPDATE_FAILED,
+        title: ATTENTION_RUNNER_UPDATE_FAILED,
+        detail: attentionRunnerUpdateFailedDetail(
+          runnerSaid(report.reason, ATTENTION_UPDATE_DIDNT_GO_THROUGH),
+          version,
+          latestVersion,
+        ),
+        action: { kind: 'updateRunner' },
+        params: reported,
+      };
+    default:
+      return null;
+  }
 }
 
 /** An installed CLI whose update note is a warning (runnerEngines' updateNoteOf). */
@@ -570,10 +652,21 @@ export function runnerAttention(input: RunnerAttentionInput): AttentionItem[] {
     const disk = diskItem(runner, workspaces);
     if (disk) items.push(disk);
   }
-  const cannotUpdate = cannotSelfUpdateItem(runner, latestVersion);
+  const cannotUpdate = cannotSelfUpdateItem(runner, latestVersion, offline);
   if (cannotUpdate) items.push(cannotUpdate);
   if (!offline) items.push(...engineUpdateItems(runner, nowMs));
   return items;
+}
+
+/**
+ * Whether Update Runner Now can do anything here. Only a runner that reports its updates takes the
+ * request (the server refuses an older one), only while it is online, and not one whose updater is
+ * off or can't write its install folder: a check now would find what the last one did.
+ */
+export function runnerCanUpdateNow(runner: AttentionRunner, nowMs: number): boolean {
+  const state = runner.selfUpdate?.state;
+  if (!state || state === 'disabledByEnv' || state === 'dirNotWritable') return false;
+  return !runnerIsOffline(runner, nowMs);
 }
 
 // MARK: the list row

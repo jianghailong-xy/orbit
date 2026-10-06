@@ -201,12 +201,16 @@ orbit_pat_<43 字符 base64url>        # randomBytes(32)，256 bit
 
 | 路由 | PAT 不可写的字段 |
 |---|---|
-| `PATCH /projects/:id` | `status`（`DONE` / `CANCELLED` / `OPEN` 都算）、`integration`、`acceptanceCriteriaItems` |
-| `POST /projects` | `integration` ※ |
+| `PATCH /projects/:id` | `status`（`DONE` / `CANCELLED` / `OPEN` 都算）、`integration`、`acceptanceCriteriaItems`；项目授权集合 ◆ |
+| `POST /projects` | `integration` ※；项目授权集合 ◆ |
 | `POST /wiki/spaces` | `maintenance` |
 | `PATCH /wiki/spaces/:id` | `reviewMode`、`maintenance`、`automaticSpotChecks` ※ |
 | `PATCH /sessions/:id/config` | `permissionMode`，改成任何值都拒绝 |
 | `POST /sessions/:id/resume` | `permissionMode` ※ |
+| `POST /sessions` | `permissionMode`，任何值都拒绝 ◆ |
+
+项目授权集合指 `automatic`、`coordinatorEnabled`、`maxConcurrentTasks`、`sessionBudgetPerDay`、`coordinatorAgentId`
+五个字段，任何值都算，包括 `sessionBudgetPerDay`、`coordinatorAgentId` 用来清空的 `null`。
 
 `permissionMode` 的任何改动都拒绝，往更严的模式改也一样：否则 PAT 能把会话切到绕过审批的模式，
 「审批答复必须走 LOGIN」就失去意义。
@@ -216,9 +220,30 @@ orbit_pat_<43 字符 base64url>        # randomBytes(32)，256 bit
 `reviewMode`、`maintenance` 一样对 agent 会话拒绝 `WIKI_OWNER_CHANNEL_ONLY`；`resume` 复活已结束的会话时会重新套用
 `permissionMode`，不拒它，config 的规则就能「先结束再带新模式复活」绕过去。
 
-未纳入字段级规则、交协调者决定的：新建项目时的首批验收标准（不是编辑，项目启动或标准集确认时由所有者盖章）；
-项目授权集合（`automatic`、`coordinatorEnabled`、`maxConcurrentTasks`、`sessionBudgetPerDay`、`coordinatorAgentId`，
-runner 门对 agent 拒绝它们时点名「从 Web 或 user API 改」）；新建会话时的 `permissionMode`（agent 派生子会话时也可自选）。
+◆ 协调者 2026-10-06 决定新增的两项：
+
+- **项目授权集合**（`POST /projects` 与 `PATCH /projects/:id`）。这几个字段决定 agent 能自主到什么程度：协调者是否替所有者
+  做决定（Automatic）、同时能跑几个任务、一天能自己开几个会话、由谁来当协调者。runner 门已经对 agent 拒绝它们
+  （`runner-projects.controller.ts` 的 `refuseGovernance`）；PAT 是脚本通道，同样不该替所有者改授权。service 层直接读
+  `ProjectsService.AUTHORIZATION_FIELDS` 再加 `coordinatorAgentId`，与 runner 门同一份清单，授权集合以后加字段，PAT 也跟着拒绝。
+  PAT 带任何一个，整请求 403，不建项目、`configRevision` 不动；不带时照常建项目（授权取默认值，与 LOGIN 不带时建的一样）、
+  照常改其余字段。`POST /projects` 本来只收其中三个（`coordinatorEnabled`、`maxConcurrentTasks`、`sessionBudgetPerDay`；
+  新项目的 Automatic 就是 `coordinatorEnabled`，协调者由 `workspaceId` 开在哪里决定），`automatic` 和 `coordinatorAgentId`
+  过去被全局 whitelist 静默丢掉，PAT 带了会得到一个「不带它们的项目」。现在 `CreateProjectDto` 按 `PATCH` 的校验声明这两个字段，
+  只为按名拒绝，谁带都不写入：LOGIN 带合法值仍照旧忽略（格式不对的值与 `PATCH` 一样 400）；runner 门的 `refuseGovernance`
+  也因此按名拒绝 agent 带来的这两个字段，不再静默丢弃。
+- **新建会话的 `permissionMode`**（`POST /sessions`）。理由与 `PATCH /sessions/:id/config` 相同：不拒的话，PAT 新建一个绕过审批的会话，
+  就绕开了「审批答复只能走 LOGIN」。不带时按账号默认模式建会话：默认模式是所有者在设置里选的 `defaultPermissionMode`，
+  PAT 改不了（`users/*` 对 PAT 是 `PAT_FORBIDDEN` `ACCOUNT`）；没选过的账号与 MCP 派生、任务运行等所有不指定模式的会话一样，
+  落到服务端下限 `auto`（工作区内的改动与命令不询问）。
+
+保持不变、PAT 照常可写的两项（协调者 2026-10-06 决定）：
+
+- **新建项目时的首批验收标准**（`POST /projects` 的 `acceptanceCriteriaItems`）。确认标准集仍然只有 LOGIN 能做
+  （`POST /projects/:id/acceptance/confirmation` 与 `start` 都是 `OWNER_INTERACTIVE`），PAT 写的标准不会自动生效为已确认；
+  编辑已有项目的标准仍按上表拒绝。
+- **wiki principle 类条目的写入**（`POST /wiki/spaces/:id/changesets` 经 PAT 以所有者身份写入，可以写 agent 不能写的
+  principle）。它是内容，不是所有者通道的裁定，按 `wiki:write` 放行。
 
 ## 6. 服务端实现
 

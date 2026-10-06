@@ -276,6 +276,9 @@ export class SessionsController {
   // reach Prisma raw. These three are the ones a caller types or pastes — a workspace or runner
   // copied out of a client URL, a task id from a tool result — so they arrive base62 as often
   // as not.
+  //
+  // A personal access token reaches this with `sessions:write`, but never chooses the new
+  // session's permission mode — see SessionsService.create.
   @PatScope('sessions:write', {
     workspaceConfinable: {
       body: { workspaceId: 'workspace', agentId: 'workspace', taskId: 'task' },
@@ -290,7 +293,11 @@ export class SessionsController {
     dto: CreateSessionDto,
   ) {
     // `agentId` is the pre-rename name every shipped client still sends.
-    return this.sessions.create(user.userId, { ...dto, workspaceId: dto.workspaceId ?? dto.agentId });
+    return this.sessions.create(
+      user.userId,
+      { ...dto, workspaceId: dto.workspaceId ?? dto.agentId },
+      { credential: user.credential },
+    );
   }
 
   /** Start (or return) the repair session attached to this merge recovery. */
