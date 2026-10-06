@@ -2,9 +2,12 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtModule, type JwtSignOptions } from '@nestjs/jwt';
+import { AccessTokensController, PatSelfController } from './access-tokens.controller';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { PatDeviceLoginController } from './pat-device-login.controller';
+import { PatDeviceLoginService } from './pat-device-login.service';
 import { PatRefusalInterceptor, PatRequestAudit } from './pat-request-audit';
 import { PatService } from './pat.service';
 
@@ -30,17 +33,19 @@ import { PatService } from './pat.service';
       },
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, AccessTokensController, PatSelfController, PatDeviceLoginController],
   providers: [
     AuthService,
     JwtAuthGuard,
     PatService,
+    PatDeviceLoginService,
     PatRequestAudit,
     // Global, as every APP_INTERCEPTOR is: a field only the owner sets is refused past JwtAuthGuard,
     // and the request audit records that refusal as it records the guard's.
     { provide: APP_INTERCEPTOR, useClass: PatRefusalInterceptor },
   ],
-  // PatService and PatRequestAudit are exported because JwtAuthGuard is instantiated in every module that uses it.
+  // PatService and PatRequestAudit are exported because JwtAuthGuard is instantiated in every module that uses it,
+  // and PatService also because admin/* lists and revokes a user's tokens.
   exports: [JwtAuthGuard, JwtModule, PatService, PatRequestAudit],
 })
 export class AuthModule {}

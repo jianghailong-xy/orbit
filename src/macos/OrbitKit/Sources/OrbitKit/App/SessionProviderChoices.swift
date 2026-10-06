@@ -47,8 +47,9 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
     /// Nil for anything else.
     public let note: String?
     /// The runner's own accounts of this engine, when it has signed in more than one: offered under
-    /// its row, so a session can start on another account than its workspace's. Codex and Claude —
-    /// the engines whose CLI keeps a login per directory (`Session.codexAccount`, `.claudeAccount`).
+    /// its row, so a session can start on another account than its workspace's. Codex, Claude and
+    /// Antigravity — the engines whose CLI keeps a login per directory (`Session.codexAccount`,
+    /// `.claudeAccount`, `.antigravityAccount`).
     public let accounts: [AccountChoice]?
     /// Not a provider at all: the offer to connect one (DeepSeek Harness with no key yet). Always
     /// `unavailable`, never a session's provider, so no runtime's menu lists it.
@@ -83,7 +84,9 @@ public struct AccountChoice: Equatable, Sendable, Identifiable {
     public let id: String
     public let label: String
     /// Its own quota's tightest window — the one closest to its limit, which is the one that stops it —
-    /// compactly: "5h 100%", "Weekly 0%". Nil when none is reported.
+    /// compactly: "5h 100%", "Weekly 0%"; an Antigravity bucket by what is left, "gemini-5h 4% left".
+    /// "env key" for Antigravity's Default on a runner that runs it on its own Gemini key. Nil when
+    /// none is reported.
     public let quota: String?
     /// That window is at least 90% spent — where the composer's quota gauge turns amber too.
     public let nearLimit: Bool
@@ -116,33 +119,49 @@ public struct EngineChoice: Equatable, Sendable, Identifiable {
     /// there is no better one to pick — and where it is fixed.
     public var unavailable: String? { provider.unavailable }
     public var fixEngine: String? { provider.fixEngine }
-    /// The small label beside the engine's name: how its own sign-in signs in (Antigravity's "env
-    /// key"), and nothing for a provider of it — which provider is the composer's Provider menu's to
-    /// say (web `engineProviderDetail`).
-    public var providerDetail: String? {
-        provider.slug == slug ? provider.labelDetail : nil
-    }
 }
 
 public enum SessionProviderChoices {
-    /// The runner's accounts of an engine as picker rows, each with its own quota — nil unless it has
-    /// signed in more than one (web `providerChoices`).
-    public static func accountChoices(_ accounts: [RunnerEngineAccount]?, usage: PlanUsageSnapshot?) -> [AccountChoice]? {
-        guard let accounts, accounts.count >= 2 else { return nil }
+    /// The runner's accounts of an engine (`health`) as picker rows, each with its own quota — nil
+    /// unless it has signed in more than one (web `providerChoices`). `usage` is the engine's snapshot
+    /// (`CodexAccounts.usage`).
+    public static func accountChoices(_ health: RunnerEngineHealth?, usage: PlanUsageSnapshot?) -> [AccountChoice]? {
+        guard let health, let accounts = health.accounts, accounts.count >= 2 else { return nil }
         return accounts.map { account in
+            // Antigravity's Default on the runner's own Gemini key runs, on the key, with no quota of its
+            // own to show (`RunnerPageFormat.runsOnEnvKey`): not an account that is signed out.
+            if RunnerPageFormat.runsOnEnvKey(health, account: account.id, auth: account.auth) {
+                return AccountChoice(id: account.id, label: CodexAccounts.label(account.id, accounts: accounts),
+                                     quota: "env key")
+            }
+            let own = account.auth == "yes" ? CodexAccounts.snapshot(usage, account: account.id) : nil
+            let rows = own?.rows ?? []
             // The window closest to its limit: a Claude login's 5-hour window can read 0% while its
-            // weekly one is spent, and the first window alone would say it has room.
-            let rows = account.auth == "yes" ? (CodexAccounts.snapshot(usage, account: account.id)?.rows ?? []) : []
-            let row = rows.reduce(nil as PlanUsageRow?) { tightest, row in
-                tightest.map { row.percent > $0.percent ? row : $0 } ?? row
+            // weekly one is spent, and the first window alone would say it has room. An Antigravity
+            // bucket's row counts what is left rather than what is used, so its tightest is the one
+            // with least left: the binding row, judged by use.
+            let row: PlanUsageRow?
+            if rows.contains(where: \.remaining) {
+                row = own?.bindingRow()
+            } else {
+                row = rows.reduce(nil as PlanUsageRow?) { tightest, next in
+                    tightest.map { next.percent > $0.percent ? next : $0 } ?? next
+                }
             }
             return AccountChoice(
                 id: account.id,
                 label: CodexAccounts.label(account.id, accounts: accounts),
-                quota: row.map { r in "\(compactWindowLabel(r.label)) \(r.percent)%" },
+                quota: row.map(quotaText),
                 nearLimit: (row?.window.utilization ?? 0) >= 90,
                 unavailable: account.auth == "no" ? "Not signed in" : nil)
         }
+    }
+
+    /// One account's tightest window, compactly: "5h 100%" — or, for one that counts what is left, its
+    /// bucket and that: "gemini-5h 4% left".
+    static func quotaText(_ row: PlanUsageRow) -> String {
+        guard row.remaining else { return "\(compactWindowLabel(row.label)) \(row.percent)%" }
+        return "\(row.groupLabel ?? row.label) \(row.percent)% left"
     }
 
     /// A window's name short enough for a row beside an account's: "5h", "Weekly", "Weekly Opus" —
@@ -242,8 +261,8 @@ public enum SessionProviderChoices {
                 modelLabel: modelLabel(for: slug, configured: configured, catalog: catalog),
                 unavailable: blocker,
                 fixEngine: blocker == nil ? nil : slug,
-                accounts: (slug == "codex" || slug == "claude") && blocker == nil
-                    ? accountChoices(health(slug)?.accounts, usage: planUsage?.snapshot(for: slug))
+                accounts: RunnerPageFormat.keepsAccounts(slug) && blocker == nil
+                    ? accountChoices(health(slug), usage: CodexAccounts.usage(slug, planUsage: planUsage, engines: engines))
                     : nil,
                 labelDetail: slug == "antigravity" ? (googleAccount ? "Google account" : "env key") : nil)
         }

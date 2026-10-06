@@ -17,11 +17,14 @@
  *
  * WHAT IS REACHABLE, EXACTLY. `FILE_TASK` — new work filed over the line — and the `DEPEND_ON_TASK`
  * edge a plan asks for: both are declared on a create, and both file a question. `MOVE_TASK` is
- * still declared by no writer: `TasksService.update` admits a re-filing as `UPDATE_TASK` and builds
- * no declaration from the `handoff` its DTO accepts, so §4 R7 refuses a declared move exactly as it
- * refuses an undeclared one, and moving work between two goals stays the account owner's own write
- * (§4 R1 exempts them). The kind is defined here because the approval it would need is the same row;
- * what is missing is the writer, not the rule.
+ * declared on the edit door: a session that sends `task_update` with another `projectId` and a
+ * `handoff` (`--project` with `--handoff-reason` at a terminal) is asking for an existing task to be
+ * moved, and `TasksService.update` files that question and moves nothing. It may be asked from
+ * either end of the move — the project the task is leaving or the one it would enter — and one
+ * question stands per task and destination at a time. An undeclared move is still §4 R7, and the
+ * account owner's own move is still theirs to make directly (§4 R1). The account owner's yes is the
+ * move: confirming it moves the task, as their act, and spends the answer on it in the same
+ * transaction (`TasksService.applyMoveApproval`); re-sending the request moves nothing.
  *
  * The gap this unit closed was never a missing endpoint. It was a missing FACT: "the user said yes
  * to THIS crossing" is not derivable from any column the schema has.
@@ -55,8 +58,12 @@
 import { createHash } from 'node:crypto';
 
 import { canonicalJson } from './canonical-json';
-import type { ScopeRefusalCode } from './project-scope-contract';
-import type { HandoffApproval, HandoffApprovalState } from './project-scope-decision';
+import { SCOPE_RULE_BY_ID, type ScopeRefusalCode } from './project-scope-contract';
+import {
+  settledEndRule,
+  type HandoffApproval,
+  type HandoffApprovalState,
+} from './project-scope-decision';
 
 /**
  * The three shapes of crossing, kept apart because an approval for one is not an approval for
@@ -265,6 +272,36 @@ export function handoffDependentDigest(dependent: {
     .digest('hex');
 }
 
+/**
+ * The payload half for a move: what the moved task will carry into the target, and who asked.
+ *
+ * A move changes one fact about a task that already exists — which goal it counts towards — so its
+ * plan is not a task's fields. What the answer authorises beyond the two ends and the subject (all
+ * three already in the crossing key) is the criterion of the TARGET project the task will declare
+ * once it is there, when the request names one: a yes to "move it and count it towards criterion
+ * 2" is not a yes to "move it and count it towards nothing". The asker is bound for the reason
+ * `HandoffSourceEvidence` gives, and because `ProjectHandoffService.answerFor` refuses a row asked
+ * by anybody else: two sessions asking for the same move are two questions here, and what stops
+ * them standing side by side is the one-pending-move index of migration 0386, not this digest.
+ */
+export function handoffMoveDigest(move: {
+  criterionDefinitionId: string | null;
+  source: HandoffSourceEvidence;
+}): string {
+  return createHash('sha256')
+    .update(canonicalJson({
+      v: 1,
+      criterionDefinitionId: move.criterionDefinitionId ?? null,
+      source: {
+        projectId: move.source.projectId ?? null,
+        taskId: move.source.taskId ?? null,
+        sessionId: move.source.sessionId ?? null,
+        triggerEvent: move.source.triggerEvent ?? null,
+      },
+    }))
+    .digest('hex');
+}
+
 export interface HandoffCrossing {
   ownerId: string;
   fromProjectId: string;
@@ -330,38 +367,75 @@ export interface HandoffProjectFacts {
   status: 'OPEN' | 'DONE' | 'CANCELLED';
 }
 
+/**
+ * What the acceptance rule reads about a MOVE_TASK beyond its two ends, from the task row: whether
+ * the task serves one of the acceptance criteria of the project it would leave.
+ */
+export interface HandoffMoveFacts {
+  servesSourceCriterion: boolean;
+}
+
 export type HandoffAcceptedBy = HandoffDecider;
 
 export interface HandoffAcceptanceDecision {
-  acceptedBy: HandoffAcceptedBy;
+  /** Who may answer the crossing, or null when no answer can make it — `refusal` says why. */
+  acceptedBy: HandoffAcceptedBy | null;
   /** The rule that answered. Recorded on the row, so "why was this auto-accepted" has an answer. */
-  rule: 'HP1_TARGET_NOT_OPEN' | 'HP2_NOT_BOTH_AUTO';
+  rule: 'HP1_TARGET_NOT_OPEN' | 'HP1_SETTLED_CRITERION_SERVED' | 'HP2_NOT_BOTH_AUTO';
+  /** The refusal §4 gives the same move, exactly when `acceptedBy` is null. */
+  refusal: ScopeRefusalCode | null;
 }
 
 /**
  * WHO may accept the work — the project instruction's "目标 Project／登录用户按策略接受工作", as one
  * rule.
  *
- * HP1. The target is not OPEN: only a person, ever. R8 already refuses the write outright
- *      (`PROJECT_REOPEN_REQUIRED`, and reopening is L5's door), and this row makes the same claim
- *      about the ANSWER: an approval must never be able to buy a way into a settled project, or an
- *      accepted project gains work while its acceptance record still claims to describe it.
+ * HP1. A settled end. R8 already refuses the write outright (`PROJECT_REOPEN_REQUIRED`, and
+ *      reopening is L5's door), and this row makes the same claim about the ANSWER: an approval
+ *      must never be able to buy a way into a settled project, or an accepted project gains work
+ *      while its acceptance record still claims to describe it. A FILE_TASK's or DEPEND_ON_TASK's
+ *      answer is a permission spent later, by a write judged again when it is made, so only a
+ *      person may give one. A MOVE_TASK's answer IS the move (account owner, 2026-10-06), so for a
+ *      move this row is the refusal itself, in R8's words (`settledEndRule`): nobody's answer moves
+ *      a task into a settled project, or out of one whose criteria it serves
+ *      (`MOVE_TASK_SERVES_SETTLED_CRITERION`, R8B).
  *
  * HP2. Everything else: a person. This is the task's "跨项目 … 必须等待人工", and it has no
- *      exceptions left. The rule it replaced was `HP3_BOTH_AUTO` — both ends on AUTO and both open,
+ *      exceptions left. It includes the one move HP1 lets out of a settled project — a task none of
+ *      its criteria count, into an open one — which the account owner confirms like any other. The
+ *      rule it replaced was `HP3_BOTH_AUTO` — both ends on AUTO and both open,
  *      accepted by the two projects' owner in advance rather than by anybody looking — and it went
  *      with `automation_policy`, the only column either end's half of it could be read from. Rows an
  *      older build wrote under it still exist and are still read; nothing writes a new one, and
  *      `assertStandingAtEffect` is where spending one is refused.
+ *
+ * `move` is passed exactly for a MOVE_TASK.
  */
 export function decideHandoffAcceptance(
   from: HandoffProjectFacts,
   to: HandoffProjectFacts,
+  move: HandoffMoveFacts | null = null,
 ): HandoffAcceptanceDecision {
-  if (to.status !== 'OPEN' || from.status !== 'OPEN') {
-    return { acceptedBy: 'USER', rule: 'HP1_TARGET_NOT_OPEN' };
+  if (move) {
+    const settled = settledEndRule(
+      { fromOpen: from.status === 'OPEN', toOpen: to.status === 'OPEN' },
+      move,
+    );
+    if (settled) {
+      return {
+        acceptedBy: null,
+        rule: settled === 'R8B_SETTLED_CRITERION_SERVED'
+          ? 'HP1_SETTLED_CRITERION_SERVED'
+          : 'HP1_TARGET_NOT_OPEN',
+        refusal: SCOPE_RULE_BY_ID[settled].code,
+      };
+    }
+    return { acceptedBy: 'USER', rule: 'HP2_NOT_BOTH_AUTO', refusal: null };
   }
-  return { acceptedBy: 'USER', rule: 'HP2_NOT_BOTH_AUTO' };
+  if (to.status !== 'OPEN' || from.status !== 'OPEN') {
+    return { acceptedBy: 'USER', rule: 'HP1_TARGET_NOT_OPEN', refusal: null };
+  }
+  return { acceptedBy: 'USER', rule: 'HP2_NOT_BOTH_AUTO', refusal: null };
 }
 
 /** The stored row, as everything below reads it. */

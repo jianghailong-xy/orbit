@@ -184,6 +184,11 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
     'renders completion-evidence source provenance on the human review face; grants no project authority',
   'src/apiserver/src/runner-api/runner-task-completion-evidence.controller.ts':
     'forwards the authenticated runner session as completion-evidence provenance',
+  // The CLI acting as the person (docs/personal-access-token-design.md §7.3) sends the same N10 field
+  // in the user door's body — `orbit task evidence-submit --source-session-id`, which the runner door
+  // carries in a header. It forwards what the caller named and reads no task project provenance.
+  'src/runner-go/user_mode.go':
+    "forwards the caller's completion-evidence source session to the user door; reads no task project provenance",
   'src/apiserver/src/runner-api/runner-api.controller.ts':
     'persists and replay-checks completion-evidence source provenance; grants no project authority',
   'src/apiserver/src/tasks/task-completion-test-helper.ts':

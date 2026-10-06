@@ -202,9 +202,19 @@ export function accountsAfterMove(args: {
   session: { provider: string; claudeAccount: string | null; codexAccount: string | null };
   from: { env: unknown; claudeAccount: string | null; codexAccount: string | null } | null;
   runnerEngines: unknown;
-}): { claudeAccount?: string | null; claudeAccountPinned?: boolean; codexAccount?: string | null; codexAccountPinned?: boolean } {
+}): {
+  claudeAccount?: string | null;
+  claudeAccountPinned?: boolean;
+  codexAccount?: string | null;
+  codexAccountPinned?: boolean;
+  antigravityAccount?: string | null;
+  antigravityAccountPinned?: boolean;
+} {
   if (!args.sameRunner) {
-    return { claudeAccount: null, claudeAccountPinned: false, codexAccount: null, codexAccountPinned: false };
+    return {
+      claudeAccount: null, claudeAccountPinned: false, codexAccount: null, codexAccountPinned: false,
+      antigravityAccount: null, antigravityAccountPinned: false,
+    };
   }
   // A configured provider or a pool runs on a credential of its own, not on one of the runner's accounts.
   const { session } = args;

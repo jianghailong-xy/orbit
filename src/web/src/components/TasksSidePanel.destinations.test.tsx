@@ -6,6 +6,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeId } from '../lib/idCodec';
 import type { SidebarProject } from '../lib/projectAttention';
+import { MOBILE_QUERY } from '../lib/useMediaQuery';
 import { TasksSidePanel } from './TasksSidePanel';
 
 /**
@@ -163,6 +164,27 @@ describe('the sidebar’s rows as destinations', () => {
     await visit('/tasks');
     await click(projectRow());
     expect(location).toBe(`/workspaces/${A}?project=${PROJECT}`);
+  });
+
+  // As the iPad's sidebar has it: beside an open conversation only the list column changes.
+  it('opens a project beside the conversation showing on a wide screen, so the conversation stays', async () => {
+    serve();
+    await visit(`/sessions/${MEMBER}`);
+    await click(projectRow());
+    expect(location).toBe(`/sessions/${MEMBER}?project=${PROJECT}`);
+    expect(projectRow().classList.contains('active')).toBe(true);
+  });
+
+  it('opens the project’s page on a phone, which shows one pane, even from a conversation', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === MOBILE_QUERY, media: query, onchange: null,
+      addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }));
+    serve();
+    await visit(`/sessions/${MEMBER}`);
+    await click(projectRow());
+    expect(location).toBe(`/workspaces/${B}?project=${PROJECT}`);
   });
 
   it('keeps the project lit on a member’s conversation opened from its page', async () => {

@@ -89,8 +89,9 @@ describe('owner project settlement card', () => {
     expect(projectDoneReceiptTally(project.derivedDone.counts, 1)).toBe(
       '2 criteria met · 1 landed on main · 1 nothing to land · 1 gaps accepted',
     );
-    expect(projectWhyNotDoneTally(project.derivedDone.counts)).toBe(
-      '2 criteria · 2 met · 1 on main · 1 nothing to land',
+    // Its parts add up to the criteria: no "2 met" counted a second time beside where they are.
+    expect(projectWhyNotDoneTally(project.derivedDone)).toBe(
+      '2 criteria · 1 on main · 1 nothing to land',
     );
   });
 

@@ -557,8 +557,9 @@ func TestTheRunnerDeclaresItCarriesConversationsToAnotherAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 	for constant, capability := range map[string]string{
-		"CODEX_ACCOUNT_MOVE_V1":  codexAccountMoveCapabilityV1,
-		"CLAUDE_ACCOUNT_MOVE_V1": claudeAccountMoveCapabilityV1,
+		"CODEX_ACCOUNT_MOVE_V1":        codexAccountMoveCapabilityV1,
+		"CLAUDE_ACCOUNT_MOVE_V1":       claudeAccountMoveCapabilityV1,
+		"ANTIGRAVITY_ACCOUNT_LOGIN_V1": antigravityAccountLoginCapabilityV1,
 	} {
 		if !strings.Contains(","+runnerCapabilitiesV1+",", ","+capability+",") {
 			t.Fatalf("this runner does not declare %s: %q", capability, runnerCapabilitiesV1)

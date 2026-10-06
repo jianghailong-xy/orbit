@@ -1,5 +1,5 @@
-import type { LoginEngine, RunnerEngineAccount } from '@orbit/shared';
-import { accountDir, accountNameOf, accountPlanUsage } from '../lib/engineAccounts';
+import { withEnginePlanUsage, type LoginEngine, type RunnerEngineAccount } from '@orbit/shared';
+import { accountDir, accountNameOf, accountPlanUsage, runsOnEnvKey } from '../lib/engineAccounts';
 import { bindingPlanUsageRow, currentPlanUsageRows } from '../lib/planUsage';
 import { tildePath } from './RunnerEngines';
 import type { Runner } from './TasksSidePanel';
@@ -40,14 +40,22 @@ function accountStatus(
   engine: LoginEngine,
   account: Pick<RunnerEngineAccount, 'id' | 'auth'>,
 ): string {
+  // Antigravity's Default on a machine that runs it on its Gemini key: no Google sign-in to speak of.
+  if (runsOnEnvKey(runner.engines?.find((entry) => entry.engine === engine), account)) {
+    return 'env key · runs on your Gemini key';
+  }
   const signIn =
     account.auth === 'yes' ? 'signed in' : account.auth === 'no' ? 'signed out' : 'sign-in unknown';
   // Each account's quota is its own: the runner reads every account in that account's own
   // directory, and an account it has not read shows none rather than borrowing another's.
-  const snapshot = accountPlanUsage(runner.planUsage, engine, account.id);
+  const snapshot = accountPlanUsage(withEnginePlanUsage(runner.planUsage, runner.engines), engine, account.id);
   // The window that stops it, not the first one: a 5-hour window at 6% says nothing of a spent week.
+  // Antigravity's is the bucket with the least left, by agy's own name for it, in what is left.
   const quota = account.auth === 'yes' && snapshot ? bindingPlanUsageRow(currentPlanUsageRows(snapshot)) : undefined;
-  return quota ? `${quota.label} ${quota.percent}% · ${signIn}` : signIn;
+  if (!quota) return signIn;
+  return quota.remaining
+    ? `${quota.groupLabel ?? quota.label} ${quota.percent}% left · ${signIn}`
+    : `${quota.label} ${quota.percent}% · ${signIn}`;
 }
 
 interface AccountOption {
@@ -60,6 +68,8 @@ interface AccountOption {
 const ENGINE_COPY: Record<string, { label: string; envVar: string; sessions: string }> = {
   codex: { label: 'Codex account', envVar: 'CODEX_HOME', sessions: 'Codex' },
   claude: { label: 'Claude account', envVar: 'CLAUDE_CONFIG_DIR', sessions: 'Claude' },
+  // agy takes no variable for it: the runner's own, which picks the sign-in a session runs on.
+  antigravity: { label: 'Antigravity account', envVar: 'ORBIT_ANTIGRAVITY_GOOGLE_DIR', sessions: 'Antigravity' },
 };
 
 /**

@@ -432,14 +432,20 @@ describe('the A–Z index', () => {
   });
 });
 
-describe('the Wiki home', () => {
-  it('has the directory where the Topics grid was, and a Review bar for a phone', async () => {
+describe('the Wiki home, before a plan is confirmed', () => {
+  it('lists the topic articles the directory lists, a title a row, and nothing of what waits', async () => {
     await open('/wiki/orbit');
-    await vi.waitFor(() => expect(container.querySelector('.wk-dir-col .wk-toc-cat')).toBeTruthy());
+    await vi.waitFor(() => expect(container.querySelector('.wk-home .wk-pl-doc.topic')).toBeTruthy());
     expect(container.textContent).not.toContain('Topics');
     expect(text('.wk-toc-item.active')).toEqual(['Home']);
-    const bar = container.querySelector('.wk-banner')!;
-    await vi.waitFor(() => expect(text('.wk-banner .t')).toEqual(['2 proposals to review']));
-    expect(bar.getAttribute('href')).toBe('/wiki/review');
+    // The directory's categories and topics, in its order — each row a title alone, into the topic's article.
+    const topics = text('.wk-dir-col .wk-toc-group .wk-toc-item .lb');
+    expect(text('.wk-home .wk-pl-cat-h b')).toEqual(text('.wk-dir-col .wk-toc-cat'));
+    expect(text('.wk-home .wk-pl-doc.topic .tt')).toEqual(topics);
+    expect(container.querySelectorAll('.wk-home .wk-pl-doc.topic .q, .wk-home .wk-pl-doc.topic .no')).toHaveLength(0);
+    expect(container.querySelector('.wk-home .wk-pl-doc.topic')?.getAttribute('href')).toMatch(/^\/wiki\/orbit\/t\//);
+    expect(text('.wk-home-state')).toEqual([`${topics.length} articles`]);
+    // The proposals waiting are Activity's now: no Review bar on the home.
+    expect(container.querySelector('.wk-banner')).toBeNull();
   });
 });

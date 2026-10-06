@@ -21,6 +21,7 @@ import { OWNER_INTERACTIVE_ROUTES } from './pat-owner-channel-routes';
 import {
   PAT_FORBIDDEN_REASONS,
   PAT_SCOPE,
+  PAT_SELF,
   type PatDeclaration,
   type PatForbiddenReason,
   type PatWorkspaceConfinable,
@@ -30,8 +31,9 @@ import { PAT_SCOPES } from './pat.service';
 
 // The personal-access-token census (docs/personal-access-token-design.md §6.2). A token is the user
 // on every route behind JwtAuthGuard, so each of those routes has to say what a token may do there:
-// @PatScope (the scope it needs) or @PatForbidden (no token, and why). One that says neither is closed
-// to tokens by the guard — fail-closed — and red here, which is where its author makes the decision.
+// @PatScope (the scope it needs) or @PatForbidden (no token, and why) — or, on the two routes where a
+// token reads or revokes itself, @PatSelf (every token, no scope). One that says none is closed to
+// tokens by the guard — fail-closed — and red here, which is where its author makes the decision.
 // @PatScope also says whether a token confined to workspaces reaches the route (§6.3, the census's
 // `workspaceConfinable` column), and what in its request the guard judges that on.
 //
@@ -118,7 +120,13 @@ function jwtRoutesOf(controller: Controller): Route[] {
 }
 
 const describe = (d: PatDeclaration) =>
-  d.kind === 'FORBIDDEN' ? `@PatForbidden('${d.reason}')` : d.kind === 'SCOPE' ? `@PatScope('${d.scope}')` : 'nothing';
+  d.kind === 'FORBIDDEN'
+    ? `@PatForbidden('${d.reason}')`
+    : d.kind === 'SCOPE'
+      ? `@PatScope('${d.scope}')`
+      : d.kind === 'SELF'
+        ? '@PatSelf()'
+        : 'nothing';
 
 const census = (async () => {
   const controllers = await mountedControllers();
@@ -132,23 +140,24 @@ const NEVER_GRANTABLE: ReadonlyArray<{
   rule: string;
   reason: PatForbiddenReason;
   matches: (path: string) => boolean;
-  /** Set only for a family that has no route yet: the rule waits for the routes it will hold. */
-  noRouteYet?: string;
 }> = [
   { rule: 'auth/*', reason: 'AUTH', matches: (p) => p.startsWith('/auth/') },
+  // A user's tokens, which an administrator lists and revokes (§11.4), included.
   { rule: 'admin/*', reason: 'ADMIN', matches: (p) => p.startsWith('/admin/') },
-  {
-    rule: 'the access tokens themselves (§6.5)',
-    reason: 'TOKEN_MANAGEMENT',
-    matches: (p) => /^\/access-tokens(\/|$)/.test(p),
-    noRouteYet: 'issuing, listing and revoking land with the settings page (§10 step 4)',
-  },
+  { rule: 'the access tokens themselves (§6.5)', reason: 'TOKEN_MANAGEMENT', matches: (p) => /^\/access-tokens(\/|$)/.test(p) },
   // Runner registration approval, and the enrollment tokens that are its other door: a machine they
   // admit receives the account's work.
   { rule: 'admitting a runner', reason: 'RUNNER_CREDENTIALS', matches: (p) => /^\/runners\/(device\/|enrollment-tokens$)/.test(p) },
   { rule: "rotating a runner's token", reason: 'RUNNER_CREDENTIALS', matches: (p) => p === '/runners/:id/rotate-token' },
   { rule: 'share links', reason: 'SHARE_LINK', matches: (p) => /\/share(-links)?(\/|$)/.test(p) },
 ];
+
+// ── §6.5: the token acting on itself ────────────────────────────────────────────────────────────
+// The two routes every token reaches whatever it holds: reading itself (`orbit whoami`, `orbit login
+// --with-token`) and revoking itself (`orbit logout`). Exact both ways, and read off the metadata
+// itself as well as through `patDeclaration`: a @PatSelf that a refusal or a scope outranks on the
+// same handler is a decision nobody finished, and is held here too.
+const PAT_SELF_ROUTES = ['DELETE /pat/self', 'GET /pat/self'];
 
 // ── §5: the owner channel ───────────────────────────────────────────────────────────────────────
 // Exact both ways: a route refused as the owner's own decision is listed in OWNER_INTERACTIVE_ROUTES
@@ -264,20 +273,40 @@ test('every route behind JwtAuthGuard declares what a personal access token may 
     'declare @PatScope(<scope>) on the handler, or @PatForbidden(<reason>) on it or its controller ' +
       '(docs/personal-access-token-design.md §4, §6.2): a route that declares neither is 403 to every token',
   );
-  const scoped = routes.filter((r) => r.declared.kind === 'SCOPE').length;
-  t.diagnostic(`${routes.length} JwtAuthGuard routes: ${scoped} open to a token with their scope, ${routes.length - scoped} refused to every token`);
+  const count = (kind: PatDeclaration['kind']) => routes.filter((r) => r.declared.kind === kind).length;
+  t.diagnostic(
+    `${routes.length} JwtAuthGuard routes: ${count('SCOPE')} open to a token with their scope, `
+      + `${count('SELF')} open to every token (@PatSelf), ${count('FORBIDDEN')} refused to every token`,
+  );
 });
 
 test('§4: auth/*, admin/*, the token routes, admitting a runner, rotating its token and share links are refused to every token', async () => {
   const { routes } = await census;
-  for (const { rule, reason, matches, noRouteYet } of NEVER_GRANTABLE) {
+  for (const { rule, reason, matches } of NEVER_GRANTABLE) {
     const held = routes.filter((r) => matches(r.path));
-    if (!noRouteYet) assert.ok(held.length > 0, `${rule}: matches no route — the rule went stale`);
+    assert.ok(held.length > 0, `${rule}: matches no route — the rule went stale`);
     const wrong = held
       .filter((r) => !(r.declared.kind === 'FORBIDDEN' && r.declared.reason === reason))
       .map((r) => `${r.route} (${r.at}) declares ${describe(r.declared)}`);
     assert.deepEqual(wrong, [], `${rule} must be @PatForbidden('${reason}')`);
   }
+});
+
+test('§6.5: @PatSelf opens exactly two routes to every token — GET and DELETE /pat/self, the token reading and revoking itself', async () => {
+  const { controllers, routes } = await census;
+  const marked = routes
+    .filter((r) => Reflect.getMetadata(PAT_SELF, (r.controller.prototype as Record<string, object>)[r.method]) !== undefined)
+    .map((r) => r.route);
+  assert.deepEqual(marked.sort(), PAT_SELF_ROUTES, '@PatSelf on a handler');
+  assert.deepEqual(routes.filter((r) => r.declared.kind === 'SELF').map((r) => r.route).sort(), PAT_SELF_ROUTES, 'declared @PatSelf');
+  // Nor anywhere it is not one of those: on a controller, or on a handler JwtAuthGuard does not guard.
+  assert.deepEqual([...controllers].filter((c) => Reflect.getMetadata(PAT_SELF, c) !== undefined).map((c) => c.name), []);
+  const unguarded = [...controllers].flatMap((c) =>
+    handlersOf(c)
+      .filter(([, handler]) => Reflect.getMetadata(PAT_SELF, handler) !== undefined)
+      .map(([name]) => `${c.name}.${name}`)
+      .filter((at) => !routes.some((r) => r.at === at)));
+  assert.deepEqual(unguarded, []);
 });
 
 test("§5: the owner channel's doors are refused to every token, and are exactly the listed ones", async () => {
@@ -319,10 +348,12 @@ test('§6.3: every route open to a token declares workspaceConfinable — a refu
     "declare it in @PatScope(<scope>, { workspaceConfinable }): false, 'LIST', or the task, session or "
       + 'workspace the route acts on (docs/personal-access-token-design.md §6.3)',
   );
-  const confinable = routes.filter((r) => confinableOf(r) !== false);
+  // @PatSelf reads the token alone, so a token confined to workspaces reaches it like any other.
+  const confinable = routes.filter((r) => r.declared.kind === 'SELF' || confinableOf(r) !== false);
   t.diagnostic(
     `${routes.length} JwtAuthGuard routes: ${confinable.length} reachable by a token confined to workspaces `
-      + `(${confinable.filter((r) => confinableOf(r) === 'LIST').length} of them lists), `
+      + `(${confinable.filter((r) => confinableOf(r) === 'LIST').length} of them lists, `
+      + `${confinable.filter((r) => r.declared.kind === 'SELF').length} the token acting on itself), `
       + `${routes.length - confinable.length} refused to it`,
   );
 });

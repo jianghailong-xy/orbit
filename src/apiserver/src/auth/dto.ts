@@ -1,4 +1,16 @@
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsEmail,
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
+import { IsPublicId } from '../common/public-id';
+import { PAT_EXPIRY_CHOICES, PAT_SCOPE_PRESETS, type PatScopePreset } from './pat.service';
 
 export class LoginDto {
   @IsEmail()
@@ -21,6 +33,70 @@ export class ChangePasswordDto {
   @IsString()
   @MinLength(6)
   newPassword!: string;
+
+  /** Also revoke every personal access token the account has (§11.3). Left out, they keep working. */
+  @IsOptional()
+  @IsBoolean()
+  revokeAccessTokens?: boolean;
+}
+
+/**
+ * `POST /access-tokens` (docs/personal-access-token-design.md §6.5). `expiresInDays` is 30, 90 or
+ * 365; null is a token that never expires; left out, it is 90 (§11.1).
+ */
+export class IssueAccessTokenDto {
+  @IsString()
+  name!: string;
+
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  scopes!: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsPublicId({ each: true })
+  workspaceIds?: string[];
+
+  @IsOptional()
+  @IsIn(PAT_EXPIRY_CHOICES)
+  expiresInDays?: (typeof PAT_EXPIRY_CHOICES)[number] | null;
+}
+
+/**
+ * `POST /access-tokens/device/start`, what `orbit login` asks for (docs/personal-access-token-design.md
+ * §7.3): the token's name, its scopes — listed, or a preset of them, one of the two — its lifetime as
+ * `POST /access-tokens` takes one, and the host the CLI runs on, shown on the approval page.
+ */
+export class StartPatDeviceLoginDto {
+  @IsString()
+  name!: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  scopes?: string[];
+
+  @IsOptional()
+  @IsIn(Object.keys(PAT_SCOPE_PRESETS))
+  preset?: PatScopePreset;
+
+  @IsOptional()
+  @IsIn(PAT_EXPIRY_CHOICES)
+  expiresInDays?: (typeof PAT_EXPIRY_CHOICES)[number] | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  hostname?: string;
+}
+
+/** `POST /access-tokens/device/poll`: the device code `start` answered, which only the CLI holds. */
+export class PollPatDeviceLoginDto {
+  @IsString()
+  deviceCode!: string;
 }
 
 export class BootstrapDto {

@@ -642,4 +642,106 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     await click(rows.find((row) => row.textContent?.startsWith('Work')));
     expect(vi.mocked(switchSessionAccount)).toHaveBeenCalledWith(SESSION, WORK);
   });
+
+  /** Two Google accounts for Antigravity, their quota on the engine's own health (never in the
+   *  heartbeat's planUsage): Default has 90% of its 5-hour bucket left, Work 4%. */
+  const withGoogleAccounts = (capabilities: string[] = []) =>
+    ({
+      ...RUNNER,
+      capabilities,
+      antigravity: {
+        supported: true,
+        installed: true,
+        version: '1.3.0',
+        envKeyAvailable: true,
+        authSource: 'google',
+        googleLogin: 'available',
+      },
+      engines: [
+        ...(RUNNER.engines ?? []),
+        {
+          engine: 'antigravity',
+          installed: true,
+          auth: 'yes',
+          authSource: 'google',
+          version: '1.3.0',
+          accounts: [
+            { id: 'default', home: '/root/.orbit/antigravity/google', auth: 'yes' },
+            { id: WORK, name: 'Work', home: `/root/.orbit/antigravity-accounts/${WORK}`, auth: 'yes' },
+          ],
+          planUsage: {
+            provider: 'antigravity',
+            buckets: [{ id: 'gemini-5h', window: '5h', remainingFraction: 0.9, resetTime: RESETS }],
+            accounts: {
+              [WORK]: {
+                provider: 'antigravity',
+                buckets: [{ id: 'gemini-5h', window: '5h', remainingFraction: 0.04, resetTime: RESETS }],
+              },
+            },
+          },
+        },
+      ],
+    }) as unknown as Runner;
+
+  it('starts a new Antigravity session on the Google account picked under Antigravity, its gauge saying what is left', async () => {
+    runner = withGoogleAccounts();
+    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
+    await click(mounted().querySelector('.np-card'));
+    await render(() => document.querySelector('.np-list'));
+    await click(
+      [...document.querySelectorAll('.np-list .np-row')].find((row) => row.querySelector('.np-row-name')?.textContent === 'Antigravity'),
+    );
+    // Work's 5-hour bucket is nearly spent, so Automatic would start on Default.
+    expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 90% left');
+    expect(await gaugeAccount()).toEqual({ name: 'Default', note: 'Automatic — the account whose quota resets soonest' });
+    expect((await providerMenuRows())!.map(rowText)).toEqual([
+      'AntigravityGoogle account',
+      'AutomaticSwitches to soonest reset ✓',
+      'Defaultgemini-5h 90% left',
+      'Workgemini-5h 4% left',
+    ]);
+
+    await click(await draftRow('Work'));
+    expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 4% left');
+    expect(await gaugeAccount()).toEqual({ name: 'Work', note: null });
+    await sendMessage('fix the flaky test');
+    expect(creates[0]).toMatchObject({ provider: 'antigravity', antigravityAccount: WORK });
+    expect('codexAccount' in creates[0]).toBe(false);
+    expect('claudeAccount' in creates[0]).toBe(false);
+  });
+
+  const onAntigravity = (antigravityAccount: string, pinned: boolean) => ({
+    ...session(null, null),
+    provider: 'antigravity',
+    model: 'gemini-3.8-flash',
+    antigravityAccount,
+    antigravityAccountPinned: pinned,
+    workspace: { id: WORKSPACE, codexAccount: null, claudeAccount: null, antigravityAccount: null },
+  });
+
+  it('a live Antigravity session moves to another Google account from the Provider menu', async () => {
+    runner = withGoogleAccounts(['antigravity-account-login/v1']);
+    detail = onAntigravity('default', false);
+    vi.mocked(switchSessionAccount).mockResolvedValue({ ok: true } as never);
+    await mount(`/sessions/${SESSION}`, '.composer-box textarea');
+    await settlesOn('Plan usage 90% left');
+    const rows = (await providerMenuRows())!;
+    expect(rows.map(rowText)).toEqual([
+      'AntigravityGoogle account',
+      'AutomaticSwitches to soonest reset ✓',
+      'Defaultgemini-5h 90% left',
+      'Workgemini-5h 4% left',
+    ]);
+    await click(rows.find((row) => row.textContent?.startsWith('Work')));
+    expect(vi.mocked(switchSessionAccount)).toHaveBeenCalledWith(SESSION, WORK);
+  });
+
+  it('a session pinned to a Google account shows its quota, and offers no move where the runner does not declare Antigravity accounts', async () => {
+    runner = withGoogleAccounts();
+    detail = onAntigravity(WORK, true);
+    await mount(`/sessions/${SESSION}`, '.composer-box textarea');
+    await settlesOn('Plan usage 4% left');
+    expect(await gaugeAccount()).toEqual({ name: 'Work', note: null });
+    expect(await providerMenuRows()).toBeNull();
+  });
 });

@@ -23,6 +23,7 @@ final class TaskDetailCopyParityTests: XCTestCase {
     private static let inputs = "src/web/src/components/TaskInputs.tsx"
     private static let attributionCard = "src/web/src/components/TaskAttributionCard.tsx"
     private static let attribution = "src/web/src/lib/attribution.ts"
+    private static let crossingsCard = "src/web/src/components/ProjectCrossingsCard.tsx"
     private static let followedBy = "src/web/src/components/WatchRelations.tsx"
     private static let watchEditor = "src/web/src/components/WatchEditor.tsx"
     private static let dependencyList = "src/web/src/components/TaskDependencyList.tsx"
@@ -215,6 +216,22 @@ final class TaskDetailCopyParityTests: XCTestCase {
         }
         XCTAssertEqual(TaskDetailCopy.absentReason.count, 4)
         XCTAssertEqual(Set(TaskDetailCopy.crossingStateLabel.keys), ["PENDING", "APPROVED", "DENIED", "APPLIED"])
+
+        // A request to move the task: the card picks the crossings card's `MOVE_TASK_STATE_MEANING`
+        // for it, as `TaskDetailLogic.crossing` picks `moveTaskStateMeaning`, and each sentence is
+        // read out of that declaration alone.
+        assertSays(card, "import { MOVE_TASK_STATE_MEANING } from './ProjectCrossingsCard';", in: Self.attributionCard)
+        assertSays(card, "view.crossing.kind === 'MOVE_TASK' ? MOVE_TASK_STATE_MEANING : CROSSING_STATE_MEANING",
+                   in: Self.attributionCard)
+        let crossings = try source(Self.crossingsCard)
+        let declaration = "export const MOVE_TASK_STATE_MEANING: Readonly<Record<CrossingState, string>> = {"
+        assertSays(crossings, declaration, in: Self.crossingsCard)
+        let moveMeanings = crossings.components(separatedBy: declaration).dropFirst().first?
+            .components(separatedBy: "};").first ?? ""
+        for (state, text) in TaskDetailCopy.moveTaskStateMeaning {
+            assertSays(moveMeanings, "\(state): '\(text)',", in: Self.crossingsCard)
+        }
+        XCTAssertEqual(Set(TaskDetailCopy.moveTaskStateMeaning.keys), ["PENDING", "APPROVED", "DENIED", "APPLIED"])
     }
 
     // MARK: followed by

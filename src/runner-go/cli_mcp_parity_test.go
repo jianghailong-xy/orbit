@@ -100,7 +100,10 @@ var cliParityJSONInputTools = map[string]bool{
 // grew `provider` and `permissionMode` and the hand-written argument list kept quiet about them.
 func TestCLICapabilitiesCoverEveryMCPToolAndParameter(t *testing.T) {
 	specs := map[string]cliCapabilitySpec{}
-	for _, list := range [][]cliCapabilitySpec{baseCLICapabilities, providerCLICapabilities, projectCLICapabilities, notifyCLICapabilities, mergeReceiptCLICapabilities, sessionCLICapabilities, agentCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, wikiPlanCLICapabilities} {
+	// One direction only: every MCP tool needs a command, and a command needs no tool. The person's
+	// own commands (userCLICapabilities: login, logout, whoami, api) have none — MCP runs only inside
+	// sessions, where the CLI never acts as the person (docs/personal-access-token-design.md §7.4).
+	for _, list := range [][]cliCapabilitySpec{baseCLICapabilities, providerCLICapabilities, projectCLICapabilities, notifyCLICapabilities, mergeReceiptCLICapabilities, sessionCLICapabilities, agentCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, wikiPlanCLICapabilities, userCLICapabilities} {
 		for _, spec := range list {
 			specs[spec.Tool] = spec
 		}

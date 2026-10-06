@@ -1928,7 +1928,36 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // index, constraint, enum, type, function or trigger is created, replaced or dropped; no
       // task, project, acceptance or DONE fence object is named; no INSERT, UPDATE or DELETE —
       // every runner reads NULL, "not reported" and "nobody asked", until its next heartbeat.
-      '0385_runner_self_update'],
+      '0385_runner_self_update',
+      // Move requests (0386): one nullable `requested_criterion_definition_id` on
+      // project_handoff_approval with a CHECK keeping it to MOVE_TASK rows, one partial unique index
+      // (one PENDING move per owner, task and pair of projects) and one new function + BEFORE UPDATE
+      // trigger freezing the new column. 0155's guard is not replaced; no task, project,
+      // acceptance or DONE fence object is named, and no row is written or backfilled.
+      '0386_project_handoff_move_request',
+      // Antigravity accounts (0387): one nullable TEXT with no default on `workspace`
+      // (`antigravity_account`, 0309's `claude_account` exactly), and on `session` one nullable TEXT
+      // with no default (`antigravity_account`) and one BOOLEAN NOT NULL DEFAULT false
+      // (`antigravity_account_pinned`) — 0336's pair exactly, catalog-only as a constant default is —
+      // with no index, no CHECK and no foreign key, and nothing else. `task`, `project` and
+      // `project_acceptance_criterion_definition` are not named, no `project_acceptance_*` object nor
+      // any of the six preserved triggers/functions is, and no function, trigger, enum or type is
+      // created — so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: nothing
+      // is backfilled.
+      '0387_antigravity_account',
+      // `orbit login` through the browser (0388): one new table, pat_device_login, with its own
+      // CHECKs, indexes and one foreign key to `user` (ON DELETE CASCADE). No existing table,
+      // column, constraint, function, trigger or type is altered or dropped; no task, project,
+      // acceptance or DONE fence object is named, and no row is written.
+      '0388_pat_device_login',
+      // Confirmed moves (0389): one CREATE OR REPLACE of `task_claimed_project_move_guard` (0122,
+      // widened by 0130); its trigger, event and refusal are unchanged. The body still refuses a
+      // project change on a task with a live claim, except in the transaction that applies the
+      // account owner's confirmation of a MOVE_TASK for that task and those two projects — named by
+      // a transaction-local setting and an unspent, USER-approved project_handoff_approval row the
+      // function only reads. It is none of the six preserved triggers/functions and not the DONE
+      // fence; no table, column, constraint, index or type is touched, and no row is written.
+      '0389_move_task_confirmation_live_claim'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
