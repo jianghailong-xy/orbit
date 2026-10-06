@@ -1,0 +1,243 @@
+﻿2026-10-06T22:46:41.0372165Z Current runner version: '2.337.0'
+2026-10-06T22:46:41.0397475Z ##[group]Runner Image Provisioner
+2026-10-06T22:46:41.0398493Z Hosted Compute Agent
+2026-10-06T22:46:41.0399087Z Version: 20260901.588
+2026-10-06T22:46:41.0399757Z Commit: f88ec8081b781fac6c440065ac7ff9e710ce3d0b
+2026-10-06T22:46:41.0400507Z Build Date: 2026-09-01T19:56:44Z
+2026-10-06T22:46:41.0401220Z Worker ID: {c85adc0d-b1e4-47da-86f7-7e260de2759b}
+2026-10-06T22:46:41.0401983Z Azure Region: westus
+2026-10-06T22:46:41.0402550Z ##[endgroup]
+2026-10-06T22:46:41.0404258Z ##[group]Operating System
+2026-10-06T22:46:41.0404939Z Ubuntu
+2026-10-06T22:46:41.0405500Z 24.04.5
+2026-10-06T22:46:41.0406290Z LTS
+2026-10-06T22:46:41.0406865Z ##[endgroup]
+2026-10-06T22:46:41.0407424Z ##[group]Runner Image
+2026-10-06T22:46:41.0408099Z Image: ubuntu-24.04
+2026-10-06T22:46:41.0408704Z Version: 20260927.320.1
+2026-10-06T22:46:41.0409999Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260927.320/images/ubuntu/Ubuntu2404-Readme.md
+2026-10-06T22:46:41.0411534Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260927.320
+2026-10-06T22:46:41.0412609Z ##[endgroup]
+2026-10-06T22:46:41.0413821Z ##[group]GITHUB_TOKEN Permissions
+2026-10-06T22:46:41.0416199Z Contents: read
+2026-10-06T22:46:41.0416825Z Metadata: read
+2026-10-06T22:46:41.0417827Z Packages: read
+2026-10-06T22:46:41.0418421Z ##[endgroup]
+2026-10-06T22:46:41.0420498Z Secret source: Actions
+2026-10-06T22:46:41.0421533Z Cache mode: write
+2026-10-06T22:46:41.0422218Z Prepare workflow directory
+2026-10-06T22:46:41.0765762Z Prepare all required actions
+2026-10-06T22:46:41.0816571Z Getting action download info
+2026-10-06T22:46:41.4704257Z Download action repository 'actions/checkout@v7' (SHA:3d3c42e5aac5ba805825da76410c181273ba90b1)
+2026-10-06T22:46:41.6526826Z Complete job name: Navigation (one push mechanism per stack)
+2026-10-06T22:46:41.7389987Z ##[group]Run actions/checkout@v7
+2026-10-06T22:46:41.7391210Z with:
+2026-10-06T22:46:41.7391681Z   repository: jianghailong-xy/orbit
+2026-10-06T22:46:41.7395446Z   token: ***
+2026-10-06T22:46:41.7396147Z   ssh-strict: true
+2026-10-06T22:46:41.7396597Z   ssh-user: git
+2026-10-06T22:46:41.7397053Z   persist-credentials: true
+2026-10-06T22:46:41.7397555Z   clean: true
+2026-10-06T22:46:41.7398006Z   sparse-checkout-cone-mode: true
+2026-10-06T22:46:41.7398524Z   fetch-depth: 1
+2026-10-06T22:46:41.7398952Z   fetch-tags: false
+2026-10-06T22:46:41.7399390Z   show-progress: true
+2026-10-06T22:46:41.7399849Z   lfs: false
+2026-10-06T22:46:41.7400262Z   submodules: false
+2026-10-06T22:46:41.7400711Z   set-safe-directory: true
+2026-10-06T22:46:41.7401214Z   allow-unsafe-pr-checkout: false
+2026-10-06T22:46:41.7402110Z ##[endgroup]
+2026-10-06T22:46:41.8420111Z Syncing repository: jianghailong-xy/orbit
+2026-10-06T22:46:41.8422991Z ##[group]Getting Git version info
+2026-10-06T22:46:41.8424053Z Working directory is '/home/runner/work/orbit/orbit'
+2026-10-06T22:46:41.8425585Z [command]/usr/bin/git version
+2026-10-06T22:46:41.8533820Z git version 2.55.0
+2026-10-06T22:46:41.8560165Z ##[endgroup]
+2026-10-06T22:46:41.8571951Z Temporarily overriding HOME='/home/runner/work/_temp/59102fdd-6e87-47e5-b093-9d99c0b979bc' before making global git config changes
+2026-10-06T22:46:41.8578661Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-06T22:46:41.8580466Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/orbit/orbit
+2026-10-06T22:46:41.8630110Z Deleting the contents of '/home/runner/work/orbit/orbit'
+2026-10-06T22:46:41.8633818Z ##[group]Determining repository object format
+2026-10-06T22:46:41.8635298Z ##[endgroup]
+2026-10-06T22:46:41.8636817Z ##[group]Initializing the repository
+2026-10-06T22:46:41.8639731Z [command]/usr/bin/git init /home/runner/work/orbit/orbit
+2026-10-06T22:46:41.8748348Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-10-06T22:46:41.8750129Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-10-06T22:46:41.8752061Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-10-06T22:46:41.8753354Z hint: call:
+2026-10-06T22:46:41.8754093Z hint:
+2026-10-06T22:46:41.8755038Z hint: 	git config --global init.defaultBranch <name>
+2026-10-06T22:46:41.8757605Z hint:
+2026-10-06T22:46:41.8758681Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-10-06T22:46:41.8760239Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-10-06T22:46:41.8761471Z hint:
+2026-10-06T22:46:41.8762154Z hint: 	git branch -m <name>
+2026-10-06T22:46:41.8762936Z hint:
+2026-10-06T22:46:41.8763969Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-10-06T22:46:41.8765729Z Initialized empty Git repository in /home/runner/work/orbit/orbit/.git/
+2026-10-06T22:46:41.8777601Z [command]/usr/bin/git remote add origin https://github.com/jianghailong-xy/orbit
+2026-10-06T22:46:41.8828173Z ##[endgroup]
+2026-10-06T22:46:41.8829523Z ##[group]Disabling automatic garbage collection
+2026-10-06T22:46:41.8832017Z [command]/usr/bin/git config --local gc.auto 0
+2026-10-06T22:46:41.8866605Z ##[endgroup]
+2026-10-06T22:46:41.8867937Z ##[group]Setting up auth
+2026-10-06T22:46:41.8868891Z Removing SSH command configuration
+2026-10-06T22:46:41.8872541Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-06T22:46:41.8909822Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-06T22:46:41.9303366Z Removing HTTP extra header
+2026-10-06T22:46:41.9310517Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-06T22:46:41.9350103Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-06T22:46:41.9610221Z Removing includeIf entries pointing to credentials config files
+2026-10-06T22:46:41.9615622Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-06T22:46:41.9653462Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-06T22:46:41.9880749Z [command]/usr/bin/git config --file /home/runner/work/_temp/git-credentials-cbf71d8d-1d87-40db-9d74-50623e4d8577.config http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-10-06T22:46:41.9921732Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/orbit/orbit/.git.path /home/runner/work/_temp/git-credentials-cbf71d8d-1d87-40db-9d74-50623e4d8577.config
+2026-10-06T22:46:41.9955644Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/orbit/orbit/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-cbf71d8d-1d87-40db-9d74-50623e4d8577.config
+2026-10-06T22:46:41.9993559Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-cbf71d8d-1d87-40db-9d74-50623e4d8577.config
+2026-10-06T22:46:42.0036066Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-cbf71d8d-1d87-40db-9d74-50623e4d8577.config
+2026-10-06T22:46:42.0070085Z ##[endgroup]
+2026-10-06T22:46:42.0071798Z ##[group]Fetching the repository
+2026-10-06T22:46:42.0079154Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +9d9eadcd59a35b9d2468d63d80cc8180d8f78c1d:refs/remotes/origin/probe/a1-google
+2026-10-06T22:47:04.2284325Z From https://github.com/jianghailong-xy/orbit
+2026-10-06T22:47:04.2285274Z  * [new ref]         9d9eadcd59a35b9d2468d63d80cc8180d8f78c1d -> origin/probe/a1-google
+2026-10-06T22:47:04.2295747Z [command]/usr/bin/git branch --list --remote origin/probe/a1-google
+2026-10-06T22:47:04.2326239Z   origin/probe/a1-google
+2026-10-06T22:47:04.2334345Z [command]/usr/bin/git rev-parse refs/remotes/origin/probe/a1-google
+2026-10-06T22:47:04.2361285Z 9d9eadcd59a35b9d2468d63d80cc8180d8f78c1d
+2026-10-06T22:47:04.2365027Z ##[endgroup]
+2026-10-06T22:47:04.2365691Z ##[group]Determining the checkout info
+2026-10-06T22:47:04.2366641Z ##[endgroup]
+2026-10-06T22:47:04.2370275Z [command]/usr/bin/git sparse-checkout disable
+2026-10-06T22:47:04.2425661Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-10-06T22:47:04.2459741Z ##[group]Checking out the ref
+2026-10-06T22:47:04.2463749Z [command]/usr/bin/git checkout --progress --force -B probe/a1-google refs/remotes/origin/probe/a1-google
+2026-10-06T22:47:05.2873901Z Updating files:  22% (6375/28810)
+2026-10-06T22:47:05.3011875Z Updating files:  23% (6627/28810)
+2026-10-06T22:47:05.3109515Z Updating files:  24% (6915/28810)
+2026-10-06T22:47:05.3210188Z Updating files:  25% (7203/28810)
+2026-10-06T22:47:05.4294450Z Updating files:  26% (7491/28810)
+2026-10-06T22:47:05.5127615Z Updating files:  27% (7779/28810)
+2026-10-06T22:47:05.5612752Z Updating files:  28% (8067/28810)
+2026-10-06T22:47:05.5860166Z Updating files:  29% (8355/28810)
+2026-10-06T22:47:05.6460604Z Updating files:  30% (8643/28810)
+2026-10-06T22:47:05.6757846Z Updating files:  31% (8932/28810)
+2026-10-06T22:47:05.6939195Z Updating files:  32% (9220/28810)
+2026-10-06T22:47:05.7094420Z Updating files:  33% (9508/28810)
+2026-10-06T22:47:05.7499407Z Updating files:  34% (9796/28810)
+2026-10-06T22:47:05.8008950Z Updating files:  35% (10084/28810)
+2026-10-06T22:47:05.8276137Z Updating files:  36% (10372/28810)
+2026-10-06T22:47:05.8467474Z Updating files:  37% (10660/28810)
+2026-10-06T22:47:05.8808702Z Updating files:  38% (10948/28810)
+2026-10-06T22:47:05.9018521Z Updating files:  39% (11236/28810)
+2026-10-06T22:47:05.9727145Z Updating files:  40% (11524/28810)
+2026-10-06T22:47:06.0094627Z Updating files:  41% (11813/28810)
+2026-10-06T22:47:06.0770666Z Updating files:  42% (12101/28810)
+2026-10-06T22:47:06.1048432Z Updating files:  43% (12389/28810)
+2026-10-06T22:47:06.1459798Z Updating files:  44% (12677/28810)
+2026-10-06T22:47:06.2343858Z Updating files:  45% (12965/28810)
+2026-10-06T22:47:06.2767696Z Updating files:  46% (13253/28810)
+2026-10-06T22:47:06.2920598Z Updating files:  46% (13404/28810)
+2026-10-06T22:47:06.3694499Z Updating files:  47% (13541/28810)
+2026-10-06T22:47:06.4019739Z Updating files:  48% (13829/28810)
+2026-10-06T22:47:06.4352278Z Updating files:  49% (14117/28810)
+2026-10-06T22:47:06.5946619Z Updating files:  50% (14405/28810)
+2026-10-06T22:47:06.7858396Z Updating files:  51% (14694/28810)
+2026-10-06T22:47:06.8062809Z Updating files:  52% (14982/28810)
+2026-10-06T22:47:06.8238409Z Updating files:  53% (15270/28810)
+2026-10-06T22:47:06.8881417Z Updating files:  54% (15558/28810)
+2026-10-06T22:47:06.9084128Z Updating files:  55% (15846/28810)
+2026-10-06T22:47:06.9347749Z Updating files:  56% (16134/28810)
+2026-10-06T22:47:07.0056203Z Updating files:  57% (16422/28810)
+2026-10-06T22:47:07.0284724Z Updating files:  58% (16710/28810)
+2026-10-06T22:47:07.0691884Z Updating files:  59% (16998/28810)
+2026-10-06T22:47:07.1106709Z Updating files:  60% (17286/28810)
+2026-10-06T22:47:07.1775893Z Updating files:  61% (17575/28810)
+2026-10-06T22:47:07.2775570Z Updating files:  62% (17863/28810)
+2026-10-06T22:47:07.3488453Z Updating files:  62% (18044/28810)
+2026-10-06T22:47:07.5524548Z Updating files:  63% (18151/28810)
+2026-10-06T22:47:07.6055729Z Updating files:  64% (18439/28810)
+2026-10-06T22:47:07.6381201Z Updating files:  65% (18727/28810)
+2026-10-06T22:47:07.6991434Z Updating files:  66% (19015/28810)
+2026-10-06T22:47:07.7289459Z Updating files:  67% (19303/28810)
+2026-10-06T22:47:07.7657805Z Updating files:  68% (19591/28810)
+2026-10-06T22:47:07.7960089Z Updating files:  69% (19879/28810)
+2026-10-06T22:47:07.8447423Z Updating files:  70% (20167/28810)
+2026-10-06T22:47:07.9002580Z Updating files:  71% (20456/28810)
+2026-10-06T22:47:07.9293453Z Updating files:  72% (20744/28810)
+2026-10-06T22:47:07.9580785Z Updating files:  73% (21032/28810)
+2026-10-06T22:47:07.9855941Z Updating files:  74% (21320/28810)
+2026-10-06T22:47:08.0226992Z Updating files:  75% (21608/28810)
+2026-10-06T22:47:08.0800541Z Updating files:  76% (21896/28810)
+2026-10-06T22:47:08.1213073Z Updating files:  77% (22184/28810)
+2026-10-06T22:47:08.1559044Z Updating files:  78% (22472/28810)
+2026-10-06T22:47:08.1873349Z Updating files:  79% (22760/28810)
+2026-10-06T22:47:08.2084768Z Updating files:  80% (23048/28810)
+2026-10-06T22:47:08.2465692Z Updating files:  81% (23337/28810)
+2026-10-06T22:47:08.2649568Z Updating files:  82% (23625/28810)
+2026-10-06T22:47:08.2766967Z Updating files:  83% (23913/28810)
+2026-10-06T22:47:08.3292917Z Updating files:  83% (23999/28810)
+2026-10-06T22:47:08.6190942Z Updating files:  84% (24201/28810)
+2026-10-06T22:47:09.2657762Z Updating files:  85% (24489/28810)
+2026-10-06T22:47:09.2767265Z Updating files:  86% (24777/28810)
+2026-10-06T22:47:09.3021878Z Updating files:  86% (24808/28810)
+2026-10-06T22:47:09.3332956Z Updating files:  87% (25065/28810)
+2026-10-06T22:47:09.3606880Z Updating files:  88% (25353/28810)
+2026-10-06T22:47:09.3951470Z Updating files:  89% (25641/28810)
+2026-10-06T22:47:09.4200135Z Updating files:  90% (25929/28810)
+2026-10-06T22:47:09.4556978Z Updating files:  91% (26218/28810)
+2026-10-06T22:47:09.4993155Z Updating files:  92% (26506/28810)
+2026-10-06T22:47:09.5306787Z Updating files:  93% (26794/28810)
+2026-10-06T22:47:09.5570524Z Updating files:  94% (27082/28810)
+2026-10-06T22:47:09.5852338Z Updating files:  95% (27370/28810)
+2026-10-06T22:47:09.6130627Z Updating files:  96% (27658/28810)
+2026-10-06T22:47:09.6412280Z Updating files:  97% (27946/28810)
+2026-10-06T22:47:09.6692344Z Updating files:  98% (28234/28810)
+2026-10-06T22:47:09.6922764Z Updating files:  99% (28522/28810)
+2026-10-06T22:47:09.6923887Z Updating files: 100% (28810/28810)
+2026-10-06T22:47:09.6924382Z Updating files: 100% (28810/28810), done.
+2026-10-06T22:47:09.7298941Z Switched to a new branch 'probe/a1-google'
+2026-10-06T22:47:09.7302077Z branch 'probe/a1-google' set up to track 'origin/probe/a1-google'.
+2026-10-06T22:47:09.7430223Z ##[endgroup]
+2026-10-06T22:47:09.7477453Z [command]/usr/bin/git log -1 --format=%H
+2026-10-06T22:47:09.7508560Z 9d9eadcd59a35b9d2468d63d80cc8180d8f78c1d
+2026-10-06T22:47:09.7730424Z ##[group]Run bash scripts/ci/nav-push-gate.sh
+2026-10-06T22:47:09.7730846Z [36;1mbash scripts/ci/nav-push-gate.sh[0m
+2026-10-06T22:47:09.8003987Z shell: /usr/bin/bash -e {0}
+2026-10-06T22:47:09.8004352Z ##[endgroup]
+2026-10-06T22:47:09.8184640Z ✓ no `navigationDestination(isPresented:)` — pushes go onto the stack, not beside it
+2026-10-06T22:47:09.9020012Z ✓ every `List(selection:)` binds a projection of the section's stack
+2026-10-06T22:47:09.9080934Z ✓ no shell-awareness flag on the model — the view decides the shape
+2026-10-06T22:47:09.9081761Z nav-push-gate: OK — one push mechanism per stack, in src/macos/OrbitApp/Sources/OrbitApp src/ios/Sources
+2026-10-06T22:47:09.9280571Z Post job cleanup.
+2026-10-06T22:47:10.0116616Z [command]/usr/bin/git version
+2026-10-06T22:47:10.0164646Z git version 2.55.0
+2026-10-06T22:47:10.0210542Z Temporarily overriding HOME='/home/runner/work/_temp/9c05e67c-abe1-4092-9308-8797a86bbe20' before making global git config changes
+2026-10-06T22:47:10.0212069Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-06T22:47:10.0216543Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/orbit/orbit
+2026-10-06T22:47:10.0252278Z Removing SSH command configuration
+2026-10-06T22:47:10.0259844Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-06T22:47:10.0296625Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-06T22:47:10.0564999Z Removing HTTP extra header
+2026-10-06T22:47:10.0572490Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-06T22:47:10.0620305Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-06T22:47:10.0903911Z Removing includeIf entries pointing to credentials config files
+2026-10-06T22:47:10.0911224Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-06T22:47:10.0945564Z includeif.gitdir:/home/runner/work/orbit/orbit/.git.path
+2026-10-06T22:47:10.0954905Z includeif.gitdir:/home/runner/work/orbit/orbit/.git/worktrees/*.path
+2026-10-06T22:47:10.0956263Z includeif.gitdir:/github/workspace/.git.path
+2026-10-06T22:47:10.0957227Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-10-06T22:47:10.0959989Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/orbit/orbit/.git.path
+2026-10-06T22:47:10.1002869Z /home/runner/work/_temp/git-credentials-cbf71d8d-1d87-40db-9d74-50623e4d8577.config
+2026-10-06T22:47:10.1029050Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/orbit/orbit/.git.path \/home\/runner\/work\/_temp\/git\-credentials\-cbf71d8d\-1d87\-40db\-9d74\-50623e4d8577\.config
+2026-10-06T22:47:10.1087211Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/orbit/orbit/.git/worktrees/*.path
+2026-10-06T22:47:10.1112658Z /home/runner/work/_temp/git-credentials-cbf71d8d-1d87-40db-9d74-50623e4d8577.config
+2026-10-06T22:47:10.1148940Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/orbit/orbit/.git/worktrees/*.path \/home\/runner\/work\/_temp\/git\-credentials\-cbf71d8d\-1d87\-40db\-9d74\-50623e4d8577\.config
+2026-10-06T22:47:10.1196588Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+2026-10-06T22:47:10.1226983Z /github/runner_temp/git-credentials-cbf71d8d-1d87-40db-9d74-50623e4d8577.config
+2026-10-06T22:47:10.1236523Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path \/github\/runner_temp\/git\-credentials\-cbf71d8d\-1d87\-40db\-9d74\-50623e4d8577\.config
+2026-10-06T22:47:10.1279926Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-10-06T22:47:10.1308786Z /github/runner_temp/git-credentials-cbf71d8d-1d87-40db-9d74-50623e4d8577.config
+2026-10-06T22:47:10.1322498Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path \/github\/runner_temp\/git\-credentials\-cbf71d8d\-1d87\-40db\-9d74\-50623e4d8577\.config
+2026-10-06T22:47:10.1366700Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-06T22:47:10.1637302Z Removing credentials config '/home/runner/work/_temp/git-credentials-cbf71d8d-1d87-40db-9d74-50623e4d8577.config'
+2026-10-06T22:47:10.1799902Z Cleaning up orphan processes

@@ -1,0 +1,2 @@
+pressed Continue on the sign-in prompt in springboard
+stub saw: ["GET /api/auth/methods", "START client=native challenge=S256 state=present -> ok", "EXCHANGE ticket=known pkce=ok"]

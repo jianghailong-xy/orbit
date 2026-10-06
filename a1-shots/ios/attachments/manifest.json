@@ -1,0 +1,242 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "90960EA9-CA3A-4843-AA42-3F40564B9876.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-GoogleShotTeststest1GoogleOnAndOpeningAccounts-notes_0_3EB5F386-464C-4A8A-A083-AFE42F9CFCCE.txt",
+        "timestamp" : 1791328215.641
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "0F7E0460-A413-4708-A4E5-153349E7430E.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-tree-1-google-on-signup-open_0_B52F609E-3E0F-429A-9CEB-A904F009B16D.txt",
+        "timestamp" : 1791328215.586
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "F70D2FE5-1BAB-4452-8DCB-6B7376336243.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-1-google-on-signup-open_0_5BC75CB1-CB83-401B-8CF4-66B2633D1DFA.png",
+        "timestamp" : 1791328215.117
+      }
+    ],
+    "testIdentifier" : "GoogleShotTests/test1GoogleOnAndOpeningAccounts()",
+    "testIdentifierURL" : "test://com.apple.xcode/A1Probe/A1ProbeUITests/GoogleShotTests/test1GoogleOnAndOpeningAccounts"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "B7F22DE2-5496-42C0-AFD1-5DAAFE72141F.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-GoogleShotTeststest2GoogleOnForExistingAccounts-notes_0_03F85473-9084-4E17-A215-B1B268AED3B9.txt",
+        "timestamp" : 1791328235.428
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "5B3A0206-77FA-4826-9FA9-520E06BDC90D.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-tree-2-google-on-existing-accounts_0_F304D50F-7FDA-4498-97E5-C820ABBB79DF.txt",
+        "timestamp" : 1791328235.4
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "6E2FD1A1-5B8E-4B8A-A00B-7C3350D676FF.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-2-google-on-existing-accounts_0_71616F7E-AFF7-4BD5-8D66-987A1156A483.png",
+        "timestamp" : 1791328235.082
+      }
+    ],
+    "testIdentifier" : "GoogleShotTests/test2GoogleOnForExistingAccounts()",
+    "testIdentifierURL" : "test://com.apple.xcode/A1Probe/A1ProbeUITests/GoogleShotTests/test2GoogleOnForExistingAccounts"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "DF2AEA43-D2A3-47C9-82D1-8FBBBBB462D4.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-GoogleShotTeststest3GoogleOff-notes_0_113BE68E-D94E-4145-AAB4-C92DEFC51758.txt",
+        "timestamp" : 1791328258.049
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "C380590E-62F0-43EC-9E0B-E4D4609C4E98.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-tree-3-google-off_0_16BA8C3D-7744-4718-A97D-D9FC41D0F098.txt",
+        "timestamp" : 1791328258.046
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "F7C7BCBD-B011-452B-86F8-A64F7041FB5E.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-3-google-off_0_03449E38-B201-425F-893C-3A0411DBE24B.png",
+        "timestamp" : 1791328257.902
+      }
+    ],
+    "testIdentifier" : "GoogleShotTests/test3GoogleOff()",
+    "testIdentifierURL" : "test://com.apple.xcode/A1Probe/A1ProbeUITests/GoogleShotTests/test3GoogleOff"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "E53AE477-5AE8-43FD-8171-63CCB9DF1790.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-GoogleShotTeststest4ServerFromBeforeGoogleSignIn-notes_0_C1C315B5-8E8D-492A-A556-9FE833B40ED1.txt",
+        "timestamp" : 1791328270.922
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "12819335-D7DD-43F7-92D4-99B396F4BC84.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-tree-4-old-server-404_0_6ADF36F9-5B08-4102-B6E1-D329A9FE483A.txt",
+        "timestamp" : 1791328270.916
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "B137DDD1-9BAF-45A9-8790-30494286A2A8.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-4-old-server-404_0_DB306061-21DF-4FC5-8176-F997C148642A.png",
+        "timestamp" : 1791328270.642
+      }
+    ],
+    "testIdentifier" : "GoogleShotTests/test4ServerFromBeforeGoogleSignIn()",
+    "testIdentifierURL" : "test://com.apple.xcode/A1Probe/A1ProbeUITests/GoogleShotTests/test4ServerFromBeforeGoogleSignIn"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "E6A55747-45A2-4608-BB86-F7D71755696E.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-GoogleShotTeststest5GoogleOnDark-notes_0_303CE29C-0A2F-4258-A567-B1744F0EBA50.txt",
+        "timestamp" : 1791328282.439
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "22D79B43-B589-4AEB-8EFA-7EAEB16C6771.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-tree-5-google-on-signup-open-dark_0_50436D8E-0F75-4937-9976-7DD04D29896B.txt",
+        "timestamp" : 1791328282.436
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "06A0A707-99F8-4EC5-AD59-C3258A83482F.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-5-google-on-signup-open-dark_0_D0DDDA06-4619-428A-A88A-E84A6D9EA926.png",
+        "timestamp" : 1791328282.282
+      }
+    ],
+    "testIdentifier" : "GoogleShotTests/test5GoogleOnDark()",
+    "testIdentifierURL" : "test://com.apple.xcode/A1Probe/A1ProbeUITests/GoogleShotTests/test5GoogleOnDark"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "A579DF95-6475-4F10-9E82-DF8CDC46B8BD.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-GoogleShotTeststest6ContinueWithGoogleSignsIn-notes_0_23905122-553C-44FA-ABCA-7E2C7380A86C.txt",
+        "timestamp" : 1791328314.185
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "39C69729-8FF6-42E4-A14C-20ECE2421C23.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-6-signed-in-with-google_0_87C08B6F-25D3-4827-AD50-C54F79547BC0.png",
+        "timestamp" : 1791328313.902
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "23AB0BD7-DE1E-4E55-9706-5D7285DE55FC.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-sign-in-prompt_0_95046A32-B0B0-4E54-BAA7-6F44BC3CB8E2.png",
+        "timestamp" : 1791328299.154
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "1084372B-BA72-4AD1-BD62-758E5212334C.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-6-sign-in-meanwhile-4_0_59372646-4570-4AA9-A46E-820A828768DC.png",
+        "timestamp" : 1791328297.588
+      }
+    ],
+    "testIdentifier" : "GoogleShotTests/test6ContinueWithGoogleSignsIn()",
+    "testIdentifierURL" : "test://com.apple.xcode/A1Probe/A1ProbeUITests/GoogleShotTests/test6ContinueWithGoogleSignsIn"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "38BB7868-AD8B-44A3-AEE0-D35A864AC4A3.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-GoogleShotTeststest7ARefusedGoogleSignInSaysWhy-notes_0_39DE4324-F84F-4CD0-A603-089888BF15E1.txt",
+        "timestamp" : 1791328335.277
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "975C5D61-7D97-4B1D-98E9-2697B80535F1.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-7-google-refused_0_DCC0A613-BD59-46DA-8411-DB9EE931EBE8.png",
+        "timestamp" : 1791328335.192
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "59A71D42-A0F5-45EE-988B-6207FFBF916B.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-sign-in-prompt_0_7B9F1420-89E2-436F-99FD-5FBFBDBF5FDF.png",
+        "timestamp" : 1791328328.385
+      }
+    ],
+    "testIdentifier" : "GoogleShotTests/test7ARefusedGoogleSignInSaysWhy()",
+    "testIdentifierURL" : "test://com.apple.xcode/A1Probe/A1ProbeUITests/GoogleShotTests/test7ARefusedGoogleSignInSaysWhy"
+  }
+]

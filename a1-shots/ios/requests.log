@@ -1,0 +1,43 @@
+23:04:31 :8765   GET /api/auth/methods
+23:04:31 :8765 "GET /api/auth/methods HTTP/1.1" 200 -
+23:04:32 :8769   GET /api/auth/methods
+23:04:32 :8769 "GET /api/auth/methods HTTP/1.1" 200 -
+23:04:32 :8765   GET /api/auth/methods
+23:04:32 :8765 "GET /api/auth/methods HTTP/1.1" 200 -
+23:09:25 :8765 "POST /__reset HTTP/1.1" 200 -
+23:10:09 :8765   GET /api/auth/methods
+23:10:09 :8765 "GET /api/auth/methods HTTP/1.1" 200 -
+23:10:11 :8765 "GET /__log HTTP/1.1" 200 -
+23:10:16 :8765 "POST /__reset HTTP/1.1" 200 -
+23:10:29 :8766   GET /api/auth/methods
+23:10:29 :8766 "GET /api/auth/methods HTTP/1.1" 200 -
+23:10:32 :8765 "GET /__log HTTP/1.1" 200 -
+23:10:35 :8765 "POST /__reset HTTP/1.1" 200 -
+23:10:52 :8767   GET /api/auth/methods
+23:10:52 :8767 "GET /api/auth/methods HTTP/1.1" 200 -
+23:10:55 :8765 "GET /__log HTTP/1.1" 200 -
+23:10:58 :8765 "POST /__reset HTTP/1.1" 200 -
+23:11:05 :8768   GET /api/auth/methods
+23:11:05 :8768 "GET /api/auth/methods HTTP/1.1" 404 -
+23:11:08 :8765 "GET /__log HTTP/1.1" 200 -
+23:11:11 :8765 "POST /__reset HTTP/1.1" 200 -
+23:11:16 :8765   GET /api/auth/methods
+23:11:16 :8765 "GET /api/auth/methods HTTP/1.1" 200 -
+23:11:19 :8765 "GET /__log HTTP/1.1" 200 -
+23:11:22 :8765 "POST /__reset HTTP/1.1" 200 -
+23:11:27 :8765   GET /api/auth/methods
+23:11:27 :8765 "GET /api/auth/methods HTTP/1.1" 200 -
+23:11:46 :8765   START client=native challenge=S256 state=present -> ok
+23:11:47 :8765 "GET /api/auth/google/start?client=native&code_challenge=-OUtTsCeCnA7qAWdv1K8uKqwcgxCSCcb5YlMRjF6VKk&client_state=UfXRTMumyiREfbwxmfgfyQlyI4wfvqhiybpRj8Q9GdY HTTP/1.1" 302 -
+23:11:51 :8765   EXCHANGE ticket=known pkce=ok
+23:11:51 :8765 "POST /api/auth/google/exchange HTTP/1.1" 201 -
+23:11:51 :8765 "GET /api/users/me HTTP/1.1" 200 -
+23:11:54 :8765 "GET /__log HTTP/1.1" 200 -
+23:11:54 :8765 "POST /__reset HTTP/1.1" 200 -
+23:12:02 :8769   GET /api/auth/methods
+23:12:02 :8769 "GET /api/auth/methods HTTP/1.1" 200 -
+23:12:11 :8769   START client=native challenge=S256 state=present -> ok
+23:12:11 :8769 "GET /api/auth/google/start?client=native&code_challenge=aqXIQLcER--RH7GFYbxuwhYp1IXUobQ6fO1GOGSBQNw&client_state=qVy2c0zGF5hHkI8k0x09dF7kwLhFweYPmvvLD5q0Jzg HTTP/1.1" 302 -
+23:12:12 :8769   EXCHANGE ticket=known pkce=ok
+23:12:12 :8769 "POST /api/auth/google/exchange HTTP/1.1" 403 -
+23:12:15 :8765 "GET /__log HTTP/1.1" 200 -

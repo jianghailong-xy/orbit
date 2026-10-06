@@ -1,0 +1,18 @@
+Test Case '-[A1ProbeUITests.GoogleShotTests test1GoogleOnAndOpeningAccounts]' started.
+Test Case '-[A1ProbeUITests.GoogleShotTests test1GoogleOnAndOpeningAccounts]' passed (59.811 seconds).
+Test Case '-[A1ProbeUITests.GoogleShotTests test2GoogleOnForExistingAccounts]' started.
+Test Case '-[A1ProbeUITests.GoogleShotTests test2GoogleOnForExistingAccounts]' passed (19.395 seconds).
+Test Case '-[A1ProbeUITests.GoogleShotTests test3GoogleOff]' started.
+Test Case '-[A1ProbeUITests.GoogleShotTests test3GoogleOff]' passed (22.777 seconds).
+Test Case '-[A1ProbeUITests.GoogleShotTests test4ServerFromBeforeGoogleSignIn]' started.
+Test Case '-[A1ProbeUITests.GoogleShotTests test4ServerFromBeforeGoogleSignIn]' passed (12.719 seconds).
+Test Case '-[A1ProbeUITests.GoogleShotTests test5GoogleOnDark]' started.
+Test Case '-[A1ProbeUITests.GoogleShotTests test5GoogleOnDark]' passed (11.446 seconds).
+Test Case '-[A1ProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn]' started.
+Test Case '-[A1ProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn]' passed (31.803 seconds).
+Test Case '-[A1ProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy]' started.
+Test Case '-[A1ProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy]' passed (21.041 seconds).
+	 Executed 7 tests, with 0 failures (0 unexpected) in 178.991 (179.007) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 178.991 (179.008) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 178.991 (179.010) seconds
+** TEST SUCCEEDED **
