@@ -209,8 +209,8 @@ private struct RunnerEngineContent: View {
                     }
                     // On the account's own row, whose swipe raises it, so the panel opens against the
                     // row rather than at the top of the page.
-                    .confirmationDialog(removalTitle, isPresented: removalAsked, titleVisibility: .visible,
-                                        presenting: pendingRemoval) { line in
+                    .orbitConfirmation({ _ in removalTitle },
+                                       isPresented: removalAsked, presenting: pendingRemoval) { line in
                         Button("Remove", role: .destructive) { remove(line) }
                         Button("Cancel", role: .cancel) {}
                     } message: { line in

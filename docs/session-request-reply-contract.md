@@ -213,9 +213,13 @@ run 结束时顺带清掉了队列，`UNDELIVERED` 和 `RECIPIENT_ENDED` 同时�
 
 ### 4.2 回信怎么送
 
-- 作为发送方会话的新 turn 送达，`sendIntent = NEXT_TURN`，`clientTurnId` 前缀 `session-reply:`。turn 正文为空，
-  结局挂在旁边，投递时再渲染成块，做法同 `bg-wake:`（`src/apiserver/src/runner-api/background-job-wake.ts`）：
-  回信不算任何人说的话，客户端画成回信卡片。
+- 作为发送方会话的 turn 送达，`clientTurnId` 前缀 `session-reply:`。turn 正文为空，结局挂在旁边，投递时再渲染成块，
+  做法同 `bg-wake:`（`src/apiserver/src/runner-api/background-job-wake.ts`）：回信不算任何人说的话，客户端画成回信卡片。
+- **路由**与后台任务结束的 wake 相同（`createTurn` 的服务端参数 `steerIfLive`）：发送方正在跑一轮（引擎 turn 的租约有效），
+  且它的运行时与 runner 支持精确目标的 steer（runner 声明了 routing-v1）时，回信作为 `CURRENT_WORK` steer 写进这一轮：
+  `kind = steer`，`targetTurnId` 是正在跑的那一轮，引擎在下一次工具调用时读到，不另开一轮。发送方往往正是在这一轮里
+  等这个答案。其余情况——发送方空闲、租约将尽、运行时不支持 steer、runner 没有声明 routing-v1——作为下一轮送达，
+  `sendIntent = NEXT_TURN`。路由在同一把 Session 锁、同一个事务里决定，不能 steer 时退回下一轮，不会因此 409。
 - 每个结局渲染成一个块，带上原请求的前 200 字，发送方的上下文被压缩之后也能对上号：
 
   ```
@@ -225,12 +229,20 @@ run 结束时顺带清掉了队列，`UNDELIVERED` 和 `RECIPIENT_ENDED` 同时�
   </orbit-session-reply>
   ```
 
-- **合并**：回信 turn 还在排队（runner 还没领走）时，新到的结局并进同一个 turn。5 个 worker 几乎同时回复，
-  发送方只被唤醒一次，而不是 5 次。
+  以 steer 投递时，每个块在开头多一行，说明它是加进当前这一轮的（同 bg-wake 的 `WAKE_HEADS`）：
+  「你正在工作，所以这条回信加进了你当前这一轮，没有为它另开一轮。」排队列表按 turn 自身的 kind 生成同样的字节。
+- **合并**只在同一路线内：要写进运行中这一轮的结局，只并入仍在等同一个 target turn、runner 还没领走的 reply steer；
+  要等下一轮的结局，只并入排队中的下一轮回信 turn。两条路线互不合并；runner 已领走或引擎已确认的 steer 不再被并入，
+  之后到的结局另起一个 steer。5 个 worker 几乎同时回复，发送方只收到一次，而不是 5 次。
+- **steer 没送达**：目标轮在引擎读到之前就结束了（目标轮落定时的 `requeueUnreadCurrentWorkSteers`，或 runner 的
+  `steer_requeue`），reply steer 在同一行上回到队列，成为普通的下一轮回信 turn，结局仍挂在它上面
+  （`reply_client_turn_id` 不变）；已排队的下一轮回信 turn 并进它，不会出现两个。runner 没能把它写进这一轮
+  （引擎没有确认，steer 以 FAILED 落定）时，结局从它上面放下来，由请求 worker 重新交回发送方：这一轮还能 steer 就再
+  steer，否则排到下一轮。
 - `session-reply:` 列为保留前缀，所有允许调用方指定 `clientTurnId` 的入口都拒收。
   `watch-turn-key.ts#assertClientTurnIdNotReserved` 今天只挡 `watch:`，要一并扩展。
 - 回信不经过 watch，所以不受 `WAKE_LOOP` 约束：A 在等 B 回复时，B 照样可以向 A 发请求追问，双方都不会卡死。
-- 回信是平台投递，不计入 §2.4 的上限，也不计入 `chargeSteer`。
+- 回信是平台投递，不计入 §2.4 的上限，也不计入 `chargeSteer`；以 steer 写进运行中的那一轮时也一样。
 
 ### 4.3 发送方已经不在了
 
@@ -239,7 +251,11 @@ run 结束时顺带清掉了队列，`UNDELIVERED` 和 `RECIPIENT_ENDED` 同时�
   评论主键由 `requestId` 派生，重复处理不会重复写。「已结束」不包括失败后已经排上自动重试的情况：那种会话会被重试唤醒，
   回信照常排给它，也不写任务评论。
 - 发送方被打断时，排队中的回信 turn 随队列一起被收掉：停就是停，不因为来了回信而继续跑。结局仍在请求行上，
-  并在发送方**下一次被投递 turn 时**作为附加块补上，不会丢。
+  并在发送方**下一次被投递 turn 时**作为附加块补上，不会丢。还没被 runner 领走的 reply steer 也一样：打断把它随队列收掉
+  （记为没送达的 `CURRENT_WORK`），结局留在请求行上（held），不再被排回去，下一次投递时补上。
+- run 结束时（失败、finalize、reaper、结束会话）没被引擎确认的 reply steer，按随队列收掉的回信 turn 处理：排上了自动重试的，
+  结局留给重试的那一轮；没有的，按本节第一条告知已结束的发送方。自动重试重发的是 reply steer 所在的那一轮（原话），
+  不用一个回信 turn 顶替它；没送达的结局在重发的那一轮补上。
 
 ---
 
@@ -353,6 +369,21 @@ P0–三处待定合入后的审查（2026-10-02）：
     它承载的请求随重发挪到新 turn（第 14 条）；重发不了的，请求立即以 UNDELIVERED 结案，不会被判成 NO_REPLY、附上与它
     无关的摘录。
 
+回信改走 steer（2026-10-06）：
+
+28. 发送方正在跑一轮、且运行时与 runner 支持精确目标 steer 时，回信以 `CURRENT_WORK` steer 写进这一轮（`kind = steer`，
+    `targetTurnId` 为运行中的那一轮）：不另开一轮，排队列表里显示为 steer、带回信卡片、不可撤回，投递的块说明它是加进
+    当前这一轮的，与排队列表的字节相同；不计入 `chargeSteer` 和 §2.4 的上限。发送方空闲、租约将尽、运行时不支持 steer、
+    或 runner 没有声明 routing-v1 时，仍是下一轮的回信 turn，块不变。
+29. 合并只在同一路线内：steer 只并入仍在等同一个 target turn 的 reply steer，下一轮的只并入排队中的下一轮回信 turn；
+    两条路线互不合并，runner 已领走的 steer 不再被并入。
+30. reply steer 没送达——目标轮在引擎读到之前结束，或 runner 以 `steer_requeue` 交回——时，它在同一行上回到队列，成为
+    下一轮的回信 turn，结局仍挂在它上面；已排队的回信 turn 并进它，只投递一次。runner 没能写进去的 reply steer，结局由
+    请求 worker 重新交回发送方。
+31. 发送方被打断时，还没被领走的 reply steer 随队列收掉，结局留在请求行上，不被重新排回，并在下一次投递时补上。
+32. reply steer 所在的那一轮因临时失败停下、排上自动重试时，重试重发的是那一轮的原话，不是一个回信 turn；没送达的结局
+    留给重试的那一轮，并在那一轮补上。
+
 ---
 
 ## 9. 已定的决策（owner，2026-10-01）
@@ -395,3 +426,9 @@ owner 在认领期间关掉重试会让结局被说两遍。验收见 §8 第 22
 或者重试放弃时，请求留在一条再也不会送达的 turn 上，挂到截止时间。runner 在回显写入之前掉线时，重试按回显找"上一条消息"，
 找到的是更早一条已经答过的；失败那条上的请求在下一次落定时被判成 NO_REPLY，附的摘录与它无关。§2.1 写明了"上一条消息"
 指哪条，§4 把"确定不会再重发"列入 UNDELIVERED。验收见 §8 第 26–27 条。
+
+2026-10-06 八补（回信改走 steer）：§4.2 原先写「`sendIntent = NEXT_TURN`，做法同 `bg-wake:`」，照抄的是当时后台任务 wake 的做法。
+10-03 后台任务结束的 wake 在会话运行中改走 `CURRENT_WORK` steer（commit f4bc89cdf），回信没有跟着改：发送方正在跑一轮时，
+回信只能排在这一轮后面，而这一轮常常正是在等这个答案。§4.2 改为同一条路由：能 steer 就写进运行中的那一轮，合并只在
+同一路线内，steer 没送达时回到队列成为下一轮的回信 turn；§4.3 补上打断、run 结束与自动重试对 reply steer 的处理。
+验收见 §8 第 28–32 条。

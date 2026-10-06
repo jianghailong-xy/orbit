@@ -510,6 +510,51 @@ export interface RunnerHeartbeatRequest {
    *  and a machine with no reported root is not offered as a clone target at all, rather than
    *  having one guessed for it. */
   reposRoot?: string;
+  /** Where this runner's updates of itself stand. Sent on every beat by a runner that knows the
+   *  field; absent from an older one — or one rolled back to an older release — which the control
+   *  plane stores as NULL, "not reported", rather than keeping what a newer binary last said. */
+  selfUpdate?: RunnerSelfUpdate;
+}
+
+/** What a runner's self-updater last found:
+ *  - `enabled`: nothing in the way — on its assigned release, or about to install it.
+ *  - `disabledByEnv`: turned off — ORBIT_NO_SELFUPDATE, a development build, or a platform no
+ *    release is published for; `reason` says which.
+ *  - `dirNotWritable`: `installDir` is not writable by the runner's user, so no release can be
+ *    swapped in until someone runs `sudo orbit upgrade` there.
+ *  - `waitingForIdle`: a release is waiting for the turns in flight to end.
+ *  - `failed`: the release check or the install failed; `reason` is the runner's own words.
+ *  - `heldByRollout`: a newer release exists, but its staged rollout has not reached this runner. */
+export type RunnerSelfUpdateState =
+  | 'enabled'
+  | 'disabledByEnv'
+  | 'dirNotWritable'
+  | 'waitingForIdle'
+  | 'failed'
+  | 'heldByRollout';
+
+export const RUNNER_SELF_UPDATE_STATES: readonly RunnerSelfUpdateState[] = [
+  'enabled',
+  'disabledByEnv',
+  'dirNotWritable',
+  'waitingForIdle',
+  'failed',
+  'heldByRollout',
+];
+
+/** A runner's report on its updates of itself (RunnerHeartbeatRequest.selfUpdate), as the runner
+ *  list and detail return it — `null` there for a runner that does not report one. */
+export interface RunnerSelfUpdate {
+  state: RunnerSelfUpdateState;
+  /** Why: set for `failed`, and for `disabledByEnv` (which switch turned it off). */
+  reason?: string;
+  /** The directory holding the binary an update replaces, symlinks resolved. */
+  installDir?: string;
+  /** The last update the runner installed into itself: ISO-8601 time and the versions it moved
+   *  between. Absent until there has been one. */
+  lastUpdatedAt?: string;
+  lastUpdatedFrom?: string;
+  lastUpdatedTo?: string;
 }
 
 /** What the runner saw at one agent's working directory. Reported from the runner's own disk,
@@ -738,6 +783,11 @@ export interface RunnerHeartbeatResponse {
    *  pass. Set once per user request and cleared as it is handed over, so a runner that misses it
    *  (offline, older build) costs nothing more than the wait it was already in. */
   refreshModelCatalog?: boolean;
+  /** Check for a runner release now — the owner's "Update Runner Now" — instead of at the runner's
+   *  next periodic check. The same check: a turn in flight still defers the update, which the
+   *  runner then reports as `waitingForIdle`. Set once per request and cleared as it is handed
+   *  over, like `refreshModelCatalog`. */
+  checkSelfUpdate?: boolean;
   /** This machine's free-space floor in MB (Runner.minFreeDiskMb), the same number the auto-run
    *  disk gate reads. Sent so the runner can apply it to work only it can see — reclaiming the
    *  session checkouts on its own disk — without keeping a second copy of the setting.

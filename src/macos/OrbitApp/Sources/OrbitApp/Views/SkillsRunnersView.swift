@@ -251,8 +251,8 @@ private struct RunnerListEditing: ViewModifier {
     func body(content: Content) -> some View {
         content
             .sheet(isPresented: $addingRunner) { AddRunnerSheet() }
-            .confirmationDialog(removalTitle, isPresented: removalAsked, titleVisibility: .visible,
-                                presenting: pendingRemoval) { runner in
+            .orbitConfirmation({ _ in removalTitle },
+                               isPresented: removalAsked, presenting: pendingRemoval) { runner in
                 Button(RunnerPageCopy.RUNNER_REMOVE, role: .destructive) {
                     Task { await remove(runner) }
                 }
@@ -652,6 +652,10 @@ struct RunnerDetailContent: View {
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_HOSTNAME, runner.hostname)
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_VERSION,
                      RunnerPageFormat.versionValue(runner, latest: runners.latestVersion))
+            aboutRow(RunnerPageCopy.RUNNER_ABOUT_LAST_UPDATE, RunnerPageFormat.lastUpdate(runner))
+            if RunnerAttention.runnerCanUpdateNow(runner, nowMs: RunnerPageFormat.nowMs(now)) {
+                Button(RunnerPageCopy.RUNNER_UPDATE_RUNNER_NOW) { updateRunner() }
+            }
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_RUNS_AS, RunnerPageFormat.runsAsValue(runner))
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_REPOS_FOLDER, runner.reposRoot)
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_LAST_CHECK_IN, RunnerPageFormat.lastCheckIn(runner, now: now))
@@ -669,8 +673,8 @@ struct RunnerDetailContent: View {
     private var rotateSection: some View {
         Section {
             Button(RunnerPageCopy.RUNNER_ROTATE_TOKEN) { confirmingRotate = true }
-                .confirmationDialog("Rotate token for “\(RunnerPageFormat.displayName(runner))”?",
-                                    isPresented: $confirmingRotate, titleVisibility: .visible) {
+                .orbitConfirmation("Rotate token for “\(RunnerPageFormat.displayName(runner))”?",
+                                   isPresented: $confirmingRotate) {
                     Button("Rotate Token", role: .destructive) { rotate() }
                     Button("Cancel", role: .cancel) {}
                 } message: {
@@ -694,8 +698,8 @@ struct RunnerDetailContent: View {
                 Text(RunnerPageCopy.RUNNER_REMOVE)
                     .frame(maxWidth: .infinity)
             }
-            .confirmationDialog("Remove “\(RunnerPageFormat.displayName(runner))”?",
-                                isPresented: $confirmingRemove, titleVisibility: .visible) {
+            .orbitConfirmation("Remove “\(RunnerPageFormat.displayName(runner))”?",
+                               isPresented: $confirmingRemove) {
                 Button(RunnerPageCopy.RUNNER_REMOVE, role: .destructive) { remove() }
                 Button("Cancel", role: .cancel) {}
             } message: {
@@ -740,8 +744,7 @@ struct RunnerDetailContent: View {
             Button(RunnerPageCopy.RUNNER_SET_A_RESERVE) { choosingReserve = true }
                 // On the button that asks, so the panel opens against it rather than at the top of
                 // the page.
-                .confirmationDialog(RunnerPageCopy.RUNNER_KEEP_FREE, isPresented: $choosingReserve,
-                                    titleVisibility: .visible) {
+                .orbitConfirmation(RunnerPageCopy.RUNNER_KEEP_FREE, isPresented: $choosingReserve) {
                     ForEach(RunnerAttention.KEEP_FREE_TIERS.filter { $0.mb != nil }, id: \.label) { tier in
                         Button(tier.label) { keepFree = tier.mb }
                     }
@@ -756,6 +759,8 @@ struct RunnerDetailContent: View {
         case .updateEngines:
             Button(RunnerPageCopy.RUNNER_UPDATE_ENGINES_NOW) { updateEngines() }
                 .disabled(RunnerPageFormat.engineUpdateInFlight(runner.install))
+        case .updateRunner:
+            Button(RunnerPageCopy.RUNNER_UPDATE_RUNNER_NOW) { updateRunner() }
         }
     }
 
@@ -843,6 +848,13 @@ struct RunnerDetailContent: View {
         Task {
             show(await runners.refreshModels(id)
                  ?? "Re-reading this machine’s model lists — the picker updates within a minute.")
+        }
+    }
+
+    private func updateRunner() {
+        let id = runner.id
+        Task {
+            show(await runners.updateRunner(id) ?? RunnerPageCopy.RUNNER_UPDATE_RUNNER_REQUESTED)
         }
     }
 

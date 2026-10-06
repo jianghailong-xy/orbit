@@ -129,6 +129,12 @@ struct SettingsHomeView: View {
                 Text("Settings").font(.headline).opacity(headerScrolledAway ? 1 : 0)
             }
         }
+        // Signing out asks first, in the shape the width calls for (see `ConfirmationStyle`): an alert
+        // on a phone, the anchored panel on a tablet.
+        .orbitConfirmation(SettingsCopy.signOutTitle, isPresented: $confirmingSignOut) {
+            Button(SettingsCopy.signOut, role: .destructive) { model.logout() }
+            Button(SharePanelCopy.cancel, role: .cancel) {}
+        }
         .sheet(isPresented: $editingProfile) {
             ProfileEditSheet(name: model.user?.name ?? "")
         }
@@ -294,14 +300,6 @@ struct SettingsHomeView: View {
                 } icon: {
                     Image(systemName: "rectangle.portrait.and.arrow.right").foregroundStyle(Color.red)
                 }
-            }
-            // On the row, not on the `Form`: the system anchors the panel to the view this is declared
-            // on, and a `Form` covering the whole page put it at the top of the screen — over the
-            // header — while the row that asked for it sat at the bottom.
-            .confirmationDialog(SettingsCopy.signOutTitle(instance: SettingsHome.instanceName(model.baseURL)),
-                                isPresented: $confirmingSignOut, titleVisibility: .visible) {
-                Button(SettingsCopy.signOut, role: .destructive) { model.logout() }
-                Button(SharePanelCopy.cancel, role: .cancel) {}
             }
         } footer: {
             if let line = SettingsHome.versionLine(
@@ -1162,8 +1160,8 @@ private struct SharedLinksSettingsPage: View {
         }
         // On the link's own row — the swipe and the long-press menu both raise it — so the panel opens
         // against that row rather than at the top of the page.
-        .confirmationDialog(SharePanelCopy.turnOffTitle, isPresented: turnOffAsked, titleVisibility: .visible,
-                            presenting: pendingTurnOff) { link in
+        .orbitConfirmation({ _ in SharePanelCopy.turnOffTitle },
+                           isPresented: turnOffAsked, presenting: pendingTurnOff) { link in
             Button(SharePanelCopy.turnOff, role: .destructive) { Task { await turnOff(link) } }
             Button(SharePanelCopy.cancel, role: .cancel) {}
         } message: { _ in

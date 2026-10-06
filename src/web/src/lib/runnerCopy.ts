@@ -127,12 +127,21 @@ export const RUNNER_ABOUT_RUNS_AS = 'Runs As';
 export const RUNNER_ABOUT_REPOS_FOLDER = 'Repos Folder';
 export const RUNNER_ABOUT_LAST_CHECK_IN = 'Last Check-in';
 export const RUNNER_ABOUT_REGISTERED = 'Registered';
+/** The last update the runner installed into itself: when, and from which version to which. */
+export const RUNNER_ABOUT_LAST_UPDATE = 'Last Update';
 export const RUNNER_VERSION_LATEST = 'Latest';
 /** Behind the latest release on a runner that replaces itself: it waits for an idle moment. */
 export const RUNNER_VERSION_INSTALLS_WHEN_IDLE = 'installs when no turn is running';
+/** Behind the latest release because its staged rollout hasn't reached this runner. */
+export const RUNNER_VERSION_NOT_ROLLED_OUT = 'not rolled out to it yet';
 export const RUNNER_RUNS_AS_ROOT = 'root';
 export const RUNNER_RUNS_AS_REGULAR_USER = 'regular user';
 export const RUNNER_ROOT_NO_BYPASS = 'Runs as root, so sessions here can’t use Bypass permissions.';
+
+/** Last Update's versions: `0.1.217 → 0.1.218`. */
+export function runnerUpdatedFromTo(from: string, to: string): string {
+  return `${from} → ${to}`;
+}
 
 // MARK: Rotate Token / Remove Runner
 
@@ -308,6 +317,47 @@ export const RUNNER_UPGRADE_COMMAND = 'sudo orbit upgrade';
 
 export function attentionCantUpdateItselfDetail(version: string, latest: string, command: string): string {
   return `It runs as a regular user, so it can’t replace its own binary — still on ${version}, latest is ${latest}. On that machine, run ${command}.`;
+}
+
+// MARK: Needs Attention — the runner reports why it isn't updating itself
+
+/** dirNotWritable: both the list's short line and the card's title. */
+export const ATTENTION_INSTALL_FOLDER_NOT_WRITABLE = 'Install folder isn’t writable';
+/** The folder, when the runner didn't say which. */
+export const RUNNER_INSTALL_FOLDER = 'its install folder';
+/** disabledByEnv: both the list's short line and the card's title. */
+export const ATTENTION_UPDATES_TURNED_OFF = 'Updates are turned off';
+/** disabledByEnv with no reason given. */
+export const ATTENTION_UPDATER_OFF = 'Its updater is switched off';
+/** After a disabledByEnv reason that names ORBIT_NO_SELFUPDATE, the one reason that is a switch. */
+export const ATTENTION_UPDATES_TURN_ON =
+  'To turn them back on, remove ORBIT_NO_SELFUPDATE from the runner’s environment and restart it — ' +
+  'on a Mac, opening the latest Orbit app does this.';
+/** failed: both the list's short line and the card's title. */
+export const ATTENTION_RUNNER_UPDATE_FAILED = 'Runner update failed';
+/** failed with no reason given. */
+export const ATTENTION_UPDATE_DIDNT_GO_THROUGH = 'Its last update didn’t go through';
+export const RUNNER_UPDATE_RUNNER_NOW = 'Update Runner Now';
+export const RUNNER_UPDATE_RUNNER_REQUESTED =
+  'Checking for a runner release now — a new one installs once no turn is running.';
+
+export function attentionInstallFolderNotWritableDetail(
+  folder: string,
+  version: string,
+  latest: string,
+  command: string,
+): string {
+  return `It can’t write to ${folder}, so it can’t replace its own binary — still on ${version}, latest is ${latest}. On that machine, run ${command} once; after that it updates itself.`;
+}
+
+/** `reason` is the runner's own, capitalized: `ORBIT_NO_SELFUPDATE is set`, `Development build`. */
+export function attentionUpdatesTurnedOffDetail(reason: string, version: string, latest: string): string {
+  return `${reason}, so it doesn’t update itself — still on ${version}, latest is ${latest}.`;
+}
+
+/** `reason` is the runner's own words, capitalized. */
+export function attentionRunnerUpdateFailedDetail(reason: string, version: string, latest: string): string {
+  return `${reason}. Still on ${version}, latest is ${latest}. It retries every 10 min — Update Runner Now tries again right away.`;
 }
 
 // MARK: Needs Attention — an engine CLI has stopped being kept current

@@ -1,0 +1,7 @@
+{
+  "grouping": true,
+  "chinese": true,
+  "syntheticCompositionIgnored": true,
+  "escapePreservesValue": true,
+  "explicitClear": true
+}

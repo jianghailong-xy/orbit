@@ -32,6 +32,7 @@ import {
   startCardMeta,
   startCheckedLine,
   startExplanation,
+  startPageRow,
 } from '../lib/projectStart';
 import {
   ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER,
@@ -43,7 +44,7 @@ import {
 import { ENTER_HINT } from './CardHotkey';
 import { PROVENANCE_LABEL, shortSeal } from './CriteriaDecisionCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
-import { SessionStartProjectCard, startBody, startPlanView } from './StartProjectCard';
+import { ProjectStartDialog, SessionStartProjectCard, startBody, startPlanView } from './StartProjectCard';
 
 /**
  * "Start this project?" — drawn on the coordinator's request and never inferred, pressed once at
@@ -191,6 +192,7 @@ function answer<T>(value: Answer<T>): Promise<T> {
 
 beforeEach(() => {
   narrow = false;
+  startedCalls = 0;
   server.standing = standingOf();
   server.document = documentOf();
   server.row = rowOf('item-1');
@@ -252,8 +254,10 @@ async function until(done: () => boolean, what: string): Promise<void> {
   expect(done(), `waited for ${what}`).toBe(true);
 }
 
+let startedCalls = 0;
+
 async function mount(
-  options: { router?: boolean; onViewTasks?: () => void } = {},
+  options: { router?: boolean; bare?: boolean; dialog?: boolean; onViewTasks?: () => void } = {},
 ): Promise<{ node: HTMLElement; qc: QueryClient }> {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   const qc = new QueryClient({
@@ -268,7 +272,11 @@ async function mount(
   await act(async () => {
     tree.render(
       <QueryClientProvider client={qc}>
-        {options.router ? (
+        {options.dialog ? (
+          <ProjectStartDialog projectId={PROJECT} asked open onClose={() => { startedCalls += 1; }} />
+        ) : options.bare ? (
+          <SessionStartProjectCard projectId={PROJECT} bare onStarted={() => { startedCalls += 1; }} />
+        ) : options.router ? (
           <SessionAcceptanceConfirmationCard
             projectId={PROJECT}
             onOpenQuestion={(question) => reports.push(question)}
@@ -406,6 +414,12 @@ describe('the plan in one line', () => {
     // "A new card" opens with a word, not a marker.
     expect(planTaskLabel('A new card for the start')).toBe('A new card for the start');
     expect(planTaskLabel('x'.repeat(40))).toBe(`${'x'.repeat(23)}…`);
+    // A capital and one or two digits is a code, and a space after it is enough.
+    expect(planTaskLabel('P1 Web：合并 Runners 与 Providers 为 Infrastructure 页')).toBe('P1');
+    expect(planTaskLabel('P5：接通 Web、macOS 和 iOS 的 DeepSeek Harness 操作链')).toBe('P5');
+    expect(planTaskLabel('D12. wire the card')).toBe('D12');
+    expect(planTaskLabel('v2 API changes')).toBe('v2 API changes');
+    expect(planTaskLabel('P123 three')).toBe('P123 three');
   });
 
   it('says the mock’s plan the way the mock does', () => {
@@ -598,6 +612,47 @@ describe('what the card says', () => {
     expect(new URL(link!.href, window.location.href).pathname).toBe(`/projects/${PROJECT}`);
     expect(card().querySelector('button.start-card-link')).toBeNull();
   });
+});
+
+describe('which start row a page draws', () => {
+  it('draws the request once asked, the owner’s own Start… once the read says nobody asked, and nothing else', () => {
+    const row = rowOf('item-1');
+    expect(startPageRow(false, { startRequest: row })).toEqual({ kind: 'asked', row });
+    expect(startPageRow(false, { startRequest: null })).toEqual({ kind: 'own' });
+    // A read still on its way is not a project nobody asked about, nor is a read that does not say.
+    expect(startPageRow(false, undefined)).toBeNull();
+    expect(startPageRow(null, { startRequest: null })).toBeNull();
+    expect(startPageRow(true, { startRequest: row })).toBeNull();
+  });
+});
+
+describe('the card answered over the project’s sessions page', () => {
+  it('draws the same request bare — no review around it, no Chat about this — and says once it went through', async () => {
+    const { node } = await mount({ bare: true });
+    await until(() => cardIn(node) !== null && cardIn(node)!.querySelector('.start-card-plan span') !== null, 'the card');
+    expect(document.querySelector('.review-card-preview')).toBeNull();
+    expect(actionsOf(cardIn(node)!).map(labelOf)).toEqual([START_PROJECT_ACTION]);
+    await act(async () => {
+      action(cardIn(node)!, START_PROJECT_ACTION).click();
+    });
+    await until(() => bodies.length === 1, 'the press to reach the door');
+    expect(bodies[0]?.requestId).toBe('item-1');
+    await until(() => startedCalls === 1, 'the page to be told the start went through');
+  });
+
+  it('says the request no longer stands, rather than drawing an empty dialog', async () => {
+    server.row = null;
+    const { node } = await mount({ bare: true });
+    await until(() => node.textContent?.includes(START_REQUEST_GONE) ?? false, 'the sentence that says so');
+    expect(cardIn(node)).toBeNull();
+  });
+
+  it.each([[false, '.start-card-dialog'], [true, '.start-card-sheet']] as const)(
+    'puts the card up as a dialog on a wide screen and a sheet on a phone (phone=%s)', async (phone, shell) => {
+      narrow = phone;
+      await mount({ dialog: true });
+      await until(() => document.querySelector(`${shell} .start-card`) !== null, `the card in ${shell}`);
+    });
 });
 
 describe('the press', () => {

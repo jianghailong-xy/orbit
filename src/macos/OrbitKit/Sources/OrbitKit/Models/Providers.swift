@@ -49,17 +49,20 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
     /// endpoint reached with a subscription token). Nil for a metered API key or a third-party
     /// endpoint, neither of which has a 5-hour/weekly window at all. Served by GET /providers.
     public let planUsage: PlanUsageSnapshot?
+    /// Whether an OpenCode session may spend this key too (`OpenCodeKeys`), as GET /providers decides
+    /// it. Nil from an older server, which reads as no.
+    public var runsOnOpenCode: Bool? = nil
     public var id: String { slug }
 
     private enum CodingKeys: String, CodingKey {
         case providerID = "id"
-        case slug, label, runtime, models, defaultModel, presetSlug, modelsFromRuntime, planUsage
+        case slug, label, runtime, models, defaultModel, presetSlug, modelsFromRuntime, planUsage, runsOnOpenCode
     }
 
     public init(slug: String, label: String, runtime: String? = nil,
                 models: [ConfiguredProviderModel] = [], defaultModel: String? = nil,
                 presetSlug: String? = nil, modelsFromRuntime: Bool? = nil,
-                planUsage: PlanUsageSnapshot? = nil) {
+                planUsage: PlanUsageSnapshot? = nil, runsOnOpenCode: Bool? = nil) {
         self.slug = slug
         self.label = label
         self.runtime = runtime
@@ -68,5 +71,6 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
         self.presetSlug = presetSlug
         self.modelsFromRuntime = modelsFromRuntime
         self.planUsage = planUsage
+        self.runsOnOpenCode = runsOnOpenCode
     }
 }

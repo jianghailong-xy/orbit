@@ -28,7 +28,7 @@ const REMOVAL_MIGRATION =
   'src/apiserver/prisma/migrations/0224_evidence_judgment_removal_of_human_signoff/migration.sql';
 
 function git(...args: string[]): string {
-  return execFileSync('git', args, { cwd: repoRoot(), encoding: 'utf8' }).trim();
+  return execFileSync('git', args, { cwd: repoRoot(), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim();
 }
 
 // ── (a) HUMAN_SIGNOFF is not a criterion any caller can declare ────────────────────────────────

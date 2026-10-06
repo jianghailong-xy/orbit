@@ -150,9 +150,9 @@ struct CompactShell: View {
                     .offset(x: x)
 
                 // Left-edge open strip — present on a drawer destination's own page: a section's
-                // root, or a project's sessions page, which turns off the system back-swipe below,
-                // freeing this edge. A page pushed over either keeps the edge for the system
-                // back-swipe.
+                // root, or a project's sessions page put up as the project's own (not one a list row
+                // pushed), which turns off the system back-swipe below, freeing this edge. A page
+                // pushed over either keeps the edge for the system back-swipe.
                 if !drawerOpen && model.atDestinationRoot {
                     Color.clear
                         .frame(width: 18)
@@ -296,9 +296,13 @@ private struct CompactSections: View {
                         // a workspace's session list (§3.3). Its own ✎ pushes a draft over it, and
                         // the session that draft creates lands in the folder.
                         case .folder(let address):       SessionFolderPage(address: address)
-                        // A project's sessions page leads like the session list it stands in for:
-                        // the drawer's hamburger, not a back button.
-                        case .sessionProject(let address): SessionProjectPage(address: address)
+                        // A project's sessions page a session list's row pushed is a page over that
+                        // list: the system back button and back-swipe return to it (owner,
+                        // 2026-10-06). Put up as the project's own page — by the drawer's row, the
+                        // merge banner or a notification — it leads like the session list it stands
+                        // in for: the drawer's hamburger, not a back button.
+                        case .sessionProject(let address, asDestination: false): SessionProjectPage(address: address)
+                        case .sessionProject(let address, asDestination: true): SessionProjectPage(address: address)
                             .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }
                             .navigationBarBackButtonHidden()
                             .drawerToggle(open: openDrawer)
@@ -1226,10 +1230,10 @@ private struct AgentConsolePage: View {
 /// Toggles the enclosing `UINavigationController`'s interactive pop gestures (the edge swipe-back, and
 /// on iOS 26 the swipe-back from anywhere in the content) while leaving the tappable back button
 /// intact — there's no SwiftUI API to disable only the swipe. Used on a drawer destination's own page
-/// that sits on a stack (a project's sessions page) so the left screen edge drives `CompactShell`'s
-/// drawer-open swipe instead of the system back-swipe. A passive, non-interactive probe that reaches the nav
-/// controller through its own responder chain; it caches that controller so the gesture is restored even
-/// if the view is torn down while disabled.
+/// that sits on a stack (a project's sessions page the drawer, not a list row, put up) so the left
+/// screen edge drives `CompactShell`'s drawer-open swipe instead of the system back-swipe. A passive,
+/// non-interactive probe that reaches the nav controller through its own responder chain; it caches
+/// that controller so the gesture is restored even if the view is torn down while disabled.
 private struct SwipeBackGestureToggle: UIViewRepresentable {
     var enabled: Bool
 

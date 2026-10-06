@@ -44,6 +44,21 @@ final class FailureReasonTests: XCTestCase {
                        "a dropped connection is reporting itself as an NSError dump again")
     }
 
+    /// A proxy's error page is not the server's words: Cloudflare answers a 502 with a whole HTML
+    /// document, and the project's sessions page drew every line of it.
+    func testAnHTMLErrorPageIsItsStatusAndNotItsMarkup() {
+        let cloudflare = """
+            <!DOCTYPE html>
+            <!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]-->
+            <head>
+            <title>orbitd.io | 502: Bad gateway</title>
+            """
+        XCTAssertEqual(APIClient.failureReason(APIError.http(status: 502, body: cloudflare)),
+                       "the server returned 502")
+        XCTAssertEqual(APIClient.failureReason(APIError.http(status: 504, body: "\n<html><body>Gateway Timeout</body></html>")),
+                       "the server returned 504")
+    }
+
     /// The fence. Nothing in a build catches a banner that went back to printing its error, because
     /// `\(error)` compiles anywhere — so the check is that no banner holds one.
     ///

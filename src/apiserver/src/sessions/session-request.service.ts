@@ -32,8 +32,9 @@ import {
 import { SessionNotSendable, SessionsService } from './sessions.service';
 
 /**
- * Where a request's outcome went (contract §4.2, §4.3): onto a new reply turn of the asker (QUEUED),
- * onto one already queued (MERGED), kept on the row because the asker had ended or is waiting on its
+ * Where a request's outcome went (contract §4.2, §4.3): onto a new reply turn of the asker (QUEUED) —
+ * a turn of its own, or a steer into the turn it is running — onto one already waiting on that same
+ * route (MERGED), kept on the row because the asker had ended or is waiting on its
  * auto-retry (HELD) — or somewhere another pass had already put it (ALREADY). DEFERRED: nowhere yet,
  * because the hand-off failed; the outcome is safe on its row and the request worker hands it back on
  * its next pass.
@@ -136,13 +137,18 @@ export class SessionRequestService {
   /**
    * Hand one request's outcome back to the session that asked (§4.2, §4.3).
    *
-   * As a turn of the asker's conversation — NEXT_TURN, with no words of its own, the outcome kept on
-   * its row and written in at delivery — through `createTurn`, exactly as a background job's wake is
-   * filed: onto the asker's reply turn nobody has been handed yet if there is one, so outcomes that
-   * arrive together wake it once, else as a new `session-reply:` turn. Each hand-off attempt takes a
-   * key of its own: what makes the outcome go back once is the compare-and-set inside the turn's
-   * transaction (`attachReplyToTurn`), not the key, so a key a dropped reply turn once used can never
-   * answer for a hand-off it did not carry.
+   * As a turn of the asker's conversation — with no words of its own, the outcome kept on its row and
+   * written in at delivery — through `createTurn`, exactly as a background job's exit is filed. Into
+   * the turn the asker is running, as a CURRENT_WORK steer aimed at it, when its runtime and runner
+   * take one (`steerIfLive`): an asker running a turn is usually waiting in it for this very answer,
+   * and queued behind it the answer was read only once that turn was over. Otherwise NEXT_TURN, as it
+   * always was — an idle asker, or a runtime that cannot steer. Either way onto the asker's reply turn
+   * nobody has been handed yet on that same route if there is one (`undeliveredReplyTurn`), so outcomes
+   * that arrive together reach it once, else as a new `session-reply:` turn. Each hand-off attempt
+   * takes a key of its own: what makes the outcome go back once is the compare-and-set inside the
+   * turn's transaction (`attachReplyToTurn`), not the key, so a key a dropped reply turn once used can
+   * never answer for a hand-off it did not carry. A platform delivery, charged neither as a steer nor
+   * against any session pair's hourly limit: no `participateSendTransaction` is passed.
    *
    * An asker that has ended — its run over, being cancelled, completed or in Trash — is not revived to
    * be told (§4.3). The outcome is held on the row, written into the next turn the asker is handed if
@@ -182,14 +188,15 @@ export class SessionRequestService {
         request.fromSessionId,
         { clientTurnId, content: '', intent: 'NEXT_TURN' },
         {
-          coalesce: async (tx, asker) => {
+          steerIfLive: true,
+          coalesce: async (tx, asker, route) => {
             if (sessionHasEnded(asker) || asker.cancelRequestedAt) {
               throw new SessionNotSendable('the session has ended');
             }
             // A retry armed since the look above — a quota that ran out a moment ago. The look is
             // taken again, under the lock it needs.
             if (mayLookAgain && awaitsAutoRetry(asker)) throw new AskerAwaitsRetry();
-            const queued = await undeliveredReplyTurn(tx, request.fromSessionId);
+            const queued = await undeliveredReplyTurn(tx, request.fromSessionId, route);
             merged = queued !== null;
             await attachReplyToTurn(tx, request.id, queued?.clientTurnId ?? clientTurnId);
             return queued;

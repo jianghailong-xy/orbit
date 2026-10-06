@@ -1,0 +1,9 @@
+{
+  "choices": 520,
+  "choicesSame520IdentitiesAsR5": true,
+  "toasts": 272,
+  "toastsOrigin": "232 original plus 40 notification promotion tests",
+  "p0": 112,
+  "p0Origin": "104 original plus 8 production notification tests",
+  "p0NoSpecializedFixtures": true
+}

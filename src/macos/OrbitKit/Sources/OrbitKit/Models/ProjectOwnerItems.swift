@@ -185,6 +185,10 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     /// (`StartProject.swift`) — and nil for every other kind, for a server that predates start
     /// requests, and for a request this build cannot read.
     public let startRequest: ProjectStartRequest?
+    /// The request a `DONE_REQUEST` carries — what the "Is this project done?" card is drawn from
+    /// (`ProjectDone.swift`) — and nil for every other kind, for a server that predates done
+    /// requests, and for a request this build cannot read.
+    public let doneRequest: DoneRequest?
     /// What the item's payload holds, as the rows its card draws (§7.5); nil when the payload is
     /// not a shape this build reads — an item an older build opened, a pause, a question — which
     /// leaves the card drawing the server's own sentence, as it did before the rows existed.
@@ -199,7 +203,8 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
                 sessionId: String? = nil, promotionId: String? = nil,
                 fuseEpisodeId: String? = nil, delivery: Delivery? = nil,
                 actions: [ProjectOpenItemAction] = [], question: CoordinatorQuestion? = nil,
-                startRequest: ProjectStartRequest? = nil, facts: OpenItemFacts? = nil) {
+                startRequest: ProjectStartRequest? = nil, doneRequest: DoneRequest? = nil,
+                facts: OpenItemFacts? = nil) {
         self.itemId = itemId
         self.kind = kind
         self.title = title
@@ -217,6 +222,7 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         self.actions = actions
         self.question = question
         self.startRequest = startRequest
+        self.doneRequest = doneRequest
         self.facts = facts
     }
 
@@ -243,6 +249,7 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         // would have drawn is not drawn — rather than an open-items read that fails to decode.
         startRequest = (try? c.decodeIfPresent(ProjectStartRequest.self,
                                                forKey: .startRequest)) ?? nil
+        doneRequest = (try? c.decodeIfPresent(DoneRequest.self, forKey: .doneRequest)) ?? nil
         facts = try c.decodeIfPresent(OpenItemFacts.self, forKey: .facts)
     }
 }
@@ -341,12 +348,19 @@ public struct ProjectOpenItemsView: Codable, Equatable, Sendable {
     /// that predates the kind draws every owner row it cannot name as an escalation. Absent from a
     /// server that predates start requests.
     public let startRequest: ProjectOpenItemRow?
+    /// The coordinator's open request to record the project done (`DONE_REQUEST`), or nil — a
+    /// project holds at most one, and it is served only while it still describes the project: one
+    /// whose criteria, tasks or landings moved since is superseded before this is read. Served
+    /// beside the groups for the reason `startRequest` is. Absent from a server that predates done
+    /// requests.
+    public let doneRequest: ProjectOpenItemRow?
 
     public init(needsYou: [ProjectOpenItemRow] = [], withCoordinator: [ProjectOpenItemRow] = [],
-                startRequest: ProjectOpenItemRow? = nil) {
+                startRequest: ProjectOpenItemRow? = nil, doneRequest: ProjectOpenItemRow? = nil) {
         self.needsYou = needsYou
         self.withCoordinator = withCoordinator
         self.startRequest = startRequest
+        self.doneRequest = doneRequest
     }
 
     public init(from decoder: Decoder) throws {
@@ -354,6 +368,7 @@ public struct ProjectOpenItemsView: Codable, Equatable, Sendable {
         needsYou = try c.decodeIfPresent([ProjectOpenItemRow].self, forKey: .needsYou) ?? []
         withCoordinator = try c.decodeIfPresent([ProjectOpenItemRow].self, forKey: .withCoordinator) ?? []
         startRequest = (try? c.decodeIfPresent(ProjectOpenItemRow.self, forKey: .startRequest)) ?? nil
+        doneRequest = (try? c.decodeIfPresent(ProjectOpenItemRow.self, forKey: .doneRequest)) ?? nil
     }
 }
 
@@ -495,6 +510,10 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
     public let commitsAhead: Int?
     public let filesChanged: Int?
     public let taskIds: [String]
+    /// The same tasks by title, in the server's order — what the project's sessions page and the
+    /// receipt name, because the owner is deciding about tasks and a count of them is not a name
+    /// (`@orbit/shared`'s `tasks`). Empty from a server older than the field.
+    public let tasks: [PromotionTask]
     public let checks: [IntegrationCheckResult]
     public let conflicts: [String]
     /// `MERGE_COMMIT` for a project branch, `FAST_FORWARD` for a single task's branch (M6).
@@ -541,7 +560,7 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
 
     public init(promotionId: String, state: PromotionState, sourceRef: String, sourceSha: String,
                 upstreamRef: String, commitsAhead: Int? = nil, filesChanged: Int? = nil,
-                taskIds: [String] = [], checks: [IntegrationCheckResult] = [],
+                taskIds: [String] = [], tasks: [PromotionTask] = [], checks: [IntegrationCheckResult] = [],
                 conflicts: [String] = [], landsAs: String? = "MERGE_COMMIT",
                 askedAt: String? = nil, recheckedAt: String? = nil, decidedAt: String? = nil,
                 merged: Merged? = nil, execution: Execution? = nil) {
@@ -553,6 +572,7 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
         self.commitsAhead = commitsAhead
         self.filesChanged = filesChanged
         self.taskIds = taskIds
+        self.tasks = tasks
         self.checks = checks
         self.conflicts = conflicts
         self.landsAs = landsAs
@@ -573,6 +593,7 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
         commitsAhead = try c.decodeIfPresent(Int.self, forKey: .commitsAhead)
         filesChanged = try c.decodeIfPresent(Int.self, forKey: .filesChanged)
         taskIds = try c.decodeIfPresent([String].self, forKey: .taskIds) ?? []
+        tasks = try c.decodeIfPresent([PromotionTask].self, forKey: .tasks) ?? []
         checks = try c.decodeIfPresent([IntegrationCheckResult].self, forKey: .checks) ?? []
         conflicts = try c.decodeIfPresent([String].self, forKey: .conflicts) ?? []
         landsAs = try c.decodeIfPresent(String.self, forKey: .landsAs)
@@ -581,6 +602,17 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
         execution = try c.decodeIfPresent(Execution.self, forKey: .execution)
         decidedAt = try c.decodeIfPresent(String.self, forKey: .decidedAt)
         merged = try c.decodeIfPresent(Merged.self, forKey: .merged)
+    }
+}
+
+/// One task a merge would carry, as the candidate names it.
+public struct PromotionTask: Codable, Equatable, Sendable {
+    public let taskId: String
+    public let title: String
+
+    public init(taskId: String, title: String) {
+        self.taskId = taskId
+        self.title = title
     }
 }
 

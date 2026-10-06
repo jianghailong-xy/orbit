@@ -3,7 +3,12 @@ import {
   DEFAULT_MODEL_BY_PROVIDER,
   antigravityBaseModel,
   isRetiredModel,
+  keyDialect,
   modelForProvider,
+  OPENCODE_DIALECT_NPM,
+  openCodeBaseUrl,
+  openCodeKeyOf,
+  openCodeKeyProvider,
   providerPreset,
 } from '@orbit/shared';
 import { Prisma } from '@prisma/client';
@@ -311,6 +316,70 @@ function injectedEnv(row: ModelProviderRow, model: string): Record<string, strin
   return claudeEnv;
 }
 
+/** A Claude subscription token: Anthropic serves it to its own clients only, so OpenCode never gets
+ *  one (plan-usage.ts reads the same prefix for the same reason). */
+const SUBSCRIPTION_TOKEN_PREFIX = 'sk-ant-oat';
+
+/**
+ * Whether an OpenCode session may spend this configured key (shared `openCodeKeys`): enabled, on a
+ * dialect OpenCode speaks — every one a configured key can speak — and holding an API key rather than
+ * a Claude subscription token. A pool's members are rows too and answer the same way; the pool itself
+ * holds no key to hand over, so it is not one.
+ */
+export function runsOnOpenCode(row: Pick<ModelProviderRow, 'runtime' | 'enabled' | 'apiKeyEnc'>): boolean {
+  if (!row.enabled || !keyDialect(row.runtime)) return false;
+  try {
+    return !decryptSecret(row.apiKeyEnc).trim().startsWith(SUBSCRIPTION_TOKEN_PREFIX);
+  } catch {
+    return false;
+  }
+}
+
+/** A configured row with the slug an OpenCode model names it by. */
+export type OpenCodeKeyRow = ModelProviderRow & { slug: string };
+
+/**
+ * Every configured key `ownerId` could name in an OpenCode model: their own and the shared ones, as a
+ * session's provider resolves (`OR: [{ ownerId: null }, { ownerId }]`). Read for an OpenCode session
+ * only, and handed to resolveProviderExec, which takes the one the model names.
+ */
+export async function openCodeKeyRows(
+  db: Prisma.TransactionClient,
+  ownerId: string,
+): Promise<OpenCodeKeyRow[]> {
+  return db.modelProvider.findMany({ where: { enabled: true, OR: [{ ownerId: null }, { ownerId }] } });
+}
+
+/**
+ * The OPENCODE_CONFIG_CONTENT that runs `model` on this key: one provider named for the key, driving
+ * its endpoint through the AI SDK package of its dialect with its key — the endpoint and protocol
+ * Orbit already runs it on with its own CLI — and declaring the model, which OpenCode refuses to
+ * select otherwise. Merged over the workspace's own content, and the runner merges its agent and
+ * permission config over this in turn (runner-go openCodeConfigContent).
+ */
+function openCodeKeyConfig(row: OpenCodeKeyRow, model: string, base?: string): string {
+  const dialect = keyDialect(row.runtime)!;
+  let config: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = base ? JSON.parse(base) : {};
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) config = parsed as Record<string, unknown>;
+  } catch {
+    // Not JSON: the runner reports the workspace's broken value on its own; this key's provider
+    // still goes through.
+  }
+  const providers =
+    config.provider && typeof config.provider === 'object' ? (config.provider as Record<string, unknown>) : {};
+  config.provider = {
+    ...providers,
+    [openCodeKeyProvider(row.slug)]: {
+      npm: OPENCODE_DIALECT_NPM[dialect],
+      options: { baseURL: openCodeBaseUrl(dialect, row.baseUrl), apiKey: decryptSecret(row.apiKeyEnc) },
+      models: { [model]: { name: model } },
+    },
+  };
+  return JSON.stringify(config);
+}
+
 /**
  * Resolve how to actually run a (possibly custom) provider at dispatch: the runner-facing
  * built-in runtime, the model to pass, and the process env. For a configured provider
@@ -355,6 +424,9 @@ export function resolveProviderExec(args: {
   claudeAccount?: string | null;
   /** Runner.engines of the assigned runner: where each account's directory is reported. */
   runnerEngines?: unknown;
+  /** The owner's configured keys (openCodeKeyRows), for an OpenCode session whose model names one
+   *  (`orbit-<slug>/<model>`): that key is written into the run's OPENCODE_CONFIG_CONTENT. */
+  openCodeKeys?: OpenCodeKeyRow[];
 }): {
   provider: AgentProvider;
   model: string;
@@ -438,9 +510,26 @@ export function resolveProviderExec(args: {
         savedRuntimeDefaultModel(args.runtimeDefaultModels, provider),
         firstRuntimeCatalogModel(args.modelCatalog, provider),
       );
+  const model = modelForProvider(provider, explicitSessionModel ?? inheritedModel, offered);
+  // An OpenCode model on one of the owner's configured keys runs on that key, and on nothing else:
+  // a key that is gone, disabled or not one OpenCode may spend refuses the run rather than letting
+  // OpenCode fall back to whatever this machine's own config holds for that name.
+  const key = provider === AgentProvider.OPENCODE ? openCodeKeyOf(model) : null;
+  if (key) {
+    const row = args.openCodeKeys?.find((candidate) => candidate.slug === key.slug);
+    if (!row || !runsOnOpenCode(row)) {
+      throw new BadRequestException(`provider not available on OpenCode: "${key.slug}"`);
+    }
+    return {
+      provider,
+      model,
+      env: { ...(env ?? {}), OPENCODE_CONFIG_CONTENT: openCodeKeyConfig(row, key.model, env?.OPENCODE_CONFIG_CONTENT) },
+      ...(retired ? { retiredPin: true } : {}),
+    };
+  }
   return {
     provider,
-    model: modelForProvider(provider, explicitSessionModel ?? inheritedModel, offered),
+    model,
     env,
     ...(retired ? { retiredPin: true } : {}),
   };

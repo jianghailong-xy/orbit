@@ -160,6 +160,12 @@ public enum SessionWaitingKind: String, Codable, Sendable {
     case ownerConfirmation = "OWNER_CONFIRMATION"
     case ownerItem = "OWNER_ITEM"
     case startRequest = "START_REQUEST"
+    /// An OPEN project whose coordinator asked its owner to record it done: the row says "Ready to
+    /// close", over the "Is this project done?" card.
+    case doneRequest = "DONE_REQUEST"
+    /// A project that looks finished and that its coordinator did not ask about within the
+    /// project's escalation window: the row says "Record as done…".
+    case recordAsDone = "RECORD_AS_DONE"
     /// Forward-compatibility floor: no named kind, which is also what an older control plane sends.
     case unknown = "UNKNOWN"
 

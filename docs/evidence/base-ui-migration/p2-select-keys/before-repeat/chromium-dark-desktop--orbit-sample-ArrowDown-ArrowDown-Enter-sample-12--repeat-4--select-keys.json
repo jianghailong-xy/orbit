@@ -1,0 +1,30 @@
+{
+  "target": "orbit-sample",
+  "run": 12,
+  "before": "Never",
+  "after": "Never",
+  "listboxOpen": false,
+  "keys": [
+    {
+      "key": "ArrowDown",
+      "t": 16.5,
+      "target": "combobox:Sample choice",
+      "listbox": false,
+      "highlighted": null
+    },
+    {
+      "key": "ArrowDown",
+      "t": 30.3,
+      "target": "combobox:Sample choice",
+      "listbox": true,
+      "highlighted": "Never"
+    },
+    {
+      "key": "Enter",
+      "t": 32.3,
+      "target": "option:Never",
+      "listbox": true,
+      "highlighted": "Never"
+    }
+  ]
+}

@@ -1,0 +1,163 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs choices-open-value.browser.mjs --project=chromium-light-desktop
+
+[WebServer] (node:3648756) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 3 tests using 1 worker
+
+(node:3648850) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [chromium-light-desktop] › ui-migration/choices-open-value.browser.mjs:24:53 › expiry dims the current value while open and restores it on Escape (2.0s)
+(node:3649062) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 [chromium-light-desktop] › ui-migration/choices-open-value.browser.mjs:24:53 › account dims the current value while open and restores it on Escape (2.1s)
+(node:3649549) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  3 [chromium-light-desktop] › ui-migration/choices-open-value.browser.mjs:24:53 › search dims the current value while open and restores it on Escape (3.3s)
+
+
+  1) [chromium-light-desktop] › ui-migration/choices-open-value.browser.mjs:24:53 › expiry dims the current value while open and restores it on Escape 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+    @@ -11,11 +11,11 @@
+        "open": Array [
+          Object {
+            "color": "rgb(31, 35, 41)",
+            "fontSize": "14px",
+            "fontWeight": "400",
+    -       "opacity": 0.25,
+    +       "opacity": 1,
+            "text": "Never",
+          },
+        ],
+        "restored": Array [
+          Object {
+
+      44 |   }
+      45 |   await info.attach('open-value', { body: JSON.stringify(samples, null, 2), contentType: 'application/json' });
+    > 46 |   expect(samples.orbit).toEqual(samples.antd);
+         |                         ^
+      47 |   expect(samples.orbit.closed).toHaveLength(1);
+      48 |   expect(samples.orbit.open).toHaveLength(1);
+      49 |   expect(samples.orbit.closed[0].opacity).toBe(1);
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-open-value.browser.mjs:46:25
+
+    Error Context: .choices-results/choices-open-value.browser-522b6-n-and-restores-it-on-Escape-chromium-light-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices-open-value.browser-522b6-n-and-restores-it-on-Escape-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices-open-value.browser-522b6-n-and-restores-it-on-Escape-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-desktop] › ui-migration/choices-open-value.browser.mjs:24:53 › account dims the current value while open and restores it on Escape 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+    @@ -11,11 +11,11 @@
+        "open": Array [
+          Object {
+            "color": "rgb(31, 35, 41)",
+            "fontSize": "14px",
+            "fontWeight": "400",
+    -       "opacity": 0.25,
+    +       "opacity": 1,
+            "text": "Automatic",
+          },
+        ],
+        "restored": Array [
+          Object {
+
+      44 |   }
+      45 |   await info.attach('open-value', { body: JSON.stringify(samples, null, 2), contentType: 'application/json' });
+    > 46 |   expect(samples.orbit).toEqual(samples.antd);
+         |                         ^
+      47 |   expect(samples.orbit.closed).toHaveLength(1);
+      48 |   expect(samples.orbit.open).toHaveLength(1);
+      49 |   expect(samples.orbit.closed[0].opacity).toBe(1);
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-open-value.browser.mjs:46:25
+
+    Error Context: .choices-results/choices-open-value.browser-60149-n-and-restores-it-on-Escape-chromium-light-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices-open-value.browser-60149-n-and-restores-it-on-Escape-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices-open-value.browser-60149-n-and-restores-it-on-Escape-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-light-desktop] › ui-migration/choices-open-value.browser.mjs:24:53 › search dims the current value while open and restores it on Escape 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 2
+    + Received  + 2
+
+    @@ -8,14 +8,14 @@
+            "text": "Never",
+          },
+        ],
+        "open": Array [
+          Object {
+    -       "color": "rgb(31, 35, 41)",
+    +       "color": "rgba(0, 0, 0, 0.25)",
+            "fontSize": "14px",
+            "fontWeight": "400",
+    -       "opacity": 0.25,
+    +       "opacity": 1,
+            "text": "Never",
+          },
+        ],
+        "restored": Array [
+          Object {
+
+      44 |   }
+      45 |   await info.attach('open-value', { body: JSON.stringify(samples, null, 2), contentType: 'application/json' });
+    > 46 |   expect(samples.orbit).toEqual(samples.antd);
+         |                         ^
+      47 |   expect(samples.orbit.closed).toHaveLength(1);
+      48 |   expect(samples.orbit.open).toHaveLength(1);
+      49 |   expect(samples.orbit.closed[0].opacity).toBe(1);
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-open-value.browser.mjs:46:25
+
+    Error Context: .choices-results/choices-open-value.browser-01664-n-and-restores-it-on-Escape-chromium-light-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices-open-value.browser-01664-n-and-restores-it-on-Escape-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices-open-value.browser-01664-n-and-restores-it-on-Escape-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3 failed
+    [chromium-light-desktop] › ui-migration/choices-open-value.browser.mjs:24:53 › expiry dims the current value while open and restores it on Escape 
+    [chromium-light-desktop] › ui-migration/choices-open-value.browser.mjs:24:53 › account dims the current value while open and restores it on Escape 
+    [chromium-light-desktop] › ui-migration/choices-open-value.browser.mjs:24:53 › search dims the current value while open and restores it on Escape 
+npm error Lifecycle script `test:ui-choices` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/choices.config.mjs choices-open-value.browser.mjs --project=chromium-light-desktop

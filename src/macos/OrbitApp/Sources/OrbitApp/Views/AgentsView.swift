@@ -422,7 +422,7 @@ struct AgentPanes: View {
                     Section {
                         ForEach(section.sessions) { sessionRow($0) }
                     } header: {
-                        tagSectionHeader(section.tag)
+                        sectionHeaderBand { tagSectionHeader(section.tag) }
                     }
                 }
             } else {
@@ -475,13 +475,13 @@ struct AgentPanes: View {
                                 ForEach(section.sessions) { listRow($0, projects: projectRows) }
                             }
                         } header: {
-                            pinnedSectionHeader(section.title)
+                            sectionHeaderBand { pinnedSectionHeader(section.title) }
                         }
                     } else {
                         Section {
                             ForEach(section.sessions) { listRow($0, projects: projectRows) }
                         } header: {
-                            Text(section.title).textCase(nil)
+                            sectionHeaderBand { Text(section.title).textCase(nil) }
                         }
                     }
                 }
@@ -559,7 +559,8 @@ struct AgentPanes: View {
                     }
                     .background(.bar)
                 }
-                NeedsYouBannerView(excluding: app.selectedAgentSessionID)
+                NeedsYouBannerView(excluding: app.selectedAgentSessionID,
+                                   projectInColumn: rowNavigation == .selection)
             }
         }
         #endif
@@ -961,10 +962,12 @@ struct AgentPanes: View {
             // Doubles as the short-query notice the palette keeps in its footer: below the
             // server's content threshold only names are matched, which is worth saying before
             // "no matches" reads as "this doesn't exist".
-            Text(contentSearched
-                 ? "All sessions"
-                 : "Matching names only — type more to search message text.")
-                .textCase(nil)
+            sectionHeaderBand {
+                Text(contentSearched
+                     ? "All sessions"
+                     : "Matching names only — type more to search message text.")
+                    .textCase(nil)
+            }
         }
     }
 
@@ -1072,6 +1075,34 @@ struct AgentPanes: View {
         .buttonStyle(.plain)
         .accessibilityAddTraits(.isHeader)
         .accessibilityHint(pinnedCollapsed ? "Shows the pinned sessions" : "Hides the pinned sessions")
+    }
+
+    /// A section header's band: its title drawn over the list's own surface, so that the header
+    /// *pins* with something behind it. SwiftUI's plain list floats a section's header over the rows
+    /// as they scroll under it but paints nothing behind a custom header — so a row on its way up
+    /// read straight through "Yesterday" / "2–7 days ago", its title overlapping the header's glyph
+    /// for glyph (every appearance, light and dark).
+    ///
+    /// The list's own header insets sit *outside* the header's view, so a bare `.background` on the
+    /// title would cover its line and leave the strips above and below it see-through. The surface
+    /// is therefore grown past the title's own frame by the insets that surround it — measured off
+    /// the header this replaces on the simulator (iOS 26.5: the title sits 33pt below the band's
+    /// top, which ends 9pt below the title's line). Nothing here is layout: a background lays out
+    /// nothing, so the header keeps the system's own metrics, the band stays the height it was (a
+    /// header that added its own padding instead measured 2pt short per section), and the Pinned
+    /// header's tap target — the button, not this — is exactly the size it was.
+    ///
+    /// The fill is `systemBackground`, what the list itself draws in each appearance — the same fill
+    /// the rows and their chips sit on (see `TagChipColor`). A row sliding under a pinned header now
+    /// disappears behind it instead of reading through it.
+    private func sectionHeaderBand<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                Color(uiColor: .systemBackground)
+                    .padding(.top, -33)
+                    .padding(.bottom, -9)
+            }
     }
     #endif
 }
@@ -1286,9 +1317,8 @@ struct NewSessionView: View {
                 VStack(spacing: 18) {
                     // Which engine runs this session is the hero — the native port of web's
                     // `NewSessionProviderHero`: the vendor's own mark, then the engine's name as the
-                    // one tappable identity, with the provider it spends when that is not its own
-                    // sign-in ("via DeepSeek") — picked in the composer's Provider menu. The
-                    // workspace name sits in the iOS navigation bar; macOS keeps its workspace
+                    // one tappable identity. Which provider of it the session spends is the
+                    // composer's Provider menu's to pick and to say. The workspace name sits in the iOS navigation bar; macOS keeps its workspace
                     // switcher below the hero.
                     VStack(spacing: 14) {
                         ProviderMark(provider: currentEngine.slug, size: 68,
@@ -1298,16 +1328,13 @@ struct NewSessionView: View {
                             HStack(spacing: 7) {
                                 Text(currentEngine.label)
                                     .font(.title.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
-                                if let detail = currentEngine.providerDetail {
-                                    Text(detail).font(.footnote).foregroundStyle(.secondary)
-                                }
                                 Image(systemName: "chevron.down").font(.subheadline.weight(.semibold))
                                     .foregroundStyle(.secondary)
                             }
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Engine: \(currentEngine.label)\(currentEngine.providerDetail.map { " \($0)" } ?? ""). Switch")
+                        .accessibilityLabel("Engine: \(currentEngine.label). Switch")
                     }
                     VStack(spacing: 5) {
                         // The pick is sticky, so it can point at an engine this machine can no
@@ -1467,18 +1494,18 @@ struct NewSessionView: View {
     /// this workspace last ran there (web parity).
     private var engines: [EngineChoice] {
         SessionProviderChoices.engines(providerChoices, configured: draft.configuredProviders,
-                                       preferred: [draft.provider, agent.defaultProvider])
+                                       preferred: [draft.providerChoice, agent.defaultProvider])
     }
 
     /// The engine of the draft's pick — synthesized when no group holds it (`opencode`, a removed
     /// provider) or holds it but cannot run it, so the hero still names what it would run.
     private var currentEngine: EngineChoice {
-        engines.first { $0.provider.slug == draft.provider }
+        engines.first { $0.provider.slug == draft.providerChoice }
             ?? SessionProviderChoices.engine(for: currentProviderChoice, configured: draft.configuredProviders)
     }
 
     private var currentProviderChoice: ProviderChoice {
-        SessionProviderChoices.current(draft.provider, in: providerChoices,
+        SessionProviderChoices.current(draft.providerChoice, in: providerChoices,
                                        configured: draft.configuredProviders,
                                        catalog: draft.modelCatalog,
                                        antigravity: draft.runnerAntigravity)
@@ -1491,7 +1518,7 @@ struct NewSessionView: View {
     /// No account either (web parity): the composer's quota gauge names it in its detail.
     private var heroSubtitle: String {
         draft.providerCapabilitiesResolved
-            ? AgentDefaults.friendlyName(draft.modelID, for: draft.provider,
+            ? AgentDefaults.friendlyName(draft.modelID, for: draft.providerChoice,
                                          catalog: draft.modelCatalog,
                                          configured: draft.configuredProviders)
             : "Runtime default"
@@ -1954,8 +1981,7 @@ struct AgentFormContent: View {
                     // rather than at the top of the form. The server soft-deletes (its sessions are
                     // kept and stay linked); close the sheet afterward since the agent is gone from
                     // here.
-                    .confirmationDialog("Delete \(agent.name)?", isPresented: $confirmingDelete,
-                                        titleVisibility: .visible) {
+                    .orbitConfirmation("Delete \(agent.name)?", isPresented: $confirmingDelete) {
                         Button("Delete agent", role: .destructive) {
                             dismiss()
                             Task { await agents.delete(agent.id) }

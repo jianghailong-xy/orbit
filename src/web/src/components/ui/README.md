@@ -6,7 +6,7 @@
 
 - 业务按组件导入 `components/ui/<Component>`；组件内部按需导入 `@base-ui/react/<component>`，不把 Base UI 的 Root/Portal/状态对象直接重导出给业务。
 - 公共 props 只覆盖当前业务需要；优先原生 DOM 属性、可访问名称与原生 ref。不要复制 AntD 全部 props，不读取第三方内部 class/DOM。
-- `__fixtures__` 仅供 `ui-migration/foundation.html`、`controls.html` 和 `overlays.html` 使用，没有业务路由、生产入口或公共导出。Foundation 的临时按钮/弹窗仍为私有；Controls/Overlays 使用真实公共组件与旧控件对照。
+- `__fixtures__` 仅供 `ui-migration/foundation.html`、`controls.html`、`overlays.html`、`choices.html` 和 `composer.html` 使用，没有业务路由、生产入口或公共导出。Foundation 的临时按钮/弹窗仍为私有；其余使用真实公共组件与旧控件对照。
 - `boundary.test.ts` 检查实际源码的导入、重导出、动态导入及类型引用：Base UI 只能在本目录内；业务不能引用私有 fixture；公共 ui 不能依赖 antd。共存 fixture 中的 AntD 对照在 P6 删除。
 
 ## 基础控件
@@ -16,7 +16,7 @@
 | `Button` | `variant="default/primary/text/link"`，`size="small/middle/large"`，`danger`、`icon`、`loading`；其余为原生 button 属性，**`type` 是 button/submit/reset**，默认 button。ref 为 HTMLButtonElement。纯图标必须给可访问名称。loading 阻止再次激活，保留焦点并暴露 aria-busy；disabled 按原生规则退出 Tab 顺序。 |
 | `LinkButton`（同 Button 文件） | 同一外观的原生 anchor，使用 href/target/rel/download 等原生属性和 HTMLAnchorElement ref；链接与操作按钮分别保持导航和提交语义。 |
 | `Input` | 原生 input 属性/ref，`size="small/middle/large"`、`invalid`、`prefix/suffix`。有装饰时 className/style 指向外壳，其他原生属性与 ref 仍指向 input；装饰区点击聚焦。标签和错误说明由调用方使用 label/aria-describedby 关联。 |
-| `Textarea` | 原生 textarea 属性/ref、`invalid`、rows。保留选区、输入与拖拽调整尺寸；自动增高和会话输入行为由 P3.1 实现。 |
+| `Textarea` | 原生 textarea 属性，ref 即 HTMLTextAreaElement；`invalid`、rows、`variant="outlined/borderless"`、`autoSize`（`true` 或 `{minRows,maxRows}`）。保留选区、输入与拖拽调整尺寸；自动增高与会话输入约定见下文。 |
 | `Checkbox` | 必填 checked，onCheckedChange(boolean)、indeterminate、disabled、invalid；支持 name/value/form 和原生 input ref。文字作为 children，点击标签与 Space 切换。 |
 | `Radio` / `RadioGroup` | 组提供必填 value、onValueChange(value)、name、disabled；子项提供 value/children/disabled。组使用 aria-label 或 aria-labelledby 命名；箭头键跳过禁用项。variant="default/button"，size="small/middle"。 |
 | `Switch` | 必填 checked、onCheckedChange(boolean)，size="small/middle"、disabled、loading；使用 aria-label 或 aria-labelledby 命名，支持 name/value/form 和原生 input ref。 |
@@ -60,6 +60,12 @@ return <><Button onClick={() => void remove()}>Delete</Button>{confirmation}</>;
 
 弹层以1000为根层级，每个拥有者内递增100；现有 toast 为2050。每层有自己的遮罩，Base UI 管理模态焦点、Tab/Shift+Tab、IME期间Esc和文档滚动锁。长 Dialog 由 viewport 滚动，Drawer 正文单独滚动。主题仍来自 html 的 data-theme；没有第二套主题状态。不要给 portal 宿主增加 transform 或裁切样式。
 
+通知继续使用 `useToast` / `toastFeed` / `toastStore` 和唯一的 `ToastViewport`。打开的 Orbit 弹层通过自有 ref 登记反馈挂载点，最上层接收通知，使已有通知与后到通知都留在可访问树和 Tab 范围内；关闭后回到父层或 body，keepMounted 的关闭层不接收通知。React portal 始终使用同一宿主，避免切层重建通知 DOM。宿主使用原生 `popover="manual"` 顶层绘制，逃离弹层的缩放、平移和裁切；不增加遮罩或抢焦点，也不改变原 Dialog/Drawer 动画。通知自身保留首次入场的动画起点，切层以负 delay 延续原进度，不重播或删除入场动画。样式清除 popover 的默认盒模型，保留原通知原点、字体和安全区规则。持久的 body 固定定位测量节点保留 WebKit 的滚动条预留宽度，并随通知视口卸载清理。此能力依赖浏览器的 Popover API，已在本项目固定 Chromium/WebKit 版本验证。
+
+悬停仍只暂停原先可悬停的结果卡片和可操作短通知。真实 mouseover 覆盖通知到达或布局移动到静止指针下的进入；mousemove 补足 WebKit 切层时遗漏的 mouseleave。清空队列后再次进入会重新确认暂停状态；鼠标静止时切层继续暂停，真正离开后才重新完整计时，未悬停的通知保留原截止时间。队列、去重和计时内核未改动，不读取库的内部 DOM。短通知及空宿主穿透点击，通知动作不关闭拥有它的弹层。
+
+通知行为与集成矩阵：`npm run test:ui-toasts -w @orbit/web`；固定端口14377，沿用 P0 浏览器/字体环境。`toasts-lifecycle.browser.mjs` 保留验收方的原复现，追加正常动画每帧卡片位置/透明度、嵌套开关、静止悬停和原截止时间检查；`toasts-hover.browser.mjs` 以原生时钟验证静止指针下的新通知，并精确验证布局进入/离开、清空后替换及恢复计时。可访问检查证明 live region 的优先级、内容和可见性，不代替真实读屏软件听测。P0 生产通知链路的单独复跑为 `npm run test:ui-migration -w @orbit/web -- feedback-production.browser.mjs`，原 P0 截图断言保持不变。
+
 混用时显式标出拥有关系，不查询 `.ant-*`：
 
 ```tsx
@@ -97,6 +103,42 @@ AntD `ConfigProvider` / `AntApp`、`theme.ts` 算法和 reset 保留到 P6。当
 
 保持现有页面层叠关系；不要直接给整个 `#root` 添加 `isolation`（会改变旧 toast/portal 的关系）。Foundation 的历史样例只验证一个嵌套方向；P2.1 的真实公共弹层及双向组合按上节约定使用。尚未迁移的其它浮层由后续批次按实际组合验证，不能把这些组合推广为全站均已兼容。
 
+## 菜单、浮层与选择控件
+
+P2.2 提供 `Menu`、`Popover`、`Tooltip`、`Select`、`Combobox` 和 `MultiSelect`。业务从具体文件导入；Base UI 的部件和事件类型不外泄。共同的 `open/onOpenChange` 可受控，也可省略；`side/align`、`popupClassName/popupStyle` 是公开定位/外观入口。默认 portal 归属当前 OverlayScope；在旧 Modal/Drawer 正文中包一层 Scope，沿用 P2.1 的共存约定。
+
+- `Menu` 接收可承接 ref 的按钮 `trigger` 和 `items`。动作含 key/label/icon、disabled/danger/selected/onSelect；separator/group/children 覆盖现有分隔、分组与子菜单。`checked/onCheckedChange` 提供 checkbox 语义，默认选中后保持打开；普通动作默认关闭，`closeOnSelect` 可覆盖。复杂 label 可给 `textValue` 支持文字导航。`variant="attachment"` 仅在 <=600px 使用42.4px行高、17px字号、26px圆角。菜单触发器和弹出内容拦截点击冒泡，避免触发行导航。菜单动作打开 Dialog 时给 Dialog `returnFocus` 指向稳定菜单按钮。
+- `Popover` 用 `trigger/title/children`；无标题传 null。默认点击打开，可设 `openOnHover`；`initialFocus/returnFocus` 遵循弹层约定。内容内可直接放 Select/Combobox，Esc 逐层关闭。`Tooltip` 用 `children/content`，保留触发器原有 aria-describedby；disabled 原生按钮需用可聚焦 span 包裹，让提示可由键盘获得。
+- `Select` 与 `Combobox` 共用字符串 `value | null`、`options` 和 `onValueChange`。空字符串是有效选择（账号 Automatic）；null 表示未选择/显式清除。options 为 `{value,label,disabled?}` 或 `{label,options}` 分组；label 为搜索/无障碍文本，复杂展示使用 `renderOption/renderValue`。支持 small/middle、outlined/borderless、disabled/loading、placeholder/clearable、emptyContent、showArrow 和 matchTriggerWidth。
+- 需要文本检索时使用 `Combobox`；默认按 label 忽略大小写匹配。修改查询和 Esc 不清掉已选值；显式清除才回调 null。远端搜索设置 `filter={false}` 与 `onSearch`，由业务处理请求/过期响应；`value={null}` 可用于选择后重置的动作入口。已选标签通过 aria-describedby 暴露给辅助技术。ref 分别指向 Select 按钮和 Combobox 输入框，name 支持原生表单值。
+
+`MultiSelect` 使用字符串数组 value/onValueChange；搜索选项后保持列表打开，支持逐项移除、全清、分组和 maxTagCount。`mode="tags"`、`open={false}`、`searchValue/onSearch`、`tokenSeparators={[',', ' ']}` 对应现有邮件输入：Enter 或失焦提交尾项，输入法组合期间不提交，值去重；格式校验和分享请求仍由业务负责。Backspace 删除数组末项，即使它在折叠计数内。
+
+正常动效沿用旧实测：根菜单/选择列表200ms纵向展开，子菜单/Popover 200ms缩放，Tooltip 100ms缩放；入场/退场缓动与方向原点分别匹配旧组件。通过 Base UI 公开 data-open/data-closed/data-side/data-align/data-nested 设置 CSS 动画，由其生命周期等待退场完成，退场面不接收指针。入场结束不保留 transform，避免改变嵌套 portal 的定位参照。减少动态效果时与 P2.1 一样禁用缩放/渐隐。手机附件菜单除任务指定字号外保持旧实测布局：5px/12px行padding、4px行圆角、原分隔线、图标x=12px、总高240.953125px（本例5行）。
+
+样式只使用 Orbit 类名、自己的属性与 Base UI 公开的 data-selected/data-highlighted/data-disabled 等状态；不查询或覆盖 AntD DOM。箭头与空态 SVG 沿用原 MIT 许可图形，保留许可。详见 [P2.2 证据](../../../../../docs/evidence/base-ui-migration/p2.2/README.md)，其中明示原手机14px覆盖缺陷与任务要求17px的差异，以及旧 Modal 最后一次 Tab 的宿主缺陷。
+
+## 自动增高 Textarea 与会话输入
+
+P3.1 把自动增高、手动高度和 DOM 访问收进 `Textarea`，业务不再经由 AntD 字段的内部 ref 取 textarea。ref 直接是原生 textarea：`focus()`、`setSelectionRange()`、`selectionStart`、`scrollHeight/clientHeight/offsetHeight` 都按 DOM 原义使用，组件不暴露其它句柄。
+
+- `autoSize` 按受控 `value` 测量（现有调用都是受控值）：值或行数界限变化时在绘制前测量，字段宽度变化时下一帧重测。测量沿用被替换字段的离屏副本算法与样式清单，空值按 placeholder 计高，超过 `maxRows` 后改为滚动；结果写入 height/min-height/max-height/overflow-y/resize，并覆盖调用方 style 中的同名项。placeholder 变化本身不触发重测，与旧字段相同。
+- 手动高度：调用方在用户拖动后传 `autoSize={false}` 和 `style={{ height }}`，双击复位时恢复 `autoSize`。拖动起点读 ref 的 `offsetHeight`，到顶判断读 `scrollHeight > clientHeight + 1`（下一帧读取，测量已在绘制前完成）。
+- `variant="borderless"` 对应会话输入框：无边框/底色/焦点阴影，上下 padding 补回 1px 边框；`:focus-visible` 时只过渡 outline，输入中增高即时完成。默认外观的 textarea 与旧字段一样以 0.3s 过渡全部属性（包括自动增高的高度）；`prefers-reduced-motion: reduce` 时与其它 Orbit 文本控件一样不过渡。
+- 会话输入框的共享度量仍在 index.css 的 `.composer-field` 区块，`textarea.orbit-textarea` 与旧选择器共用同一组声明，镜像和输入框只能一起改。任务评论框的 `.tdp-compose` 同样让 `.orbit-textarea` 取得 `flex: 1`。P3.2/P5.3 切换调用后删除对应 `.ant-input` 选择器。
+- 键位、菜单、粘贴、历史和发送逻辑留在业务组件；Textarea 透传原生事件（含 `nativeEvent.isComposing`），不改写 onChange 的 target。
+
+```tsx
+const field = useRef<HTMLTextAreaElement>(null);
+<Textarea ref={field} variant="borderless" value={text} onChange={(event) => setText(event.target.value)}
+  autoSize={height == null ? { minRows: 1, maxRows: 12 } : false} style={height == null ? undefined : { height }} />
+// 选中 @ 提及后恢复光标：
+field.current?.focus();
+field.current?.setSelectionRange(position, position);
+```
+
+`ui-migration/composer.html` 用真实 CSS、ComposerMirror 和输入框辅助函数复现 WorkspaceView 会话输入与 TaskDetailPanel 评论框，同一脚本分别驱动旧 AntD 字段和 Orbit Textarea。`npm run test:ui-composer -w @orbit/web` 比较几何、计算样式、截图像素、镜像字形对齐、附件对齐、手动高度、断点、过渡，以及中文组合输入、Enter/Shift+Enter、⌘/Ctrl+Enter、候选菜单、粘贴、长度上限和历史回溯。Chromium 用 DevTools 真实组合输入；WebKit 无输入法自动化，以 insertText 加组合事件/keyCode 229 重放，不代表真机输入法或软键盘。详见 [P3.1 证据](../../../../../docs/evidence/base-ui-migration/p3.1/README.md)。
+
 ## 验证入口
 
 从仓库根执行：
@@ -108,6 +150,10 @@ node node_modules/typescript/bin/tsc -p src/web/ui-migration/controls.tsconfig.j
 npm run test:ui-controls -w @orbit/web
 npm run test:ui-overlays -w @orbit/web
 node node_modules/typescript/bin/tsc -p src/web/ui-migration/overlays.tsconfig.json --noEmit
+npm run test:ui-choices -w @orbit/web
+node node_modules/typescript/bin/tsc -p src/web/ui-migration/choices.tsconfig.json --noEmit
+npm run test:ui-composer -w @orbit/web
+node node_modules/typescript/bin/tsc -p src/web/ui-migration/composer.tsconfig.json --noEmit
 npm run test:ui-foundation -w @orbit/web
 npm run test:ui-migration -w @orbit/web
 npm run build -w @orbit/web
@@ -115,4 +161,4 @@ npm run build -w @orbit/web
 
 Foundation 使用独立 Vite 开发入口，运行 Chromium/WebKit × light/dark × desktop/phone；P0 回归使用正式生产构建。两者都校验 P0 固定浏览器/OS/字体环境。新样例截图作为运行附件保存；旧页面仍按原 252 张截图零像素差异比较，不覆盖基线。主题首屏检查暂停真实 main.tsx 加载，观察原 HTML boot 再放行应用；账号接口采用合成 fixture，不代表真实服务端跨设备验证。
 
-Controls 使用相同环境矩阵；检查尺寸、字体、颜色、轮廓、图标与文本对齐、选择标记、hover/focus、键盘/标签/表单值及 disabled/loading。固定样例直接展示实际组件，测量附件与真实 PNG 见 [P1.2 证据](../../../../../docs/evidence/base-ui-migration/p1.2/README.md)。当前手机普通 input/textarea 按原 CSS 使用 16px，带前后缀输入保持实测 14px；这不代表已验证真机软键盘或自动增高。
+Controls 使用相同环境矩阵；检查尺寸、字体、颜色、轮廓、图标与文本对齐、选择标记、hover/focus、键盘/标签/表单值及 disabled/loading。固定样例直接展示实际组件，测量附件与真实 PNG 见 [P1.2 证据](../../../../../docs/evidence/base-ui-migration/p1.2/README.md)。普通 input/textarea 按原 CSS 在 ≤960px 使用 16px（P3.1 修正了此前误用的 600px 断点），带前后缀输入保持实测 14px；focus 优先于 hover。这不代表已验证真机软键盘。

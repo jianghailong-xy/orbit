@@ -137,6 +137,55 @@ struct ApprovalReviewLayout<Content: View, Actions: View>: View {
     }
 }
 
+/// The beat between the press and the door's answer: the card is optimistically gone, and nothing
+/// is decided yet. A state of its own rather than the fallback below, because the answer has NOT
+/// gone away — it is on its way, and a refusal has to leave the reader here with the card back.
+private struct ApprovalAnswerUnderWay: View {
+    var body: some View {
+        VStack(spacing: 10) {
+            ProgressView()
+            Text("Sending your answer…")
+                .font(.orbitProse).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
+        .navigationTitle("Sending")
+    }
+}
+
+/// The press's own outcome, drawn once the door has taken it, for the moment before the sheet
+/// leaves with the request it just answered.
+///
+/// A receipt rather than a dismissal on the press, because nothing is decided until the door has
+/// it — a refusal leaves the reader here, with the card re-seeded and the reason above it. And a
+/// receipt rather than nothing, because this is the one surface still showing the question (the
+/// transcript's card is already gone) and the reader is owed the words for what happened to their
+/// press. Not for the other way a subject goes away: that one keeps the card and says so.
+private struct ReviewReceipt: View {
+    @Environment(\.dismiss) private var dismiss
+    let title: String
+    let detail: String
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.orbitHeroGlyph).foregroundStyle(.green)
+            Text(title).font(.orbitProse.weight(.semibold))
+            Text(detail).font(.orbitLabel).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
+        .navigationTitle("Answered")
+        // Long enough to read two lines, short enough not to be a thing to dismiss. The Close
+        // button stays live throughout, and a sheet closed by hand cancels this with the view.
+        .task {
+            try? await Task.sleep(for: .seconds(1.2))
+            dismiss()
+        }
+    }
+}
+
 /// Presented by ConsoleView, outside the transcript's recyclable rows.
 struct ApprovalReviewSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -151,6 +200,16 @@ struct ApprovalReviewSheet: View {
                 case .approval(let id):
                     if let approval = console.state.pendingApprovals.first(where: { $0.id == id }) {
                         ApprovalCard(console: console, approval: approval)
+                    } else if let answer = console.approvalAnswers[id] {
+                        // Gone because the reader answered it. The fallback below is for the OTHER
+                        // way a request goes away, and saying it here would read the reader's own
+                        // press back to them as somebody else's news.
+                        switch answer {
+                        case .sending: ApprovalAnswerUnderWay()
+                        case .sent:    ReviewReceipt(
+                            title: "Answer sent",
+                            detail: "The agent has been told, and this request has nothing left to answer.")
+                        }
                     } else {
                         Text("This request is no longer waiting for an answer.")
                             .font(.orbitProse).foregroundStyle(.secondary)
@@ -159,7 +218,15 @@ struct ApprovalReviewSheet: View {
                             .navigationTitle("Request closed")
                     }
                 case .delivered(let card):
-                    DeliveredDecisionCardView(console: console, card: card)
+                    if console.answeredHere(card) {
+                        // Closed HERE (`close(_:)`): the question is over, and the record the read
+                        // publishes where the decision was made is what the conversation keeps.
+                        ReviewReceipt(
+                            title: "Decision recorded",
+                            detail: "The conversation keeps the record where it was made.")
+                    } else {
+                        DeliveredDecisionCardView(console: console, card: card)
+                    }
                 }
             }
             .environment(\.inApprovalReview, true)

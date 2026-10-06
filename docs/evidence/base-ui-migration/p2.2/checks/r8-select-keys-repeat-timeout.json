@@ -1,0 +1,14 @@
+{
+  "command": "node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.config.mjs --project chromium-dark-desktop",
+  "runner": "mcp__orbit__bg_run",
+  "bgJobId": "bgj_6b6825b1dfd1",
+  "cwd": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2",
+  "commit": "38947755e48ac979362db36f82bfcf966b527a75",
+  "webTree": "848736509199b4db94c3a30a20b43d5c202599a4",
+  "started": "2026-10-06T06:11:57Z",
+  "outputLastWritten": "2026-10-06T06:16:36.028905+00:00",
+  "exitCode": 1,
+  "outputSha256": "2a5bd34b91cfaec37067a913c312d3365a716206514f13f24a28df6b8f216969",
+  "outputBytes": 6979,
+  "note": "Probe design error: 40 samples looped inside one test exceeded the inherited 90s test timeout before attaching; no product result. It ran the first version of the probe, kept as select-keys-repeat-timeout/select-keys-repeat.browser.mjs.as-run."
+}

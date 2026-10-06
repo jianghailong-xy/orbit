@@ -29,6 +29,7 @@ struct ConsoleView: View {
     /// The public read-only link's sheet — opened from the nav bar on iOS, the window toolbar on macOS.
     @State private var showShare = false
     @State private var promotionReview: PromotionReviewTarget?
+    @State private var promotionReceipt: PromotionReceiptTarget?
     @State private var approvalReview: ApprovalReviewTarget?
     @State private var approvalReviewDrafts = ApprovalReviewDrafts()
     #if os(iOS)
@@ -213,7 +214,13 @@ struct ConsoleView: View {
                     promotionReview = PromotionReviewTarget(id: promotionID)
                 })
                 .sheet(item: $promotionReview) { target in
-                    PromotionReviewSheet(console: console, promotionID: target.id)
+                    PromotionReviewSheet(source: console, promotionID: target.id)
+                }
+                .environment(\.openPromotionReceipt, { promotion in
+                    promotionReceipt = PromotionReceiptTarget(promotion: promotion)
+                })
+                .sheet(item: $promotionReceipt) { target in
+                    PromotionReceiptSheet(promotion: target.promotion)
                 }
                 .environment(approvalReviewDrafts)
                 .environment(\.openApprovalReview, { target in
@@ -238,6 +245,7 @@ struct ConsoleView: View {
         }
         .onChange(of: sessionID) { _, _ in
             promotionReview = nil
+            promotionReceipt = nil
             approvalReview = nil
             approvalReviewDrafts = ApprovalReviewDrafts()
         }
@@ -462,7 +470,7 @@ struct ConsoleView: View {
         .accessibilityLabel("Session actions")
         // Raised by this menu, so it hangs off the menu rather than off the page: the panel opens
         // against the ⋯ that was pressed.
-        .confirmationDialog("Delete permanently?", isPresented: $confirmPurge, titleVisibility: .visible) {
+        .orbitConfirmation("Delete permanently?", isPresented: $confirmPurge) {
             Button("Delete Permanently", role: .destructive) { appModel.purgeSession(sessionID) }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -899,9 +907,13 @@ struct TranscriptView: View {
         console.noteTopVisible(ruler.topAnchorID)
         let questions = ruler.questions(console) { StickyQuestions($0.state.items, isQuestion: namesAQuestion) }
         var found: String? = nil
+        // Both answers are held (`StickyQuestionHold`): the header moves the list by its own height,
+        // so a reading taken with it shown and one taken with it hidden can disagree, and a single
+        // threshold between them flips the header on every frame.
         if let anchor = ruler.topAnchorID {
-            found = questions.above(anchor)
-        } else if ruler.contentOffset > 40 {
+            found = StickyQuestionHold.named(found: questions.above(anchor), anchor: anchor, showing: stuckID)
+        } else if StickyQuestionHold.fallbackNames(contentOffset: Double(ruler.contentOffset),
+                                                   showing: stuckID != nil) {
             found = questions.last
         }
         if found != stuckID { stuckID = found }
@@ -978,75 +990,13 @@ struct TranscriptView: View {
             // No `AnchorRow` — a queued turn hasn't been asked yet, so it's never the sticky
             // "Your question" (web's `:not(.chat-queued)`).
             //
-            // An exception item's delivery is nobody's message the moment it is QUEUED, not the
-            // moment a runner takes it: its words are written for the AGENT, so read as a message
-            // they are wrong about who sent them and everything the item is opened with is prose —
-            // for as long as the turn waits, and redrawn the instant it is taken. The card comes off
-            // the projection (`QueuedTurnInfo.itemCard`), never out of the text's shape, and this is
-            // checked FIRST as the transcript's own row checks it (`TranscriptItemView`): the shape
-            // must not depend on which of the two states the turn is in. A delivery's paragraph is
-            // neither of the two wake blocks below, so nothing is shadowed by the order.
-            //
-            // Another Orbit session's message is asked about before all of them, as the transcript's
-            // row asks it: who sent it is the projection's (`QueuedTurnInfo.senderCard`), and its words
-            // are the sending agent's to choose — they could take a wake's shape. Cancel withdraws it
-            // and hands nothing back to the composer (`ComposerLogic.restorableText`). Not offered for
-            // a steer: `session_send` into a running turn is written into it, and the server refuses
-            // to withdraw what the engine may already be reading (`UserBubbleView` hides it the same way).
-            if let card = bubble.sessionMessage {
-                SessionMessageCardView(card: card, text: bubble.text, ts: bubble.ts,
-                                       undelivered: bubble.undelivered,
-                                       onCancelQueued: bubble.turnId == nil || bubble.steer
-                                           ? nil : { Task { await console.cancelQueued(bubble) } })
-            } else if let card = bubble.itemCard {
-                OpenItemDeliveryCardView(card: card, text: bubble.text, ts: bubble.ts,
-                                         undelivered: bubble.undelivered,
-                                         onCancelQueued: bubble.turnId == nil
-                                             ? nil : { Task { await console.cancelQueued(bubble) } })
-            } else if let started = bubble.startedCard {
-                // The message telling the coordinator its project was started: the card the
-                // transcript draws once a runner takes it, off the projection (`startedCard`).
-                ProjectStartedCardView(card: started, text: bubble.text, ts: bubble.ts,
-                                       undelivered: bubble.undelivered,
-                                       onCancelQueued: bubble.turnId == nil
-                                           ? nil : { Task { await console.cancelQueued(bubble) } })
-            } else if let card = bubble.reviewRequest {
-                // A confirmation review's turns are Orbit's on the queue too: the cards the
-                // transcript draws once a runner takes them (web parity: the queued tail's
-                // `q.confirmationReviewRequest` / `q.confirmationReturn`).
-                ReviewRequestedCardView(card: card, ts: bubble.ts, undelivered: bubble.undelivered,
-                                        onCancelQueued: bubble.turnId == nil
-                                            ? nil : { Task { await console.cancelQueued(bubble) } })
-            } else if let card = bubble.reviewReturn {
-                SentBackByReviewerCardView(card: card, ts: bubble.ts, undelivered: bubble.undelivered,
-                                           onCancelQueued: bubble.turnId == nil
-                                               ? nil : { Task { await console.cancelQueued(bubble) } })
-            } else if let wake = WatchWakeText.parse(bubble.text) {
-                WatchWakeCardView(wake: wake, text: bubble.text, ts: bubble.ts,
-                                  undelivered: bubble.undelivered,
-                                  onWithdraw: bubble.turnId == nil
-                                      ? nil : { Task { await console.cancelQueued(bubble) } })
-            } else if let background = BackgroundWakeText.parse(bubble.text) {
-                // A wake the control plane queued for a background job's news, or for a wakeup
-                // coming due, is nobody's message either: it gets the card the transcript draws
-                // once a runner takes it. Nothing has been recorded yet, so the block is still the
-                // turn's own content rather than a note beside it (web parity: the queued tail
-                // reads `q.content`). Withdrawing it is an ordinary cancel — nothing re-sends it.
-                // Except for a job that ended while the turn ran: that wake is a steer on its way
-                // into the running turn, which the server refuses to withdraw, so it says how far it
-                // has got instead (web parity: `QueuedTurnMeta` for a `steer` placement).
-                BackgroundWakeCardView(wake: background, ts: bubble.ts,
-                                       undelivered: bubble.undelivered,
-                                       onCancelQueued: bubble.turnId == nil || bubble.steer
-                                           ? nil : { Task { await console.cancelQueued(bubble) } },
-                                       steerState: BackgroundWakeCard.steerState(
-                                           steer: bubble.steer, delivery: bubble.delivery,
-                                           undelivered: bubble.undelivered),
-                                       queued: true)
-            } else {
-                UserBubbleView(bubble: bubble,
-                               onCancelQueued: { Task { await console.cancelQueued(bubble) } })
-            }
+            // Drawn by the row the transcript draws the same turn with once a runner takes it, so a
+            // turn that is a card is that card from the moment it is queued — off the cards the
+            // projection carried (`QueuedTurnInfo.cards`), never out of its words — and keeps its
+            // shape when it lands; the queue adds only its own controls.
+            UserTurnRow(bubble: bubble, queued: QueuedControls(bubble: bubble) {
+                Task { await console.cancelQueued(bubble) }
+            })
         case .bottom:
             if console.detached {
                 // A window opened at a record ends at a gap: reaching its bottom pulls in the newer page.
@@ -1608,105 +1558,9 @@ struct TranscriptItemView: View {
     var body: some View {
         switch item {
         case .user(let b):
-            // Another Orbit session's message (`session_send` / `project_send`): somebody's words,
-            // but not the reader's, so not the reader's bubble. Who sent it is what the control plane
-            // recorded beside the echo (`sessionMessage`, `SessionMessage.parse`), so it is asked
-            // FIRST — before anything is read out of the words, which are the sending agent's to
-            // choose — as the browser asks it (`NodeView`). No payload, the old reading.
-            //
-            // An exception item's delivery is the control plane's too, and for a stronger reason
-            // than the wakes below: nobody typed it at all. What the turn says is a paragraph
-            // written for the AGENT — the tools to call, the ids to call them with — so drawing it
-            // as a message is both wrong about who sent it and unreadable as a record: the item's
-            // kind, its title, the files a merge conflicted on and whether the work has landed are
-            // all in the payload recorded beside it (`openItemDelivery`, `OpenItemDelivery.parse`).
-            // With no payload the turn keeps its old reading — this is checked before the wakes, as
-            // the browser checks it (`NodeView`).
-            if let card = b.sessionMessage {
-                SessionMessageCardView(card: card, text: b.text, ts: b.ts,
-                                       undelivered: b.undelivered || b.delivery == "failed",
-                                       attached: b.attached)
-            } else if let card = b.itemCard {
-                // The note the same turn carried rides inside the card (`b.attached`): nobody typed
-                // this turn either, so the control plane's words do not go back into a bubble in the
-                // reader's own name — the same rule the wake card applies to a mixed note.
-                OpenItemDeliveryCardView(card: card, text: b.text, ts: b.ts,
-                                         undelivered: b.undelivered || b.delivery == "failed",
-                                         attached: b.attached)
-            } else if let card = b.taskStart {
-                // A task run's opening turn is the brief written for the agent — the task, then four
-                // steps of protocol — and nobody typed it either. With the task recorded beside it
-                // (`taskStart`, `TaskStart.parse`) it is drawn as that task, with anything delivery
-                // appended riding inside the card; the task's inputs the turn carried keep the
-                // bubble's own image and file rows under it, with no words in the owner's name.
-                VStack(alignment: .leading, spacing: 6) {
-                    TaskStartCardView(card: card, text: b.text, ts: b.ts,
-                                      undelivered: b.undelivered || b.delivery == "failed",
-                                      attached: b.attached)
-                    if !b.attachments.isEmpty {
-                        UserBubbleView(bubble: inputsOnly(b))
-                    }
-                }
-            } else if let started = b.startedCard {
-                // The message telling the coordinator its project was started: prose for the agent,
-                // drawn as the card the payload recorded beside it (`projectStarted`,
-                // `ProjectStarted.parse`). No payload, the old reading.
-                ProjectStartedCardView(card: started, text: b.text, ts: b.ts,
-                                       undelivered: b.undelivered || b.delivery == "failed",
-                                       attached: b.attached)
-            } else if let card = b.reviewRequest {
-                // A confirmation request handed to this conversation to review, and a reviewer's
-                // return handed to the run (`ConfirmationReviewTurns.swift`): Orbit's turns, drawn as
-                // their cards with the block the agent read riding at the foot (web parity: NodeView).
-                ReviewRequestedCardView(card: card, ts: b.ts,
-                                        undelivered: b.undelivered || b.delivery == "failed",
-                                        attached: b.attached)
-            } else if let card = b.reviewReturn {
-                SentBackByReviewerCardView(card: card, ts: b.ts,
-                                           undelivered: b.undelivered || b.delivery == "failed",
-                                           attached: b.attached)
-            } else if let replies = b.sessionReplies, !replies.isEmpty {
-                // The outcomes of this session's own requests, handed back (`sessionReplies`,
-                // `SessionReply.parse`): a reply turn carries nobody's words, and a message of the
-                // owner's may carry outcomes that were held for it — then the owner's words are their
-                // bubble, first, and the outcomes follow as cards, with what else delivery appended
-                // folded into them (web parity: NodeView).
-                VStack(alignment: .leading, spacing: 6) {
-                    if !b.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        UserBubbleView(bubble: withoutNote(b))
-                    }
-                    SessionReplyCardsView(replies: replies, ts: b.ts, attached: replyRest(b))
-                }
-            } else if let wake = WatchWakeText.parse(b.text) {
-                // A turn a watch queued is the watch's to show, not a message the user typed: it opens
-                // with a raw UUID and carries the whole payload the agent read (web parity: NodeView).
-                WatchWakeCardView(wake: wake, text: b.text, ts: b.ts,
-                                  undelivered: b.undelivered || b.delivery == "failed")
-            } else if let background = BackgroundWakeText.parse(b.note) {
-                // A turn the control plane opened for a background job's news, or for a wakeup
-                // coming due, is nobody's message either: the block IS the turn, so it is read off
-                // the recorded note rather than the person's words, which are empty. Only the wake
-                // blocks become the card — anything else the same note carried (the inventory a
-                // returning engine is handed, a coordinator's standing role) is a folded entry in
-                // the same card, because it is the control plane's too. It used to be an entry in a
-                // user bubble under the card, which drew an empty bubble: a message with no words
-                // in it, in the reader's own name. A job that ended while a turn ran was written
-                // into that turn as a steer: the same line, where its echo landed inside the running
-                // turn, saying how far it got (web parity: `Transcript.tsx`'s `steer=`).
-                VStack(alignment: .leading, spacing: 6) {
-                    BackgroundWakeCardView(wake: background, ts: b.ts,
-                                           undelivered: b.undelivered || b.delivery == "failed",
-                                           attached: attachedRest(background),
-                                           steerState: BackgroundWakeCard.steerState(
-                                               steer: b.steer, delivery: b.delivery,
-                                               undelivered: b.undelivered))
-                    if BackgroundWakeCard.drawsBubble(text: b.text) {
-                        UserBubbleView(bubble: withoutNote(b))
-                    }
-                }
-            } else {
-                UserBubbleView(bubble: b)
-            }
+            // Which card a user turn is — or the owner's bubble — is decided in one place, for the
+            // transcript and the queued tail alike (`UserTurnRow`).
+            UserTurnRow(bubble: b)
         case .assistant(let b): AssistantBubbleView(bubble: b)
         case .thinking(let b):  ThinkingView(block: b)
         case .toolCall(let c):  ToolCardView(card: c, fullPayload: fullPayload)
@@ -1747,34 +1601,5 @@ struct TranscriptItemView: View {
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .font(.orbitLabel).foregroundStyle(.orange).textSelection(.enabled)
         }
-    }
-
-    /// What the wake card did NOT take, as the entry folded inside it — so a mixed note still shows
-    /// its other blocks instead of repeating the wake beneath the card.
-    private func attachedRest(_ wake: BackgroundWake) -> (kind: String, text: String)? {
-        wake.rest.isEmpty ? nil : (kind: describeNote(wake.rest), text: wake.rest)
-    }
-
-    /// What the reply cards did NOT take from a turn's note, as the entry folded inside them.
-    private func replyRest(_ bubble: UserBubble) -> (kind: String, text: String)? {
-        let rest = SessionReply.withoutReplyBlocks(bubble.note)
-        return rest.isEmpty ? nil : (kind: describeNote(rest), text: rest)
-    }
-
-    /// The same bubble with the note taken off it: all of it is the card's now, so leaving it here
-    /// would draw it a second time under the card that already holds it.
-    private func withoutNote(_ bubble: UserBubble) -> UserBubble {
-        var bare = bubble
-        bare.note = nil
-        return bare
-    }
-
-    /// The same bubble holding only what it was sent with: the brief and the note are the task-start
-    /// card's, so what is left is the images and files, drawn as the bubble draws them.
-    private func inputsOnly(_ bubble: UserBubble) -> UserBubble {
-        var inputs = bubble
-        inputs.text = ""
-        inputs.note = nil
-        return inputs
     }
 }

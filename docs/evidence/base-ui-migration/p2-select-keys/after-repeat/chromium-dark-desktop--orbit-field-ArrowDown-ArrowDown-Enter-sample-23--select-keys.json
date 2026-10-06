@@ -1,0 +1,30 @@
+{
+  "target": "orbit-field",
+  "run": 23,
+  "before": "never",
+  "after": "7",
+  "listboxOpen": false,
+  "keys": [
+    {
+      "key": "ArrowDown",
+      "t": 71.5,
+      "target": "combobox:Expires",
+      "listbox": false,
+      "highlighted": null
+    },
+    {
+      "key": "ArrowDown",
+      "t": 135,
+      "target": "option:Never",
+      "listbox": true,
+      "highlighted": "Never"
+    },
+    {
+      "key": "Enter",
+      "t": 140.6,
+      "target": "option:7 days",
+      "listbox": true,
+      "highlighted": "7 days"
+    }
+  ]
+}

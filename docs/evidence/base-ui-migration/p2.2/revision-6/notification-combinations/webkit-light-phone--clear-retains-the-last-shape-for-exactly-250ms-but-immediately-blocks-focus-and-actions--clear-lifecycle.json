@@ -1,0 +1,10 @@
+{
+  "inert": true,
+  "hidden": "true",
+  "focused": false,
+  "shape": "toast toast--card toast--live",
+  "retainedUntilMs": 249,
+  "removedAtMs": 250,
+  "successorDwellMs": 3000,
+  "undoCalls": 0
+}

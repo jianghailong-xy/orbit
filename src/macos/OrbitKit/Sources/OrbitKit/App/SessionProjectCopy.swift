@@ -21,10 +21,29 @@ public enum SessionProjectCopy {
     public static let move = "Move…"
 
     public static func pageSubtitle(sessions: Int) -> String { "Project · \(sessions) sessions" }
+    /// The page's subtitle before its members have been read: no count it cannot vouch for yet.
+    public static let pageSubtitleLoading = "Project"
     public static let coordinatorSection = "Coordinator"
     public static func pageProgress(done: Int, total: Int, running: Int) -> String {
         "\(done)/\(total) done · \(running) running"
     }
+
+    /// The progress line of a project nobody has started, which says so rather than reading like
+    /// one that runs nothing: "Not started · 5 tasks" (docs/mocks/project-start-sessions-page).
+    public static func pageNotStarted(tasks: Int) -> String {
+        "Not started · \(tasks) \(tasks == 1 ? "task" : "tasks")"
+    }
+    /// The start row under it, when the coordinator has asked: since when, what it suggests in one
+    /// line, and the press that opens the start card.
+    public static func startAsked(_ ago: String) -> String { "asked \(ago)" }
+    public static func startSuggestion(_ settings: ProjectStartSettings) -> String {
+        "\(settings.line == .main ? "Directly into main" : "Project branch") · Automatic \(settings.automatic ? "on" : "off") · \(settings.maxConcurrentTasks) at a time"
+    }
+    public static let startReview = "Review and start"
+    /// …and when nobody has, beside the owner's own Start….
+    public static let startNotAsked = "The coordinator hasn’t asked yet"
+    /// What either press opens, for a reader who cannot see the card it will put up.
+    public static let startHint = "Opens the start card: the criteria, the plan and how it runs."
 
     /// The project page's landing line, shortened for a row that is not redrawn every second:
     /// "Merge to main · queued · 13m", "Landing · checking · 4m · <task>". Nil when nothing is in

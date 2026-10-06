@@ -104,8 +104,7 @@ struct ShareSheet: View {
             .disabled(busy)
             // On the picker that asks, so the panel opens against it rather than at the top of the
             // form.
-            .confirmationDialog(SharePanelCopy.turnOffTitle, isPresented: $confirmingTurnOff,
-                                titleVisibility: .visible) {
+            .orbitConfirmation(SharePanelCopy.turnOffTitle, isPresented: $confirmingTurnOff) {
                 Button(SharePanelCopy.turnOff, role: .destructive) { Task { await turnOff() } }
                 Button(SharePanelCopy.cancel, role: .cancel) {}
             } message: {

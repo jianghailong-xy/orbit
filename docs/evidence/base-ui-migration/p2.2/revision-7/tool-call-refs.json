@@ -1,0 +1,77 @@
+[
+  {
+    "ref": "exec-97f51efe-f66e-4418-84ff-6198acfbdf2d",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2.2/run-check.py r7-original-entry-probe node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2.2/revision-7/entry-diagnostic.config.mjs --project=webkit-dark-desktop --repeat-each=5",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-f4a83712-3017-4b3e-b1e4-ec9d9c186d37",
+    "command": "python3 - <<'PY'\nimport json,pathlib\np=pathlib.Path('src/web/.r7-entry-diagnostics/report.json')\nif p.exists():\n r=json.loads(p.read_text());print(r.get('stats'),r.get('errors'))\n def walk(ss):\n  for s in ss:\n   yield from s.get('specs',[]);yield from walk(s.get('suites',[]))\n for s in walk(r['suites']):\n  for t in s['tests']:\n   for x in t['results']:\n    print(t['projectName'],t['repeatEachIndex'],x['status'])\n    for a in x.get('attachments',[]):\n     if a['name']=='native-entry':\n      import base64\n      es=json.loads(base64.b64decode(a['body']) if 'body' in a else pathlib.Path(a['path']).read_text())\n      print('visible first',next((e for e in es if e.get('dialog')),None))\n      print('OK pointer events',[e for e in es if e.get('event',{}).get('targetOK')])\n      print('end',es[-1])\nPY",
+    "exitCode": 1
+  },
+  {
+    "ref": "exec-16fcc0cc-3b60-4aeb-8d9a-1ab9324865d8",
+    "command": "cp src/web/.ui-migration-results/environment.json src/web/.r7-entry-diagnostics/environment.json\nnode src/web/ui-migration/collect-choice-evidence.mjs docs/evidence/base-ui-migration/p2.2/revision-7/original-entry-probe --from=src/web/.r7-entry-diagnostics\npython3 - <<'PY'\nimport json,pathlib,base64\nr=json.loads(pathlib.Path('src/web/.r7-entry-diagnostics/report.json').read_text())\ndef walk(ss):\n for s in ss:\n  yield from s.get('specs',[]);yield from walk(s.get('suites',[]))\nfor s in walk(r['suites']):\n for t in s['tests']:\n  for x in t['results']:\n   print(t['projectName'],x['status'])\n   for a in x.get('attachments',[]):\n    if a['name']=='native-entry':\n     es=json.loads(base64.b64decode(a['body']) if 'body' in a else pathlib.Path(a['path']).read_text())\n     print('first dialog',next((e for e in es if e.get('dialog')),None))\n     print('OK pointer events',[e for e in es if (e.get('event') or {}).get('targetOK')])\n     print('entrance animation events',[e for e in es if e['kind'] in ['animationstart','animationend']][:2])\n     print('end',es[-1])\nPY",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-f6558a7d-4bd4-48a3-859e-d8f372cf74de",
+    "command": "git diff --check -- src/web/ui-migration/toasts.browser.mjs\ngit diff -- src/web/ui-migration/toasts.browser.mjs\nnode --check docs/evidence/base-ui-migration/p2.2/revision-7/entry-synchronized.browser.mjs\nnode --check docs/evidence/base-ui-migration/p2.2/revision-7/entry-observer.mjs\ngit add src/web/ui-migration/toasts.browser.mjs docs/evidence/base-ui-migration/p2.2/revision-7/entry-observer.mjs docs/evidence/base-ui-migration/p2.2/revision-7/entry-original.browser.mjs docs/evidence/base-ui-migration/p2.2/revision-7/entry-synchronized.browser.mjs docs/evidence/base-ui-migration/p2.2/revision-7/entry-diagnostic.config.mjs docs/evidence/base-ui-migration/p2.2/revision-7/entry-synchronized.config.mjs\ngit commit -m 'test(web): await settled legacy confirmation before pointer click'\ngit rev-parse HEAD",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-47964deb-2eb6-4e7d-9a1f-1d20c3726225",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2.2/run-check.py r7-final-entry-eight npm run test:ui-toasts -w @orbit/web -- --grep 'legacy AntApp confirmation' --trace=on",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-a5ae5851-3c48-49ab-96c2-f1d88e91ba3e",
+    "command": "git rev-parse refs/heads/main refs/heads/project/34ZZeq0e3IR65GVm2kAs7\ngit merge --no-ff 53da29cc1e799e1b5a82e98167305d9b41cc54cc -m 'merge: retain current upstream in P2.2 confirmation entry delivery'\ngit rev-parse HEAD HEAD^{tree}",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-17e0d608-b901-45ac-869a-f6e6ef4107d1",
+    "command": "tail -12 docs/evidence/base-ui-migration/p2.2/checks/r7-final-entry-finite.txt\npython3 - <<'PY'\nimport pathlib\np=pathlib.Path('docs/evidence/base-ui-migration/p2.2/revision-7/entry-eight/summary.json')\nprint(p.read_text()[:1900])\nPY",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-0a13b503-c0a2-4f33-888c-31b965b862b1",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/revision-7/audit-source.py",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-23753c66-423a-430b-906e-befdf3bf40b8",
+    "command": "tail -8 docs/evidence/base-ui-migration/p2.2/checks/r7-final-entry-finite.txt",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-9ddaee54-9ebe-4668-a53e-b9afa028bcce",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2.2/run-check.py r7-final-entry-finite node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2.2/revision-7/entry-synchronized.config.mjs --repeat-each=5",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-336b1e0b-6e66-490d-bd87-e4cc355fcd8b",
+    "command": "cp src/web/.ui-migration-results/environment.json src/web/.r7-entry-synchronized/environment.json\nnode src/web/ui-migration/collect-choice-evidence.mjs docs/evidence/base-ui-migration/p2.2/revision-7/entry-finite --from=src/web/.r7-entry-synchronized",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-c8e03a88-a650-43b2-a8bb-2254b47d7c58",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/revision-7/audit-entry.py",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-b0034e4f-ec57-404a-b4c5-b9eab2bb148b",
+    "command": "python3 - <<'PY'\nimport json,pathlib\np=pathlib.Path('docs/evidence/base-ui-migration/p2.2/revision-7')\nr=json.loads((p/'entry-audit.json').read_text())\nfor x in r['observations']:\n if x['run']=='entry-finite' and 'webkit-dark-desktop' in x['test']:\n  print({k:x[k] for k in ['test','firstDialog','entranceStart','initialPointFirstMiss','trustedClick','entryToClickMs']})\n  break\nfor t in ['webkit-dark-desktop','webkit-light-phone']:\n print('PNG',next((p/'entry-finite').glob(t+'*legacy-confirmed.png')))\nPY\ntail -5 docs/evidence/base-ui-migration/p2.2/checks/r7-delivery-build-test.txt",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-e863770b-a583-4ef9-822c-9146bc036065",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2.2/run-check.py r7-delivery-build-test bash -c 'npm run build -w @orbit/web && npm run test -w @orbit/web'",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-bd23350c-8b5a-4b09-8a6b-601e435f35d9",
+    "command": "python3 - <<'PY'\nimport json,pathlib,hashlib,shutil,tempfile\nout=pathlib.Path('docs/evidence/base-ui-migration/p2.2/revision-7')\nenv=pathlib.Path('docs/evidence/base-ui-migration/p0.2/environment.json').read_bytes()\nfor run in ['entry-eight','entry-finite','original-entry-probe']:\n assert (out/run/'environment.json').read_bytes()==env,run\nchecks=[]\nfor p in sorted(pathlib.Path('docs/evidence/base-ui-migration/p2.2/checks').glob('r7-*.json')):\n r=json.loads(p.read_text());assert r['exitCode']==0\n checks.append({'path':str(p),'commit':r['commit'],'exitCode':r['exitCode'],'command':r['command']})\nraw=pathlib.Path(tempfile.mkdtemp(prefix='orbit-p22-r7-native-raw-'))\nfor name in ['.r7-entry-diagnostics','.r7-entry-synchronized']:\n shutil.move('src/web/'+name,raw/name)\n(out/'run-audit.json').write_text(json.dumps({'environmentSha256':hashlib.sha256(env).hexdigest(),'allThreeEnvironmentsByteIdenticalToP0':True,'originalWorkingReportsMovedTo':str(raw),'checks':checks},indent=2)+'\\n')\nprint(json.dumps({'environmentIdentical':True,'archivedRawWorkingDirectories':str(raw),'checkCount':len(checks)},indent=2))\nPY\npython3 docs/evidence/base-ui-migration/p2.2/revision-7/audit-source.py\npython3 docs/evidence/base-ui-migration/p2.2/revision-7/audit-entry.py",
+    "exitCode": 0
+  }
+]
