@@ -310,6 +310,7 @@ export function ShareModal({
         title={TURN_OFF_TITLE}
         description={TURN_OFF_DETAIL}
         confirmText="Turn off"
+        cancelText="Cancel"
         danger
         confirmLoading={offMut.isPending}
         side="bottom"

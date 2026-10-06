@@ -181,7 +181,7 @@ final class TaskDetailCopyParityTests: XCTestCase {
         assertSays(web, "> \(TaskDetailCopy.addFile) </Button>", in: Self.inputs)
         assertSays(web, "title=\"\(TaskDetailCopy.removeInputTitle)\"", in: Self.inputs)
         assertSays(web, "description=\"\(TaskDetailCopy.removeInputDetail)\"", in: Self.inputs)
-        assertSays(web, "okText=\"\(TaskDetailCopy.remove)\"", in: Self.inputs)
+        assertSays(web, "confirmText=\"\(TaskDetailCopy.remove)\"", in: Self.inputs)
     }
 
     // MARK: attribution
