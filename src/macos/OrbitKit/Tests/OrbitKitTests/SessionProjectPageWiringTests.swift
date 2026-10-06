@@ -55,18 +55,27 @@ final class SessionProjectPageWiringTests: XCTestCase {
 
     func testTheWorkspaceAndFolderListsDrawTheGroupingResult() throws {
         let agents = code(try appSource("Views/AgentsView.swift"))
-        let listing = try slice(agents, from: "private var projectListing: SessionProjectListing {", to: "\n    }")
+        let listing = try slice(agents, from: "private static func projectListing(_ inputs: SessionListInputs, _ lines: SessionLineCache) -> SessionProjectListing {", to: "\n    }")
         for part in ["SessionProjectGrouping.listing(shownSessions,",
-                     "projects: app.projects?.sidebarProjects ?? [], view: view,",
-                     "byTag: tagFilter != nil || groupByTag, searching: isSearching,",
-                     "runnerOffline: agents.runnerIsOffline(agent.runnerId)",
-                     "let coordinators = agents.allSessions + app.sessions",
+                     "let shownSessions = inputs.shownSessions",
+                     "projects: inputs.projects, view: inputs.view,",
+                     "byTag: inputs.byTag, searching: inputs.searching,",
+                     "runnerOffline: inputs.runnerOffline,",
+                     "let coordinators = inputs.allSessions.filter(isCoordinator) + inputs.accountSessions.filter(isCoordinator)",
+                     "line: { lines.line(for: $0, watching: inputs.watch(for: $0.id)) }",
                      "coordinators: coordinators,",
-                     "contentSessions: view == .open ? app.sessions : agents.allSessions"] {
+                     "contentSessions: inputs.view == .open ? inputs.accountSessions : inputs.allSessions"] {
             XCTAssertTrue(listing.contains(part), "the workspace grouping carries `\(part)`")
         }
-        let folders = try slice(agents, from: "private func folderListing(_ projectListing: SessionProjectListing) -> SessionFolderListing {", to: "\n    }")
-        XCTAssertTrue(folders.contains("SessionFolderGrouping.listing(shownSessions,"))
+        let inputs = try slice(agents, from: "private var listInputs: SessionListInputs {", to: "\n    }")
+        for part in ["accountSessions: app.sessions, allSessions: agents.allSessions,",
+                     "projects: app.projects?.sidebarProjects ?? [],",
+                     "watches: app.watches?.summaries ?? [:],",
+                     "searching: isSearching,"] {
+            XCTAssertTrue(inputs.contains(part), "the workspace grouping's inputs carry `\(part)`")
+        }
+        let folders = try slice(agents, from: "private static func folderListing(_ projectListing: SessionProjectListing, _ inputs: SessionListInputs) -> SessionFolderListing {", to: "\n    }")
+        XCTAssertTrue(folders.contains("SessionFolderGrouping.listing(inputs.shownSessions,"))
         XCTAssertTrue(folders.contains("folders: projectListing.folders"))
         XCTAssertTrue(folders.contains("projectListing.entries.map(\\.timeGroupingSession)"))
         XCTAssertTrue(agents.contains("let projectRows = Dictionary(uniqueKeysWithValues: projectListing.projects.map { ($0.id, $0) })"))
@@ -75,13 +84,18 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(row.contains("if let project = projects[s.id]"))
         XCTAssertTrue(row.contains("projectRow(project)"), "the recency projection is rendered as a project, never as a session")
         XCTAssertTrue(row.contains("sessionRow(s)"))
-        XCTAssertEqual(try branches(of: "private var projectListing: SessionProjectListing {", in: agents), ["os(iOS)"])
+        XCTAssertEqual(try branches(of: "private static func projectListing(_ inputs: SessionListInputs, _ lines: SessionLineCache) -> SessionProjectListing {", in: agents), ["os(iOS)"])
 
         let page = code(try appSource("Views/SessionFolderPage.swift"))
-        let folderListing = try slice(page, from: "private var projectListing: SessionProjectListing {", to: "\n    }")
-        XCTAssertTrue(folderListing.contains("SessionProjectGrouping.listing(app.agents?.agentSessions ?? [],"))
-        XCTAssertTrue(folderListing.contains("folderID: address.folderID"))
-        XCTAssertTrue(folderListing.contains("searching: isSearching"))
+        let folderListing = try slice(page, from: "private static func projectListing(_ inputs: SessionListInputs, _ lines: SessionLineCache) -> SessionProjectListing {", to: "\n    }")
+        XCTAssertTrue(folderListing.contains("SessionProjectGrouping.listing(inputs.sessions,"))
+        XCTAssertTrue(folderListing.contains("folderID: inputs.folderID"))
+        XCTAssertTrue(folderListing.contains("searching: inputs.searching"))
+        let pageInputs = try slice(page, from: "private var listInputs: SessionListInputs {", to: "\n    }")
+        for part in ["sessions: app.agents?.agentSessions ?? [],", "folderID: address.folderID,",
+                     "searching: isSearching,", "watches: app.watches?.summaries ?? [:],"] {
+            XCTAssertTrue(pageInputs.contains(part), "the folder page's grouping inputs carry `\(part)`")
+        }
         XCTAssertTrue(page.contains("return projectListing.entries.map(\\.timeGroupingSession)"))
         XCTAssertTrue(page.contains("let projectRows = Dictionary(uniqueKeysWithValues: projectListing.projects.map { ($0.id, $0) })"))
         XCTAssertTrue(page.contains("listRow(session, projects: projectRows)"))
@@ -89,6 +103,25 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(folderRow.contains("if let project = projects[s.id]"))
         XCTAssertTrue(folderRow.contains("projectRow(project)"))
         XCTAssertTrue(folderRow.contains("sessionRow(s)"))
+    }
+
+    /// Both lists regroup only when an input changed: the body reads the memo, and the grouping is
+    /// static so it cannot read a fact the memo's key leaves out (`SessionListingMemo`).
+    func testBothListsGroupThroughTheMemoFromTheirInputsAlone() throws {
+        for relative in ["Views/AgentsView.swift", "Views/SessionFolderPage.swift"] {
+            let source = code(try appSource(relative))
+            XCTAssertTrue(source.contains("@State private var listingMemo = SessionListingMemo<SessionListGrouping>()"), relative)
+            XCTAssertTrue(source.contains("let grouping = listingMemo.value(for: listInputs, compute: Self.grouping)"), relative)
+            XCTAssertTrue(source.contains("let projectRows = grouping.projectRows"), relative)
+            let grouping = try slice(source, from: "private static func grouping(_ inputs: SessionListInputs, _ lines: SessionLineCache) -> SessionListGrouping {",
+                                     to: "\n    }")
+            XCTAssertTrue(grouping.contains("Self.projectListing(inputs, lines)"), relative)
+            XCTAssertFalse(source.contains("private var projectListing"), "\(relative) regroups outside the memo")
+            for name in ["projectListing", "timeSections"] {
+                let function = try slice(source, from: "private static func \(name)(", to: "\n    }")
+                XCTAssertFalse(function.contains("app."), "\(relative)'s \(name) reads a model the memo does not key on")
+            }
+        }
     }
 
     func testTheRowOpensSessionsAndItsMenuUsesTheGroupingTarget() throws {

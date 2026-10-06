@@ -271,7 +271,10 @@ func (a *dshACPClient) decodeReply(method string, reply dshRPCReply) (map[string
 		return nil, reply.err
 	}
 	if e := reply.message.Error; e != nil {
-		return nil, fmt.Errorf("dsh %s (%d): %s %s", method, e.Code, a.redact(e.Message), clip(a.redact(kimiRPCErrorDetail(e.Data)), 300))
+		return nil, &dshCallError{
+			text:           fmt.Sprintf("dsh %s (%d): %s %s", method, e.Code, a.redact(e.Message), clip(a.redact(kimiRPCErrorDetail(e.Data)), 300)),
+			upstreamStatus: dshUpstreamStatus(e.Data),
+		}
 	}
 	var result map[string]interface{}
 	if json.Unmarshal(reply.message.Result, &result) != nil || result == nil {
@@ -522,6 +525,12 @@ type dshPromptResult struct {
 
 func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	p.setTurn("")
+	// dsh reports context occupancy only, never cost or tokens (P0): no turn of it claims a measured $0.
+	completeTurn := p.completeTurn
+	p.completeTurn = func(req TurnCompleteRequest, providerContexts ...context.Context) error {
+		req.UsageUnknown = true
+		return completeTurn(req, providerContexts...)
+	}
 	fail := func(message string) (string, bool, bool) {
 		p.emit(evError, map[string]interface{}{"message": message})
 		return stFailed, true, false

@@ -219,8 +219,11 @@ func isLeaseOwnershipError(err error) bool {
 
 // Sent on claim/reclaim from the first release that safely understands OpenCode. The server uses
 // this positive capability advertisement instead of trusting a stale heartbeat version during a
-// rolling upgrade. Older control planes ignore the header.
-const runnerSupportedProviders = "claude,codex,opencode,antigravity"
+// rolling upgrade. Older control planes ignore the header. The same header rides every runner
+// request, so the heartbeat persists it as the provider:<name> capabilities the dsh gate also reads.
+// It states protocol support only: whether dsh is installed on this machine is its health report's
+// (dsh_health.go), and a session started without it fails with that report's repair, not as Claude.
+const runnerSupportedProviders = "claude,codex,opencode,antigravity,dsh"
 
 func NewTransport(baseURL, token string) *Transport {
 	leaseOwner, err := newLeaseGeneration()

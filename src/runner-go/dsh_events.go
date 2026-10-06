@@ -257,7 +257,7 @@ func (m *dshEventMapper) settle(turnID string, result map[string]interface{}, er
 	}
 	stop := firstString(result, "stopReason")
 	if err != nil {
-		request.Status, request.Subtype, request.Error = stFailed, "error", err.Error()
+		request.Status, request.Subtype, request.Error = stFailed, "error", dshTurnError(err)
 	} else {
 		switch stop {
 		case "end_turn":

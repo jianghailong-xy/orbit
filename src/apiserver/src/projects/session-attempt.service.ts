@@ -3,6 +3,7 @@ import { ConflictException, Injectable, Logger, NotFoundException } from '@nestj
 import { Prisma } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { sessionUsageUnreported } from '../tasks/task-model-routing-report.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
   AttemptBudget,
@@ -390,12 +391,14 @@ export class SessionAttemptService {
     const [row] = await tx.$queryRaw<Array<{
       numTurns: number;
       costUsd: number;
+      usageUnknown: boolean;
       contextTokens: number | null;
       contextWindow: number | null;
       startedAt: Date | null;
       toolCalls: bigint;
     }>>(Prisma.sql`
       SELECT s."num_turns" AS "numTurns", s."cost_usd" AS "costUsd",
+             ${sessionUsageUnreported('s')} AS "usageUnknown",
              s."context_tokens" AS "contextTokens", s."context_window" AS "contextWindow",
              s."started_at" AS "startedAt",
              (SELECT count(*) FROM "tool_call" c WHERE c."session_id" = s."id") AS "toolCalls"
@@ -407,7 +410,7 @@ export class SessionAttemptService {
       turns: Number(row?.numTurns ?? 0),
       wallClockMs: Math.max(0, now.getTime() - startedAt.getTime()),
       toolCalls: Number(row?.toolCalls ?? 0n),
-      costMicros: Math.round(Number(row?.costUsd ?? 0) * 1_000_000),
+      costMicros: row?.usageUnknown ? null : Math.round(Number(row?.costUsd ?? 0) * 1_000_000),
       contextTokens: row?.contextTokens ?? null,
       contextWindow: row?.contextWindow ?? null,
       coordinatorSteers: attempt.coordinatorSteers,
