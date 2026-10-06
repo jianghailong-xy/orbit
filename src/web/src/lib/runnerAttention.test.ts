@@ -433,6 +433,7 @@ describe('runnerCopy', () => {
     expect(copy.runnerEnginesChecked('6 min ago')).toBe('Checked 6 min ago');
     expect(copy.runnerEnginesReported('Sep 14')).toBe('Reported Sep 14');
     expect(copy.runnerEngineAccountsSignedIn(2)).toBe('2 accounts signed in');
+    expect(copy.runnerEngineNext('Work')).toBe('Next: Work');
     expect(copy.runnerEngineUpdateFailed('2.1.270', 'Sep 13')).toBe('Update to 2.1.270 failed Sep 13');
     expect(copy.runnerWorkspaceRunning(4)).toBe('4 running');
     expect(copy.runnerInstallCommandUnix('https://orbitd.io')).toBe(
