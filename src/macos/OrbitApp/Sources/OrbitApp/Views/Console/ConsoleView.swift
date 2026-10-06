@@ -897,9 +897,13 @@ struct TranscriptView: View {
         console.noteTopVisible(ruler.topAnchorID)
         let questions = ruler.questions(console) { StickyQuestions($0.state.items, isQuestion: namesAQuestion) }
         var found: String? = nil
+        // Both answers are held (`StickyQuestionHold`): the header moves the list by its own height,
+        // so a reading taken with it shown and one taken with it hidden can disagree, and a single
+        // threshold between them flips the header on every frame.
         if let anchor = ruler.topAnchorID {
-            found = questions.above(anchor)
-        } else if ruler.contentOffset > 40 {
+            found = StickyQuestionHold.named(found: questions.above(anchor), anchor: anchor, showing: stuckID)
+        } else if StickyQuestionHold.fallbackNames(contentOffset: Double(ruler.contentOffset),
+                                                   showing: stuckID != nil) {
             found = questions.last
         }
         if found != stuckID { stuckID = found }
