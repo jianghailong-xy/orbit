@@ -1,0 +1,55 @@
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+==> stub ready on 127.0.0.1:8765 (pid 6525, after 2s); {"tokens": [{"id": "34ajPat1", "name": "deploy-bot", "tokenHint": "k3Fq", "scope
+==> mac
+Test Case '-[PatMacProbeUITests.PatShotTests testMacListsAndRevokes]' started.
+Test Case '-[PatMacProbeUITests.PatShotTests testMacListsAndRevokes]' passed (39.956 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 39.956 (39.957) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 39.956 (39.957) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 39.956 (39.960) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 17259, after 2s); {"tokens": [{"id": "34ajPat1", "name": "deploy-bot", "tokenHint": "k3Fq", "scope
+==> ios
+Test Case '-[PatProbeUITests.PatShotTests testIPhoneListsAndRevokes]' started.
+Test Case '-[PatProbeUITests.PatShotTests testIPhoneListsAndRevokes]' passed (117.139 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 117.139 (117.145) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 117.139 (117.147) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 117.139 (117.150) seconds
+** TEST SUCCEEDED **
+.pat-probe/run.sh: line 79: 17259 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+/Users/runner/work/orbit/orbit/.pat-probe/shots/ios:
+total 5328
+drwxr-xr-x  20 runner  staff     640 Oct  6 10:53 .
+drwxr-xr-x   4 runner  staff     128 Oct  6 10:37 ..
+drwxr-xr-x  16 runner  staff     512 Oct  6 10:53 attachments
+-rw-r--r--   1 runner  staff  277984 Oct  6 10:52 ios-1-settings.png
+-rw-r--r--   1 runner  staff  250897 Oct  6 10:52 ios-2-access-tokens.png
+-rw-r--r--   1 runner  staff  248337 Oct  6 10:52 ios-3-swipe.png
+-rw-r--r--   1 runner  staff  438120 Oct  6 10:52 ios-4-confirm.png
+-rw-r--r--   1 runner  staff  246556 Oct  6 10:52 ios-5-revoked.png
+-rw-r--r--   1 runner  staff  209898 Oct  6 10:52 ios-6-active-after.png
+-rw-r--r--   1 runner  staff  283265 Oct  6 10:52 ios-7-revoked-and-expired.png
+-rw-r--r--   1 runner  staff     219 Oct  6 10:53 not-served.txt
+-rw-r--r--@  1 runner  staff     169 Oct  6 10:52 PatShotTeststestIPhoneListsAndRevokes-notes.txt
+-rw-r--r--   1 runner  staff    3276 Oct  6 10:52 requests.log
+-rw-r--r--   1 runner  staff      49 Oct  6 10:45 requests.log.out
+-rw-r--r--@  1 runner  staff   21960 Oct  6 10:52 tree-ios-confirm.txt
+-rw-r--r--@  1 runner  staff   19577 Oct  6 10:52 tree-ios-ended.txt
+-rw-r--r--@  1 runner  staff   18007 Oct  6 10:52 tree-ios-list.txt
+-rw-r--r--@  1 runner  staff   26660 Oct  6 10:52 tree-ios-settings.txt
+-rw-r--r--   1 runner  staff     101 Oct  6 10:53 writes.txt
+-rw-r--r--   1 runner  staff  640942 Oct  6 10:53 xcodebuild-ios.log
+
+/Users/runner/work/orbit/orbit/.pat-probe/shots/mac:
+total 1976
+drwxr-xr-x  12 runner  staff     384 Oct  6 10:53 .
+drwxr-xr-x   4 runner  staff     128 Oct  6 10:37 ..
+drwxr-xr-x  12 runner  staff     384 Oct  6 10:45 attachments
+-rw-r--r--   1 runner  staff   65591 Oct  6 10:45 mac-1-access-tokens.png
+-rw-r--r--   1 runner  staff  163864 Oct  6 10:45 mac-2-confirm.png
+-rw-r--r--   1 runner  staff   60065 Oct  6 10:45 mac-3-revoked.png
+-rw-r--r--   1 runner  staff   61453 Oct  6 10:45 mac-4-revoked-and-expired.png
+-rw-r--r--   1 runner  staff       0 Oct  6 10:53 not-served.txt
+-rw-r--r--   1 runner  staff     580 Oct  6 10:45 requests.log
+-rw-r--r--   1 runner  staff      49 Oct  6 10:40 requests.log.out
+-rw-r--r--   1 runner  staff     101 Oct  6 10:53 writes.txt
+-rw-r--r--   1 runner  staff  634350 Oct  6 10:45 xcodebuild-mac.log

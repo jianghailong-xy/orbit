@@ -1,0 +1,2 @@
+ios-settings-row: in view after 4 move(s) at (16.0, 629.0, 370.0, 52.0)
+confirming with Revoke at (97.0, 222.33333333333334, 208.0, 47.99999999999997) (in a sheet: true)

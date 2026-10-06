@@ -1,0 +1,89 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "b266f251edf92adb7a80c4fcb59e26a2e57317d0",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "CC43AD5B-F6FA-4E88-926A-A8C651D8A168.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "PatShotTeststestMacListsAndRevokes-notes_0_EAA9110F-65A6-4D8D-8E6D-0117B11C4FA3.txt",
+        "timestamp" : 1791283525.961
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "b266f251edf92adb7a80c4fcb59e26a2e57317d0",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "5C95E22D-32DD-4007-9A88-A1F38C587678.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "tree-mac-ended_0_17FE2401-0CA8-4909-8791-668289ACEDE2.txt",
+        "timestamp" : 1791283525.957
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "b266f251edf92adb7a80c4fcb59e26a2e57317d0",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "A241809F-A2BE-4CE5-A57F-F1477273A378.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-4-revoked-and-expired_0_ABD24BC3-AC40-484B-B368-2F0853D758AB.png",
+        "timestamp" : 1791283525.818
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "b266f251edf92adb7a80c4fcb59e26a2e57317d0",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "5836557B-9E06-4C1C-873C-4379381D60D5.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-3-revoked_0_E60AFADF-D834-4628-9A0E-8ACAC0333C3C.png",
+        "timestamp" : 1791283523.06
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "b266f251edf92adb7a80c4fcb59e26a2e57317d0",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "5B4576B5-BC17-430C-A61A-49AAF6C874CD.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "tree-mac-confirm_0_4A054EFE-C3FC-4D65-9725-455B05EAA0AF.txt",
+        "timestamp" : 1791283520.469
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "b266f251edf92adb7a80c4fcb59e26a2e57317d0",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "09000714-6237-461B-AB39-4BD52D904A73.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-2-confirm_0_EEEBB9D7-3131-4D3E-B462-4AFE3E8832C7.png",
+        "timestamp" : 1791283520.253
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "b266f251edf92adb7a80c4fcb59e26a2e57317d0",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "90F41DF0-332B-46E4-B35B-1CBF63960095.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "tree-mac-list_0_2EB1751B-6145-4C56-A332-17554F63BBC8.txt",
+        "timestamp" : 1791283516.096
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "b266f251edf92adb7a80c4fcb59e26a2e57317d0",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "A172E03C-C75D-4408-8F8E-F93E9D5B7698.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-1-access-tokens_0_5C285D62-A400-44B7-A744-00CED26CE965.png",
+        "timestamp" : 1791283515.866
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "b266f251edf92adb7a80c4fcb59e26a2e57317d0",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "7993C2A8-A989-41AD-865E-3E0AE1F77796.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "no-window-mac-settings_0_89A2FAF5-0753-4B8A-8E17-38807D498572.txt",
+        "timestamp" : 1791283507.515
+      }
+    ],
+    "testIdentifier" : "PatShotTests/testMacListsAndRevokes()",
+    "testIdentifierURL" : "test://com.apple.xcode/PatProbe/PatMacProbeUITests/PatShotTests/testMacListsAndRevokes"
+  }
+]

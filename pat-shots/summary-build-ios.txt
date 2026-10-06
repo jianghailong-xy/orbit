@@ -1,0 +1,6 @@
+Test Case '-[PatProbeUITests.PatShotTests testIPhoneListsAndRevokes]' started.
+Test Case '-[PatProbeUITests.PatShotTests testIPhoneListsAndRevokes]' passed (117.139 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 117.139 (117.145) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 117.139 (117.147) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 117.139 (117.150) seconds
+** TEST SUCCEEDED **

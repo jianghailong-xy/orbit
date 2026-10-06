@@ -1,0 +1,4 @@
+   6 "GET /api/projects/sidebar HTTP/1.1" 404 -
+   1 "GET /api/wiki/spaces HTTP/1.1" 404 -
+   1 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 404 -
+   1 "GET /api/events HTTP/1.1" 404 -

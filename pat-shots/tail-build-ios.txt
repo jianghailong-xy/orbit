@@ -1,0 +1,300 @@
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbe.app (in target 'PatProbe' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbe.app
+
+Validate /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbe.app (in target 'PatProbe' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    builtin-validationUtility /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbe.app -shallow-bundle -infoplist-subpath Info.plist
+
+Touch /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbe.app (in target 'PatProbe' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbe.app
+
+ProcessInfoPlistFile /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest/Info.plist /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Intermediates.noindex/PatProbe.build/Debug-iphonesimulator/PatProbeUITests.build/empty-PatProbeUITests.plist (in target 'PatProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    builtin-infoPlistUtility /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Intermediates.noindex/PatProbe.build/Debug-iphonesimulator/PatProbeUITests.build/empty-PatProbeUITests.plist -producttype com.apple.product-type.bundle.ui-testing -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Intermediates.noindex/PatProbe.build/Debug-iphonesimulator/PatProbeUITests.build/ProductTypeInfoPlistAdditions.plist -o /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest/Info.plist
+
+Ld /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest/PatProbeUITests normal (in target 'PatProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios17.0-simulator -bundle -isysroot /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -O0 -L/Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -L/Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator -L/Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F/Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator -iframework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -iframework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/Developer/Library/Frameworks -filelist /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Intermediates.noindex/PatProbe.build/Debug-iphonesimulator/PatProbeUITests.build/Objects-normal/arm64/PatProbeUITests.LinkFileList -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @loader_path/Frameworks -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Intermediates.noindex/PatProbe.build/Debug-iphonesimulator/PatProbeUITests.build/Objects-normal/arm64/PatProbeUITests_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Intermediates.noindex/PatProbe.build/Debug-iphonesimulator/PatProbeUITests.build/Objects-normal/arm64/PatProbeUITests_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Intermediates.noindex/PatProbe.build/Debug-iphonesimulator/PatProbeUITests.build/Objects-normal/arm64/PatProbeUITests.swiftmodule @/Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Intermediates.noindex/PatProbe.build/Debug-iphonesimulator/PatProbeUITests.build/Objects-normal/arm64/PatProbeUITests-linker-args.resp -Xlinker -needed_framework -Xlinker XCTest -framework XCTest -Xlinker -needed-lXCTestSwiftSupport -lXCTestSwiftSupport -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __entitlements -Xlinker /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Intermediates.noindex/PatProbe.build/Debug-iphonesimulator/PatProbeUITests.build/PatProbeUITests.xctest-Simulated.xcent -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __ents_der -Xlinker /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Intermediates.noindex/PatProbe.build/Debug-iphonesimulator/PatProbeUITests.build/PatProbeUITests.xctest-Simulated.xcent.der -Xlinker -no_adhoc_codesign -o /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest/PatProbeUITests
+
+ExtractAppIntentsMetadata (in target 'PatProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.56XJA3/Metal.xctoolchain --module-name PatProbeUITests --sdk-root /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk --xcode-version 17F113 --platform-family iOS --deployment-target 17.0 --bundle-identifier io.orbitd.patprobe.uitests --output /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest --target-triple arm64-apple-ios17.0-simulator --binary-file /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest/PatProbeUITests --dependency-file /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Intermediates.noindex/PatProbe.build/Debug-iphonesimulator/PatProbeUITests.build/Objects-normal/arm64/PatProbeUITests_dependency_info.dat --stringsdata-file /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Intermediates.noindex/PatProbe.build/Debug-iphonesimulator/PatProbeUITests.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Intermediates.noindex/PatProbe.build/Debug-iphonesimulator/PatProbeUITests.build/Objects-normal/arm64/PatProbeUITests.SwiftFileList --metadata-file-list /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Intermediates.noindex/PatProbe.build/Debug-iphonesimulator/PatProbeUITests.build/PatProbeUITests.DependencyMetadataFileList --static-metadata-file-list /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Intermediates.noindex/PatProbe.build/Debug-iphonesimulator/PatProbeUITests.build/PatProbeUITests.DependencyStaticMetadataFileList --swift-const-vals-list /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Intermediates.noindex/PatProbe.build/Debug-iphonesimulator/PatProbeUITests.build/Objects-normal/arm64/PatProbeUITests.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-10-06 10:50:08.928 appintentsmetadataprocessor[27606:78327] Starting appintentsmetadataprocessor export
+2026-10-06 10:50:08.930 appintentsmetadataprocessor[27606:78327] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+CopySwiftLibs /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest (in target 'PatProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest/PatProbeUITests --scan-folder /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest/Frameworks --scan-folder /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest/PlugIns --scan-folder /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest/SystemExtensions --scan-folder /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.56XJA3/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest/Frameworks --strip-bitcode --scan-executable /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Intermediates.noindex/PatProbe.build/Debug-iphonesimulator/PatProbeUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+
+AppIntentsSSUTraining (in target 'PatProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest/Info.plist --temp-dir-path /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Intermediates.noindex/PatProbe.build/Debug-iphonesimulator/PatProbeUITests.build/ssu --bundle-id io.orbitd.patprobe.uitests --product-path /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest --extracted-metadata-path /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest/Metadata.appintents --metadata-file-list /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Intermediates.noindex/PatProbe.build/Debug-iphonesimulator/PatProbeUITests.build/PatProbeUITests.DependencyMetadataFileList --source-file /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest/Info.plist --archive-ssu-assets
+2026-10-06 10:50:08.951 appintentsnltrainingprocessor[27607:78328] Parsing options for appintentsnltrainingprocessor
+2026-10-06 10:50:08.952 appintentsnltrainingprocessor[27607:78328] Starting AppIntents SSU YAML Generation
+2026-10-06 10:50:08.952 appintentsnltrainingprocessor[27607:78328] No AppShortcuts found - Skipping.
+
+MkDir /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app (in target 'PatProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    /bin/mkdir -p /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app
+
+CopyPlistFile /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/Info.plist /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Info.plist (in target 'PatProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    builtin-copyPlist --validate --convert xml1 --macro-expansion WRAPPEDPRODUCTNAME PatProbeUITests-Runner --macro-expansion WRAPPEDPRODUCTBUNDLEIDENTIFIER io.orbitd.patprobe.uitests.xctrunner --macro-expansion TESTPRODUCTNAME PatProbeUITests --macro-expansion TESTPRODUCTBUNDLEIDENTIFIER io.orbitd.patprobe.uitests --copy-value UIDeviceFamily /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest/Info.plist --outdir /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app -- /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Info.plist
+
+CopyAndPreserveArchs /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PatProbeUITests-Runner (in target 'PatProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/lipo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/XCTRunner -output /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PatProbeUITests-Runner -extract arm64
+
+Copy /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PkgInfo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/PkgInfo (in target 'PatProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/PkgInfo /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app
+
+Copy /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/Frameworks/libXCTestSwiftSupport.dylib /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib (in target 'PatProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/Frameworks/XCUnit.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework (in target 'PatProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/Frameworks/XCUIAutomation.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework (in target 'PatProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/Frameworks/XCTestSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework (in target 'PatProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/Frameworks/XCTestCore.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework (in target 'PatProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/Frameworks/XCTest.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework (in target 'PatProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/Frameworks/XCTAutomationSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework (in target 'PatProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/Frameworks/Testing.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework (in target 'PatProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/Frameworks
+
+CodeSign /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest (in target 'PatProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest (in target 'PatProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest
+
+Touch /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest (in target 'PatProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app/PlugIns/PatProbeUITests.xctest
+
+CodeSign /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app (in target 'PatProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app
+/Users/runner/work/orbit/orbit/.pat-probe/.dd-ios/Build/Products/Debug-iphonesimulator/PatProbeUITests-Runner.app: replacing existing signature
+
+2026-10-06 10:50:52.980888+0000 PatProbeUITests-Runner[29762:83581] [Default] Running tests...
+2026-10-06 10:50:53.112319+0000 PatProbeUITests-Runner[29762:84084] [General] Failed to send CA Event for app launch measurements for ca_event_type: 0 event_name: com.apple.app_launch_measurement.FirstFramePresentationMetric
+2026-10-06 10:50:53.152484+0000 PatProbeUITests-Runner[29762:84084] [General] Failed to send CA Event for app launch measurements for ca_event_type: 1 event_name: com.apple.app_launch_measurement.ExtendedLaunchMetrics
+objc[29762]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x106d90310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x106e18398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'All tests' started at 2026-10-06 10:51:00.517.
+Test Suite 'PatProbeUITests.xctest' started at 2026-10-06 10:51:00.519.
+Test Suite 'PatShotTests' started at 2026-10-06 10:51:00.519.
+Test Case '-[PatProbeUITests.PatShotTests testIPhoneListsAndRevokes]' started.
+    t =     0.00s Start Test at 2026-10-06 10:51:00.523
+    t =     1.22s Set Up
+    t =     8.54s Open io.orbitd.patprobe
+    t =     8.55s     Launch io.orbitd.patprobe
+2026-10-06 10:51:09.744 xcodebuild[17268:53100] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 10:51:09.744 xcodebuild[17268:53100] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    35.91s         Setting up automation session
+    t =    54.72s         Wait for io.orbitd.patprobe to idle
+    t =    58.52s Checking existence of `Any (First Match)`
+    t =    59.61s Checking existence of `Any (First Match)`
+    t =    60.26s Checking existence of `Any (First Match)`
+    t =    60.94s Checking existence of `Any (First Match)`
+    t =    65.37s Checking existence of `Any (First Match)`
+    t =    66.06s Find the Window (First Match)
+    t =    66.15s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    66.15s     Wait for io.orbitd.patprobe to idle
+    t =    66.16s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    66.21s     Check for interrupting elements affecting Window
+    t =    66.46s     Synthesize event
+    t =    66.46s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    66.51s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    66.54s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    66.57s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    66.59s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    68.21s     Wait for io.orbitd.patprobe to idle
+    t =    69.15s Checking existence of `Any (First Match)`
+    t =    70.02s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    70.04s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    70.04s     Wait for io.orbitd.patprobe to idle
+    t =    70.04s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    70.06s     Check for interrupting elements affecting Window
+    t =    70.20s     Synthesize event
+    t =    70.20s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    70.23s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    70.25s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    70.26s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    70.28s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    71.75s     Wait for io.orbitd.patprobe to idle
+    t =    72.56s Checking existence of `Any (First Match)`
+    t =    73.15s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    73.17s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    73.17s     Wait for io.orbitd.patprobe to idle
+    t =    73.17s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    73.19s     Check for interrupting elements affecting Window
+    t =    73.44s     Synthesize event
+    t =    73.44s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    73.48s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    73.56s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    73.60s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    73.65s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    75.14s     Wait for io.orbitd.patprobe to idle
+    t =    75.95s Checking existence of `Any (First Match)`
+    t =    76.31s Find the Any (First Match)
+    t =    76.65s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    76.68s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    76.68s     Wait for io.orbitd.patprobe to idle
+    t =    76.68s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    76.69s     Check for interrupting elements affecting Window
+    t =    76.81s     Synthesize event
+    t =    76.81s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    76.83s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    76.84s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    76.87s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    76.88s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    78.35s     Wait for io.orbitd.patprobe to idle
+    t =    80.04s Checking existence of `"Access tokens, 3 active" Button`
+    t =    80.39s Find the "Access tokens, 3 active" Button
+    t =    80.70s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    80.73s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Access tokens"'
+    t =    80.87s Find the Button (Element at index 0)
+    t =    82.43s Added attachment named 'ios-1-settings'
+    t =    82.43s Requesting snapshot of accessibility hierarchy for app with pid 32112
+    t =    83.04s Requesting snapshot of accessibility hierarchy for app with pid 32112
+    t =    83.22s Added attachment named 'tree-ios-settings.txt'
+    t =    83.31s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Access tokens"'
+    t =    83.48s Checking existence of `Button (Element at index 0)`
+    t =    83.65s Find the Button (Element at index 0)
+    t =    83.83s Checking existence of `"Access tokens, 3 active" Button`
+    t =    83.98s Find the "Access tokens, 3 active" Button
+    t =    84.17s Tap "Access tokens, 3 active" Button
+    t =    84.17s     Wait for io.orbitd.patprobe to idle
+    t =    84.18s     Find the "Access tokens, 3 active" Button
+    t =    84.32s     Check for interrupting elements affecting "Access tokens, 3 active" Button
+    t =    84.47s     Synthesize event
+    t =    84.81s     Wait for io.orbitd.patprobe to idle
+    t =    85.16s Checking existence of `Any (First Match)`
+    t =    88.44s Added attachment named 'ios-2-access-tokens'
+    t =    88.45s Requesting snapshot of accessibility hierarchy for app with pid 32112
+    t =    89.12s Requesting snapshot of accessibility hierarchy for app with pid 32112
+    t =    89.36s Added attachment named 'tree-ios-list.txt'
+    t =    89.37s Checking existence of `Any (First Match)`
+    t =    89.65s Checking existence of `Any (First Match)`
+    t =    89.94s Checking existence of `Any (First Match)`
+    t =    90.19s Checking existence of `Any (First Match)`
+    t =    90.40s Checking existence of `Any (First Match)`
+    t =    90.59s Checking existence of `Any (First Match)`
+    t =    90.82s Checking existence of `Any (First Match)`
+    t =    91.06s Checking existence of `Any (First Match)`
+    t =    91.28s Checking existence of `Any (First Match)`
+    t =    91.52s Swipe left Any (First Match)
+    t =    91.52s     Wait for io.orbitd.patprobe to idle
+    t =    91.53s     Find the Any (First Match)
+    t =    91.72s     Check for interrupting elements affecting "MacBook Air, orbit_pat_…p0Lx, Read & write · everything, Expires Sep 16, 2027 · in 345 days, Last used 2d 4h ago · 198.51.100.23" StaticText
+    t =    91.86s     Synthesize event
+    t =    92.48s     Wait for io.orbitd.patprobe to idle
+    t =    94.21s Added attachment named 'ios-3-swipe'
+    t =    94.22s Get all elements bound by index for: Elements matching predicate 'label == "Revoke"'
+    t =    94.40s Checking existence of `Button (Element at index 0)`
+    t =    94.51s Find the Button (Element at index 0)
+    t =    94.69s Checking existence of `"Revoke" Button`
+    t =    94.82s Find the "Revoke" Button
+    t =    94.92s Checking existence of `"Revoke" Button`
+    t =    95.02s Tap "Revoke" Button
+    t =    95.02s     Wait for io.orbitd.patprobe to idle
+    t =    95.02s     Find the "Revoke" Button
+    t =    95.12s     Check for interrupting elements affecting "Revoke" Button
+    t =    95.24s     Synthesize event
+    t =    95.55s     Wait for io.orbitd.patprobe to idle
+    t =   101.76s Checking existence of `Any (First Match)`
+    t =   103.09s Added attachment named 'ios-4-confirm'
+    t =   103.09s Requesting snapshot of accessibility hierarchy for app with pid 32112
+    t =   103.79s Requesting snapshot of accessibility hierarchy for app with pid 32112
+    t =   103.95s Added attachment named 'tree-ios-confirm.txt'
+    t =   103.95s Get all elements bound by index for: Elements matching predicate 'label == "Revoke"'
+    t =   104.13s Checking existence of `Button (Element at index 0)`
+    t =   104.32s Find the Button (Element at index 0)
+    t =   104.44s Checking existence of `"Revoke" Button`
+    t =   104.56s Find the "Revoke" Button
+    t =   104.70s Checking existence of `"Revoke" Button`
+    t =   104.81s Find the "Revoke" Button
+    t =   105.01s Checking existence of `"Revoke" Button`
+    t =   105.22s Find the "Revoke" Button
+    t =   105.41s Find the "Revoke" Button
+    t =   105.59s Checking existence of `"Revoke" Button`
+    t =   105.76s Tap "Revoke" Button
+    t =   105.76s     Wait for io.orbitd.patprobe to idle
+    t =   105.77s     Find the "Revoke" Button
+    t =   105.91s     Check for interrupting elements affecting "Revoke" Button
+    t =   106.05s     Synthesize event
+    t =   106.37s     Wait for io.orbitd.patprobe to idle
+    t =   106.79s Checking existence of `Any (First Match)`
+    t =   107.72s Checking existence of `Any (First Match)`
+    t =   108.08s Added attachment named 'ios-5-revoked'
+    t =   110.76s Added attachment named 'ios-6-active-after'
+    t =   110.77s Checking existence of `Any (First Match)`
+    t =   110.95s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Revoked & expired"'
+    t =   111.06s Checking existence of `Button (Element at index 0)`
+    t =   111.15s Find the Button (Element at index 0)
+    t =   111.35s Checking existence of `"Revoked & expired 4" Button`
+    t =   111.45s Find the "Revoked & expired 4" Button
+    t =   111.56s Tap "Revoked & expired 4" Button
+    t =   111.56s     Wait for io.orbitd.patprobe to idle
+    t =   111.57s     Find the "Revoked & expired 4" Button
+    t =   111.67s     Check for interrupting elements affecting "Revoked & expired 4" Button
+    t =   111.78s     Synthesize event
+    t =   112.09s     Wait for io.orbitd.patprobe to idle
+    t =   114.77s Checking existence of `Any (First Match)`
+    t =   115.05s Checking existence of `Any (First Match)`
+    t =   115.25s Checking existence of `Any (First Match)`
+    t =   115.51s Checking existence of `Any (First Match)`
+    t =   116.07s Added attachment named 'ios-7-revoked-and-expired'
+    t =   116.07s Requesting snapshot of accessibility hierarchy for app with pid 32112
+    t =   116.61s Requesting snapshot of accessibility hierarchy for app with pid 32112
+    t =   116.75s Added attachment named 'tree-ios-ended.txt'
+    t =   116.76s Tear Down
+    t =   116.76s     Added attachment named 'PatShotTeststestIPhoneListsAndRevokes-notes.txt'
+Test Case '-[PatProbeUITests.PatShotTests testIPhoneListsAndRevokes]' passed (117.139 seconds).
+Test Suite 'PatShotTests' passed at 2026-10-06 10:52:57.664.
+	 Executed 1 test, with 0 failures (0 unexpected) in 117.139 (117.145) seconds
+Test Suite 'PatProbeUITests.xctest' passed at 2026-10-06 10:52:57.666.
+	 Executed 1 test, with 0 failures (0 unexpected) in 117.139 (117.147) seconds
+Test Suite 'All tests' passed at 2026-10-06 10:52:57.667.
+	 Executed 1 test, with 0 failures (0 unexpected) in 117.139 (117.150) seconds
+2026-10-06 10:53:36.563 xcodebuild[17268:53100] [MT] IDETestOperationsObserverDebug: 207.075 elapsed -- Testing started completed.
+2026-10-06 10:53:36.564 xcodebuild[17268:53100] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-06 10:53:36.564 xcodebuild[17268:53100] [MT] IDETestOperationsObserverDebug: 207.075 sec, +207.075 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.pat-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

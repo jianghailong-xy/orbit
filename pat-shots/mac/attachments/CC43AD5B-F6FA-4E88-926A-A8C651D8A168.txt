@@ -1,0 +1,4 @@
+mac-settings: no window after launch; pressing ⌘N
+mac-settings: 1 window(s)
+mac-section: in view after 2 move(s) at (30.0, 426.0, 329.0, 64.0)
+revoke button at (371.0, 424.0, 79.0, 24.0), laptop row at (30.0, 426.0, 329.0, 64.0)

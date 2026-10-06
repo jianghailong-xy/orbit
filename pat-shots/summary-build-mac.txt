@@ -1,0 +1,6 @@
+Test Case '-[PatMacProbeUITests.PatShotTests testMacListsAndRevokes]' started.
+Test Case '-[PatMacProbeUITests.PatShotTests testMacListsAndRevokes]' passed (39.956 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 39.956 (39.957) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 39.956 (39.957) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 39.956 (39.960) seconds
+** TEST SUCCEEDED **

@@ -1,0 +1,300 @@
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib
+/Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework (in target 'PatMacProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework
+/Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework (in target 'PatMacProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework
+/Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework (in target 'PatMacProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework
+/Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework (in target 'PatMacProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework
+/Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework (in target 'PatMacProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework
+/Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework (in target 'PatMacProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework
+/Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework (in target 'PatMacProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework
+/Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/PlugIns/PatMacProbeUITests.xctest (in target 'PatMacProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Intermediates.noindex/PatProbe.build/Debug/PatMacProbeUITests.build/PatMacProbeUITests.xctest.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/PlugIns/PatMacProbeUITests.xctest
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/PlugIns/PatMacProbeUITests.xctest (in target 'PatMacProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/PlugIns/PatMacProbeUITests.xctest
+
+CodeSign /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app (in target 'PatMacProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Intermediates.noindex/PatProbe.build/Debug/PatMacProbeUITests.build/PatMacProbeUITests.xctest.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app
+/Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app: replacing existing signature
+
+Touch /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/PlugIns/PatMacProbeUITests.xctest (in target 'PatMacProbeUITests' from project 'PatProbe')
+    cd /Users/runner/work/orbit/orbit/.pat-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.pat-probe/.dd-mac/Build/Products/Debug/PatMacProbeUITests-Runner.app/Contents/PlugIns/PatMacProbeUITests.xctest
+
+2026-10-06 10:44:45.002117+0000 PatMacProbeUITests-Runner[14826:46889] [Default] Running tests...
+Test Suite 'All tests' started at 2026-10-06 10:44:46.286.
+Test Suite 'PatMacProbeUITests.xctest' started at 2026-10-06 10:44:46.288.
+Test Suite 'PatShotTests' started at 2026-10-06 10:44:46.288.
+Test Case '-[PatMacProbeUITests.PatShotTests testMacListsAndRevokes]' started.
+    t =     0.00s Start Test at 2026-10-06 10:44:46.289
+    t =     1.59s Set Up
+    t =     2.11s Open io.orbitd.patmacprobe
+    t =     2.11s     Launch io.orbitd.patmacprobe
+2026-10-06 10:44:49.622 xcodebuild[6582:24896] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 10:44:49.622 xcodebuild[6582:24896] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     4.99s         Wait for accessibility to load
+    t =     5.11s         Setting up automation session
+    t =     5.25s         Wait for io.orbitd.patmacprobe to idle
+    t =     5.64s Get number of matches for: Descendants matching type Window
+    t =     6.43s Get number of matches for: Descendants matching type Window
+    t =     6.95s Get number of matches for: Descendants matching type Window
+    t =     7.48s Get number of matches for: Descendants matching type Window
+    t =     8.00s Get number of matches for: Descendants matching type Window
+    t =     8.53s Get number of matches for: Descendants matching type Window
+    t =     9.07s Get number of matches for: Descendants matching type Window
+    t =     9.59s Get number of matches for: Descendants matching type Window
+    t =    10.12s Get number of matches for: Descendants matching type Window
+    t =    10.65s Get number of matches for: Descendants matching type Window
+    t =    11.17s Get number of matches for: Descendants matching type Window
+    t =    11.70s Get number of matches for: Descendants matching type Window
+    t =    12.22s Get number of matches for: Descendants matching type Window
+    t =    12.75s Get number of matches for: Descendants matching type Window
+    t =    13.28s Get number of matches for: Descendants matching type Window
+    t =    13.81s Get number of matches for: Descendants matching type Window
+    t =    14.33s Get number of matches for: Descendants matching type Window
+    t =    14.86s Get number of matches for: Descendants matching type Window
+    t =    15.39s Get number of matches for: Descendants matching type Window
+    t =    15.92s Get number of matches for: Descendants matching type Window
+    t =    16.44s Get number of matches for: Descendants matching type Window
+    t =    16.96s Get number of matches for: Descendants matching type Window
+    t =    17.48s Get number of matches for: Descendants matching type Window
+    t =    18.01s Get number of matches for: Descendants matching type Window
+    t =    18.53s Get number of matches for: Descendants matching type Window
+    t =    19.06s Get number of matches for: Descendants matching type Window
+    t =    19.58s Get number of matches for: Descendants matching type Window
+    t =    20.10s Get number of matches for: Descendants matching type Window
+    t =    20.62s Get number of matches for: Descendants matching type Window
+    t =    21.15s Requesting snapshot of accessibility hierarchy for app with pid 14849
+    t =    21.19s Requesting snapshot of accessibility hierarchy for app with pid 14849
+    t =    21.23s Added attachment named 'no-window-mac-settings.txt'
+    t =    21.24s Type 'n' key with modifiers '⌘' (0x10)
+    t =    21.24s     Wait for io.orbitd.patmacprobe to idle
+    t =    21.24s     Find the Target Application 'io.orbitd.patmacprobe'
+    t =    21.26s     Check for interrupting elements affecting "PatMacProbe" Application
+    t =    21.26s     Synthesize event
+    t =    22.84s     Wait for io.orbitd.patmacprobe to idle
+    t =    22.85s Get number of matches for: Descendants matching type Window
+    t =    23.04s Get number of matches for: Descendants matching type Window
+    t =    23.10s Checking existence of `Any (First Match)`
+    t =    23.12s Checking existence of `Any (First Match)`
+    t =    25.14s Checking existence of `Any (First Match)`
+    t =    25.25s Checking existence of `StaticText (First Match)`
+    t =    25.29s Checking existence of `StaticText (First Match)`
+    t =    25.32s Find the StaticText (First Match)
+    t =    25.35s Find the Window (First Match)
+    t =    25.36s Hover over "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<PatMacProbe.SettingsView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.UpdaterModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window[0.50, 0.50]
+    t =    25.36s     Wait for io.orbitd.patmacprobe to idle
+    t =    25.36s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<PatMacProbe.SettingsView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.UpdaterModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    25.37s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<PatMacProbe.SettingsView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.UpdaterModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    25.42s     Synthesize event
+    t =    25.42s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<PatMacProbe.SettingsView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.UpdaterModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    25.43s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<PatMacProbe.SettingsView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.UpdaterModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    25.54s     Wait for io.orbitd.patmacprobe to idle
+    t =    25.55s Scroll "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<PatMacProbe.SettingsView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.UpdaterModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window by dx: 0.00, dy: -900.00
+    t =    25.55s     Wait for io.orbitd.patmacprobe to idle
+    t =    25.55s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<PatMacProbe.SettingsView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.UpdaterModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    25.55s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<PatMacProbe.SettingsView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.UpdaterModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    25.57s     Synthesize event
+    t =    25.96s     Wait for io.orbitd.patmacprobe to idle
+    t =    26.78s Checking existence of `"MacBook Air, orbit_pat_…p0Lx, Read & write · everything, Expires Sep 16, 2027 · in 345 days, Last used 2d 4h ago · 198.51.100.23" StaticText`
+    t =    26.82s Find the "MacBook Air, orbit_pat_…p0Lx, Read & write · everything, Expires Sep 16, 2027 · in 345 days, Last used 2d 4h ago · 198.51.100.23" StaticText
+    t =    26.86s Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<PatMacProbe.SettingsView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.UpdaterModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    26.87s Hover over "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<PatMacProbe.SettingsView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.UpdaterModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window[0.50, 0.50]
+    t =    26.87s     Wait for io.orbitd.patmacprobe to idle
+    t =    26.88s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<PatMacProbe.SettingsView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.UpdaterModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    26.88s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<PatMacProbe.SettingsView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.UpdaterModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    26.89s     Synthesize event
+    t =    26.90s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<PatMacProbe.SettingsView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.UpdaterModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    26.91s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<PatMacProbe.SettingsView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.UpdaterModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    27.02s     Wait for io.orbitd.patmacprobe to idle
+    t =    27.03s Scroll "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<PatMacProbe.SettingsView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.UpdaterModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window by dx: 0.00, dy: -900.00
+    t =    27.03s     Wait for io.orbitd.patmacprobe to idle
+    t =    27.03s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<PatMacProbe.SettingsView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.UpdaterModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    27.04s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<PatMacProbe.SettingsView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.UpdaterModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    27.05s     Synthesize event
+    t =    27.44s     Wait for io.orbitd.patmacprobe to idle
+    t =    28.26s Checking existence of `"MacBook Air, orbit_pat_…p0Lx, Read & write · everything, Expires Sep 16, 2027 · in 345 days, Last used 2d 4h ago · 198.51.100.23" StaticText`
+    t =    28.30s Find the "MacBook Air, orbit_pat_…p0Lx, Read & write · everything, Expires Sep 16, 2027 · in 345 days, Last used 2d 4h ago · 198.51.100.23" StaticText
+    t =    28.34s Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<PatMacProbe.SettingsView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<PatMacProbe.UpdaterModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    28.35s Checking existence of `"MacBook Air, orbit_pat_…p0Lx, Read & write · everything, Expires Sep 16, 2027 · in 345 days, Last used 2d 4h ago · 198.51.100.23" StaticText`
+    t =    29.38s Checking existence of `Window (First Match)`
+    t =    29.38s Checking existence of `Window (First Match)`
+    t =    29.39s Find the Window (First Match)
+    t =    29.58s Added attachment named 'mac-1-access-tokens'
+    t =    29.58s Requesting snapshot of accessibility hierarchy for app with pid 14849
+    t =    29.71s Requesting snapshot of accessibility hierarchy for app with pid 14849
+    t =    29.81s Added attachment named 'tree-mac-list.txt'
+    t =    29.81s Checking existence of `Any (First Match)`
+    t =    29.94s Checking existence of `StaticText (First Match)`
+    t =    30.02s Checking existence of `StaticText (First Match)`
+    t =    30.07s Checking existence of `Any (First Match)`
+    t =    30.12s Checking existence of `StaticText (First Match)`
+    t =    30.16s Checking existence of `StaticText (First Match)`
+    t =    30.19s Checking existence of `Any (First Match)`
+    t =    30.26s Checking existence of `StaticText (First Match)`
+    t =    30.30s Checking existence of `StaticText (First Match)`
+    t =    30.34s Checking existence of `Any (First Match)`
+    t =    30.42s Checking existence of `StaticText (First Match)`
+    t =    30.46s Checking existence of `StaticText (First Match)`
+    t =    30.51s Checking existence of `Any (First Match)`
+    t =    30.57s Checking existence of `StaticText (First Match)`
+    t =    30.60s Checking existence of `StaticText (First Match)`
+    t =    30.64s Checking existence of `Any (First Match)`
+    t =    30.70s Checking existence of `StaticText (First Match)`
+    t =    30.73s Checking existence of `StaticText (First Match)`
+    t =    30.77s Find the "MacBook Air, orbit_pat_…p0Lx, Read & write · everything, Expires Sep 16, 2027 · in 345 days, Last used 2d 4h ago · 198.51.100.23" StaticText
+    t =    30.81s Get all elements bound by index for: Elements matching predicate 'label == "Revoke…"'
+    t =    30.86s Checking existence of `Button (Element at index 0)`
+    t =    30.93s Find the Button (Element at index 0)
+    t =    31.00s Checking existence of `Button (Element at index 1)`
+    t =    31.05s Find the Button (Element at index 1)
+    t =    31.12s Checking existence of `Button (Element at index 2)`
+    t =    31.17s Find the Button (Element at index 2)
+    t =    31.28s Checking existence of `"Revoke…" Button`
+    t =    31.34s Find the "Revoke…" Button
+    t =    31.40s Checking existence of `"Revoke…" Button`
+    t =    31.47s Find the "Revoke…" Button
+    t =    31.57s Checking existence of `"Revoke…" Button`
+    t =    31.62s Find the "Revoke…" Button
+    t =    31.71s Find the "Revoke…" Button
+    t =    31.79s Find the "Revoke…" Button
+    t =    31.87s Find the "Revoke…" Button
+    t =    31.93s Find the "Revoke…" Button
+    t =    31.98s Find the "Revoke…" Button
+    t =    32.04s Find the "MacBook Air, orbit_pat_…p0Lx, Read & write · everything, Expires Sep 16, 2027 · in 345 days, Last used 2d 4h ago · 198.51.100.23" StaticText
+    t =    32.08s Click "Revoke…" Button
+    t =    32.08s     Wait for io.orbitd.patmacprobe to idle
+    t =    32.09s     Find the "Revoke…" Button
+    t =    32.15s     Check for interrupting elements affecting "Revoke…" Button
+    t =    32.17s     Synthesize event
+    t =    32.64s     Wait for io.orbitd.patmacprobe to idle
+    t =    32.68s Checking existence of `Any (First Match)`
+    t =    32.76s Checking existence of `StaticText (First Match)`
+    t =    32.87s Checking existence of `StaticText (First Match)`
+    t =    33.96s Added attachment named 'mac-2-confirm'
+    t =    33.97s Requesting snapshot of accessibility hierarchy for app with pid 14849
+    t =    34.09s Requesting snapshot of accessibility hierarchy for app with pid 14849
+    t =    34.18s Added attachment named 'tree-mac-confirm.txt'
+    t =    34.18s Checking existence of `"Revoke" Button`
+    t =    34.25s Click "Revoke" Button
+    t =    34.25s     Wait for io.orbitd.patmacprobe to idle
+    t =    34.25s     Find the "Revoke" Button
+    t =    34.32s     Check for interrupting elements affecting "action-button-1" Button
+    t =    34.34s     Synthesize event
+    t =    34.81s     Wait for io.orbitd.patmacprobe to idle
+    t =    34.81s Checking existence of `Any (First Match)`
+    t =    34.89s Checking existence of `StaticText (First Match)`
+    t =    34.94s Checking existence of `Any (First Match)`
+    t =    35.54s Checking existence of `Any (First Match)`
+    t =    35.62s Checking existence of `StaticText (First Match)`
+    t =    35.67s Checking existence of `StaticText (First Match)`
+    t =    36.73s Checking existence of `Window (First Match)`
+    t =    36.74s Checking existence of `Window (First Match)`
+    t =    36.74s Find the Window (First Match)
+    t =    36.77s Added attachment named 'mac-3-revoked'
+    t =    36.77s Checking existence of `Any (First Match)`
+    t =    36.86s Checking existence of `Any (First Match)`
+    t =    36.91s Checking existence of `RadioButton (First Match)`
+    t =    36.95s Click RadioButton (First Match)
+    t =    36.95s     Wait for io.orbitd.patmacprobe to idle
+    t =    36.95s     Find the RadioButton (First Match)
+    t =    37.01s     Check for interrupting elements affecting "Revoked & expired 4" RadioButton
+    t =    37.02s     Synthesize event
+    t =    37.41s     Wait for io.orbitd.patmacprobe to idle
+    t =    38.92s Checking existence of `Any (First Match)`
+    t =    38.98s Checking existence of `StaticText (First Match)`
+    t =    39.01s Checking existence of `StaticText (First Match)`
+    t =    39.04s Checking existence of `Any (First Match)`
+    t =    39.08s Checking existence of `StaticText (First Match)`
+    t =    39.13s Checking existence of `StaticText (First Match)`
+    t =    39.17s Checking existence of `Any (First Match)`
+    t =    39.22s Checking existence of `StaticText (First Match)`
+    t =    39.26s Checking existence of `StaticText (First Match)`
+    t =    39.34s Checking existence of `Any (First Match)`
+    t =    39.41s Checking existence of `StaticText (First Match)`
+    t =    39.46s Checking existence of `StaticText (First Match)`
+    t =    39.50s Checking existence of `Window (First Match)`
+    t =    39.50s Checking existence of `Window (First Match)`
+    t =    39.51s Find the Window (First Match)
+    t =    39.53s Added attachment named 'mac-4-revoked-and-expired'
+    t =    39.53s Requesting snapshot of accessibility hierarchy for app with pid 14849
+    t =    39.61s Requesting snapshot of accessibility hierarchy for app with pid 14849
+    t =    39.67s Added attachment named 'tree-mac-ended.txt'
+    t =    39.67s Tear Down
+    t =    39.67s     Added attachment named 'PatShotTeststestMacListsAndRevokes-notes.txt'
+Test Case '-[PatMacProbeUITests.PatShotTests testMacListsAndRevokes]' passed (39.956 seconds).
+Test Suite 'PatShotTests' passed at 2026-10-06 10:45:26.245.
+	 Executed 1 test, with 0 failures (0 unexpected) in 39.956 (39.957) seconds
+Test Suite 'PatMacProbeUITests.xctest' passed at 2026-10-06 10:45:26.245.
+	 Executed 1 test, with 0 failures (0 unexpected) in 39.956 (39.957) seconds
+Test Suite 'All tests' passed at 2026-10-06 10:45:26.246.
+	 Executed 1 test, with 0 failures (0 unexpected) in 39.956 (39.960) seconds
+2026-10-06 10:45:26.890 xcodebuild[6582:24896] [MT] IDETestOperationsObserverDebug: 46.790 elapsed -- Testing started completed.
+2026-10-06 10:45:26.890 xcodebuild[6582:24896] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-06 10:45:26.890 xcodebuild[6582:24896] [MT] IDETestOperationsObserverDebug: 46.790 sec, +46.790 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.pat-probe/results/mac.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started
