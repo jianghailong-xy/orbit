@@ -76,6 +76,9 @@ final class AppModel {
     var selectedSection: AppSection {
         get { nav.section }
         set {
+            // Coming into the Wiki from another section, it opens the space bound to the workspace the
+            // reader was in (wiki design §12.3.4) — read off the stack being left, before the switch.
+            if newValue == .wiki && nav.section != .wiki { wiki?.open(fromWorkspace: workspaceInView) }
             nav.section = newValue
             // Switching sections tears down the other sections' *views* (the compact shell renders
             // one at a time), but not their navigation: each section keeps its own stack, so coming
@@ -1804,6 +1807,31 @@ final class AppModel {
     /// The drawer row the screen belongs to (`NavState.drawerDestination`): the row drawn as
     /// selected, and the one whose tap only closes the drawer.
     var drawerDestination: DrawerDestination { nav.drawerDestination(agentID: selectedAgentID) }
+
+    /// The workspace the reader is in, for the space the Wiki opens when they come into it (wiki design
+    /// §12.3.4): the one whose session list is showing, a project's coordinator workspace on its pages, and
+    /// none on the Projects or Tasks list.
+    private var workspaceInView: String? {
+        WikiSpaceLogic.workspaceInView(nav, agentID: selectedAgentID,
+                                       coordinatorWorkspace: { self.coordinatorWorkspaceID(ofProject: $0) })
+    }
+
+    /// The workspace a project's coordinator runs in, for the space the Wiki opens from its pages: what its
+    /// page's read says, else the workspace of the coordinator's conversation among the sessions held.
+    private func coordinatorWorkspaceID(ofProject projectID: String) -> String? {
+        if let id = projects?.detail(projectID).document?.coordinatorWorkspaceId { return id }
+        let key = PublicID.storageKey(projectID)
+        #if os(iOS)
+        let held = sessions + (agents?.allSessions ?? [])
+        #else
+        let held = sessions
+        #endif
+        let coordinator = held.first {
+            $0.projectMembership?.role == .coordinator
+                && $0.projectMembership.map { PublicID.storageKey($0.projectId) } == key
+        }
+        return coordinator.flatMap { $0.agent?.id ?? $0.agentId }
+    }
 
     /// iOS compact: the page on top is its drawer destination's own — a section's list, or a
     /// project's sessions page put up as the project's own rather than pushed by a list row — so the

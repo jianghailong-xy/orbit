@@ -245,7 +245,7 @@ final class ProjectsWiringTests: XCTestCase {
         let page = try slice(view, from: "private func page(", to: ".projectPageListStyle()")
         let order = ["openItemsAttention(", "overviewSection(", "coordinatorSection(", "runSettingsSection(",
                      "goalSection(", "graphSection(", "blockersSection(", "runQueueSection(", "criteriaSection(",
-                     "instructionsSection(", "tasksSection("]
+                     "instructionsSection(", "tasksSection(", "crossingsSection("]
         let positions = order.map { page.range(of: $0)?.lowerBound }
         XCTAssertFalse(positions.contains(nil), "the page lost one of \(order)")
         XCTAssertEqual(positions.compactMap { $0 }, positions.compactMap { $0 }.sorted(),
