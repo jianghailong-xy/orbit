@@ -46,6 +46,44 @@ export function sessionProjectMembershipSql(sessionAlias: string): Prisma.Sql {
   )`;
 }
 
+/** Every session that can be a member of `projectId`, read from that project's own rows through their
+ *  indexes: its coordinator, the sessions executing or about its tasks, its open judgment sessions, and
+ *  every session whose root is one of those. A superset — precedence can still put one of them in
+ *  another project, or keep a child with its own membership out — so it is only ever narrowed by
+ *  sessionProjectMembershipSql. Each source of directProjectMembershipSql needs a branch here. */
+function projectMembershipCandidatesSql(projectId: string): Prisma.Sql {
+  return Prisma.sql`
+    WITH project_task(id) AS (
+      SELECT t.id FROM task t WHERE t.project_id = ${projectId}::uuid
+    ), direct(id) AS (
+      SELECT p.coordinator_session_id FROM project p
+        WHERE p.id = ${projectId}::uuid AND p.coordinator_session_id IS NOT NULL
+      UNION ALL
+      SELECT ts.id FROM session ts WHERE ts.task_id = ANY(ARRAY(SELECT id FROM project_task))
+      UNION ALL
+      SELECT cs.id FROM session cs WHERE cs.context_task_id = ANY(ARRAY(SELECT id FROM project_task))
+      UNION ALL
+      SELECT w.session_id FROM project_coordinator_wake w
+        WHERE w.project_id = ${projectId}::uuid AND w.status = 'SESSION_OPENED' AND w.session_id IS NOT NULL
+    )
+    SELECT id FROM direct
+    UNION
+    SELECT child.id FROM session child WHERE child.root_session_id = ANY(ARRAY(SELECT id FROM direct))`;
+}
+
+/** `(sessionProjectMembershipSql(alias) ->> 'projectId')::uuid = projectId`, with the same answer for
+ *  every session, but membership is computed only for the candidates above: as a filter, the bare
+ *  comparison runs the membership subqueries for every row the rest of the WHERE leaves. Each set is
+ *  matched with `= ANY` of an array, which stays an index lookup however its size is misestimated;
+ *  `IN` lets a misestimate turn it into a scan of the whole table. */
+export function sessionInProjectSql(sessionAlias: string, projectId: string): Prisma.Sql {
+  const s = Prisma.raw(sessionAlias);
+  return Prisma.sql`(
+    ${s}.id = ANY(ARRAY(${projectMembershipCandidatesSql(projectId)}))
+    AND (${sessionProjectMembershipSql(sessionAlias)} ->> 'projectId')::uuid = ${projectId}::uuid
+  )`;
+}
+
 export async function readSessionProjectMembership(
   prisma: Pick<PrismaService, '$queryRaw'>,
   sessionId: string,
