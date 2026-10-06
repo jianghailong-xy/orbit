@@ -140,6 +140,8 @@ export interface TenantRequest {
   /** Every path parameter of the route. */
   params: Record<string, string | number>;
   query?: Record<string, string>;
+  /** Headers that carry ids — the session-context ones (common/public-id-headers.ts) — beside the credential's. */
+  headers?: Record<string, string>;
   body?: unknown;
   /** Sent as the one file of a multipart/form-data body, instead of a JSON one. */
   file?: { name: string; type: string; content: string };

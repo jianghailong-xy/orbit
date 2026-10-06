@@ -42,9 +42,16 @@ async function freePort(): Promise<number> {
 
 /**
  * One request on a connection of its own. A 200 from a stream is answered as soon as its headers
- * arrive, and the stream is closed.
+ * arrive, and the stream is closed. `headers` go out beside the bearer's.
  */
-export function call(server: Apiserver, method: string, route: string, bearer?: string, body?: unknown): Promise<Reply> {
+export function call(
+  server: Apiserver,
+  method: string,
+  route: string,
+  bearer?: string,
+  body?: unknown,
+  headers: Record<string, string> = {},
+): Promise<Reply> {
   return new Promise((resolve, reject) => {
     const payload = body === undefined ? undefined : JSON.stringify(body);
     const req = http.request(
@@ -55,6 +62,7 @@ export function call(server: Apiserver, method: string, route: string, bearer?: 
         method,
         agent: false,
         headers: {
+          ...headers,
           ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
           ...(payload ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) } : {}),
         },
