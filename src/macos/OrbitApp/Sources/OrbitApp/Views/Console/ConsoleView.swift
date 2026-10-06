@@ -462,7 +462,7 @@ struct ConsoleView: View {
         .accessibilityLabel("Session actions")
         // Raised by this menu, so it hangs off the menu rather than off the page: the panel opens
         // against the ⋯ that was pressed.
-        .confirmationDialog("Delete permanently?", isPresented: $confirmPurge, titleVisibility: .visible) {
+        .orbitConfirmation("Delete permanently?", isPresented: $confirmPurge) {
             Button("Delete Permanently", role: .destructive) { appModel.purgeSession(sessionID) }
             Button("Cancel", role: .cancel) {}
         } message: {

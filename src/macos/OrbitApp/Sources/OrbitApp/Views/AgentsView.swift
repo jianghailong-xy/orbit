@@ -1923,8 +1923,7 @@ struct AgentFormContent: View {
                     // rather than at the top of the form. The server soft-deletes (its sessions are
                     // kept and stay linked); close the sheet afterward since the agent is gone from
                     // here.
-                    .confirmationDialog("Delete \(agent.name)?", isPresented: $confirmingDelete,
-                                        titleVisibility: .visible) {
+                    .orbitConfirmation("Delete \(agent.name)?", isPresented: $confirmingDelete) {
                         Button("Delete agent", role: .destructive) {
                             dismiss()
                             Task { await agents.delete(agent.id) }

@@ -68,9 +68,10 @@ struct TasksListView: View {
                     tasks.applyLabels($0)
                 }
             }
-            .confirmationDialog(batchTitle(batchConfirm), isPresented: batchPresented,
-                                titleVisibility: .visible, presenting: batchConfirm) { action in
+            .orbitConfirmation({ batchTitle($0) },
+                               isPresented: batchPresented, presenting: batchConfirm) { action in
                 batchButtons(action, tasks: tasks)
+                Button("Cancel", role: .cancel) {}
             } message: { action in
                 Text(batchMessage(action))
             }
@@ -544,8 +545,7 @@ struct TasksListView: View {
             .contextMenu { rowMenu(tasks, task) }
             // On the row that asks — the swipe and the long-press menu both raise it — so the panel
             // opens against the row rather than at the top of the page.
-            .confirmationDialog("Delete this task?", isPresented: deletePresented,
-                                titleVisibility: .visible) {
+            .orbitConfirmation("Delete this task?", isPresented: deletePresented) {
                 if let task = taskToDelete {
                     Button("Delete \(task.title)", role: .destructive) {
                         let id = task.id
@@ -1206,8 +1206,7 @@ private struct TaskDetailContent: View {
                     .accessibilityLabel("Task actions")
                     // Raised by this menu, so it hangs off the ⋯ that was pressed rather than off the
                     // page.
-                    .confirmationDialog("Delete this task?", isPresented: $confirmingDelete,
-                                        titleVisibility: .visible) {
+                    .orbitConfirmation("Delete this task?", isPresented: $confirmingDelete) {
                         Button("Delete task", role: .destructive) {
                             Task {
                                 if await tasks.deleteTask(taskID), model.selectedTaskID == taskID {
@@ -1557,8 +1556,7 @@ private struct TaskDetailContent: View {
             // the work has stopped, and asked once, on the button that asks. Answered with
             // `TaskReopen.modalOK` rather than the question's words: the press has already been made
             // once.
-            .confirmationDialog(TaskReopenCopy.modalTitle, isPresented: $confirmingReopen,
-                                titleVisibility: .visible) {
+            .orbitConfirmation(TaskReopenCopy.modalTitle, isPresented: $confirmingReopen) {
                 Button(TaskReopenCopy.modalOK) {
                     Task { _ = await tasks.reopen(taskID) }
                 }
@@ -1967,10 +1965,10 @@ private struct TaskDetailContent: View {
                 .disabled(tasks.isMutating(taskID))
                 // On the row's own button, so the panel opens against it rather than at the top of
                 // the page.
-                .confirmationDialog(TaskDetailCopy.removePrerequisiteTitle,
+                .orbitConfirmation({ _ in TaskDetailCopy.removePrerequisiteTitle },
                                     isPresented: Binding(get: { prerequisiteToRemove != nil },
                                                          set: { if !$0 { prerequisiteToRemove = nil } }),
-                                    titleVisibility: .visible, presenting: prerequisiteToRemove) { row in
+                                    presenting: prerequisiteToRemove) { row in
                     Button(TaskDetailCopy.remove, role: .destructive) {
                         Task { await tasks.removeDependency(taskID, dependsOn: row.id) }
                     }
@@ -2060,10 +2058,10 @@ private struct TaskDetailContent: View {
                     .disabled(tasks.isMutating(task.id))
                     // On the row's own button, so the panel opens against it rather than at the top
                     // of the page.
-                    .confirmationDialog(TaskDetailCopy.removeInputTitle,
+                    .orbitConfirmation({ _ in TaskDetailCopy.removeInputTitle },
                                         isPresented: Binding(get: { inputToRemove != nil },
                                                              set: { if !$0 { inputToRemove = nil } }),
-                                        titleVisibility: .visible, presenting: inputToRemove) { input in
+                                        presenting: inputToRemove) { input in
                         Button(TaskDetailCopy.remove, role: .destructive) {
                             Task { await tasks.removeInput(taskID, inputID: input.id) }
                         }

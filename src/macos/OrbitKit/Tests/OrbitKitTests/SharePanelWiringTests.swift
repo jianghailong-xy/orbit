@@ -118,7 +118,7 @@ final class SharePanelWiringTests: XCTestCase {
         let sheet = code(try appSource("Views/ShareSheet.swift"))
         for part in ["struct ShareSheet: View", "private var accessSection: some View",
                      "private func linkSection(_ url: URL) -> some View", "private var includesSection: some View",
-                     "private var updatesSection: some View", ".confirmationDialog(SharePanelCopy.turnOffTitle",
+                     "private var updatesSection: some View", ".orbitConfirmation(SharePanelCopy.turnOffTitle",
                      "api.shareLink(kind, rootID)", "api.putShareLink(kind, rootID, request)",
                      "api.turnOffShareLink(kind, rootID)"] {
             XCTAssertEqual(try branches(of: part, in: sheet), [], "`\(part)` is on both platforms")
@@ -177,7 +177,7 @@ final class SharePanelWiringTests: XCTestCase {
                       "choosing Only you asks; it does not turn the link off")
         XCTAssertFalse(choose.contains("turnOff()"))
         XCTAssertEqual(sheet.components(separatedBy: "await turnOff()").count - 1, 1, "one way to turn it off")
-        let question = try slice(sheet, from: ".confirmationDialog(SharePanelCopy.turnOffTitle",
+        let question = try slice(sheet, from: ".orbitConfirmation(SharePanelCopy.turnOffTitle",
                                  to: "Text(SharePanelCopy.turnOffDetail)")
         XCTAssertTrue(question.contains("Button(SharePanelCopy.turnOff, role: .destructive) { Task { await turnOff() } }"),
                       "and that way is the question's yes")
@@ -192,7 +192,7 @@ final class SharePanelWiringTests: XCTestCase {
     func testThePanelSaysNoWordsOfItsOwn() throws {
         let sheet = code(try appSource("Views/ShareSheet.swift"))
         for literal in ["Text(\"", "Button(\"", "Label(\"", "Picker(\"", "Toggle(\"", ".navigationTitle(\"",
-                        ".confirmationDialog(\""] {
+                        ".orbitConfirmation(\"", ".confirmationDialog(\""] {
             XCTAssertFalse(sheet.contains(literal), "ShareSheet spells a word itself: \(literal)…")
         }
     }

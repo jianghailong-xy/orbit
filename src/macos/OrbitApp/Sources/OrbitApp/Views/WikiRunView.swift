@@ -152,15 +152,16 @@ struct WikiRunPage: View {
         }
         // On the entry's own row, whose swipe raises it, so the panel opens against the row rather
         // than at the top of the page.
-        .confirmationDialog(WikiModeCopy.rejectOnRecord,
-                            isPresented: Binding(get: { rejecting != nil }, set: { if !$0 { rejecting = nil } }),
-                            titleVisibility: .visible) {
+        .orbitConfirmation(WikiModeCopy.rejectOnRecord,
+                           isPresented: Binding(get: { rejecting != nil }, set: { if !$0 { rejecting = nil } })) {
             ForEach(WikiRejectReason.allCases, id: \.self) { reason in
                 Button(WikiCopy.rejectReasonLabel(reason)) {
                     if let id = rejecting?.entryId { actions.reject(id, reason) }
                     rejecting = nil
                 }
             }
+            // The reasons are the question; this is the way out of it.
+            Button(WikiModeCopy.cancel, role: .cancel) {}
         }
     }
 }
