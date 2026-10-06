@@ -180,6 +180,15 @@ export function decideProjectScopeWrite(request: ScopeWriteRequest): ScopeWriteO
   // R6. Not a crossing, and not at home either: a plain write into somebody else's project. This is
   // the incident, in one line.
   if (!crossing && to !== scope.projectId) return refuse('R6_OUT_OF_SCOPE');
+  // ...and its declared twin: a crossing that holds neither of its ends. A move may be asked for
+  // from the project the task leaves or the one it would enter (account owner, 2026-10-06), never
+  // by a bystander between two goals that are both somebody else's. Undeclared, the same write is
+  // R7's, which refuses it with the same code; new work always leaves the scope that authored it,
+  // so only a move can reach this.
+  if (crossing && request.operation === 'HANDOFF_TASK'
+    && from !== scope.projectId && to !== scope.projectId) {
+    return refuse('R6_OUT_OF_SCOPE');
+  }
   // R7. A crossing that did not say it was crossing. The difference between this and a legal
   // request is entirely that the writer declared it — which is why `HANDOFF_TASK` is an operation
   // rather than an inference: an inferred crossing would let the rule be satisfied by accident.
