@@ -85,7 +85,7 @@ final class WikiWiringTests: XCTestCase {
                             "} catch APIError.http(let status, _) where status == 404 {"], "an entry's read")
 
         let screens = code(try source("Views/WikiScreens.swift"))
-        let placeholder = try slice(screens, from: "private struct WikiHomePlaceholder: View {",
+        let placeholder = try slice(screens, from: "struct WikiHomePlaceholder: View {",
                                     to: "struct WikiDetailPane: View {")
         assertOrder(placeholder, ["if wiki.disabled {", "WikiDisabledNote()", "} else if wiki.homeState.lastLoadFailed {"],
                     "the home's placeholder")
@@ -125,8 +125,9 @@ final class WikiWiringTests: XCTestCase {
         XCTAssertTrue(principles.contains("empty(WikiCopy.noPrinciples)"), "an empty band speaks for the principles alone")
     }
 
-    /// The amber number is written the way the Projects row writes its own — the same font, colour and
-    /// guard — and counts what the web sidebar counts. It is said as "3 proposals to review".
+    /// The amber number is written and said the way the Projects row writes and says its own — the same
+    /// font, colour and guard, and "3 waiting on you" — and counts what the web sidebar counts: what waits
+    /// on the owner across every space (`WikiSpaceLogic.waiting`).
     func testTheWikiRowsAmberNumberIsWrittenLikeTheProjectsRows() throws {
         let shell = code(try source("Views/CompactShell.swift"))
         let projects = try slice(shell, from: "private var projectsRow: some View {", to: ".drawerRow()")
@@ -137,8 +138,11 @@ final class WikiWiringTests: XCTestCase {
             XCTAssertTrue(projects.contains(shared), "the Projects row no longer writes \(shared)")
             XCTAssertTrue(wiki.contains(shared), "the Wiki row doesn't write \(shared) as the Projects row does")
         }
-        XCTAssertTrue(wiki.contains("let waiting = model.wiki?.proposalsToReview ?? 0"))
-        XCTAssertTrue(wiki.contains(".accessibilityLabel(WikiCopy.proposalsToReview(waiting))"))
+        XCTAssertTrue(wiki.contains("let waiting = model.wiki?.waiting ?? 0"))
+        XCTAssertTrue(wiki.contains(".accessibilityLabel(WikiCopy.waitingOnYou(waiting))"))
+        XCTAssertTrue(projects.contains(".accessibilityLabel(\"\\(waiting) waiting on you\")"),
+                      "the Projects row says its own number in the words the Wiki row's are")
+        XCTAssertEqual(WikiCopy.waitingOnYou(3), "3 waiting on you")
         XCTAssertTrue(wiki.contains("Image(systemName: AppSection.wiki.systemImage)"))
         XCTAssertTrue(wiki.contains("Text(AppSection.wiki.title)"))
         // A press is the Projects row's own: the section's destination (its root, unless it is the
@@ -146,7 +150,8 @@ final class WikiWiringTests: XCTestCase {
         XCTAssertTrue(projects.contains("open(.section(.projects))"))
         XCTAssertTrue(wiki.contains("open(.section(.wiki))"), "the row's press")
         let model = code(try source("WikiModel.swift"))
-        XCTAssertTrue(model.contains("var proposalsToReview: Int { WikiLogic.proposalsToReview(spaces) }"))
+        XCTAssertTrue(model.contains("var waiting: Int { WikiSpaceLogic.waiting(spaces) }"))
+        XCTAssertFalse(model.contains("proposalsToReview"), "the drawer no longer counts the proposals alone")
     }
 
     // MARK: the section
@@ -160,6 +165,7 @@ final class WikiWiringTests: XCTestCase {
         XCTAssertTrue(stack.contains(".drawerToggle(open: openDrawer)"))
         XCTAssertTrue(stack.contains("case .wikiEntry(let entryID): WikiEntryView(entryID: entryID)"))
         XCTAssertTrue(stack.contains("case .wikiReview:             WikiReviewView()"))
+        XCTAssertTrue(stack.contains("case .wikiActivity:           WikiActivityView()"))
         // An `orbit-wiki:` link in a phone's conversation pushes the entry over it.
         let agents = try slice(shell, from: "case .console(let sessionID, _):", to: "default:                         EmptyView()")
         XCTAssertTrue(agents.contains("case .wikiEntry(let entryID):       WikiEntryView(entryID: entryID)"))
@@ -175,7 +181,7 @@ final class WikiWiringTests: XCTestCase {
         let pane = code(try slice(try source("Views/WikiScreens.swift"),
                                   from: "struct WikiDetailPane: View {", to: "// MARK: - one entry"))
         assertOrder(pane, ["model.selectedWikiEntryID", "WikiEntryView(entryID: id)", "model.nav.wikiReviewOnTop",
-                           "WikiReviewView()"], "the detail pane")
+                           "WikiReviewView()", "model.nav.wikiActivityOnTop", "WikiActivityView()"], "the detail pane")
         let app = code(try source("AppModel.swift"))
         let projection = try slice(app, from: "var selectedWikiEntryID: String? {", to: "var taskListsDirectoryPresented")
         XCTAssertTrue(projection.contains("get { nav.selectedWikiEntryID }"), "a read of the stack, not a copy")
@@ -204,13 +210,138 @@ final class WikiWiringTests: XCTestCase {
         let picker = try slice(page, from: "private var spacePicker: some View {",
                                to: "private func band(_ band: WikiLogic.HomeBand) -> some View {")
         XCTAssertTrue(picker.contains("Image(systemName: \"chevron.up.chevron.down\")"))
-        XCTAssertTrue(picker.contains("ForEach(content.spaces) { space in"))
+        XCTAssertTrue(picker.contains("ForEach(WikiSpaceLogic.menuRows(content.spaces, names: names)) { row in"))
         XCTAssertTrue(page.contains("TextField(WikiCopy.searchPlaceholder, text: $query)"))
-        let banner = try slice(page, from: "private var reviewBanner: some View {", to: "private func bandHeader(")
+        let banner = try slice(page, from: "private var reviewBanner: some View {", to: "private func entryRow(")
         XCTAssertTrue(banner.contains("Button(action: actions.openReview)"))
         XCTAssertTrue(banner.contains("Text(WikiCopy.proposalsToReview(content.proposals))"))
         XCTAssertTrue(banner.contains("Circle().fill(.orange).frame(width: 7, height: 7)"),
                       "the needs-you bar's own amber dot")
+    }
+
+    /// The bar's buttons in the web head's order — Contents, Activity, Settings — and Activity wearing the
+    /// drawer's number in orange, said as "N waiting on you"; on a phone it pushes Activity, on the
+    /// three-column shells it opens in the detail pane.
+    func testTheHomesBarOpensActivityWithTheDrawersNumber() throws {
+        let page = code(try slice(try source("Views/WikiView.swift"),
+                                  from: "struct WikiHomePage: View {", to: "struct WikiBandActions {"))
+        let toolbar = try slice(page, from: ".toolbar {", to: ".task(id: query) {")
+        assertOrder(toolbar, ["Button(action: actions.openContents)", "Image(systemName: \"list.bullet\")",
+                              "Button(action: actions.openActivity)", "WikiActivityGlyph(waiting: waiting)",
+                              ".accessibilityLabel(WikiCopy.activity)",
+                              ".accessibilityValue(waiting > 0 ? WikiCopy.waitingOnYou(waiting) : \"\")",
+                              "Button(action: actions.openSettings)", "Image(systemName: \"gearshape\")"],
+                    "the home's bar")
+        let glyph = code(try slice(try source("Views/WikiView.swift"),
+                                   from: "struct WikiActivityGlyph: View {", to: "let wikiMenuIconsDrawAmber"))
+        assertOrder(glyph, ["Image(systemName: \"clock.arrow.circlepath\")", "if waiting > 0 {", "Text(\"\\(waiting)\")",
+                            ".background(Color.orange, in: Capsule())"], "the Activity badge")
+        let screens = code(try source("Views/WikiScreens.swift"))
+        let home = try slice(screens, from: "struct WikiHomeView: View {", to: "struct WikiHomePlaceholder: View {")
+        XCTAssertTrue(home.contains("actions: actions(wiki), waiting: wiki.waiting,"),
+                      "the badge is the drawer's number, from the same model")
+        XCTAssertTrue(home.contains("openActivity: { open(.wikiActivity) },"))
+        XCTAssertTrue(home.contains("case .push:      model.push(node)"))
+        XCTAssertTrue(home.contains("case .selection: model.nav.replaceTop(with: node)"))
+    }
+
+    /// The space beside the title (§12.3.4): one space is its name, a grey label with no chevron and no menu;
+    /// several are a menu of toggles — name, then the repository and documents under it, the amber number in
+    /// the icon cell — with Manage spaces at the foot, into Wiki settings.
+    func testTheSpaceIsALabelAloneAndAPickerAmongSeveral() throws {
+        let page = code(try slice(try source("Views/WikiView.swift"),
+                                  from: "struct WikiHomePage: View {", to: "struct WikiBandActions {"))
+        let picker = try slice(page, from: "private var spacePicker: some View {",
+                               to: "private func band(_ band: WikiLogic.HomeBand) -> some View {")
+        XCTAssertTrue(picker.contains("let names = WikiSpaceLogic.names(content.spaces)"), "the repository's name, not the slug")
+        let alone = try slice(picker, from: "if content.spaces.count < 2 {", to: "} else {")
+        XCTAssertTrue(alone.contains("Text(name)"))
+        XCTAssertFalse(alone.contains("Menu"), "one space is a label, not a control")
+        XCTAssertFalse(alone.contains("chevron"))
+        let menu = try slice(picker, from: "} else {", to: "} label: {")
+        assertOrder(menu, ["Menu {", "Toggle(isOn: Binding(get: { row.id == content.space.id },",
+                           "actions.pickSpace(row.slug)", "Text(row.name)",
+                           "if wikiMenuIconsDrawAmber, let symbol = row.waitingSymbol { wikiAmberSymbol(symbol) }",
+                           "Text(row.subtitle(sayWaiting: !wikiMenuIconsDrawAmber))",
+                           "Divider()", "Button(action: actions.openSettings)",
+                           "Label(WikiCopy.manageSpaces, systemImage: \"gearshape\")"], "the space menu")
+        let amber = code(try source("Views/WikiView.swift"))
+        XCTAssertTrue(amber.contains(".withTintColor(.systemOrange, renderingMode: .alwaysOriginal)"),
+                      "the number keeps its amber in a menu row's icon cell")
+    }
+
+    /// Activity draws `WikiLogic.ActivityBand` in its order under Review's bar — the title and the space's
+    /// name — its banners from `WikiSpaceLogic.activityBanners`, and marks what came after the reader last
+    /// looked: the stamp read as the page opens, before it moves it, as the home moves it as it opens.
+    func testActivityDrawsItsBandsInOrderAndWhatIsNew() throws {
+        let view = code(try source("Views/WikiActivityView.swift"))
+        let page = try slice(view, from: "struct WikiActivityPage: View {", to: "private struct WikiActivityBannerRow: View {")
+        XCTAssertTrue(page.contains("ForEach(WikiLogic.ActivityBand.allCases, id: \\.self) { band in"))
+        let bands = try slice(page, from: "private func band(_ band: WikiLogic.ActivityBand) -> some View {",
+                              to: "private var newRows: Int")
+        assertOrder(bands, ["case .status:", "case .reviewBanner, .planBanners, .otherPlanBanners:",
+                            "ForEach(banners.filter { $0.band == band }) { banner in",
+                            "case .recentDecisions:", "case .recentlyChanged:",
+                            "WikiCopy.newSinceLastLooked(newRows)", "rows.changeRow(item, new: isNew(item.at))",
+                            "rows.runRow(changesetId, origin: origin, at: at, changes: items.count, new: isNew(at))",
+                            "case .agentsUsed:"], "Activity's bands")
+        XCTAssertFalse(bands.contains("principles"), "Principles are content, not Activity")
+        assertOrder(page, [".navigationTitle(WikiCopy.activity)", "ToolbarItem(placement: .principal) { titleBlock }",
+                           "Text(WikiCopy.activity).font(.headline)", "Text(spaceName).font(.caption2)"], "Review's bar")
+        XCTAssertTrue(page.contains("Text(wikiStatusText(content.statusParts(now: now)))"), "the status line")
+        let screen = try slice(view, from: "struct WikiActivityView: View {", to: "private func name(of space:")
+        assertOrder(screen, [".task(id: wiki.currentSpace?.slug) {", "seen = wiki.seenBefore(slug)", "wiki.moveSeen(slug)",
+                             "await wiki.loadOtherPlans()"], "the stamp, read before it moves")
+        XCTAssertTrue(view.contains("WikiSpaceLogic.activityBanners(spaces: wiki.spaces, current: space, plans: plans,"))
+        XCTAssertTrue(view.contains("case .review:\n            model.push(.wikiReview)"), "the first banner opens Review")
+        XCTAssertFalse(view.contains("async let"), "no sibling async let in OrbitApp (d22b276cc)")
+        let screens = code(try source("Views/WikiScreens.swift"))
+        let home = try slice(screens, from: "struct WikiHomeView: View {", to: "struct WikiHomePlaceholder: View {")
+        assertOrder(home, [".task(id: wiki.currentSpace?.slug) {", "if let slug = wiki.currentSpace?.slug { wiki.moveSeen(slug) }"],
+                    "the home moves the stamp as it opens")
+        let model = code(try source("WikiModel.swift"))
+        let seen = try slice(model, from: "func seenBefore(_ slug: String) -> Double {", to: "func loadSpaces() async {")
+        assertOrder(seen, ["WikiSeenLog.key(space: slug)", "seenLog.seenBefore(key, stored: UserDefaults.standard.double(forKey: key))",
+                           "func moveSeen(_ slug: String, at date: Date = Date()) {",
+                           "seenLog.move(key, at: now, stored: UserDefaults.standard.double(forKey: key))",
+                           "UserDefaults.standard.set(now, forKey: key)"], "the stamp in UserDefaults")
+        let others = try slice(model, from: "func loadOtherPlans() async {", to: "func loadPlanVersion(")
+        XCTAssertFalse(others.contains("async let"), "the other spaces' plans read side by side without async let")
+        XCTAssertTrue(others.contains("$0.id != current && ($0.planWaiting ?? 0) > 0"))
+    }
+
+    /// Coming into the Wiki from another section opens the space bound to the workspace the reader was in,
+    /// else the last one looked at (`orbit.wiki.space`), else the most written — chosen once the spaces are in.
+    func testComingIntoTheWikiChoosesItsSpace() throws {
+        let app = code(try source("AppModel.swift"))
+        let setter = try slice(app, from: "var selectedSection: AppSection {", to: "tasks?.setSectionActive")
+        assertOrder(setter, ["if newValue == .wiki && nav.section != .wiki { wiki?.open(fromWorkspace: workspaceInView) }",
+                             "nav.section = newValue"], "where the reader came from, read before the switch")
+        let inView = try slice(app, from: "private var workspaceInView: String? {", to: "private func coordinatorWorkspaceID(")
+        XCTAssertTrue(inView.contains("WikiSpaceLogic.workspaceInView(nav, agentID: selectedAgentID,"))
+        let coordinator = try slice(app, from: "private func coordinatorWorkspaceID(ofProject projectID: String) -> String? {",
+                                    to: "var atDestinationRoot: Bool")
+        assertOrder(coordinator, ["projects?.detail(projectID).document?.coordinatorWorkspaceId",
+                                  "$0.projectMembership?.role == .coordinator"], "a project's coordinator workspace")
+        let model = code(try source("WikiModel.swift"))
+        XCTAssertTrue(model.contains("private static let spaceKey = \"orbit.wiki.space\""))
+        let choose = try slice(model, from: "func open(fromWorkspace workspaceID: String?) {", to: "func seenBefore(_ slug: String) -> Double {")
+        assertOrder(choose, ["fromWorkspaceID = workspaceID", "choosing = true", "chooseSpace()",
+                             "guard choosing, spacesState.hasLoaded else { return }",
+                             "WikiSpaceLogic.defaultSpace(spaces, workspaceID: fromWorkspaceID, lastSlug: selectedSlug)",
+                             "selectedSlug = space.slug"], "the choice")
+        let spaces = try slice(model, from: "func loadSpaces() async {", to: "func loadHome() async {")
+        assertOrder(spaces, ["spacesState.succeed()", "chooseSpace()", "} catch let error where WikiLogic.isDisabled(error) {"],
+                    "chosen once the spaces read answers")
+    }
+
+    /// macOS's source list draws no Wiki row for an account the server has the wiki off for, as the drawer
+    /// and the iPad's sidebar draw none — and reads the spaces that say so.
+    func testTheMacSidebarDrawsNoWikiRowWithoutTheWiki() throws {
+        let main = code(try source("Views/MainView.swift"))
+        let sidebar = try slice(main, from: "struct SectionSidebar: View {", to: "struct AccountFooter: View {")
+        XCTAssertTrue(sidebar.contains("ForEach(AppSection.visible(isAdmin: isAdmin, wiki: model.wiki?.shown == true)) { section in"))
+        XCTAssertTrue(sidebar.contains(".task { await model.wiki?.loadSpaces() }"))
     }
 
     // MARK: one entry

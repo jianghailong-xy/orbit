@@ -24,6 +24,11 @@ final class WikiCopyParityTests: XCTestCase {
     private static let sidebar = "src/web/src/components/TasksSidePanel.tsx"
     private static let css = "src/web/src/index.css"
     private static let shared = "src/shared/src/wiki.ts"
+    private static let activity = "src/web/src/components/WikiActivityPage.tsx"
+    private static let planCard = "src/web/src/components/WikiPlanCard.tsx"
+    private static let spaceLib = "src/web/src/lib/wikiSpace.ts"
+    private static let docsLib = "src/web/src/lib/wikiDocs.ts"
+    private static let planLib = "src/web/src/lib/wikiPlan.ts"
 
     private struct Missing: Error, CustomStringConvertible {
         let file: String
@@ -160,6 +165,8 @@ final class WikiCopyParityTests: XCTestCase {
             ("WIKI_NO_DECISIONS", WikiCopy.noDecisions),
             ("WIKI_NO_AGENTS_YET", WikiCopy.noAgentsYet),
             ("WIKI_NO_ENTRY_SELECTED", WikiCopy.noEntrySelected),
+            ("WIKI_ACTIVITY", WikiCopy.activity),
+            ("WIKI_MANAGE_SPACES", WikiCopy.manageSpaces),
         ]
         for (name, word) in pairs { assertDeclares(web, name, word) }
     }
@@ -213,6 +220,27 @@ final class WikiCopyParityTests: XCTestCase {
         assertSays(web, "wikiCompareWith = (revision: number): string => `Compare with r${revision}`", in: Self.lib)
         XCTAssertEqual(WikiCopy.ofCount(1, 3), "1 of 3")
         assertSays(web, "wikiOfCount = (at: number, total: number): string => `${at} of ${total}`", in: Self.lib)
+        // Activity's, and the number waiting on the owner's (design §12.3.7).
+        XCTAssertEqual(WikiCopy.waitingOnYou(3), "3 waiting on you")
+        assertSays(web, "wikiWaitingOnYou = (count: number): string => `${count} waiting on you`", in: Self.lib)
+        XCTAssertEqual(WikiCopy.newSinceLastLooked(4), "4 new since you last looked")
+        assertSays(web, "wikiNewSinceLastLooked = (count: number): string => `${count} new since you last looked`",
+                   in: Self.lib)
+        XCTAssertEqual(WikiCopy.countInSpace(2, "wikova"), "· 2 in wikova")
+        assertSays(web, "wikiCountInSpace = (count: number, space: string): string => `· ${count} in ${space}`", in: Self.lib)
+        XCTAssertEqual(WikiCopy.inSpace("wikova"), "· in wikova")
+        assertSays(web, "wikiInSpace = (space: string): string => `· in ${space}`", in: Self.lib)
+        XCTAssertEqual(WikiCopy.spaceWaiting(2), "· 2 waiting")
+        assertSays(web, "wikiSpaceWaiting = (count: number): string => `· ${count} waiting`", in: Self.lib)
+        // The native picker's documents, in the documents' own words and plural.
+        let docs = try source(Self.docsLib)
+        XCTAssertEqual([WikiCopy.documentCount(1), WikiCopy.documentCount(35), WikiCopy.documentCount(1234)],
+                       ["1 document", "35 documents", "1,234 documents"])
+        assertSays(docs, "wikiDocumentCount = (count: number): string => plural(count, 'document', 'documents');",
+                   in: Self.docsLib)
+        assertSays(docs, "const plural = (count: number, one: string, many: string): string => "
+                   + "`${wikiCount(count)} ${count === 1 ? one : many}`;", in: Self.docsLib)
+        assertSays(docs, "export const WIKI_NO_DOCUMENTS_YET = '\(WikiCopy.noDocumentsYet)';", in: Self.docsLib)
     }
 
     /// The four one-word vocabularies — trust, kind, op, status — entry for entry.
@@ -273,19 +301,114 @@ final class WikiCopyParityTests: XCTestCase {
 
     // MARK: the drawer's Wiki row
 
-    /// The row sits right after Projects, draws the book, and its amber number is every space's
-    /// `pendingOps`, summed — nothing at zero, and "3 proposals to review" as its accessible name.
+    /// The row sits right after Projects, draws the book, and its amber number is what waits on the owner
+    /// across every space — each space's proposals and the things its plan waits for (`wikiWaiting`) —
+    /// nothing at zero, and "3 waiting on you" as its accessible name, the Projects row's own words. The
+    /// head's Activity badge is the same number from the same function.
     func testTheDrawerRowCountsWhatTheWebSidebarCounts() throws {
         let web = try source(Self.sidebar)
         assertOrder(web, ["key: 'projects'", "{ key: 'wiki', icon: <SidebarNavIcon name=\"wiki\" />, label: 'Wiki' }"],
                     "the sidebar's top rows")
-        assertSays(web, "(wikiSpaces.data ?? []).reduce((sum, space) => sum + (space.pendingOps ?? 0), 0)",
-                   in: Self.sidebar)
-        assertSays(web, "t.key === 'wiki' && wikiPending > 0", in: Self.sidebar)
-        assertSays(web, "aria-label={wikiProposalsToReview(wikiPending)}", in: Self.sidebar)
+        assertSays(web, "const wikiWaitingCount = wikiWaiting(wikiSpaces.data ?? []);", in: Self.sidebar)
+        assertSays(web, "t.key === 'wiki' && wikiWaitingCount > 0", in: Self.sidebar)
+        assertSays(web, "aria-label={wikiWaitingOnYou(wikiWaitingCount)}", in: Self.sidebar)
+        let rules = try source(Self.spaceLib)
+        assertSays(rules, "return (space.pendingOps ?? 0) + (space.planWaiting ?? 0);", in: Self.spaceLib)
+        assertSays(rules, "return spaces.reduce((sum, space) => sum + wikiWaitingIn(space), 0);", in: Self.spaceLib)
+        XCTAssertEqual(WikiSpaceLogic.waiting([WikiSpace(id: "a", slug: "a", pendingOps: 1, planWaiting: 2),
+                                               WikiSpace(id: "b", slug: "b", pendingOps: 3)]), 6)
+        XCTAssertEqual(WikiCopy.waitingOnYou(6), "6 waiting on you")
+        let page = try source(Self.page)
+        assertSays(page, "<WikiActivityButton spaceSlug={space.slug} waiting={wikiWaiting(rows)} on={activity} />",
+                   in: Self.page)
         XCTAssertEqual(AppSection.wiki.title, "Wiki")
         XCTAssertEqual(AppSection.workSections.firstIndex(of: .wiki), AppSection.workSections.count - 1,
                        "the Wiki follows the work: Projects, Tasks, then Wiki")
+    }
+
+    /// The head's buttons, in the web's order: Contents, Activity, Settings (then New entry, which the native
+    /// bar has none of) — the bar's own order (design §12.3.1).
+    func testTheHeadsButtonsAreTheWebsInItsOrder() throws {
+        let page = try source(Self.page)
+        let actions = try slice(page, from: "<div className=\"wk-actions\">", to: "</div>")
+        assertOrder(actions, ["<WikiContentsButton />", "<WikiActivityButton", "<WikiSettingsButton", "<WikiNewEntryButton"],
+                    "the head's buttons")
+        let activity = try source(Self.activity)
+        assertSays(activity, "icon={<HistoryOutlined />}", in: Self.activity)
+        assertSays(activity, "{waiting > 0 && (", in: Self.activity)
+        assertSays(activity, "aria-label={wikiWaitingOnYou(waiting)}", in: Self.activity)
+    }
+
+    /// One space is a label and several a picker (§12.3.4, mock 31 ④), by the same names; the rules for
+    /// names, which space opens and what waits are held to the one fixture both ends read.
+    func testTheSpaceRulesAreTheWebs() throws {
+        let page = try source(Self.page)
+        let head = try slice(page, from: "function WikiHeadSpace(", to: "/** The status row")
+        assertOrder(head, ["const names = useMemo(() => wikiSpaceNames(spaces), [spaces]);", "if (spaces.length < 2) {",
+                           "<span className=\"wk-space-tag\"", "{wikiSpaceOption(names.get(row.id) ?? row.title, row)}"],
+                    "the head's space")
+        assertSays(page, "wikiDefaultSpace(spaces.data ?? [], { workspaceId: readWikiFromWorkspace(), lastSlug: readWikiLastSpace() })",
+                   in: Self.page)
+        let rules = try source(Self.spaceLib)
+        assertOrder(rules, ["if (bound) return bound;", "if (last) return last;",
+                            "(most === null || (space.docs?.written ?? 0) > (most.docs?.written ?? 0) ? space : most)"],
+                    "the space the Wiki opens")
+        let tests = try source("src/web/src/lib/wikiSpace.test.ts")
+        assertSays(tests, "'../shared/src/wiki-space.fixture.json'", in: "src/web/src/lib/wikiSpace.test.ts")
+    }
+
+    // MARK: Activity
+
+    /// Activity's blocks are the web's, in its order (mock 31 ②): the status line under the title, the
+    /// proposals' banner into Review, the space's plan banners, the other spaces' that wait, then Recent
+    /// decisions, Recently changed and Agents used the wiki — the desktop's Review and Plan cards, which a
+    /// phone hides, aside. The native page iterates `WikiLogic.ActivityBand`.
+    func testActivityIsTheWebsInItsOrder() throws {
+        let page = try source(Self.activity)
+        let body = try slice(page, from: "<div className=\"wk-act\">", to: "export function WikiActivityButton")
+        assertOrder(body, ["{status}",
+                           "<Link className=\"wk-banner\" to={WIKI_REVIEW_PATH} data-waiting={wikiProposalsWaiting(spaces)}>",
+                           "<WikiPlanBanners space={space} />",
+                           "<WikiPlanBanners key={row.id} space={row} elsewhere={names.get(row.id) ?? row.title} />",
+                           "title={WIKI_RECENT_DECISIONS}", "title={WIKI_RECENTLY_CHANGED}", "<UsageCard space={detail.data} />"],
+                    "Activity's blocks")
+        XCTAssertEqual(WikiLogic.ActivityBand.allCases, [.status, .reviewBanner, .planBanners, .otherPlanBanners,
+                                                         .recentDecisions, .recentlyChanged, .agentsUsed])
+        XCTAssertEqual(WikiLogic.ActivityBand.allCases.compactMap(\.title),
+                       [WikiCopy.recentDecisions, WikiCopy.recentlyChanged, WikiCopy.agentsUsed])
+        // A phone draws the banners and hides the desktop's two cards.
+        let css = try source(Self.css)
+        for rule in [".wk-banner { display: flex; }", ".wk-review-card { display: none; }", ".wk-plan-card { display: none; }"] {
+            assertSays(css, rule, in: Self.css)
+        }
+        // The first banner: every space's proposals, the others' shares on its line; the other spaces' plans
+        // that wait come after the space's own.
+        assertSays(page, "const proposals = wikiProposalsBanner(spaces, space.id, names);", in: Self.activity)
+        assertSays(page, "const elsewhere = spaces.filter((row) => row.id !== space.id && (row.planWaiting ?? 0) > 0);",
+                   in: Self.activity)
+        let card = try source(Self.planCard)
+        assertSays(card, "const banners = waiting.length > 0 || elsewhere ? waiting : "
+                   + "[{ ...wikiPlanBanner(look, plan, context), look, count: 0 }];", in: Self.planCard)
+        assertSays(card, "{elsewhere ? `${banner.text} ${wikiInSpace(elsewhere)}` : banner.text}", in: Self.planCard)
+        // One banner for each kind of thing the plan waits for, in the order the looks win.
+        let plan = try source(Self.planLib)
+        assertSays(plan, "['held', held], ['draftFailed', wikiPlanFailedJob(state) ? 1 : 0], "
+                   + "['draftReady', state.draft ? 1 : 0], ['changes', state.proposals.length],", in: Self.planLib)
+        let state = try JSONDecoder().decode(WikiPlanState.self, from: Data(
+            #"{"draft":{"id":"v2","version":2,"status":"draft"},"proposals":[{"id":"p","status":"pending"}]}"#.utf8))
+        XCTAssertEqual(WikiPlanLogic.waitingBanners(state, now: Date(), docs: nil, runnerOnline: true).map(\.look),
+                       [.draftReady, .changes])
+        // What is new is what came after the reader last looked: the home's stamp, as it stood before the
+        // home moved it, and moved by Activity in its turn.
+        assertSays(page, "const seenKey = wikiSeenKey(space.slug, 'home');", in: Self.activity)
+        assertSays(page, "const [seen] = useState(() => readWikiSeenBefore(seenKey));", in: Self.activity)
+        assertSays(page, "useEffect(() => moveWikiSeen(seenKey), [seenKey]);", in: Self.activity)
+        assertSays(page, "const fresh = (at: string): boolean => seen <= 0 || Date.parse(at) > seen;", in: Self.activity)
+        assertSays(page, "{wikiNewSinceLastLooked(freshRows)}", in: Self.activity)
+        // Recent decisions keep their own read, and the head is Review's: the title and the space's name.
+        assertSays(page, "useQuery(wikiEntriesOfKindQuery(space.id, 'decision', RECENT_DECISIONS))", in: Self.activity)
+        assertSays(page, "<h1 className=\"page-title\">{WIKI_ACTIVITY}</h1>", in: Self.activity)
+        assertSays(page, "<span className=\"wk-space-tag\">{names.get(space.id) ?? space.title}</span>", in: Self.activity)
     }
 
     // MARK: the home page
@@ -343,10 +466,13 @@ final class WikiCopyParityTests: XCTestCase {
     /// The home page's rows are the web's: principles oldest recorded first, the four newest
     /// decisions, the five newest changes, the three most used — and the verbs.
     func testTheHomeRowsAreTheWebsRows() throws {
-        let home = try source(Self.home)
-        // One run is one row: the five newest rows, every run folded in by the changeset its items name
-        // (`wikiRecentRows`) — the same five `WikiHomeContent.recentRows` draws.
-        assertSays(home, "wikiRecentRows(timeline.data?.items ?? []).slice(0, 5).map((row) =>", in: Self.home)
+        let activity = try source(Self.activity)
+        // Recently changed is Activity's now (design §12.3.2). One run is one row: the five newest rows,
+        // every run folded in by the changeset its items name (`wikiRecentRows`) — the same five
+        // `WikiHomeContent.recentRows` the native Activity draws.
+        assertSays(activity, "const rows = useMemo(() => wikiRecentRows(timeline.data?.items ?? []).slice(0, 5), [timeline.data]);",
+                   in: Self.activity)
+        assertSays(activity, "{rows.map((row) =>", in: Self.activity)
         let lib = try source(Self.lib)
         for verb in ["if (item.decision === 'accepted') return WIKI_HISTORY_CONFIRMED_BY;",
                      "if (item.decision === 'edited') return 'Edited by you';",
@@ -366,9 +492,12 @@ final class WikiCopyParityTests: XCTestCase {
         assertSays(home, "const PRINCIPLES_READ = \(WikiHomeContent.principlesRead);", in: Self.home)
         assertSays(home, "const RECENT_DECISIONS = \(WikiHomeContent.recentDecisionCount);", in: Self.home)
         assertSays(home, "useQuery(wikiEntriesOfKindQuery(space.id, 'principle', PRINCIPLES_READ))", in: Self.home)
-        assertSays(home, "useQuery(wikiEntriesOfKindQuery(space.id, 'decision', RECENT_DECISIONS))", in: Self.home)
         assertSays(home, "wikiEntriesOfKind(principleRead.data ?? [], 'principle')", in: Self.home)
-        assertSays(home, "wikiEntriesOfKind(decisionRead.data ?? [], 'decision')", in: Self.home)
+        // Recent decisions went to Activity with the home's other management blocks (design §12.3.2), and
+        // read their own kind there, the home's number of them.
+        let activity = try source(Self.activity)
+        assertSays(activity, "useQuery(wikiEntriesOfKindQuery(space.id, 'decision', RECENT_DECISIONS))", in: Self.activity)
+        assertSays(activity, "wikiEntriesOfKind(decisionRead.data ?? [], 'decision')", in: Self.activity)
         assertSays(home, "<WikiEmpty>{WIKI_NO_PRINCIPLES}</WikiEmpty>", in: Self.home)
         XCTAssertFalse(home.contains("WIKI_NO_ENTRIES"), "the home no longer says the space holds nothing")
         let queries = try source("src/web/src/lib/queries.ts")

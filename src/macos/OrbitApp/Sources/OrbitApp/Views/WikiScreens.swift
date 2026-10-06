@@ -17,7 +17,7 @@ struct WikiHomeView: View {
         if let wiki = model.wiki {
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 if let home = wiki.home {
-                    WikiHomePage(content: home, now: context.date, actions: actions(wiki),
+                    WikiHomePage(content: home, now: context.date, actions: actions(wiki), waiting: wiki.waiting,
                                  planBanner: planBanner(wiki, now: context.date))
                 } else {
                     WikiHomePlaceholder(wiki: wiki)
@@ -27,6 +27,11 @@ struct WikiHomeView: View {
                 await wiki.loadHome()
                 await wiki.loadPlan()
                 await wiki.loadDocsDirectory()
+            }
+            // The reader looks at the space as its home opens: what Activity marks as new is what came
+            // after the look before this one (design §12.3.2, the web home's `moveWikiSeen`).
+            .task(id: wiki.currentSpace?.slug) {
+                if let slug = wiki.currentSpace?.slug { wiki.moveSeen(slug) }
             }
             .refreshable {
                 await wiki.loadHome()
@@ -74,6 +79,7 @@ struct WikiHomeView: View {
             openRun: { id in open(.wikiRun(changesetID: id)) },
             openContents: { contentsShown = true },
             openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) },
+            openActivity: { open(.wikiActivity) },
             openPlan: { to in open(to == .settings ? .wikiSettings : .wikiPlan(version: nil)) })
     }
 
@@ -86,9 +92,10 @@ struct WikiHomeView: View {
     }
 }
 
-/// What stands where the home page would be: a spinner, the reason it could not be read, or — only
-/// after a read that succeeded — that there is no space yet, or that the wiki is off for this account.
-private struct WikiHomePlaceholder: View {
+/// What stands where the home page — or Activity — would be: a spinner, the reason it could not be read,
+/// or — only after a read that succeeded — that there is no space yet, or that the wiki is off for this
+/// account.
+struct WikiHomePlaceholder: View {
     let wiki: WikiModel
 
     var body: some View {
@@ -120,6 +127,8 @@ struct WikiDetailPane: View {
             WikiEntryView(entryID: id).id(id)
         } else if model.nav.wikiReviewOnTop {
             WikiReviewView()
+        } else if model.nav.wikiActivityOnTop {
+            WikiActivityView()
         } else if model.nav.wikiSettingsOnTop {
             WikiSettingsView()
         } else if let run = model.nav.selectedWikiRunID {
