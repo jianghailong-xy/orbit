@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { WikiHome } from '../components/WikiHome';
 import type { WikiArticleDirectory } from '@orbit/shared';
 import type { WikiChangeset, WikiEntry, WikiSpaceWithUsage, WikiTimeline } from '../lib/wiki';
-import { WIKI_DISABLED_NOTE, WIKI_NO_SPACES } from '../lib/wiki';
+import { WIKI_DISABLED_NOTE, WIKI_NO_ENTRIES, WIKI_NO_PRINCIPLES, WIKI_NO_SPACES } from '../lib/wiki';
 import { WikiPage } from './WikiPage';
 
 vi.hoisted(() => {
@@ -173,6 +173,10 @@ function paint(
   client.setQueryData(['wiki', 'spaces'], 'spaces' in seeds ? seeds.spaces : [{ ...SPACE, pendingOps: 3 }]);
   client.setQueryData(['wiki', 'space', SPACE_ID], SPACE);
   client.setQueryData(['wiki', 'space', SPACE_ID, 'entries'], seeds.entries ?? ENTRIES);
+  // The home's two bands read their own kind (`wikiEntriesOfKindQuery`).
+  const ofKind = (kind: string) => (seeds.entries ?? ENTRIES).filter((row) => row.kind === kind);
+  client.setQueryData(['wiki', 'space', SPACE_ID, 'entries', 'principle', 200], ofKind('principle'));
+  client.setQueryData(['wiki', 'space', SPACE_ID, 'entries', 'decision', 4], ofKind('decision'));
   client.setQueryData(['wiki', 'space', SPACE_ID, 'timeline'], TIMELINE);
   client.setQueryData(['wiki', 'review', SPACE_ID], REVIEW);
   const topic = (seeds.entries ?? ENTRIES).filter((row) => row.topics.includes('tasks-dispatch'));
@@ -263,6 +267,18 @@ describe('the Wiki home', () => {
     );
     expect(html).toContain('No session has used this wiki yet.');
     expect(html).toContain('No decision has been recorded yet.');
+    // An empty Principles band speaks for the principles, not for the whole space.
+    expect(html).toContain(WIKI_NO_PRINCIPLES);
+    expect(html).not.toContain(WIKI_NO_ENTRIES);
+  });
+
+  it('draws the principles and decisions their own reads answered', () => {
+    const html = paint('home', '/wiki/orbit');
+    expect(html).toContain('A clock never starts agent work');
+    expect(html).toContain('Delete means forget');
+    expect(html).toContain('Wakeups are held by the server');
+    expect(html).toContain('2 · written by you · pinned');
+    expect(html).not.toContain(WIKI_NO_PRINCIPLES);
   });
 });
 

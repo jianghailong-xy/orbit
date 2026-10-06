@@ -37,28 +37,36 @@ const (
 
 // antigravitySessionAuth is where the session's next agy gets its sign-in. A key the session brings is
 // API-key mode whatever the runner holds: the provider was set up with that key, and the runner's
-// Google account is not the provider's to use. Otherwise the runner's Google sign-in comes first, as in
-// its engine health (authSource), and the runner's own GEMINI_API_KEY is what is left.
+// Google account is not the provider's to use. Otherwise the Google sign-in of the account the session
+// runs on comes first (antigravitySessionGoogleDir) — Default's, as in the engine health (authSource),
+// unless dispatch named another — and the runner's own GEMINI_API_KEY is what is left, for Default
+// only: a session on an added account runs on that account or not at all.
 func antigravitySessionAuth(job *ClaimedSession) string {
-	switch {
-	case hasInjectedCredentials(providerAntigravity, job.Agent.Env):
+	if hasInjectedCredentials(providerAntigravity, job.Agent.Env) {
 		return antigravityAuthSessionKey
-	case antigravityGoogleSignInSaved():
+	}
+	dir, err := antigravitySessionGoogleDir(job.Agent.Env)
+	if err != nil {
+		return antigravityAuthNone
+	}
+	if antigravityGoogleSignInSavedIn(dir) {
 		return antigravityAuthGoogle
-	case strings.TrimSpace(envValue(envWithAgent(job.Agent.Env), "GEMINI_API_KEY")) != "":
+	}
+	if def, err := filepath.Abs(antigravityGoogleDir()); err == nil && dir == def &&
+		strings.TrimSpace(envValue(envWithAgent(job.Agent.Env), "GEMINI_API_KEY")) != "" {
 		return antigravityAuthEnvKey
 	}
 	return antigravityAuthNone
 }
 
-// placeAntigravityToken gives a Google-mode spawn its own copy of the runner's sign-in, private to the
-// session (0600), where agy looks for it in the session's Gemini directory — always a new file, the
-// last copy having just been removed (prepareAntigravityGeminiDir). The copy lives as long as the agy
-// started on it — that process's reaper removes it (startAgyProcess) — and one a crash or a runner
-// restart left behind goes before the next spawn, and as the runner starts
+// placeAntigravityToken gives a Google-mode spawn its own copy of the sign-in of the account it runs on
+// (accountDir), private to the session (0600), where agy looks for it in the session's Gemini directory
+// — always a new file, the last copy having just been removed (prepareAntigravityGeminiDir). The copy
+// lives as long as the agy started on it — that process's reaper removes it (startAgyProcess) — and one
+// a crash or a runner restart left behind goes before the next spawn, and as the runner starts
 // (pruneAntigravityTokenCopies).
-func placeAntigravityToken(geminiDir string) error {
-	body, err := os.ReadFile(antigravityGoogleTokenPath())
+func placeAntigravityToken(geminiDir, accountDir string) error {
+	body, err := os.ReadFile(antigravityTokenFile(accountDir))
 	if err != nil {
 		return err
 	}
@@ -174,6 +182,11 @@ var (
 // fails with. Phrased as an authentication failure, which is what the transcript offers its sign-in
 // card on (isAuthErrorText in @orbit/shared), like a signed-out claude or codex (engineSignedOutMessage).
 const antigravityGoogleSignedOutMessage = "Failed to authenticate: Antigravity is not signed in to Google on this runner (agy refused its saved sign-in) — sign in again from here."
+
+// antigravityAccountSignedOutMessage is what a session dispatched onto an added Antigravity account
+// fails with when that account holds no sign-in: an authentication failure, so the transcript offers
+// its sign-in card, and never a quiet fall back to a key the account was not picked for.
+const antigravityAccountSignedOutMessage = "Failed to authenticate: the Antigravity account this session runs on is not signed in to Google on this runner — sign it in again from here, or pick another account."
 
 // antigravityGoogleUnreachableMessage is what a turn fails with when agy could not check the sign-in for
 // a network error. Not a sign-out: no sign-in card, and the session goes on.

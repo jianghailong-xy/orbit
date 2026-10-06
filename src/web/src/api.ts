@@ -369,6 +369,8 @@ export const createInteractiveSession = (body: {
   codexAccount?: string;
   /** The same for a session on the built-in Claude engine: one of the runner's Claude accounts. */
   claudeAccount?: string;
+  /** The same again for the built-in Antigravity engine: one of the runner's Google accounts. */
+  antigravityAccount?: string;
   /** Ids of images uploaded unscoped on the compose page; the server scopes them to the
    *  new session and links them to its seeded first turn. */
   attachmentIds?: string[];
@@ -790,10 +792,10 @@ export const updateSessionConfig = (
   },
 ) => api(`/sessions/${sessionId}/config`, { method: 'PATCH', body: config });
 
-/** Move a session on the built-in Codex or Claude engine to another of its runner's accounts — which
- *  pins it there — or back onto `automatic`. Spawn-only, like a provider: a live session's engine
- *  re-spawns on the new account once no turn is in flight, and an ended one takes it on its next
- *  resume. */
+/** Move a session on the built-in Codex, Claude or Antigravity engine to another of its runner's
+ *  accounts — which pins it there — or back onto `automatic`. Spawn-only, like a provider: a live
+ *  session's engine re-spawns on the new account once no turn is in flight, and an ended one takes it
+ *  on its next resume. */
 export const switchSessionAccount = (sessionId: string, account: string) =>
   api(`/sessions/${sessionId}/account`, { method: 'PATCH', body: { account } });
 
@@ -1110,6 +1112,37 @@ export const issueAccessToken = (body: {
 /** Revoke one of the account's tokens at once. Idempotent. */
 export const revokeAccessToken = (id: string) =>
   api<{ id: string; revokedAt: string; revokedReason: string }>(`/access-tokens/${id}`, { method: 'DELETE' });
+
+/**
+ * An `orbit login` waiting at /cli-login?code=… (docs/personal-access-token-design.md §7.3): the
+ * token a terminal asks for. Approving issues nothing yet — the terminal collects the token, issued to
+ * whoever approved, the next time it asks — and denying tells it no.
+ */
+export interface CliLoginRequest {
+  userCode: string;
+  name: string;
+  scopes: string[];
+  /** Null: the token never expires. */
+  expiresInDays: AccessTokenLifetime;
+  /** The host the terminal says it runs on. */
+  hostname: string | null;
+  /** DELIVERED: approved, and the terminal has collected its token. */
+  status: 'PENDING' | 'APPROVED' | 'DENIED' | 'DELIVERED';
+  createdAt: string;
+  expiresAt: string;
+  /** One of your live tokens already has this name, so approving would be refused. */
+  nameInUse: boolean;
+}
+
+const cliLoginPath = (userCode: string) => `/access-tokens/device/${encodeURIComponent(userCode)}`;
+
+export const getCliLoginRequest = (userCode: string) => api<CliLoginRequest>(cliLoginPath(userCode));
+
+export const approveCliLogin = (userCode: string) =>
+  api<{ status: 'APPROVED'; name: string }>(`${cliLoginPath(userCode)}/approve`, { method: 'POST' });
+
+export const denyCliLogin = (userCode: string) =>
+  api<{ status: 'DENIED'; name: string }>(`${cliLoginPath(userCode)}/deny`, { method: 'POST' });
 
 /** Administrators: a user's tokens, as that user's own list shows them. */
 export const listUserAccessTokens = (userId: string) =>
@@ -1489,6 +1522,10 @@ export interface SessionDetail {
   claudeAccount?: string | null;
   /** See codexAccountPinned. */
   claudeAccountPinned?: boolean;
+  /** The Antigravity Google account picked or chosen for this session; null follows the workspace's. */
+  antigravityAccount?: string | null;
+  /** See codexAccountPinned. */
+  antigravityAccountPinned?: boolean;
   // When the armed auto-retry fires (null = nothing armed), and how many attempts this run of
   // failures has already spent. Drives the transcript's quota / provider-error card.
   retryAt?: string | null;
@@ -1508,6 +1545,8 @@ export interface SessionDetail {
     codexAccount?: string | null;
     /** The Claude account this workspace's sessions run on; null is Default. */
     claudeAccount?: string | null;
+    /** The Antigravity Google account this workspace's sessions run on; null is Default. */
+    antigravityAccount?: string | null;
   } | null;
   branch?: string | null;
   baseSha?: string | null;

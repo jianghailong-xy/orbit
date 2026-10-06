@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { PUBLIC_ID_FIELDS } from './codec';
 import { WIKI_IMPORT_RULES } from './wiki';
 import {
   KIND_SPECS,
@@ -102,6 +103,7 @@ import {
   WIKI_DOC_CHECKERS,
   WIKI_DOC_DISPOSITION_ACTIONS,
   WIKI_DOC_FOOTNOTE_KINDS,
+  WIKI_DOC_LEAD_RULES,
   WIKI_DOC_MATERIAL_RULES,
   WIKI_DOC_MATERIAL_WEIGHTS,
   WIKI_DOC_RECORD_KINDS,
@@ -205,6 +207,18 @@ describe('wiki contract', () => {
     expect(CONTRACT.effectPolicy.decide.actions).toEqual([...WIKI_DECIDE_ACTIONS]);
     expect(CONTRACT.refusals.map((r: { code: string }) => r.code)).toEqual([...WIKI_REFUSAL_CODES]);
     expect(CONTRACT.space.slug.pattern).toBe(WIKI_SLUG_PATTERN);
+  });
+
+  it('says what the spaces list adds to a row, and holds its plan count to the vectors the clients count by', () => {
+    const list = CONTRACT.space.list;
+    expect(CONTRACT.agentSurface.doors.user.routes).toContain(list.route);
+    for (const field of ['pendingOps', 'planWaiting', 'workspaceIds', 'docs']) expect(list.row).toContain(field);
+    expect(list.planWaiting).toMatch(/web wikiPlanPending and OrbitKit WikiPlanLogic\.pending/u);
+    expect(list.planWaiting).toMatch(/src\/shared\/src\/wiki-docs\.fixture\.json plan\.states/u);
+    expect(existsSync(path.join(ROOT, 'src/shared/src/wiki-docs.fixture.json'))).toBe(true);
+    // Public ids on the user door: the codec rewrites the field only because it is on its list.
+    expect(list.workspaceIds).toMatch(/public ids/u);
+    expect(PUBLIC_ID_FIELDS.has('workspaceIds')).toBe(true);
   });
 
   it('ships the limits the contract sets, and the design set the ones it names', () => {
@@ -1231,6 +1245,9 @@ describe('wiki contract', () => {
     expect(docs.withdrawReasons).toEqual([...WIKI_DOC_WITHDRAW_REASONS]);
     expect(keysOf(docs.blockKinds)).toEqual([...WIKI_DOC_BLOCK_KINDS]);
     expect(docs.rules).toEqual(WIKI_DOC_RULES);
+    // A written document's two lines on the home, which the directory carries.
+    expect(docs.lead.rules).toEqual(WIKI_DOC_LEAD_RULES);
+    expect(docs.reads.directory).toMatch(/\blead\b/u);
     expect(docs.schema).toEqual(Object.fromEntries(Object.entries(WIKI_DOC_SCHEMA).map(([level, keys]) => [level, [...keys]])));
     // What became of each piece of a section's material is written with it, and kept (migration 0337).
     expect(keysOf(docs.dispositionActions)).toEqual([...WIKI_DOC_DISPOSITION_ACTIONS]);
