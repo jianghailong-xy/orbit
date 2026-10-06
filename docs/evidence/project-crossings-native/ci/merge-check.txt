@@ -1,0 +1,29 @@
+Merge check, each step run on its own (npm run build; npm test -w @orbit/shared; npm test -w @orbit/apiserver; npm test -w @orbit/web; cd src/runner-go && go test ./...)
+
+== branch-4dddff557
+commit 4dddff557d42461babdd2dfbc51d74585cbda5ec
+build exit=0 secs=5
+shared exit=0 secs=1
+apiserver exit=0 secs=33
+web exit=0 secs=215
+go exit=0 secs=216
+apiserver: ℹ pass 4545
+apiserver: ℹ fail 0
+shared: Tests  398 passed (398)
+web: Tests  4255 passed (4255)
+go: ok  	orbit	212.480s
+go: ?   	orbit/cmd/release-manifest	[no test files]
+
+== main-51f0cdfee
+commit 51f0cdfeeb9e91573fe3f85c5e6473195ea9498f
+build exit=0 secs=5
+shared exit=0 secs=0
+apiserver exit=0 secs=32
+web exit=0 secs=213
+go exit=0 secs=219
+apiserver: ℹ pass 4545
+apiserver: ℹ fail 0
+shared: Tests  398 passed (398)
+web: Tests  4255 passed (4255)
+go: ok  	orbit	212.557s
+go: ?   	orbit/cmd/release-manifest	[no test files]

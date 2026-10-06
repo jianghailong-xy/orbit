@@ -1,0 +1,26 @@
+OrbitKit on Linux, swift:6.1 docker:
+  docker run --rm -v <tree>:/src:ro -v <scratch>:/build -w /src/src/macos/OrbitKit swift:6.1 swift test --scratch-path /build
+
+== task commit 4dddff557 (same tree as the run)
+	 Executed 3228 tests, with 5 tests skipped and 5 failures (0 unexpected) in 21.785 (21.785) seconds
+Test Suite 'ProjectCrossingsCardCopyParityTests' passed at 2026-10-06 17:36:54.835
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.01 (0.01) seconds
+Test Suite 'ProjectCrossingsDoorTests' passed at 2026-10-06 17:36:54.836
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'ProjectCrossingsTests' passed at 2026-10-06 17:36:54.837
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'ProjectCrossingsWiringTests' passed at 2026-10-06 17:36:54.862
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.025 (0.025) seconds
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsAdminView.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsSheet.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:282: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says (wikiSpaces.data ?? []).reduce((sum, space) => sum + (space.pendingOps ?? 0), 0)
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:284: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says t.key === 'wiki' && wikiPending > 0
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:285: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says aria-label={wikiProposalsToReview(wikiPending)}
+
+== clean main 51f0cdfee (git worktree add --detach, same command)
+	 Executed 3196 tests, with 5 tests skipped and 5 failures (0 unexpected) in 13.616 (13.616) seconds
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsAdminView.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsSheet.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:282: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says (wikiSpaces.data ?? []).reduce((sum, space) => sum + (space.pendingOps ?? 0), 0)
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:284: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says t.key === 'wiki' && wikiPending > 0
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:285: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says aria-label={wikiProposalsToReview(wikiPending)}
