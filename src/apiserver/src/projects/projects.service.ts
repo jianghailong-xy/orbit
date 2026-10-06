@@ -28,6 +28,8 @@ import {
   toUuid,
 } from '@orbit/shared';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
+import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
+import type { AuthCredential } from '../common/current-user.decorator';
 import { isSessionGenerating } from '../common/session-generating';
 import { SingleFlight } from '../common/single-flight';
 import { modelRoutingEnabled } from '../common/model-routing-switch';
@@ -1975,14 +1977,19 @@ export class ProjectsService {
    * came from. Putting it on the DTO would let any caller name any session and any workspace on a
    * project it is creating — which is to say claim a conversation it does not own as this
    * project’s coordinator, and point it into a workspace it was never given.
+   *
+   * `credential` is the user door's: a personal access token does not choose the integration line
+   * either (docs/personal-access-token-design.md §5), and is refused before anything is written.
    */
   async create(
     ownerId: string,
     dto: CreateProjectDto,
     coordinator?: ProjectCoordinatorSeed,
     principal: ProjectCreatePrincipal = { type: 'SYSTEM', id: ownerId },
+    credential?: AuthCredential,
   ) {
     if (!dto.title) throw new BadRequestException('title is required');
+    refuseOwnerFieldsToToken(credential, { integration: dto.integration });
     ProjectsService.assertOneAcceptanceAuthoringShape(dto);
     const structuredCriteria = dto.acceptanceCriteriaItems === undefined
       ? undefined
@@ -2280,9 +2287,11 @@ export class ProjectsService {
     /** The session that proved the caller may name a workspace, when one did. Its presence is what
      *  makes an integration choice in the same request this session's rather than the owner's. */
     actingSessionId?: string,
+    /** The user door's credential, handed to `create`, which refuses a token's integration choice. */
+    credential?: AuthCredential,
   ) {
     ProjectsService.assertIntegrationIsNotWrittenFromASession(dto, actingSessionId);
-    const project = await this.create(ownerId, dto, undefined, principal);
+    const project = await this.create(ownerId, dto, undefined, principal, credential);
     await this.coordinator(ownerId, project.id, workspaceId);
     return this.get(ownerId, project.id);
   }
@@ -3299,8 +3308,19 @@ export class ProjectsService {
    * on who asks: refused whole when an acting session is on the request, written verbatim when
    * there is none, for `refuseProjectStatusWrite`'s reasons. Neither answer decides what DONE says:
    * that is projected from rows already committed by `projects/project-done-derived.ts`, on this
-   * method's own post-commit edge as much as anywhere else. */
-  async update(ownerId: string, id: string, dto: UpdateProjectDto, actingSessionId?: string) {
+   * method's own post-commit edge as much as anywhere else.
+   *
+   * `credential` is the user door's. A personal access token is refused `status`, `integration` and
+   * `acceptanceCriteriaItems` whole, as an acting session is refused the first two: they are the
+   * account owner's own decisions (docs/personal-access-token-design.md §5). Every other field is a
+   * token's to write. */
+  async update(
+    ownerId: string,
+    id: string,
+    dto: UpdateProjectDto,
+    actingSessionId?: string,
+    credential?: AuthCredential,
+  ) {
     const current = await this.prisma.project.findFirst({
       where: { id, ownerId },
       select: { id: true, coordinatorSessionId: true },
@@ -3316,6 +3336,11 @@ export class ProjectsService {
     }
     ProjectsService.assertStatusIsNotWrittenFromASession(dto, actingSessionId);
     ProjectsService.assertIntegrationIsNotWrittenFromASession(dto, actingSessionId);
+    refuseOwnerFieldsToToken(credential, {
+      status: dto.status,
+      integration: dto.integration,
+      acceptanceCriteriaItems: dto.acceptanceCriteriaItems,
+    });
     await this.assertHumanOnlyProjectWrites(ownerId, dto, actingSessionId);
 
     const agentId =

@@ -106,6 +106,8 @@ import {
   accountDefaultPermissionMode,
   resolvePermissionMode,
 } from '../common/permission-mode';
+import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
+import type { AuthCredential } from '../common/current-user.decorator';
 import { orchestrationEnabled } from '../common/orchestration-switch';
 import { normalizePermissionRules } from '../common/permission-rules';
 import {
@@ -7149,8 +7151,15 @@ export class SessionsService {
        * they keep the refusal, and the person's door gets the routing.
        */
       routeToCurrentRun?: boolean;
+      /**
+       * The HTTP resume door's credential. A personal access token may not re-apply `permissionMode`
+       * on the way back in, for the reason `updateConfig` refuses it one (§5 of
+       * docs/personal-access-token-design.md): reviving a session is another way of setting its mode.
+       */
+      credential?: AuthCredential;
     },
   ): Promise<SessionResumeAnswer> {
+    refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
     assertPromptSize(dto.content, 'message');
     const requestFingerprint = resumeRequestFingerprint(dto);
     const session = await this.prisma.session.findFirst({
@@ -7962,8 +7971,13 @@ export class SessionsService {
    * did — see `acceptsLiveConfig` below.
    *
    * A not-yet-claimed (PENDING) session needs neither: the claim reads the new values.
+   *
+   * `credential` is the user door's. A personal access token may not change the permission mode at
+   * all, to any value: a mode that runs without asking would take approvals — which only a login may
+   * answer — out of the session's way (docs/personal-access-token-design.md §5). The rest is a token's.
    */
-  async updateConfig(ownerId: string, id: string, dto: SessionConfigDto) {
+  async updateConfig(ownerId: string, id: string, dto: SessionConfigDto, credential?: AuthCredential) {
+    refuseOwnerFieldsToToken(credential, { permissionMode: dto.permissionMode });
     if (
       dto.model === undefined &&
       dto.permissionMode === undefined &&

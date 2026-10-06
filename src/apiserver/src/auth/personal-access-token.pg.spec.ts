@@ -36,11 +36,8 @@
  * Not destructive: every row belongs to a user this run creates.
  */
 import assert from 'node:assert/strict';
-import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import http from 'node:http';
-import net from 'node:net';
 import path from 'node:path';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -69,6 +66,7 @@ import { establishProjectContractForPgTest } from '../projects/project-contract-
 import { AllowQueryToken } from './allow-query-token.decorator';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { PAT_MAX_ACTIVE_PER_USER, PAT_PREFIX, PAT_SCOPES, PatService } from './pat.service';
+import { call, startApiserver, type Apiserver } from './pat-test-apiserver';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -80,9 +78,6 @@ const ACTIVITY_MIGRATION = readFileSync(
   path.resolve(__dirname, '../../prisma/migrations/0384_activity_credential/migration.sql'),
   'utf8',
 );
-/** build/auth → build/main.js, the apiserver's production entry point. */
-const MAIN = path.resolve(__dirname, '..', 'main.js');
-const API_DIR = path.resolve(__dirname, '..', '..');
 const INVALID_TOKEN = { message: 'invalid token', error: 'Unauthorized', statusCode: 401 };
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
@@ -485,122 +480,6 @@ test('personal access tokens: issued once, stored as a hash, resolved by JwtAuth
 });
 
 // ── (10) the production apiserver ─────────────────────────────────────────────────────────────
-
-interface Apiserver {
-  port: number;
-  child: ChildProcess;
-  output(): string;
-  stop(): Promise<void>;
-}
-
-interface Reply {
-  status: number;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  json: any;
-  text: string;
-}
-
-async function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = net.createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as net.AddressInfo;
-      probe.close(() => resolve(port));
-    });
-  });
-}
-
-/**
- * One request on a connection of its own. A 200 from a stream is answered as soon as its headers
- * arrive, and the stream is closed.
- */
-function call(server: Apiserver, method: string, route: string, bearer?: string, body?: unknown): Promise<Reply> {
-  return new Promise((resolve, reject) => {
-    const payload = body === undefined ? undefined : JSON.stringify(body);
-    const req = http.request(
-      {
-        host: '127.0.0.1',
-        port: server.port,
-        path: route,
-        method,
-        agent: false,
-        headers: {
-          ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
-          ...(payload ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) } : {}),
-        },
-      },
-      (res) => {
-        res.on('error', () => undefined);
-        if (res.statusCode === 200 && String(res.headers['content-type']).startsWith('text/event-stream')) {
-          resolve({ status: 200, json: null, text: '' });
-          req.destroy();
-          return;
-        }
-        const parts: Buffer[] = [];
-        res.on('data', (chunk: Buffer) => parts.push(chunk));
-        res.on('end', () => {
-          const text = Buffer.concat(parts).toString('utf8');
-          let json: unknown = null;
-          try {
-            json = JSON.parse(text);
-          } catch {
-            json = null;
-          }
-          resolve({ status: res.statusCode ?? 0, json, text });
-        });
-      },
-    );
-    req.on('error', reject);
-    req.setTimeout(30_000, () => req.destroy(new Error(`${method} ${route} timed out`)));
-    if (payload) req.write(payload);
-    req.end();
-  });
-}
-
-/** `node build/main.js`, as the container starts it, on a port of its own; resolves once it answers. */
-async function startApiserver(databaseUrl: string, jwtSecret: string): Promise<Apiserver> {
-  const port = await freePort();
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    DATABASE_URL: databaseUrl,
-    JWT_SECRET: jwtSecret,
-    PORT: String(port),
-    NO_COLOR: '1',
-    CORS_ORIGINS: 'http://127.0.0.1',
-  };
-  delete env.NODE_TEST_CONTEXT;
-  let log = '';
-  const child = spawn(process.execPath, [MAIN], { cwd: API_DIR, env, stdio: ['ignore', 'pipe', 'pipe'] });
-  const collect = (chunk: Buffer) => {
-    log = (log + chunk.toString('utf8')).slice(-400_000);
-  };
-  child.stdout!.on('data', collect);
-  child.stderr!.on('data', collect);
-  const server: Apiserver = {
-    port,
-    child,
-    output: () => log,
-    async stop() {
-      if (child.exitCode !== null || child.signalCode !== null) return;
-      const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
-      child.kill('SIGTERM');
-      await Promise.race([exited, sleep(20_000)]);
-      if (child.exitCode === null && child.signalCode === null) {
-        child.kill('SIGKILL');
-        await exited;
-      }
-    },
-  };
-  const deadline = Date.now() + 150_000;
-  for (;;) {
-    if (child.exitCode !== null) assert.fail(`the apiserver exited ${child.exitCode} before answering:\n${log.slice(-6_000)}`);
-    const reply = await call(server, 'GET', '/api/auth/setup-status').catch(() => null);
-    if (reply?.status === 200) return server;
-    if (Date.now() > deadline) assert.fail(`the apiserver did not answer within 150s:\n${log.slice(-6_000)}`);
-    await sleep(250);
-  }
-}
 
 test('(10) the production apiserver: a token reaches a route holding the scope it declares and no other; routes no scope opens refuse every token while a login reaches them; revoked, expired and unknown tokens are one 401; the stream takes a login\'s ?access_token= and never a token\'s', {
   skip: !URL, concurrency: 1, timeout: 300_000,

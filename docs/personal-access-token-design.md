@@ -104,8 +104,45 @@ orbit_pat_<43 字符 base64url>        # randomBytes(32)，256 bit
 - `auth/*`（改密码、登出）、PAT 自身的签发与吊销 —— PAT 不能生出 PAT。
 - `admin/*` —— 用户管理。
 - runner 注册审批（`runners/device/:userCode/approve`）、runner token 轮换 —— 否则 PAT 泄露 = 能接管机器执行。
+  同为准入入口的也算：enrollment token 的签发与列表（`runners/enrollment-tokens`）、
+  设备码查询（`GET runners/device/:userCode`）。
 - 第 5 节列出的所有者通道动作。
-- 分享链接的开启与修改 —— 这是对外公开数据，留在浏览器里做。
+- 分享链接 —— 这是对外公开数据，留在浏览器里做。整个 controller 都拒绝，**读取也算**：
+  读到的是公开 URL，令牌吊销后这个 URL 照样能用。
+
+### 4.1 声明方式与拒绝码（2026-10-06 协调者确认的细化）
+
+- `@PatScope(scope, { workspaceConfinable })` **只能挂在 handler 上**（第二个参数必填，见 6.3）：类型上是
+  `MethodDecorator`，挂到 controller 上编译不过。
+  controller 级的 scope 会让以后加进来的路由静默继承授权，普查就逼不出决定。`@PatForbidden(reason)`
+  可挂 handler 也可挂 controller —— controller 级的拒绝是失败安全的；两者同时出现时拒绝优先。
+- PAT 被拒时的 403 body：
+
+  | 情形 | body |
+  |---|---|
+  | 路由 `@PatForbidden(reason)` | `{code, reason, requiredAction: 'OPEN_ORBIT', message}`；`reason = OWNER_INTERACTIVE` 时 `code = OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`（第 5 节），其余 `code = PAT_FORBIDDEN` |
+  | 令牌没有路由要的 scope | `{code: 'PAT_SCOPE_MISSING', scope, message}`，消息写明缺哪个 |
+  | 路由两者都没声明（fail-closed） | `{code: 'PAT_ROUTE_UNDECLARED', message}` |
+  | 令牌限定了 workspace（第 6.3 节） | 路由不能按 workspace 判定：`{code: 'PAT_ROUTE_NOT_WORKSPACE_CONFINABLE', message}`；请求点名的对象越界：`{code: 'PAT_WORKSPACE_OUT_OF_SCOPE', fields, message}` |
+  | 第 5 节的字段级拒绝 | 同 `OWNER_INTERACTIVE`，另带 `fields`（被拒的字段名） |
+
+- 原因码全集（`PAT_FORBIDDEN_REASONS`，`src/apiserver/src/auth/pat-scope.decorator.ts`）。前六个是本节与第 5 节的
+  「永远不可授予」，后四个是第 4 节 scope 表覆盖不到的路由：
+
+  | reason | 路由 |
+  |---|---|
+  | `AUTH` | `auth/*` 里挂 `JwtAuthGuard` 的（`POST auth/change-password`；登录、刷新、登出本来就不经 guard） |
+  | `ADMIN` | `admin/*`：用户与 provider 管理 |
+  | `TOKEN_MANAGEMENT` | PAT 自身的签发、列表、吊销（`/access-tokens*`，第 6.5 节）。路由尚未存在，普查已按前缀等着它 |
+  | `RUNNER_CREDENTIALS` | runner 准入与 token 轮换：`runners/device/:userCode`（查询与 approve）、`runners/enrollment-tokens`（签发与列表）、`runners/:id/rotate-token` |
+  | `SHARE_LINK` | 分享链接整个 controller，含读取 |
+  | `OWNER_INTERACTIVE` | 第 5 节所有者通道 |
+  | `ACCOUNT` | 账号本身：`users/me*`（资料、头像、偏好）、push 设备注册与注销 |
+  | `RUNNER_CONTROL` | runner 只有 `runners:read`，改动与驱动都在 App 里做：改名、排序、删除、引擎登录中继、装/卸引擎、引擎更新、刷新模型、账号管理、Claude 历史扫描、发起 Codex 限额重置 |
+  | `SECRET_REVEAL` | 明文取回已存的密钥（`GET providers/mine/:id/key`） |
+  | `NO_SCOPE` | v1 scope 集合没有对应 scope 的：watches、link-previews、metrics（v1 不加 scope）、outcomes/inbox |
+
+- 每条挂 `JwtAuthGuard` 的路由都必须声明其一，普查 spec `auth/pat-route-coverage.spec.ts` 逐条核对（第 6.2 节）。
 
 ## 5. 与所有者通道动作的关系
 
@@ -131,6 +168,58 @@ orbit_pat_<43 字符 base64url>        # randomBytes(32)，256 bit
 | --- | --- | --- |
 | Personal access token | 等同所有者 REST 的 `NON_JUDGMENT`，但记录 `credentialKind=PAT` | **refused**：`OWNER_INTERACTIVE_CREDENTIAL_REQUIRED` |
 
+（已落地：该页矩阵的 Personal access token 一行按那里的列逐格写明，「Why credentials cannot prove "human"」一节
+也写明 PAT 不改变那里的结论。）
+
+实现上，「凭证种类是 `LOGIN`」这一条由 `JwtAuthGuard` 读路由上的 `@PatForbidden('OWNER_INTERACTIVE')` 判，
+门自己的代码不变。设计列的门落在 9 条路由上（promotion 有 confirm / decline / cancel 三条）。按同一原则 ——
+代码已对 agent 会话拒绝的、或只在没有 agent 门的地方回答「交给所有者的问题」的 —— 另标了 23 条
+（2026-10-06 协调者确认）：
+
+- 项目：`start`（启动即为标准集盖章）、`done`、`pause`、`resume`、`done-requests/:itemId/decline`；
+- 交给所有者的问题：`GET acceptance/criteria-decisions/pending`（它发出裁定用的 `commitToken`）、
+  `fuse/:episodeId/resume`、open-items 的 `answer` / `return-to-coordinator` / `resolve`；
+- wiki 的所有者通道（对 agent 会话拒绝 `WIKI_OWNER_CHANNEL_ONLY`）：entries 的 `confirm` / `reject`，
+  changesets 的 `decide` / `revert` 与 `GET changesets/:id`，`spaces/:id/verifications/reopen`，以及 wiki plan 全部 7 条
+  （`GET plan`、`GET plan/versions`、`GET plan/versions/:version`、`POST plan/edits`、`POST plan/versions/:version/confirm`、
+  `POST plan/redraft`、`POST plan-proposals/:id/decide`）。
+
+第 3 步任务又追加 1 条：`PATCH /projects/:id/integration`。它的每个字段都是下面 5.1 里 `PATCH /projects/:id`
+拒绝 PAT 的 `integration`（对 agent 会话也是 `INTEGRATION_SETTINGS_OWNER_ONLY`），不拒它，字段级规则换个 URL 就绕过去了。
+
+完整清单共 33 条，在 `src/apiserver/src/auth/pat-owner-channel-routes.ts`。普查 spec `auth/pat-route-coverage.spec.ts`
+双向精确核对装饰器与清单；`auth/pat-owner-channel.pg.spec.ts` 对生产 apiserver 逐门各一条：持全部 scope 的 PAT →
+403 `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`、`requiredAction: OPEN_ORBIT`，同一请求换 LOGIN 由门自己回答；
+能真实搭起来的门（标准集确认、start、done、pause、resume、integration）对 LOGIN 做了事，对 PAT 什么都没写。
+
+### 5.1 混合路由：按字段拒绝
+
+有些路由按 scope 放行，body 里却带着所有者通道的字段。路由级只能按 scope 放行，这些字段在 **service 层**按凭证种类判
+（`refuseOwnerFieldsToToken`，与同一字段对 agent 会话的拒绝写在一处）：PAT 带了其中任何一个，**整个请求** 403
+`OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，body 的 `fields` 列出被拒的字段，**不做部分写入**；不带这些字段时，
+其余字段 PAT 照常可写。LOGIN 不经过这条规则，行为不变。
+
+| 路由 | PAT 不可写的字段 |
+|---|---|
+| `PATCH /projects/:id` | `status`（`DONE` / `CANCELLED` / `OPEN` 都算）、`integration`、`acceptanceCriteriaItems` |
+| `POST /projects` | `integration` ※ |
+| `POST /wiki/spaces` | `maintenance` |
+| `PATCH /wiki/spaces/:id` | `reviewMode`、`maintenance`、`automaticSpotChecks` ※ |
+| `PATCH /sessions/:id/config` | `permissionMode`，改成任何值都拒绝 |
+| `POST /sessions/:id/resume` | `permissionMode` ※ |
+
+`permissionMode` 的任何改动都拒绝，往更严的模式改也一样：否则 PAT 能把会话切到绕过审批的模式，
+「审批答复必须走 LOGIN」就失去意义。
+
+※ 第 3 步任务按同一原则追加（同一字段的另一个门，或代码已以同一理由对 agent 会话拒绝），见该任务评论：
+`POST /projects` 的 `integration` 对 agent 会话同样是 `INTEGRATION_SETTINGS_OWNER_ONLY`；`automaticSpotChecks` 与
+`reviewMode`、`maintenance` 一样对 agent 会话拒绝 `WIKI_OWNER_CHANNEL_ONLY`；`resume` 复活已结束的会话时会重新套用
+`permissionMode`，不拒它，config 的规则就能「先结束再带新模式复活」绕过去。
+
+未纳入字段级规则、交协调者决定的：新建项目时的首批验收标准（不是编辑，项目启动或标准集确认时由所有者盖章）；
+项目授权集合（`automatic`、`coordinatorEnabled`、`maxConcurrentTasks`、`sessionBudgetPerDay`、`coordinatorAgentId`，
+runner 门对 agent 拒绝它们时点名「从 Web 或 user API 改」）；新建会话时的 `permissionMode`（agent 派生子会话时也可自选）。
+
 ## 6. 服务端实现
 
 ### 6.1 Guard
@@ -150,7 +239,7 @@ Authorization: Bearer <jwt>        → 现状                → req.user = {use
 
 ### 6.2 Scope 声明与普查
 
-新装饰器，挂在 handler 或 controller 上：
+新装饰器（`@PatScope` 只挂 handler，`@PatForbidden` 可挂 handler 或 controller，见 4.1）：
 
 ```ts
 @PatScope('tasks:write')       // PAT 需要此 scope
@@ -213,6 +302,7 @@ v1 的落地。最初设想由各 service 的读写入口过滤；实际做法�
   在写 task 行的同一事务里，每个新任务写一行：`type = 'task.created'`、`payload = {taskId}`、
   `actor_id = userId`。runner 通道建任务不记。其余用户写路由都不产生 activity，v1 不补。
   落地时共 186 条：PAT 可达 111 条，PAT 一律 403 的 75 条；逐条清单在落地任务的评论里。
+  之后第 5 节把 `PATCH /projects/:id/integration` 改为对 PAT 一律 403，两数变为 110 与 76。
 - 设置页的令牌详情显示「最近使用」与最近 N 条经该令牌的 activity。
 
 ### 6.5 签发接口
