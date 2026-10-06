@@ -2425,7 +2425,7 @@ private struct ProjectDoneCardView: View {
                 request: row?.doneRequest,
                 askedAt: row?.waitingSince,
                 confirmedAt: console.acceptanceConfirmation?.confirmation?.confirmedAt,
-                openItems: ProjectDone.openItemsCount(console.openItems),
+                openItems: ProjectDone.openItemsCount(console.openItems, reviewing: row?.itemId),
                 running: ProjectDone.runningCount(subject),
                 record: console.doneRecord,
                 sealRead: row?.doneRequest != nil

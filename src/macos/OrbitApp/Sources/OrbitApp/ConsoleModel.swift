@@ -3223,6 +3223,9 @@ final class ConsoleModel {
     /// What a press here recorded, before the document read catches up with it — the receipt the card
     /// turns into in place (web's `doneReceipt`).
     private(set) var doneRecord: ProjectDoneRecord?
+    /// When that press came back. A document read begun after it that still says the project is not
+    /// DONE means it was reopened since — here or at another end — and the press no longer stands.
+    private var doneRecordAt: Date?
 
     /// The task whose run this conversation is, adopted from the session payload. Nil for an
     /// ordinary conversation, and then nothing below ever asks about a confirmation: the card is
@@ -3470,6 +3473,7 @@ final class ConsoleModel {
             acceptanceConfirmation = standing
             adoptAcceptanceReceipt()
         }
+        let documentAskedAt = Date()
         if let document = try? await api.projectCriteria(projectID: projectID) {
             projectCriteria = document.acceptanceCriteriaItems ?? []
             projectDocumentTitle = document.title
@@ -3477,6 +3481,12 @@ final class ConsoleModel {
             projectStarted = document.started
             projectTaskCount = document.taskCount
             projectDone = document.doneSubject
+            // A read asked for after a press here, and still not DONE: the project was reopened, so
+            // the press's own record no longer makes the card a receipt (`ProjectDone.recorded`).
+            if document.status != .done, let at = doneRecordAt, documentAskedAt > at {
+                doneRecord = nil
+                doneRecordAt = nil
+            }
         }
         // The project's two owner cards. Same rule as the four above: each is independent, a read
         // that fails leaves the last answer standing, and neither may close a card.
@@ -3665,6 +3675,7 @@ final class ConsoleModel {
         else { return }
         do {
             doneRecord = try await api.recordProjectDone(projectID: projectID, body)
+            doneRecordAt = Date()
         } catch {
             statusMessage = "\(ProjectDone.notRecorded) — \(APIClient.failureReason(error))."
         }
@@ -3692,6 +3703,7 @@ final class ConsoleModel {
         do {
             _ = try await api.updateProjectStatus(projectID, to: .open)
             doneRecord = nil
+            doneRecordAt = nil
         } catch {
             statusMessage = "\(ProjectDone.notReopened) — \(APIClient.failureReason(error))."
         }

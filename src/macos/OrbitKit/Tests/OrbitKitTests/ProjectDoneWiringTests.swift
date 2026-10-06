@@ -80,6 +80,11 @@ final class ProjectDoneWiringTests: XCTestCase {
                       "why it is not done replaces the done card")
         XCTAssertTrue(adopt.contains("decisionCards.removeAll { $0.kind == .projectNotDone } deliver(.projectDone, placement: donePlacement(live))"),
                       "the done card replaces why it is not done")
+        // A read asked for after a press here that still says the project is not DONE retires the
+        // press's record: the project was reopened, and the card asks again (`ProjectDone.recorded`).
+        XCTAssertTrue(refresh.contains("let documentAskedAt = Date() if let document = try? await api.projectCriteria(projectID: projectID) {"))
+        XCTAssertTrue(refresh.contains("if document.status != .done, let at = doneRecordAt, documentAskedAt > at { doneRecord = nil doneRecordAt = nil }"),
+                      "a reopened project keeps no receipt from an earlier press")
         XCTAssertTrue(console.contains("sessionWaitingKind = session.waitingKind"),
                       "Record as done… on the row puts the card up without a request")
         // Counted by the needs-you bar only while it asks.
@@ -97,15 +102,15 @@ final class ProjectDoneWiringTests: XCTestCase {
         XCTAssertTrue(record.contains("ProjectDone.body(subject: subject, requestID: doneRequestRow?.itemId,"))
         XCTAssertTrue(record.contains("currentDigest: acceptanceConfirmation?.currentVersion.digest)"),
                       "unasked, the press names the seal standing now")
-        XCTAssertTrue(record.contains("doneRecord = try await api.recordProjectDone(projectID: projectID, body)"),
-                      "the card turns into its receipt from the record the door wrote")
+        XCTAssertTrue(record.contains("doneRecord = try await api.recordProjectDone(projectID: projectID, body) doneRecordAt = Date()"),
+                      "the card turns into its receipt from the record the door wrote, and notes when")
         XCTAssertTrue(record.contains("statusMessage = \"\\(ProjectDone.notRecorded) — "))
         let decline = code(try section(console, from: "func declineDoneRequest(note: String) async -> Bool {",
                                        to: "func reopenProject() async {"))
         XCTAssertTrue(decline.contains("api.declineDoneRequest(projectID: projectID, itemID: row.itemId, note: note)"))
         let reopen = code(try section(console, from: "func reopenProject() async {",
                                       to: "func askCoordinatorAboutDone() async {"))
-        XCTAssertTrue(reopen.contains("api.updateProjectStatus(projectID, to: .open)"))
+        XCTAssertTrue(reopen.contains("api.updateProjectStatus(projectID, to: .open) doneRecord = nil doneRecordAt = nil"))
         let ask = code(try section(console, from: "func askCoordinatorAboutDone() async {", to: "\n    }\n"))
         XCTAssertTrue(ask.contains("await send(overrideText: ProjectDone.settlementContext(subject))"),
                       "Ask the coordinator sends the card's own facts as one turn")
@@ -128,6 +133,8 @@ final class ProjectDoneWiringTests: XCTestCase {
         XCTAssertTrue(card.contains("onNotYet: row == nil ? nil : { await console.declineDoneRequest(note: $0) },"),
                       "Not yet… is offered only on a card the coordinator asked for")
         XCTAssertTrue(card.contains("onReopen: { await console.reopenProject() })"))
+        XCTAssertTrue(card.contains("openItems: ProjectDone.openItemsCount(console.openItems, reviewing: row?.itemId),"),
+                      "Orbit checked leaves out only the request this card answers")
         XCTAssertTrue(card.contains(".environment(\\.approvalReviewTarget, nil)"),
                       "with no review target the card takes ApprovalReviewLayout's whole-card path")
         let notDone = code(try section(approvals, from: "private struct ProjectNotDoneCardView: View {",
@@ -212,6 +219,7 @@ final class ProjectDoneWiringTests: XCTestCase {
         for call in ["ProjectDone.live(openItems: store.openItems, status: document.status.rawValue)",
                      "ProjectDoneCard(", "await store.loadDoneCard()",
                      "ProjectDone.body(subject: subject, requestID: row?.itemId,",
+                     "openItems: ProjectDone.openItemsCount(store.openItems, reviewing: row?.itemId),",
                      "switch await store.recordDone(body) {",
                      "store.declineDone(itemID: row.itemId, note: note)", "store.setStatus(.open)"] {
             XCTAssertTrue(sheet.contains(call), "the card over the page no longer \(call)")

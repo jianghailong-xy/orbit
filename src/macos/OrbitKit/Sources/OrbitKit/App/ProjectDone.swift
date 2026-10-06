@@ -703,13 +703,18 @@ public enum ProjectDone {
         return line
     }
 
-    /// How many items the Orbit checked line counts as open: the owner's and the coordinator's — not
-    /// the request the card itself answers. The close check refuses a request while any other item
-    /// is open, so on a card the coordinator asked for this is "no open items", as the mock says;
-    /// counting the request would make every such card say "1 open item" about itself.
-    public static func openItemsCount(_ items: ProjectOpenItemsView?) -> Int {
+    /// How many items the Orbit checked line counts as open: every open item — the owner's, the
+    /// coordinator's, a request to start the project or to record it done — except the one request
+    /// the card itself is answering (`reviewing`, its item id). The close check refuses a request
+    /// while any other item is open, so a card the coordinator asked for says "no open items", as
+    /// the mock does; counting the request would make every such card say "1 open item" about
+    /// itself. Anything else stays counted, wherever the read lists it.
+    public static func openItemsCount(_ items: ProjectOpenItemsView?, reviewing requestID: String?) -> Int {
         guard let items else { return 0 }
-        return ProjectPage.needsYouRows(items).count + items.withCoordinator.count
+        let reviewed: (ProjectOpenItemRow) -> Bool = { row in requestID != nil && row.itemId == requestID }
+        return items.needsYou.filter { !reviewed($0) }.count
+            + items.withCoordinator.filter { !reviewed($0) }.count
+            + [items.startRequest, items.doneRequest].compactMap { $0 }.filter { !reviewed($0) }.count
     }
 
     /// How many criteria are still landing — what the Orbit checked line calls running.
@@ -719,11 +724,12 @@ public enum ProjectDone {
 
     // MARK: the receipt
 
-    /// Whether the project is recorded done — by a press here, by the owner anywhere, or by the
-    /// projection itself — which is when the card is its receipt.
+    /// Whether the project is recorded done right now, which is when the card is its receipt: its
+    /// status says DONE — by whoever recorded it — or a press here has just recorded it and the read
+    /// has not caught up. Not who recorded it once: `doneBy` outlives a reopen, and a project
+    /// reopened since is asked again, not shown a receipt (the coordinator's ruling, 2026-10-06).
     public static func recorded(_ subject: ProjectDoneSubject, record: ProjectDoneRecord?) -> Bool {
-        record != nil || subject.doneBy == .owner || subject.status == "DONE"
-            || subject.derivedDone?.done == true
+        subject.status == "DONE" || record != nil
     }
 
     /// Whether the owner recorded it — what the receipt line says it in.
