@@ -109,6 +109,7 @@
 - **iOS**：iPhone 推进导航栈（`NavNode` 加一种页面）；iPad 中间栏原地换页。和文件夹页走同一套。
 - **页头**：‹ 回到 Workspace 的列表；标题是项目名，下面一行小字 `Project · <n> sessions`；右上角一个按钮（iOS 用 `square.grid.2x2`）直接进项目页，不再是 ⋯ 菜单（owner 10-06 的决定）。这里没有 New session：项目的会话由 coordinator 派发。
 - **进度条**：页头下面一条，迷你进度条 + `<done>/<total> done · <m> running`，不进项目页：Web 用 ↗，iOS 走页头右上角那个按钮（owner 10-06 的决定）。
+- **合入 main**（owner 10-06 的决定，效果图 `docs/mocks/project-merge-sessions-page/`）：进度条下面一张合入卡，只在有话说时出现——检查中（`CHECK_PROMOTION` 在途，它那行合入状态从进度条挪进来，任务落到项目分支的 Landing 行仍在进度条里）、等你确认（可直接按 `Merge to main` / `Not now`，`Details ›` 打开完整的卡）、合入中（推送前可 `Cancel`）、暂时合不了（`Coordinator is resolving it · <age>`，`Open coordinator ›`）。合完卡片收起，这次合入作为一行 `Merged into main`（`<sha> · <n> tasks · by you`）按 `merged.at` 排进下面的时间分组，点开是回执。协调会话里只留一行。契约见 `docs/project-integration-line-contract.md` 修订 10。
 - **搜索**：页头和进度条下面直接是列表，没有搜索框（owner 10-04 的决定）。Web 的 ⌘K 仍能打开全局搜索面板；iOS 项目页不接全局搜索。Workspace 列表和文件夹页的搜索保持原样。
 - **列表**：`Coordinator` 一节放 coordinator（行上照旧带 `Coordinator` 标），下面是成员会话，按时间分组。列出全部 Workspace 的全部成员会话（Open 和 Completed，不含 Trash），每行操作按它自己的状态，行、悬停按钮、左右滑、长按和外面同状态的会话行一样（owner 10-04 的决定）。客户端分别请求 `GET /sessions?projectId=<id>&view=open` 和 `view=completed`，按 id 合并去重；页头会话数和进度条 running 数按合并后的全部会话计算。
 
@@ -124,6 +125,7 @@
 | 条目菜单（owner 10-04 的决定） | `Open Session`、`Sessions`、`Open Project`、`Pin`、`Unpin`、`Move…` |
 | 项目会话页页头按钮（iOS，owner 10-06 的决定） | `Open Project` |
 | 项目会话页 | `Project · <n> sessions`、`Coordinator`（节名）、`<done>/<total> done · <m> running` |
+| 合入卡与时间线行（owner 10-06 的决定） | `Merge into main?`、`Needs you`、`Merge into main queued` / `confirmed`、`Re-checking before merging into main…`、`Merging into main…`、`Can’t merge into main yet`、`Details`、`Merged into main`、`<sha> · <n> tasks · by you`；协调会话那一行 `Merge into main is waiting for you · Review`、`✓ Merged into main · <sha> · <n> tasks`（OrbitKit `PromotionCards`，web `lib/projectMerge.ts`，`ProjectMergeCopyParityTests` 对照） |
 
 等待原话、coordinator 的话沿用会话行已有的常量，不另写。处理例外的五句来自 `projectAttention.ts` 的 `COORDINATOR_LEAD_COPY`，首字母大写。Swift 侧加对照测试，读取 `src/web/src/lib/sessionProjects.ts`（照 `ProjectAttentionCopyParityTests`）。
 

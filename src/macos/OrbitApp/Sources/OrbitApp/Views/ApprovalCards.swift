@@ -1878,9 +1878,9 @@ struct DeliveredDecisionCardView: View {
             case .fusePause(let itemID):
                 OwnerItemCardView(console: console, itemID: itemID, isPause: true)
             case .promotionApproval(let promotionID):
-                PromotionApprovalCardView(console: console, promotionID: promotionID)
+                PromotionEventLine(console: console, promotionID: promotionID)
             case .promotionReceipt(let promotion):
-                PromotionReceiptCard(promotion: promotion)
+                PromotionReceiptLine(promotion: promotion)
             }
         }
         .environment(\.approvalReviewTarget, .delivered(card))
@@ -3483,12 +3483,27 @@ private struct OwnerItemCardView: View {
 /// `PromotionCards` — the same answers `OwnerItemCardsTests` holds to mock 4 — and what it offers
 /// is what the door would take: only a READY candidate may be confirmed (§3.3), so every other
 /// state's button is disabled rather than lit and refused.
+///
+/// WHERE IT LIVES (owner decision 2026-10-06). The card is on the project's sessions page, under its
+/// progress card (`ProjectMergeCardView`). The coordinator conversation keeps one line where each
+/// moment happened (`PromotionEventLine`, `PromotionReceiptLine`), and both places open the same
+/// review below, which reads whichever host opened it through `PromotionReviewSource`.
 struct PromotionReviewTarget: Identifiable {
     let id: String
 }
 
+/// A merge's record, opened from its line in the conversation or its row on the sessions page.
+struct PromotionReceiptTarget: Identifiable {
+    let promotion: ProjectPromotionView
+    var id: String { promotion.promotionId }
+}
+
 private struct OpenPromotionReviewKey: EnvironmentKey {
     static let defaultValue: (String) -> Void = { _ in }
+}
+
+private struct OpenPromotionReceiptKey: EnvironmentKey {
+    static let defaultValue: (ProjectPromotionView) -> Void = { _ in }
 }
 
 extension EnvironmentValues {
@@ -3496,75 +3511,105 @@ extension EnvironmentValues {
         get { self[OpenPromotionReviewKey.self] }
         set { self[OpenPromotionReviewKey.self] = newValue }
     }
+
+    var openPromotionReceipt: (ProjectPromotionView) -> Void {
+        get { self[OpenPromotionReceiptKey.self] }
+        set { self[OpenPromotionReceiptKey.self] = newValue }
+    }
 }
 
-private struct PromotionApprovalCardView: View {
+/// What the review reads and presses, from whichever host opened it: the coordinator's console, or
+/// the project's sessions page (`ProjectMergeModel`). One sheet for both, so the merge is answered
+/// the same way wherever the owner meets it.
+@MainActor
+protocol PromotionReviewSource: AnyObject {
+    func promotionStanding(_ promotionID: String) -> ProjectPromotionView?
+    /// The project's open items, both groups: a blocked candidate's holder is one of them.
+    var promotionItems: [ProjectOpenItemRow] { get }
+    var criteriaMet: (met: Int, total: Int)? { get }
+    func refreshPromotion() async
+    func confirmMergeToMain(_ view: ProjectPromotionView) async -> String?
+    func declineMergeToMain(_ view: ProjectPromotionView) async -> String?
+    func cancelMergeToMain(_ view: ProjectPromotionView) async -> String?
+}
+
+extension ConsoleModel: PromotionReviewSource {
+    var promotionItems: [ProjectOpenItemRow] {
+        (openItems?.needsYou ?? []) + (openItems?.withCoordinator ?? [])
+    }
+
+    func refreshPromotion() async {
+        await refreshRulerQuestions(force: true)
+    }
+}
+
+/// A candidate's one line in the coordinator conversation, where the card used to be drawn: the
+/// card is on the project's sessions page now (owner decision 2026-10-06). The line says the same
+/// state in the same words (`PromotionCards.eventLine`) and opens the same review, which is also
+/// the way in on the Mac, where there is no sessions page.
+private struct PromotionEventLine: View {
     @Environment(\.openPromotionReview) private var openReview
     let console: ConsoleModel
     let promotionID: String
 
     var body: some View {
-        let view = console.promotionStanding(promotionID)
+        let line = PromotionCards.eventLine(console.promotionStanding(promotionID))
         Button { openReview(promotionID) } label: {
-            VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
-                ApprovalHeader(symbol: "arrow.triangle.merge",
-                               title: view.map(PromotionCards.previewTitle) ?? PromotionCards.supersededTitle,
-                               tone: .orange,
-                               badge: PromotionCards.stage(view) == .askingYou ? "Needs you" : nil)
-                if let view {
-                    Text(PromotionCards.shortRef(view.sourceRef))
-                        .font(.orbitLabel).foregroundStyle(.secondary)
-                        .lineLimit(1).truncationMode(.middle)
-                    Text(PromotionCards.previewCounts(view)).font(.orbitLabel)
-                    if PromotionCards.stage(view) == .askingYou {
-                        Text("\(PromotionCards.previewChecks(view)) · \(PromotionCards.upstreamLine(view))")
-                            .font(.orbitLabel).lineLimit(2)
-                            .foregroundStyle(!view.checks.isEmpty && view.checks.allSatisfy(\.passed)
-                                             && view.conflicts.isEmpty ? Color.green : Color.primary)
-                        if let met = console.criteriaMet,
-                           let line = PromotionCards.criteriaLine(met: met.met, of: met.total) {
-                            Text(line).font(.orbitMeta).foregroundStyle(.secondary)
-                        }
-                    } else if PromotionCards.stage(view) == .blocked {
-                        Text(PromotionCards.blockedLine(view))
-                            .font(.orbitLabel).foregroundStyle(.secondary).lineLimit(2)
-                    }
-                } else {
-                    Text(PromotionCards.superseded)
-                        .font(.orbitLabel).foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                Image(systemName: symbol(line.tone))
+                Text(line.text).lineLimit(2).multilineTextAlignment(.leading)
+                if line.tone == .needsYou {
+                    Text("· \(PromotionCards.review)").foregroundStyle(Color.accentColor)
                 }
-                Divider()
-                HStack {
-                    Text(PromotionCards.stage(view) == .askingYou ? "View details & act" : "View details")
-                    Spacer(minLength: 8)
-                    Image(systemName: "chevron.right")
-                }
-                .font(.orbitLabel.weight(.semibold)).foregroundStyle(Color.accentColor)
+                Image(systemName: "chevron.right")
+                    .font(.orbitMeta.weight(.semibold))
+                    .foregroundStyle(line.tone == .needsYou ? Color.accentColor : Color.secondary)
             }
-            .approvalChrome(.orange, dimmed: PromotionCards.stage(view) != .askingYou)
-            .contentShape(Rectangle())
+            .font(.orbitLabel.weight(line.tone == .quiet ? .regular : .semibold))
+            .foregroundStyle(ink(line.tone))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(ink(line.tone).opacity(line.tone == .quiet ? 0.1 : 0.13), in: Capsule())
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .accessibilityHint("Opens the full merge review")
+        .frame(maxWidth: .infinity)
+        .accessibilityHint("Opens the merge review")
+    }
+
+    private func symbol(_ tone: PromotionCards.EventTone) -> String {
+        switch tone {
+        case .needsYou, .quiet: return "arrow.triangle.merge"
+        case .working: return "arrow.triangle.2.circlepath"
+        case .blocked: return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private func ink(_ tone: PromotionCards.EventTone) -> Color {
+        switch tone {
+        case .needsYou, .blocked: return .orange
+        case .working: return .accentColor
+        case .quiet: return .secondary
+        }
     }
 }
 
-/// Hosted by the console, so recycling or removing the transcript row cannot dismiss the review.
+/// Hosted by the console and by the sessions page, so recycling or removing the row that opened it
+/// cannot dismiss the review.
 struct PromotionReviewSheet: View {
     @Environment(\.dismiss) private var dismiss
-    let console: ConsoleModel
+    let source: any PromotionReviewSource
     let promotionID: String
     @State private var acting = false
     @State private var actionError: String?
 
-    private var view: ProjectPromotionView? { console.promotionStanding(promotionID) }
+    private var view: ProjectPromotionView? { source.promotionStanding(promotionID) }
 
     /// The open item filed for this candidate, when the project's read carries one: whose problem
     /// the block is, and since when. Nil before that read lands — the card then says who state D
     /// means and stops, which is what it did before the press carried the sentence at all.
     private var item: ProjectOpenItemRow? {
-        let rows = (console.openItems?.needsYou ?? []) + (console.openItems?.withCoordinator ?? [])
-        return rows.first { $0.promotionId == promotionID }
+        source.promotionItems.first { $0.promotionId == promotionID }
     }
 
     var body: some View {
@@ -3622,7 +3667,7 @@ struct PromotionReviewSheet: View {
                 }
             }
         }
-        .task { await console.refreshRulerQuestions(force: true) }
+        .task { await source.refreshPromotion() }
         #if os(iOS)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
@@ -3635,11 +3680,12 @@ struct PromotionReviewSheet: View {
     private func askingYou(_ view: ProjectPromotionView) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             CardRow(label: "Branch", value: PromotionCards.branchLine(view))
-            CardRow(label: "Tasks", value: PromotionCards.tasksLine(view))
+            PromotionTasksRow(label: "Tasks", summary: PromotionCards.tasksLine(view),
+                              titles: view.tasks.map(\.title))
             CardRow(label: "Checks", value: PromotionCards.checksLine(view))
             CardRow(label: PromotionCards.shortRef(view.upstreamRef),
                     value: PromotionCards.upstreamLine(view))
-            if let met = console.criteriaMet,
+            if let met = source.criteriaMet,
                let line = PromotionCards.criteriaLine(met: met.met, of: met.total) {
                 CardRow(label: "Criteria", value: line)
             }
@@ -3669,7 +3715,8 @@ struct PromotionReviewSheet: View {
     private func merged(_ view: ProjectPromotionView) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             CardRow(label: "Commit", value: PromotionCards.mergedLine(view))
-            CardRow(label: "Now on main", value: PromotionCards.tasksLine(view))
+            PromotionTasksRow(label: "Now on main", summary: PromotionCards.nowOnMainLine(view),
+                              titles: view.tasks.map(\.title))
             if let undo = PromotionCards.revertLine(view) {
                 CardRow(label: "Undo", value: undo)
             }
@@ -3691,14 +3738,14 @@ struct PromotionReviewSheet: View {
         switch PromotionCards.stage(view) {
         case .askingYou:
             ApprovalActions {
-                Button { act { await console.confirmMergeToMain(view) } } label: {
+                Button { act { await source.confirmMergeToMain(view) } } label: {
                     Text(PromotionCards.mergeToMain).approvalActionLabel()
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(acting || !PromotionCards.confirmable(view))
                 Button(role: .cancel) {
                     act {
-                        let failure = await console.declineMergeToMain(view)
+                        let failure = await source.declineMergeToMain(view)
                         if failure == nil { dismiss() }
                         return failure
                     }
@@ -3731,7 +3778,7 @@ struct PromotionReviewSheet: View {
                 Button {} label: { Text(PromotionCards.mergingActionLabel(view)).approvalActionLabel() }
                     .buttonStyle(.borderedProminent)
                     .disabled(true)
-                Button(role: .cancel) { act { await console.cancelMergeToMain(view) } } label: {
+                Button(role: .cancel) { act { await source.cancelMergeToMain(view) } } label: {
                     Text(PromotionCards.cancel).approvalActionLabel()
                 }
                 .buttonStyle(.bordered)
@@ -3754,39 +3801,112 @@ struct PromotionReviewSheet: View {
     }
 }
 
-/// The record a merge leaves, drawn where it HAPPENED: which commit went onto main, which branch it
-/// came from, and what it carried (§3.6; web's `ProjectPromotionReceipt`).
+/// The record a merge leaves in the coordinator conversation, at the moment it HAPPENED (§3.6;
+/// web's `PromotionReceiptLine`): one line where a card used to sit between two messages. The record
+/// itself — the commit, the tasks, what ran on it — opens from it (`PromotionReceiptSheet`), the
+/// same sheet the sessions page's timeline row opens.
 ///
-/// A RECORD IS NOT A QUESTION, so it is not the card above and shares none of its presses. Where it
-/// lands is the caller's — the console anchors it at `mergedAt` (`PromotionCards.receipts`), the rule
-/// the four receipts beside it are drawn by — and a moment older than every loaded row is drawn
-/// nowhere, rather than at the tail.
-///
-/// WHAT IT SAYS IS THE MERGE'S OWN, read off the terminal row this record carries and not off the
-/// candidate the branch is offering now. The two rows are the ones the card above draws once it has
-/// merged, which is the whole of what a merge leaves behind here; what is deliberately absent is
-/// anything read from the project as it stands TODAY, because a record that re-reads the present says
-/// something different every time somebody scrolls past it.
-private struct PromotionReceiptCard: View {
+/// A RECORD IS NOT A QUESTION: its one press opens the record, and nothing on it decides anything.
+/// Where it lands is the caller's — the console anchors it at `mergedAt` (`PromotionCards.receipts`),
+/// the rule the four receipts beside it are drawn by.
+private struct PromotionReceiptLine: View {
+    @Environment(\.openPromotionReceipt) private var openReceipt
     let promotion: ProjectPromotionView
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
-            ApprovalHeader(symbol: "arrow.triangle.merge",
-                           title: PromotionCards.title(promotion),
-                           tone: .orange)
-            Text(PromotionCards.provenance)
-                .font(.orbitLabel).foregroundStyle(.secondary)
+        Button { openReceipt(promotion) } label: {
+            HStack(spacing: 6) {
+                Text(PromotionCards.receiptLine(promotion)).lineLimit(2).multilineTextAlignment(.leading)
+                Image(systemName: "chevron.right").font(.orbitMeta.weight(.semibold))
+            }
+            .font(.orbitLabel)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color.secondary.opacity(0.1), in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
+        .accessibilityHint("Opens the merge's receipt")
+    }
+}
+
+/// What a merge put on main, who merged it and when, and what was run on it — read off the terminal
+/// row the record carries, never off the candidate the branch is offering now, and never off the
+/// project as it stands today. Hosted by whichever page opened it, so a recycled row cannot dismiss
+/// it.
+struct PromotionReceiptSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let promotion: ProjectPromotionView
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+                    Text(PromotionCards.provenance)
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 6) {
+                        CardRow(label: "Commit", value: PromotionCards.mergedLine(promotion))
+                        PromotionTasksRow(label: "Now on main", summary: PromotionCards.nowOnMainLine(promotion),
+                                          titles: promotion.tasks.map(\.title))
+                        CardRow(label: "Checks", value: PromotionCards.checksLine(promotion))
+                        CardRow(label: "Landed", value: PromotionCards.landsLine(promotion))
+                        if let changes = PromotionCards.changesLine(promotion) {
+                            CardRow(label: "Changes", value: changes)
+                        }
+                        if let undo = PromotionCards.revertLine(promotion) {
+                            CardRow(label: "Undo", value: undo)
+                        }
+                    }
+                }
                 .frame(maxWidth: .infinity, alignment: .leading)
-            VStack(alignment: .leading, spacing: 6) {
-                CardRow(label: "Commit", value: PromotionCards.mergedLine(promotion))
-                CardRow(label: "Now on main", value: PromotionCards.tasksLine(promotion))
-                if let undo = PromotionCards.revertLine(promotion) {
-                    CardRow(label: "Undo", value: undo)
+                .padding()
+                .textSelection(.enabled)
+            }
+            .navigationTitle(PromotionCards.title(promotion))
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Close", systemImage: "xmark") { dismiss() }
+                        .labelStyle(.iconOnly)
                 }
             }
         }
-        .approvalChrome(.orange, dimmed: true)
+        #if os(iOS)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        #else
+        .frame(minWidth: 480, minHeight: 420)
+        #endif
+    }
+}
+
+/// The row that names what a merge carries: the count, then each task by its title — the server's
+/// `tasks`; a server older than that field gives the count alone.
+private struct PromotionTasksRow: View {
+    let label: String
+    let summary: String
+    let titles: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(label)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+            Text(summary)
+                .font(.orbitProse)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            ForEach(Array(titles.enumerated()), id: \.offset) { _, title in
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("•").foregroundStyle(.secondary)
+                    Text(title).frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .font(.orbitLabel)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

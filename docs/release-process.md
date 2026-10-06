@@ -116,6 +116,36 @@ runner currently stamps its version but not `sourceSha`; record the workflow SHA
 `dev-local` a verified source stamp. A runner allowed to self-update may already be newer: pin the test to the
 candidate deployment and record any deliberate version difference as an exception.
 
+### Runner manifest and asset digests
+
+`scripts/build-binaries.sh` writes `/dl/version.json` beside the binaries (`src/runner-go/cmd/release-manifest`).
+Besides the version and the runner-write contract, it carries one entry per platform under `assets`:
+
+```json
+{
+  "version": "0.1.214",
+  "assets": {
+    "darwin-arm64": { "file": "orbit-darwin-arm64.gz", "sha256": "<64 lowercase hex digits>" },
+    "darwin-x64": { "file": "orbit-darwin-x64.gz", "sha256": "…" },
+    "linux-arm64": { "file": "orbit-linux-arm64.gz", "sha256": "…" },
+    "linux-x64": { "file": "orbit-linux-x64.gz", "sha256": "…" }
+  }
+}
+```
+
+- The key is the platform, `<darwin|linux>-<x64|arm64>`, as the runner's `platformKey` names it.
+- `file` is the asset's name under `<origin>/dl/`. `sha256` is the lowercase hex SHA-256 of that file's bytes
+  exactly as served: the `.gz` itself, not the binary inside it. Check the download before decompressing it.
+- Anything that installs a runner from `/dl` checks the digest, and on a mismatch installs nothing and keeps the
+  current binary. The runner's self-update and `orbit upgrade` do this. A manifest without `assets` comes from a
+  control plane older than the field: the runner then installs as before, unverified, and logs a warning.
+- The digest ties a download to the manifest that announces it. It is not a signature: whoever can rewrite
+  `version.json` can rewrite the digests too.
+
+Check a build against its manifest with
+`(cd dist-bin && jq -r '.assets[] | "\(.sha256)  \(.file)"' version.json | sha256sum -c)`
+(`shasum -a 256 -c` on macOS).
+
 ### Native hand-off (platform-specific)
 
 ```bash

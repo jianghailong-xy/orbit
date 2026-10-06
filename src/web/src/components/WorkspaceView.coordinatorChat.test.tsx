@@ -450,22 +450,17 @@ const WIDTHS = [
 ] as const;
 
 /**
- * The blocked candidate's card, as the transcript draws it: whole on a wide screen; on a narrow
- * one a compact preview, whose presses are in the review it opens.
+ * The blocked candidate's card, as the transcript draws it: one line on every width — the card's
+ * home is the project's sessions view (owner decision 2026-10-06) — whose presses are in the review
+ * the line opens.
  */
 async function blockedCard(): Promise<() => Element | null> {
   const anchor = (): Element | null => mounted().querySelector(`#promotion-${PROMOTION_ID}`);
   await waitForUi(() => {
-    expect(anchor(), 'the blocked merge card is not drawn').not.toBeNull();
+    expect(anchor(), 'the blocked merge line is not drawn').not.toBeNull();
   });
-  if (!narrow) {
-    const card = (): Element | null =>
-      anchor()?.querySelector('.project-promotion[data-state="BLOCKED"]') ?? null;
-    expect(anchor()!.querySelector('.review-card-preview'), 'a wide card was drawn as a preview').toBeNull();
-    expect(card(), 'the wide transcript did not draw the blocked candidate').not.toBeNull();
-    return card;
-  }
-  await act(async () => anchor()!.querySelector<HTMLButtonElement>('.review-card-preview')!.click());
+  expect(anchor()!.querySelector('.project-promotion'), 'the card was drawn whole in the conversation').toBeNull();
+  await act(async () => anchor()!.querySelector<HTMLButtonElement>('.review-card-preview.promotion-line')!.click());
   const card = (): Element | null =>
     document.querySelector('.review-card-dialog[data-open] .project-promotion[data-state="BLOCKED"]');
   await waitForUi(() => {
@@ -531,13 +526,12 @@ describe('Chat about this in the coordinator conversation', { timeout: 60_000 },
     await act(async () => chatPressOn(card()!).click());
     await waitForUi(() => {
       expect(armedBar()).toBe(`${MERGE_CHAT_PREFIX}project/merge-seal can’t merge into main yet`);
-      // A narrow screen's review gives way to the composer it armed, as the other cards' Chat about
-      // this does; a wide transcript draws the card whole, and it stays.
-      if (narrow) expect(card(), 'the review stayed open over the armed composer').toBeNull();
-      else expect(card(), 'the wide card went away').not.toBeNull();
+      // The review gives way to the composer it armed, as the other cards' Chat about this does —
+      // on every width now that the conversation draws the merge as its line.
+      expect(card(), 'the review stayed open over the armed composer').toBeNull();
     });
     // Wherever the press was made and whichever screen drew it, the keyboard it leaves behind is
-    // the composer's — the wide card keeps its place beside it, the narrow review gives way.
+    // the composer's.
     await waitForUi(() => {
       expect(document.activeElement, 'the press left the keyboard outside the composer')
         .toBe(mounted().querySelector('.composer-box textarea'));
@@ -569,7 +563,7 @@ describe('the blocked merge card’s way to where its handling is shown', { time
 
     await act(async () => link.click());
     await waitForUi(() => {
-      if (narrow) expect(card(), 'the review stayed open over the card it points at').toBeNull();
+      expect(card(), 'the review stayed open over the card it points at').toBeNull();
       expect(scrolledTo).toContain(itemCard());
     });
     expect(doorsPressed(), 'the link pressed a door').toEqual([]);
@@ -856,9 +850,9 @@ describe('arriving from a Chat about this pressed elsewhere', { timeout: 60_000 
  */
 describe('keys an armed composer and a card’s own link must not hand to a card', { timeout: 60_000 }, () => {
   it('an empty armed chat on ⌘/Ctrl + Enter does not merge the candidate the strip is asking about', async () => {
-    // The merge is asking — a READY candidate in the strip, holding the chord (`CardHotkey.ts`) —
-    // and an exception card beside it arms the chat. What is typed goes to the coordinator; nothing
-    // typed is not a press on the merge, chord or not.
+    // The merge is asking — a READY candidate, drawn in the strip as its line — and an exception
+    // card beside it arms the chat. What is typed goes to the coordinator; nothing typed is not a
+    // press on the merge, chord or not.
     promotion = {
       ...BLOCKED,
       state: 'READY',
@@ -884,15 +878,18 @@ describe('keys an armed composer and a card’s own link must not hand to a card
     await waitForUi(() => {
       expect(card(), 'the escalated card is not drawn').not.toBeNull();
     });
-    // Non-vacuous: the merge is the card holding the keys, so a press that reached them would merge.
+    // The candidate is asking, as its line, and the chord is its card's only while that card's
+    // review is open (`useCardKeyClaim`): a line in the conversation holds no keys to reach.
     await waitForUi(() => {
       expect(
-        mounted()
-          .querySelector(`#promotion-${PROMOTION_ID} .project-promotion[data-state="READY"] .approval-kbd`)
-          ?.textContent,
-        'the candidate is not the card holding the keys',
-      ).toBe(SHORTCUT_HINT);
+        mounted().querySelector(`#promotion-${PROMOTION_ID} .review-card-preview.promotion-line.is-needsYou`),
+        'the candidate is not asking',
+      ).not.toBeNull();
     });
+    expect(
+      mounted().querySelector(`#promotion-${PROMOTION_ID} .approval-kbd`),
+      'the line claimed the merge chord',
+    ).toBeNull();
 
     await act(async () => chatPressOn(card()!).click());
     await waitForUi(() => {
@@ -954,7 +951,6 @@ describe('keys an armed composer and a card’s own link must not hand to a card
     // to answer in its place while the link's own Enter was prevented.
     acceptanceStanding = ACCEPTANCE_STANDING;
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
-    const card = await blockedCard();
     const confirmation = (): HTMLElement | null =>
       mounted().querySelector<HTMLElement>('#settlement-preview .settlement-card');
     await waitForUi(() => {
@@ -962,6 +958,16 @@ describe('keys an armed composer and a card’s own link must not hand to a card
         confirmation()?.querySelector('.settlement-card-actions .approval-kbd')?.textContent,
         'the confirmation card is not the card holding the bare key',
       ).toBe(ENTER_HINT);
+    });
+    // The link is in the blocked card's review now that the conversation draws the merge as its
+    // line, and the card behind an open review gives the bare key up — so the link's Enter has no
+    // other card's answer within its reach.
+    const card = await blockedCard();
+    await waitForUi(() => {
+      expect(
+        confirmation()?.querySelector('.settlement-card-actions .approval-kbd') ?? null,
+        'a card behind the open review kept the bare key',
+      ).toBeNull();
     });
 
     const link = [...card()!.querySelectorAll<HTMLAnchorElement>('a')]

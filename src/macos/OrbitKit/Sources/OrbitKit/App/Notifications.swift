@@ -131,6 +131,10 @@ public enum AppIntent: Equatable, Sendable {
     case open(Route)
     case approve(sessionID: String, behavior: ApprovalBehavior)   // app resolves which pending approval(s)
     case reply(sessionID: String, text: String)
+    /// A merge into main waiting on the owner: answered on the project's sessions page, where its
+    /// card is (owner decision 2026-10-06). A client without that page opens the coordinator
+    /// conversation, which draws the merge as its line.
+    case openProjectMerge(projectID: String, sessionID: String)
 }
 
 public enum Notifications {
@@ -149,6 +153,11 @@ public enum Notifications {
     /// (apiserver `PushService.notifyWatchMatched`) and the local alert below both set it.
     public static let keyWatch = "watchID"
     static let keyKind = "kind"
+    /// `userInfo` key naming the project an owner-item alert is about (apiserver
+    /// `PushService.notifyOwnerItem`).
+    public static let keyProject = "projectID"
+    /// The owner-item alert kind of a merge into main waiting on the owner (`OWNER_ITEM_PUSH_KINDS`).
+    static let approveMergeKind = "approve-merge-to-main"
 
     public static func content(for event: NotificationEvent) -> NotificationContent {
         switch event {
@@ -200,7 +209,12 @@ public enum Notifications {
         case actionReply:
             let text = (responseText ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             return text.isEmpty ? nil : .reply(sessionID: sid, text: text)
-        default:          return .open(.session(sid))   // default tap
+        default:
+            // The merge's alert opens the project's page, where the merge is answered.
+            if userInfo[keyKind] == approveMergeKind, let project = userInfo[keyProject] {
+                return .openProjectMerge(projectID: project, sessionID: sid)
+            }
+            return .open(.session(sid))   // default tap
         }
     }
 }
