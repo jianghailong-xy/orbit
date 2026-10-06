@@ -4064,15 +4064,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     lock = false,
   ): Promise<void> {
     if (!fixesOpenItemId) return;
+    // Only the writer's own items, locked or read: another account's is the 404 an id that names
+    // nothing gets, never a refusal that says what kind of item it is or what state it is in.
     if (lock) {
       await db.$queryRaw`
         SELECT "id" FROM "project_open_item"
-         WHERE "id" = ${fixesOpenItemId}::uuid
+         WHERE "id" = ${fixesOpenItemId}::uuid AND "owner_id" = ${ownerId}::uuid
          FOR UPDATE`;
     }
-    const item = await db.projectOpenItem.findUnique({
-      where: { id: fixesOpenItemId },
-      select: { id: true, ownerId: true, projectId: true, state: true, kind: true, assignee: true },
+    const item = await db.projectOpenItem.findFirst({
+      where: { id: fixesOpenItemId, ownerId },
+      select: { id: true, projectId: true, state: true, kind: true, assignee: true },
     });
     if (!item) {
       throw new NotFoundException({
@@ -4096,12 +4098,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException({
         code: 'FIXES_OPEN_ITEM_PROJECT_MISMATCH',
         message: 'The fixing task and exception item must belong to the same project',
-      });
-    }
-    if (item.ownerId !== ownerId) {
-      throw new ForbiddenException({
-        code: 'FIXES_OPEN_ITEM_OWNER_MISMATCH',
-        message: 'Only the item owner may file a concrete fix',
       });
     }
     if (item.assignee === 'OWNER') {
