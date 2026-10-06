@@ -20773,7 +20773,6 @@ button.project-open-item-action:disabled {
 .wk-card .project-open-items-head { align-items: center; }
 .wk-card-trailing { margin-left: auto; font-size: 12.5px; color: var(--brand); white-space: nowrap; }
 .wk-card-trailing a { color: inherit; text-decoration: none; }
-.wk-pin { color: var(--text-3); font-size: 13px; }
 .wk-empty { padding: 6px 2px 2px; font-size: 13px; color: var(--text-3); }
 .wk-body > .wk-card + .wk-card { margin-top: 16px; }
 
@@ -20802,9 +20801,6 @@ button.project-open-item-action:disabled {
 .wk-op.retire { background: var(--fill-muted); color: var(--text-2); }
 
 /* ── entry rows: the project list row, plus the Wiki's three trailing facts ───────────────────── */
-.wk-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 2px;
-          border-top: 1px solid var(--border-subtle); }
-.wk-row:first-child { border-top: 0; }
 .wk-row-main { min-width: 0; }
 .wk-row-t { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 14px; font-weight: 600; color: var(--text-1); }
 .wk-row-t > span.tt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -21321,31 +21317,28 @@ button.project-open-item-action:disabled {
   }
 }
 
-/* ── narrower than the app's desktop layout (960px, `MOBILE_QUERY`): the phone mocks 12, 14, 16 ────
-   One column in the phone's order: the head, the status line, the search, then the Review bar,
-   Principles, Recent decisions, Recently changed and Agents used the wiki — the right rail's Review
-   card is the bar above, and the rest of the rail follows the main column. The directory is the
-   Contents drawer; a reading page other than the home drops the head for its crumb row, which
-   carries the list button. iOS draws the same blocks in the same order. */
+/* ── narrower than the app's desktop layout (960px, `MOBILE_QUERY`): the phone mocks 12, 14, 16, 30 ③ ──
+   One column in the phone's order. The home's (design §12.3.1, mocks 30 ③ and 31 ①): the head, the
+   line under it, the search, then the principles when there are any, the documents by category and
+   Browse by category · A–Z index — no block of how the wiki is kept, which is Activity's. The
+   directory is the Contents drawer; a reading page other than the home drops the head for its crumb
+   row, which carries the list button. iOS draws the same bands in the same order (`WikiLogic.HomeBand`). */
 @media (max-width: 960px) {
   .wk-page { display: flex; flex-direction: column; }
   .wk-page > .wk-title-row { order: 0; }
-  .wk-page > .wk-status-row { order: 1; margin-top: 8px; background: none; border: 0; border-radius: 0; }
-  .wk-page > .wk-status-row .project-integration-row { padding: 0; cursor: default; }
   .wk-page > .wk-search { order: 2; margin-top: 12px; height: 40px; }
+  /* A phone has no ⌘K to press (mocks 12, 30 ③): the line is the search, opened by a tap. */
+  .wk-page > .wk-search .wk-kbd { display: none; }
   .wk-page > .wk-layout, .wk-page > .wk-body { order: 3; }
   .wk-status-review { display: none; }
-  /* The phone's status line is one sentence that wraps where its words do (mock 12 ④), not a row of chips. */
-  .wk-page > .wk-status-row .project-integration-facts { display: block; line-height: 1.6; }
-  .wk-page > .wk-status-row .project-integration-facts > :not(.wk-status-review),
-  .wk-page > .wk-status-row .wk-maint { display: inline; white-space: normal; }
-  .wk-page > .wk-status-row .wk-sep { margin: 0 6px; }
   .wk-maint-spin { display: none; }
   .wk-page--reading > .wk-title-row, .wk-page--reading > .wk-search, .wk-page--reading > .wk-status-row { display: none; }
   /* The head's space sits beside its buttons (mock 30 ③). */
   .wk-title-row > .page-title { flex: 1; min-width: 0; }
+  /* The home ends on the ways to everything else (mock 31 ①); a desktop has them atop the directory. */
+  .wk-home > .wk-home-more { display: flex; }
   /* Activity draws its own head, Review's (mock 31 ②): `← Wiki`, the title and the space's name, then the
-     status row as one line of words, as the home's is. */
+     status row as one sentence that wraps where its words do (mock 12 ④), not a row of chips. */
   .wk-page--activity > .wk-title-row, .wk-page--activity > .wk-search { display: none; }
   /* Review's own head is the one its mock draws on a phone (09): `← Wiki` over the title, no Wiki head. */
   .wk-page:has(> .wk-body > .rv-page) > .wk-title-row,
@@ -21366,7 +21359,6 @@ button.project-open-item-action:disabled {
   .wk-page .wk-contents-btn { display: inline-flex; }
   .wk-banner { display: flex; }
   .wk-review-card { display: none; }
-  .wk-cols { display: flex; flex-direction: column; gap: 16px; }
   .wk-art-page .t-title, .wk-browse-page .t-title, .wk-az-page .t-title { margin-top: 10px; font-size: 24px; line-height: 1.35; letter-spacing: -.015em; }
   .wk-art { margin-top: 14px; font-size: 16px; line-height: 1.8; }
   .wk-art h2 { margin: 22px 0 8px; font-size: 17px; }
@@ -21547,6 +21539,13 @@ button.project-open-item-action:disabled {
 .wk-pl-doc.gone .main .tt { text-decoration: line-through; color: var(--text-3); }
 .wk-pl-doc.open { background: var(--bg-raised); border: 1px solid var(--brand-border); border-radius: 10px; margin: 8px 0 6px; padding: 12px 14px 8px 12px; }
 .wk-pl-doc.open > .caret { color: var(--brand); }
+/* A document as a list row (`WikiDocRow`): the plan page's on a phone, the home's on every width. */
+.wk-pl-doc.phone { grid-template-columns: 34px minmax(0, 1fr) 12px; gap: 6px; padding: 10px 2px 11px; text-decoration: none; color: inherit; }
+.wk-pl-doc.phone .main { display: block; }
+.wk-pl-doc.phone .main > .t { font-size: 15px; line-height: 21px; }
+.wk-pl-doc.phone .main > .q { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 13px; }
+.wk-pl-doc.phone .l3 { display: block; margin-top: 3px; font-size: 12.5px; color: var(--text-3); }
+.wk-pl-doc.phone .chev { font-size: 11px; color: var(--text-4); }
 .wk-pl-body { grid-column: 2 / -1; margin-top: 10px; }
 .wk-pl-kv { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 7px 12px; font-size: 13px; line-height: 1.65; }
 .wk-pl-kv > .k { color: var(--text-3); font-size: 12.5px; padding-top: 1px; white-space: nowrap; }
@@ -21729,7 +21728,40 @@ button.project-open-item-action:disabled {
 .wk-browse-list.secs a .sn { flex: none; min-width: 14px; color: var(--text-3); font-size: 12px; font-variant-numeric: tabular-nums; }
 .wk-browse-list.secs a.todo .tt { color: var(--text-3); }
 
-/* the home: the Plan card over Review, and the phone's second banner */
+/* the home (design §12.3.1, mocks 30 ③, 31 ① ③ ⑥ ⑦): the line under the head, then the principles and the
+   documents by category in the plan page's own rows — a written document's lead under its title a shade darker
+   than a question, what is not written yet folded into one row a category and opened to its titles in grey —
+   and, on a phone, the ways to Browse and the A–Z index; a new space's one card; grey bars on the first read */
+.wk-home-state { margin-top: 6px; font-size: 12.5px; line-height: 1.6; color: var(--text-2); }
+.wk-pl-doc .main > .q.lead { color: var(--text-2); }
+.wk-pl-doc.todo .main > .t { color: var(--text-3); }
+.wk-pl-doc.phone.topic { grid-template-columns: minmax(0, 1fr) 12px; }
+.wk-pl-doc.phone.more { width: 100%; padding: 8px 2px; border-width: 0 0 1px; border-style: solid; border-color: var(--border-subtle);
+                        background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.wk-pl-doc.phone.more .main > .q { margin: 0; -webkit-line-clamp: 1; font-size: 12.5px; }
+.wk-pl-doc.phone.more[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.wk-pl-doc.phone.pr { grid-template-columns: 34px minmax(0, 1fr) auto; }
+.wk-pl-doc.phone.pr > .no { font-size: 12px; color: var(--text-3); }
+.wk-pl-doc.phone.pr > .d { font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wk-home-pr > .wk-pl-cat-h { align-items: center; }
+.wk-home-n { padding: 1px 7px; border-radius: 999px; background: var(--fill-muted); font-size: 11.5px; font-weight: 600; line-height: 17px; color: var(--text-2); }
+.wk-home-pr .tdp-badge { font-size: 11px; line-height: 16px; padding: 0 6px; }
+.wk-home-all { margin-left: auto; padding: 0; border: 0; background: transparent; font: inherit; font-size: 12.5px; color: var(--brand); cursor: pointer; white-space: nowrap; }
+.wk-home-new { margin-top: 16px; padding: 12px 14px; border-radius: 10px; background: var(--bg-subtle); font-size: 13px; line-height: 1.6; color: var(--text-2); }
+.wk-home-new p { margin: 0; }
+.wk-home-new a { display: inline-block; margin-top: 6px; font-weight: 600; color: var(--brand); text-decoration: none; }
+.wk-home-more { display: none; gap: 18px; margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border-subtle); font-size: 13px; }
+.wk-home-more a { display: inline-flex; align-items: center; gap: 6px; color: var(--brand); text-decoration: none; }
+.wk-sk { display: block; height: 10px; border-radius: 5px; background: var(--fill-muted); }
+.wk-home-state .wk-sk { width: 170px; margin: 5px 0 6px; }
+.wk-home-sk .wk-pl-cat-h .wk-sk { width: 90px; height: 9px; margin: 4px 0; }
+.wk-home-sk .wk-pl-doc { align-items: start; }
+.wk-home-sk .wk-pl-doc .no .wk-sk { width: 22px; margin-top: 5px; }
+.wk-home-sk .wk-pl-doc .main > .wk-sk { height: 9px; margin-top: 6px; }
+.wk-home-sk .wk-pl-doc .main > .wk-sk:first-child { height: 12px; margin-top: 4px; }
+.wk-home-sk .wk-pl-doc .main > .wk-sk:nth-child(2) { margin-top: 8px; }
+
+/* Activity: the Plan card by Review, and the phone's plan banners */
 .wk-plan-card-text { font-size: 13px; line-height: 1.6; color: var(--text-2); }
 .wk-plan-card-link { font-size: 12.5px; color: var(--brand); text-decoration: none; }
 .wk-rv-row .wk-op.plan { font-size: 10px; }
@@ -21751,12 +21783,7 @@ button.project-open-item-action:disabled {
   .wk-pl-empty { padding: 28px 20px 22px; }
   .wk-pl-empty .ant-btn { width: 100%; height: 40px; }
   .wk-pl-cat-h .q { display: none; }
-  .wk-pl-doc.phone { grid-template-columns: 34px minmax(0, 1fr) 12px; gap: 6px; padding: 10px 2px 11px; text-decoration: none; color: inherit; }
-  .wk-pl-doc.phone .main { display: block; }
-  .wk-pl-doc.phone .main > .t { font-size: 15px; line-height: 21px; }
-  .wk-pl-doc.phone .main > .q { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 13px; }
-  .wk-pl-doc.phone .l3 { display: block; margin-top: 3px; font-size: 12.5px; color: var(--text-3); }
-  .wk-pl-doc.phone .chev, .wk-pl-sec.phone .chev { font-size: 11px; color: var(--text-4); }
+  .wk-pl-sec.phone .chev { font-size: 11px; color: var(--text-4); }
   .wk-pl-kv { grid-template-columns: minmax(0, 1fr); gap: 2px; margin-top: 12px; }
   .wk-pl-kv > .k { margin-top: 8px; font-size: 12px; }
   .wk-pl-sec.phone { grid-template-columns: 22px minmax(0, 1fr) 12px; gap: 6px; padding: 9px 2px 10px; text-decoration: none; color: inherit; }
