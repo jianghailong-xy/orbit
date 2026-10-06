@@ -70,7 +70,8 @@ public enum OpenRowChange: Equatable, Sendable {
             let held = reordered ? position[row.id]! : index
             if sessions[held] != row { changes.append((held, row)) }
         }
-        return found == ids.count ? (changes, reordered) : nil
+        guard found == ids.count else { return nil }
+        return (changes: changes, reordered: reordered)
     }
 
     private static func change(at index: Int, to row: Session, in sessions: [Session]) -> OpenRowChange {
