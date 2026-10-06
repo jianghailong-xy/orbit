@@ -480,7 +480,7 @@ func TestUserModeSaysARefusedTokenIsInvalidRevokedOrExpired(t *testing.T) {
 			user, runner := asYouBesideARunner(t)
 			loggedIn(t, user.URL, otherToken)
 			_, err := runOrbit(t, c.command, c.args, strings.NewReader(""))
-			if err == nil || !strings.Contains(err.Error(), "invalid, revoked or expired") || !strings.Contains(err.Error(), "orbit login --with-token") {
+			if err == nil || !strings.Contains(err.Error(), "invalid, revoked or expired") || !strings.Contains(err.Error(), "Run `orbit login` again") {
 				t.Fatalf("err = %v", err)
 			}
 			if got := user.seen(); len(got) != 1 {
