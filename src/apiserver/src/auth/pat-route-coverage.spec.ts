@@ -156,7 +156,10 @@ const NEVER_GRANTABLE: ReadonlyArray<{
 // The controllers under auth/ are refused to tokens whole, on the class (docs/google-sign-in-design.md
 // §4.4): most of their routes are public and so outside the rows above, and a route behind
 // JwtAuthGuard added to one later — Google's link and unlink — is refused without its author
-// repeating it. Exact both ways, so a new controller there is a decision made here.
+// repeating it. Exact both ways, so a new controller there is a decision made here. Under auth/ is
+// where a controller is mounted, as in the rows above, not the folder it is written in:
+// PatDeviceLoginController (`orbit login` through the browser) is written in auth/ but mounted at
+// /access-tokens/device, and the token row above holds it to TOKEN_MANAGEMENT.
 const AUTH_CONTROLLERS = ['AuthController', 'GoogleAuthController'];
 
 // ── §6.5: the token acting on itself ────────────────────────────────────────────────────────────

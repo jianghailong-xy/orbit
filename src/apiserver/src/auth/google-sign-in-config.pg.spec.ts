@@ -17,7 +17,8 @@
  *       (2), password doors included. Switched on with both, /auth/methods offers Google — sign-up
  *       only under OPEN — and /start stops answering GOOGLE_NOT_CONFIGURED; switched off again, (2);
  *   (5) only a signed-in ADMIN reaches the setting: nobody is 401, a MEMBER 403, and an access token
- *       holding every scope 403 PAT_FORBIDDEN ADMIN; none of them writes;
+ *       holding every scope 403 PAT_FORBIDDEN ADMIN; none of them changes it (the token's refused PUT
+ *       is recorded as `pat.request.denied`, as every refused write by a token is: pat-request-audit.ts);
  *   (6) no answer the apiserver gave in this run, nor its log, carries the secret or what is stored
  *       for it.
  *
@@ -327,7 +328,7 @@ test('Google sign-in configuration: off until an administrator turns it on, the 
     await assertOff('switched off again');
   });
 
-  await t.test('(5) only a signed-in ADMIN reaches the setting; nobody, a MEMBER and an access token write nothing', async () => {
+  await t.test('(5) only a signed-in ADMIN reaches the setting; nobody, a MEMBER and an access token change nothing in it', async () => {
     const memberId = randomUUID();
     const memberEmail = `member-${RUN}@google-sign-in-config.invalid`;
     await db.user.create({ data: { id: memberId, email: memberEmail, name: 'Member', passwordHash: 'x' } });
@@ -349,7 +350,7 @@ test('Google sign-in configuration: off until an administrator turns it on, the 
         }
       }
     }
-    assert.deepEqual(await providerRows(), before, 'none of them wrote');
+    assert.deepEqual(await providerRows(), before, 'none of them changed the setting');
   });
 
   await t.test('(6) no answer in this run, nor the apiserver\'s log, carries the secret or what is stored for it', async () => {
