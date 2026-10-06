@@ -503,6 +503,20 @@ test('tenant isolation: every route that names something by path refuses another
     });
 
     // One session asking another of the same account a question (sessions/session-request.ts).
+    const cliLoginUserCode = `cli-${name}-${RUN}`;
+    await db.patDeviceLogin.create({
+      data: {
+        deviceCodeHash: createHash('sha256').update(`${cliLoginUserCode}-device`).digest('hex'),
+        userCode: cliLoginUserCode,
+        name: `${name} cli`,
+        scopes: ['tasks:read'],
+        hostname: `${name}.census.invalid`,
+        status: 'APPROVED',
+        decidedById: ownerId,
+        decidedAt: new Date(),
+        expiresAt: new Date(Date.now() + 600_000),
+      },
+    });
     const device = await db.deviceToken.create({
       data: {
         userId: ownerId, token: `census-${name}-${RUN}`, platform: 'android', environment: 'production',
@@ -556,6 +570,7 @@ test('tenant isolation: every route that names something by path refuses another
       codexAccount: 'c0ffee01',
       codexResetOperationId,
       deviceUserCode,
+      cliLoginUserCode,
       deviceToken: device.token,
       deviceRegistrationId: device.id,
       workspaceId,

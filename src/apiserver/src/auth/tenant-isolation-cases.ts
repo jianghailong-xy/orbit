@@ -34,6 +34,8 @@ export interface Tenant {
   codexResetOperationId: string;
   /** A device enrollment this account approved. */
   deviceUserCode: string;
+  /** An `orbit login` request this account approved. */
+  cliLoginUserCode: string;
   /** A phone registered for the account's pushes: its token, and the key its registration answered. */
   deviceToken: string;
   deviceRegistrationId: string;
@@ -195,8 +197,11 @@ export const evidence = (claim: string) => ({
 });
 
 export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
-  // ── access tokens ─────────────────────────────────────────────────────────────────────────────
+  // ── access tokens, and `orbit login` asking for one ─────────────────────────────────────────────
   'DELETE /access-tokens/:id': { request: (of) => ({ params: { id: of.spare.accessTokenId } }) },
+  'GET /access-tokens/device/:userCode': { request: (of) => ({ params: { userCode: of.cliLoginUserCode } }) },
+  'POST /access-tokens/device/:userCode/approve': { request: (of) => ({ params: { userCode: of.cliLoginUserCode } }) },
+  'POST /access-tokens/device/:userCode/deny': { request: (of) => ({ params: { userCode: of.cliLoginUserCode } }) },
 
   // ── admin/*: an administrator acts on other accounts by design; a member is refused ─────────────
   'GET /admin/users/:id/access-tokens': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
@@ -446,6 +451,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
 
   // ── sessions ─────────────────────────────────────────────────────────────────────────────────
   'GET /sessions/:id': { request: (of) => ({ params: { id: of.sessionId } }) },
+  'GET /sessions/:id/compact': { request: (of) => ({ params: { id: of.sessionId } }) },
   'PATCH /sessions/:id': { request: (of) => ({ params: { id: of.sessionId }, body: { title: 'renamed by the census' } }) },
   'DELETE /sessions/:id': { request: (of) => ({ params: { id: of.spare.sessionId } }) },
   'DELETE /sessions/:id/purge': { request: (of) => ({ params: { id: of.spare.purgedSessionId } }) },
@@ -894,6 +900,7 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
     }),
   },
   'GET /sessions/imported query workspaceId': { request: (of) => ({ params: {}, query: { workspaceId: of.workspaceId } }) },
+  'GET /sessions/compact query parentSessionId': { request: (of) => ({ params: {}, query: { parentSessionId: of.sessionId } }) },
   'POST /sessions/remove-imported body workspaceId': { request: (of) => ({ params: {}, body: { workspaceId: of.workspaceId } }) },
   'POST /share-links/turn-off body shareLinkIds[]': { request: (of) => ({ params: {}, body: { shareLinkIds: [of.spare.shareLinkId] } }) },
 
