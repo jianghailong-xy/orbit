@@ -1450,11 +1450,12 @@ func envWithAgent(agentEnv map[string]string) []string {
 	// launchd/the runner or from agent-configured environment. Their MCP child reads
 	// the private session file and refreshes it lazily instead. Already-running
 	// providers retain the environment fallback for compatibility. A person's own
-	// credential (userCredentialEnvKey) is dropped from both sources too.
+	// credential is dropped from both sources too, and the process is marked as the
+	// runner's (runnerChildEnv).
 	env := make([]string, 0, len(os.Environ())+len(agentEnv))
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")
-		if !sessionContextEnvKey(key) && !userCredentialEnvKey(key) {
+		if !sessionContextEnvKey(key) {
 			env = append(env, entry)
 		}
 	}
@@ -1463,12 +1464,12 @@ func envWithAgent(agentEnv map[string]string) []string {
 		// credential store. It is runner context, not an agent-customizable value.
 		// EqualFold also preserves this rule on Windows, whose environment keys are
 		// case-insensitive.
-		if sessionContextEnvKey(k) || userCredentialEnvKey(k) || strings.EqualFold(k, "ORBIT_HOME") {
+		if sessionContextEnvKey(k) || strings.EqualFold(k, "ORBIT_HOME") {
 			continue
 		}
 		env = append(env, k+"="+v)
 	}
-	return env
+	return runnerChildEnv(env)
 }
 
 func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onCodexRateLimits codexRateLimitSink, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {

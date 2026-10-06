@@ -108,5 +108,5 @@ login is impractical, such as CI. See [personal access tokens](runner-cli.md#per
 
 | Variable | Required / default | Purpose | Secret? | Apply change |
 | --- | --- | --- | --- | --- |
-| `ORBIT_USER_TOKEN` | Optional; unset uses the saved login | A personal access token (Settings → Access tokens) the CLI acts as, in place of `user.json`. Ignored inside an Orbit session and never passed to agent processes. | Yes | Next CLI command |
+| `ORBIT_USER_TOKEN` | Optional; unset uses the saved login | A personal access token (Settings → Access tokens) the CLI acts as, in place of `user.json`. Ignored inside an Orbit session and in any process the runner starts for one (both ignore `user.json` too), and never passed to agent processes. | Yes | Next CLI command |
 | `ORBIT_SERVER_URL` | Optional; the runner's server, else the server the binary was built for | The server `ORBIT_USER_TOKEN` belongs to, and the default for `orbit login --server`. A saved login always uses its own server. | No; redact private origin | Next CLI command |

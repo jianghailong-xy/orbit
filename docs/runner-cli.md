@@ -296,7 +296,8 @@ The first of these that is present decides. `orbit whoami` prints the identity a
    machine is ignored there, and stderr says so once, so an agent never becomes you because somebody logged
    in on its machine.
 2. `ORBIT_SERVICE_TOKEN`: a service token.
-3. `ORBIT_USER_TOKEN`, or else the login saved in `user.json`: you.
+3. `ORBIT_USER_TOKEN`, or else the login saved in `user.json`: you. A process the runner started skips this
+   rule (see [On a runner machine](#on-a-runner-machine)).
 4. The runner credential in `config.json`: the machine.
 
 `orbit api` acts only as you. So do the `task`, `project` and `session` commands while you are logged in: each one
@@ -336,6 +337,12 @@ the runner service runs as the same OS user, every agent session it starts can r
 permissions do not separate the processes of one account. `orbit login` warns when that is the case. Do your
 own scripting on that machine as a separate OS user, or give the token used there only the scopes it needs,
 confine it to workspaces, and keep its lifetime short.
+
+The commands the runner runs itself never act as you, even when you are logged in in its `ORBIT_HOME`. This
+covers a task's EXECUTABLE acceptance command and a `!` command in a session. The runner marks the processes it
+starts for its sessions (engines, shell commands, background jobs) with `ORBIT_RUNNER_CHILD=1`, and there the CLI
+skips your login: such a process acts as its session if it has one, and otherwise as the machine. So `orbit wiki check` and `orbit wiki plan check` still run as the runner,
+and `orbit whoami` there says why. A terminal you open yourself has no such mark.
 
 ## Security notes
 

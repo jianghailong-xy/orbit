@@ -20,6 +20,9 @@ import (
 //     because somebody ran `orbit login` on the machine it runs on.
 //  2. ORBIT_SERVICE_TOKEN — a credential minted for a headless process (`orbit token mint`).
 //  3. ORBIT_USER_TOKEN, else the login `orbit login` saved in $ORBIT_HOME/user.json — the person.
+//     Passed over in a process the runner started (ORBIT_RUNNER_CHILD): the shell an EXECUTABLE
+//     acceptance command or a `!` command runs in has no session to act as, and is the machine's,
+//     not the person's who logged in on it.
 //  4. The runner credential in $ORBIT_HOME/config.json — the machine.
 //
 // A rule that is present decides even when its credential cannot be used: a user.json that cannot be
@@ -32,6 +35,11 @@ const (
 	envUserServerURL = "ORBIT_SERVER_URL"
 	// What every personal access token starts with (the apiserver's PAT_PREFIX).
 	userTokenPrefix = "orbit_pat_"
+	// Put on wherever the runner builds a process's environment (runnerChildEnv, and the environments
+	// it builds from nothing), so that rule 3 is passed over there. Like rule 1 it keeps the normal
+	// path from crossing identities and is no boundary: a process running as the same OS user can
+	// unset it.
+	envRunnerChild = "ORBIT_RUNNER_CHILD"
 )
 
 // The kinds of identity, in the order they are chosen.
@@ -148,7 +156,8 @@ type cliIdentity struct {
 	Reason string `json:"reason"`
 	// Set when the chosen credential cannot be used: what is wrong, and what to do about it.
 	Problem string `json:"problem,omitempty"`
-	// A session's: the session, and whether a personal access token is on hand and being ignored.
+	// A session's: the session. And whether a personal access token is on hand and being ignored —
+	// inside a session, or in a process the runner started.
 	SessionID        string `json:"sessionId,omitempty"`
 	UserTokenIgnored bool   `json:"userTokenIgnored,omitempty"`
 	// The control plane a user's or the runner's credential is for.
@@ -172,7 +181,12 @@ type cliIdentity struct {
 	token string
 	// Whether the server has confirmed a user's token and filled in its grant (`orbit whoami`).
 	verified bool
+	// Whether the runner started this process, which passed the person over (envRunnerChild).
+	runnerChild bool
 }
+
+// runnerChildReason ends the reason of an identity chosen in a process the runner started.
+const runnerChildReason = ": the Orbit runner started this process (ORBIT_RUNNER_CHILD is set), and the CLI there acts as the machine, never as a login saved on it"
 
 // resolveCLIIdentity applies the order. It reads the environment and $ORBIT_HOME only: whether a
 // token still works is the server's to say, which `orbit whoami` asks and `capabilities` does not.
@@ -198,13 +212,15 @@ func resolveCLIIdentity() cliIdentity {
 		}
 		return identity
 	}
-	if token := strings.TrimSpace(os.Getenv(envUserToken)); token != "" {
+	// A process the runner started passes the person over for the machine.
+	runnerChild := strings.TrimSpace(os.Getenv(envRunnerChild)) != ""
+	if token := strings.TrimSpace(os.Getenv(envUserToken)); token != "" && !runnerChild {
 		return cliIdentity{
 			Kind: identityUser, Reason: "ORBIT_USER_TOKEN is set", Source: envUserToken,
 			ServerURL: userTokenServer(), token: token,
 		}
 	}
-	if path := userLoginFile(); exists(path) {
+	if path := userLoginFile(); exists(path) && !runnerChild {
 		identity := cliIdentity{Kind: identityUser, Reason: "the login `orbit login` saved in " + path, Source: path}
 		login, err := loadUserLogin()
 		if err != nil {
@@ -220,6 +236,10 @@ func resolveCLIIdentity() cliIdentity {
 	}
 	if path := configPath(); exists(path) {
 		identity := cliIdentity{Kind: identityRunner, Reason: "the runner credential in " + path}
+		if runnerChild {
+			identity.Reason += runnerChildReason
+			identity.UserTokenIgnored, identity.runnerChild = userTokenOnHand(), true
+		}
 		if err := configStoragePrivate(); err != nil {
 			identity.Problem = fmt.Sprintf("runner credential storage is not private (%v); restart the Orbit runner once to migrate it", err)
 			return identity
@@ -234,6 +254,15 @@ func resolveCLIIdentity() cliIdentity {
 		identity.RunnerName = cfg.Name
 		identity.token = cfg.RunnerToken
 		return identity
+	}
+	if runnerChild {
+		return cliIdentity{
+			Kind:             identityNone,
+			Reason:           "no ORBIT_SESSION_ID or ORBIT_SERVICE_TOKEN and no runner credential" + runnerChildReason,
+			Problem:          "no runner credential at " + configPath() + ": a process the Orbit runner started acts with nothing else",
+			UserTokenIgnored: userTokenOnHand(),
+			runnerChild:      true,
+		}
 	}
 	return cliIdentity{
 		Kind:    identityNone,
@@ -274,12 +303,16 @@ func runnerServerURL() string {
 var userTokenIgnoredOnce sync.Once
 
 // noteUserTokenIgnored says on stderr, once, that a personal access token is on hand and is not used
-// because this process runs inside an Orbit session (§7.2).
+// because this process runs inside an Orbit session, or was started by the runner (§7.2).
 func noteUserTokenIgnored(identity cliIdentity, errOut io.Writer) {
 	if !identity.UserTokenIgnored {
 		return
 	}
 	userTokenIgnoredOnce.Do(func() {
-		fmt.Fprintln(errOut, "orbit: ignoring the personal access token on this machine: inside an Orbit session (ORBIT_SESSION_ID is set) the CLI acts as the session")
+		if identity.Kind == identitySession {
+			fmt.Fprintln(errOut, "orbit: ignoring the personal access token on this machine: inside an Orbit session (ORBIT_SESSION_ID is set) the CLI acts as the session")
+			return
+		}
+		fmt.Fprintln(errOut, "orbit: ignoring the personal access token on this machine: the Orbit runner started this process (ORBIT_RUNNER_CHILD is set), and the CLI there acts as the machine")
 	})
 }

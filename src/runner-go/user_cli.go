@@ -518,6 +518,9 @@ func actingUser(identity cliIdentity) error {
 	case identityService:
 		return errors.New("it acts as you, and ORBIT_SERVICE_TOKEN is set, which comes first: unset it to act as yourself")
 	default:
+		if identity.runnerChild {
+			return errors.New("it acts as you, and the Orbit runner started this process (ORBIT_RUNNER_CHILD is set): what the runner starts acts as the machine, never as a login saved on it — run it from your own terminal")
+		}
 		return errors.New("it acts as you, and you are not logged in: run `orbit login --with-token` (or set ORBIT_USER_TOKEN); the runner's credential is the machine's, never yours")
 	}
 }
