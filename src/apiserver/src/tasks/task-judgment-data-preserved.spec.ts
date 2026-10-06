@@ -1935,16 +1935,35 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // trigger freezing the new column. 0155's guard is not replaced; no task, project,
       // acceptance or DONE fence object is named, and no row is written or backfilled.
       '0386_project_handoff_move_request',
-      // Sign-in providers (0387): one new table, sign_in_provider, with its primary key and two
-      // CHECKs of its own, and no other index, foreign key, function or trigger. No existing table,
-      // column, constraint, function, trigger or type is altered or dropped; no task, project,
-      // acceptance or DONE fence object is named, and no row is written.
-      '0387_sign_in_provider',
+      // Antigravity accounts (0387): one nullable TEXT with no default on `workspace`
+      // (`antigravity_account`, 0309's `claude_account` exactly), and on `session` one nullable TEXT
+      // with no default (`antigravity_account`) and one BOOLEAN NOT NULL DEFAULT false
+      // (`antigravity_account_pinned`) — 0336's pair exactly, catalog-only as a constant default is —
+      // with no index, no CHECK and no foreign key, and nothing else. `task`, `project` and
+      // `project_acceptance_criterion_definition` are not named, no `project_acceptance_*` object nor
+      // any of the six preserved triggers/functions is, and no function, trigger, enum or type is
+      // created — so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: nothing
+      // is backfilled.
+      '0387_antigravity_account',
       // `orbit login` through the browser (0388): one new table, pat_device_login, with its own
       // CHECKs, indexes and one foreign key to `user` (ON DELETE CASCADE). No existing table,
       // column, constraint, function, trigger or type is altered or dropped; no task, project,
       // acceptance or DONE fence object is named, and no row is written.
-      '0388_pat_device_login'],
+      '0388_pat_device_login',
+      // Sign-in providers (0390): one new table, sign_in_provider, with its primary key and two
+      // CHECKs of its own, and no other index, foreign key, function or trigger. No existing table,
+      // column, constraint, function, trigger or type is altered or dropped; no task, project,
+      // acceptance or DONE fence object is named, and no row is written. Written as 0387 and
+      // renumbered before landing, unchanged otherwise, when main's 0387_antigravity_account took
+      // that number first.
+      '0390_sign_in_provider',
+      // Signing in with Google (0391): two new tables. user_identity, with its primary key, two
+      // CHECKs, two unique indexes and a foreign key to `user` (ON DELETE CASCADE); and
+      // oauth_login_flow, with its primary key, four CHECKs, two unique indexes, two indexes and a
+      // foreign key to `user` (ON DELETE CASCADE). No function or trigger. No existing table, column,
+      // constraint, function, trigger or type is altered or dropped; no task, project, acceptance or
+      // DONE fence object is named, and no row is written.
+      '0391_google_login_flow'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

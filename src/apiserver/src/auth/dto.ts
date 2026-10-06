@@ -117,6 +117,20 @@ export class BootstrapDto {
   password!: string;
 }
 
+/**
+ * `POST /auth/google/exchange` (docs/google-sign-in-design.md §4.3): the ticket the callback handed
+ * the client, and the PKCE verifier only that client holds. Both only have to be strings here: the
+ * ticket is spent by this request whatever the verifier, and a verifier of the wrong shape is refused
+ * after that, as a wrong one is.
+ */
+export class GoogleExchangeDto {
+  @IsString()
+  ticket!: string;
+
+  @IsString()
+  codeVerifier!: string;
+}
+
 /** `PUT /admin/sign-in/google` (docs/google-sign-in-design.md §6, §7.1): the whole setting. */
 export class UpdateGoogleSignInDto {
   @IsBoolean()

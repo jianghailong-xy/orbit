@@ -255,7 +255,11 @@ struct SessionProjectPage: View {
         var id: String { rawValue }
     }
 
-    private var sessions: [Session] { app.projectSessions }
+    /// This page's members — never what the model still holds for another address. Its first frame
+    /// comes before its load has begun, and the load opens on what the app already holds.
+    private var sessions: [Session] { app.projectSessionsAddress == address ? app.projectSessions : [] }
+    /// Nothing has been read for this page until its own load has begun.
+    private var loading: Bool { app.projectSessionsLoading || app.projectSessionsAddress != address }
     /// This project's merge into main — never another project's, which the model still holds for
     /// the moment between an address change and its first read.
     private var merge: ProjectMergeModel? {
@@ -331,13 +335,16 @@ struct SessionProjectPage: View {
         .navigationBarTitleDisplayMode(.inline)
         .rowSwipeList(rowSwipe)
         .refreshable {
-            await app.loadProjectSessions(address)
-            await app.loadProjectMerge(address, force: true)
-            await app.loadProjectStart(address)
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { @MainActor in await app.loadProjectSessions(address) }
+                group.addTask { @MainActor in await app.loadProjectIntegration(address) }
+                group.addTask { @MainActor in await app.loadProjectMerge(address, force: true) }
+                group.addTask { @MainActor in await app.loadProjectStart(address) }
+            }
         }
         .overlay {
             // A failure stays up while the next poll is in flight, rather than blinking out every 4s.
-            if sessions.isEmpty, let failure = app.projectSessionsError {
+            if sessions.isEmpty, app.projectSessionsAddress == address, let failure = app.projectSessionsError {
                 ContentUnavailableView {
                     Label("Couldn't load sessions", systemImage: "exclamationmark.bubble")
                 } description: {
@@ -345,7 +352,7 @@ struct SessionProjectPage: View {
                 } actions: {
                     Button("Retry") { Task { await app.loadProjectSessions(address) } }
                 }
-            } else if sessions.isEmpty && !app.projectSessionsLoading {
+            } else if sessions.isEmpty && !loading {
                 ContentUnavailableView("No sessions", systemImage: "bubble.left.and.bubble.right")
             }
         }
@@ -391,26 +398,48 @@ struct SessionProjectPage: View {
                 .task { await store.load() }
             }
         }
+        // Side by side, each on its own 4-second poll: the landing line, the merge card and the start
+        // row never wait behind the member lists, the slowest reads the page makes, and a poll of the
+        // members asks for neither list again unless something moved (`pollProjectSessions`).
         .task(id: address) {
-            await app.loadProjectSessions(address)
-            await app.loadProjectMerge(address)
-            await app.projects?.load()
-            await app.loadProjectStart(address)
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(4))
-                if Task.isCancelled { break }
-                await app.loadProjectSessions(address)
-                await app.loadProjectMerge(address)
-                await app.loadProjectStart(address)
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { @MainActor in
+                    await app.loadProjectSessions(address)
+                    await Self.poll { await app.pollProjectSessions(address) }
+                }
+                group.addTask { @MainActor in
+                    await app.loadProjectIntegration(address)
+                    await Self.poll { await app.loadProjectIntegration(address) }
+                }
+                group.addTask { @MainActor in
+                    await app.loadProjectMerge(address)
+                    await Self.poll { await app.loadProjectMerge(address) }
+                }
+                group.addTask { @MainActor in
+                    await app.projects?.load()
+                    await app.loadProjectStart(address)
+                    await Self.poll { await app.loadProjectStart(address) }
+                }
             }
+        }
+    }
+
+    /// `read` again 4 seconds after each one ends, until the page's task is cancelled: the page
+    /// went, or its address changed.
+    private static func poll(_ read: () async -> Void) async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(4))
+            if Task.isCancelled { break }
+            await read()
         }
     }
 
     private var title: some View {
         VStack(spacing: 1) {
             Text(titleText).font(.headline).lineLimit(1)
-            // No count before the members have been read: "0 sessions" would be a claim nobody checked.
-            Text(app.projectSessionsLoading && sessions.isEmpty
+            // No count while no member is known yet, from the app's lists or the read: "0 sessions"
+            // would be a claim nobody checked.
+            Text(loading && sessions.isEmpty
                  ? SessionProjectCopy.pageSubtitleLoading
                  : SessionProjectCopy.pageSubtitle(sessions: sessions.count))
                 .font(.caption)

@@ -1,9 +1,9 @@
 /**
  * Google sign-in's configuration, and its default — off (docs/google-sign-in-design.md §4.1, §6,
- * §7.1, migration 0387) — against a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from
+ * §7.1, migration 0390) — against a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from
  * empty and the production apiserver, `build/main.js`. What it is held to:
  *
- *   (1) 0387 made the table it describes — its columns and which of them are NOT NULL, its
+ *   (1) 0390 made the table it describes — its columns and which of them are NOT NULL, its
  *       defaults, the primary key, the two CHECKs, and no foreign key or trigger — runs again
  *       unchanged, and writes no row: a deployment that migrates has Google sign-in off;
  *   (2) not configured (no row): /auth/methods offers the password alone, /auth/google/start sends
@@ -57,7 +57,7 @@ const ORIGIN = 'https://orbit.example.test';
 const REDIRECT_URI = `${ORIGIN}/api/auth/google/callback`;
 const RUN = randomUUID().slice(0, 8);
 const MIGRATION = readFileSync(
-  path.resolve(__dirname, '../../prisma/migrations/0387_sign_in_provider/migration.sql'),
+  path.resolve(__dirname, '../../prisma/migrations/0390_sign_in_provider/migration.sql'),
   'utf8',
 );
 const CLIENT_ID = `1234-${RUN}.apps.googleusercontent.com`;
@@ -99,9 +99,9 @@ test('Google sign-in configuration: off until an administrator turns it on, the 
   /** Every value `client_secret_enc` held in this run, for (6). */
   const stored = new Set<string>();
 
-  await t.test('(1) 0387 made the table it describes, writes no row, and runs again', async () => {
+  await t.test('(1) 0390 made the table it describes, writes no row, and runs again', async () => {
     const applied = await sql.query(
-      `SELECT finished_at IS NOT NULL AS done FROM _prisma_migrations WHERE migration_name = '0387_sign_in_provider'`,
+      `SELECT finished_at IS NOT NULL AS done FROM _prisma_migrations WHERE migration_name = '0390_sign_in_provider'`,
     );
     assert.deepEqual(applied.rows, [{ done: true }]);
     const columns = await sql.query(

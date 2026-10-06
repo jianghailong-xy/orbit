@@ -51,6 +51,8 @@ export interface CreateSessionDto {
    *  `default` or one of the runner's slots. Omitted is Automatic where the workspace leaves the account
    *  to Orbit (the one whose quota resets soonest), else the workspace's. */
   claudeAccount?: string;
+  /** The Antigravity Google account, the same again for a session on the built-in Antigravity engine. */
+  antigravityAccount?: string;
   /** Ids of pre-uploaded image attachments (`POST /api/attachments` with no sessionId) to
    *  send with the seeded first turn. Each must be the caller's and not yet scoped to a
    *  session/turn — they're scoped to this session on create, then linked to the initial

@@ -9,8 +9,11 @@ import {
   codexAccountToMoveTo,
   codexAccountToStartOn,
   accountToStartOn,
+  accountToMoveTo,
   quotaExpiresAt,
   quotaNearLimit,
+  withEnginePlanUsage,
+  ACCOUNT_DIR_VAR,
 } from './planUsage';
 
 const NOW = new Date('2026-08-03T13:00:00Z');
@@ -463,5 +466,59 @@ describe('codexAccountToMoveTo — where a session whose account hit its limit g
   it('has nowhere to go without a second account', () => {
     expect(codexAccountToMoveTo([account('default')], usage(100, 0, 0), NOW, 'default')).toBeNull();
     expect(codexAccountToMoveTo(undefined, null, NOW, 'default')).toBeNull();
+  });
+});
+
+describe('a runner with more than one Antigravity Google account', () => {
+  const WORK = '5c2e91a0';
+  const SPARE = 'a81d07e3';
+  const WEEK_END = '2026-08-06T17:31:03Z';
+  const bucket = (id: string, window: string, remainingFraction: number, resetTime?: string) =>
+    ({ id, window, remainingFraction, ...(resetTime ? { resetTime } : {}) });
+  const accounts: RunnerEngineAccount[] = [
+    { id: 'default', home: '/root/.orbit/antigravity/google', auth: 'yes' },
+    { id: WORK, home: `/root/.orbit/antigravity-accounts/${WORK}`, auth: 'yes' },
+    { id: SPARE, home: `/root/.orbit/antigravity-accounts/${SPARE}`, auth: 'no' },
+  ];
+  // As the runner reports it: on the engine's health, Default's buckets and every other account's.
+  const engines = (defaultFive: number) => [{
+    engine: 'antigravity' as const, installed: true, auth: 'yes' as const, accounts,
+    planUsage: {
+      provider: 'antigravity' as never,
+      buckets: [bucket('gemini-weekly', 'weekly', 0.9, LATER), bucket('gemini-5h', '5h', defaultFive, EARLIER)],
+      accounts: { [WORK]: { buckets: [bucket('gemini-weekly', 'weekly', 0.5, WEEK_END), bucket('gemini-5h', '5h', 1, EARLIER)] } },
+    },
+  }];
+
+  it("folds the engine's quota into the runner's under antigravity, beside what was there", () => {
+    const usage = withEnginePlanUsage(codexExhausted, engines(1));
+    expect(usage?.antigravity?.buckets).toHaveLength(2);
+    expect(usage?.primary).toEqual(codexExhausted.primary);
+    expect(withEnginePlanUsage(codexExhausted, [])).toBe(codexExhausted);
+    // Alone, it names its provider, and so never reads as anybody else's snapshot.
+    expect(withEnginePlanUsage(null, engines(1))?.provider).toBe('antigravity');
+  });
+
+  it("weighs a bucket's remaining fraction as the share it has spent", () => {
+    const usage = withEnginePlanUsage(null, engines(0));
+    expect(planUsageBlockedUntil(usage, 'antigravity', NOW, 'default')).toEqual(new Date(EARLIER));
+    expect(planUsageBlockedUntil(usage, 'antigravity', NOW, WORK)).toBeNull();
+    expect(planUsageReported(usage, 'antigravity', SPARE)).toBe(false);
+  });
+
+  it('starts a session on the account whose week ends first, and passes over a spent or signed-out one', () => {
+    expect(accountToStartOn('antigravity', accounts, withEnginePlanUsage(null, engines(1)), NOW)).toBe(WORK);
+    expect(accountToStartOn('antigravity', accounts, withEnginePlanUsage(null, engines(0)), NOW)).toBe(WORK);
+    expect(accountToMoveTo('antigravity', accounts, withEnginePlanUsage(null, engines(0)), NOW, WORK)).toBeNull();
+  });
+
+  it("names the account a session's ORBIT_ANTIGRAVITY_GOOGLE_DIR selects, Default when it names none", () => {
+    expect(ACCOUNT_DIR_VAR.antigravity).toBe('ORBIT_ANTIGRAVITY_GOOGLE_DIR');
+    expect(accountOfEnv('antigravity', {}, accounts)).toBe('default');
+    expect(accountOfEnv('antigravity', { HOME: '/home/someone' }, accounts)).toBe('default');
+    expect(accountOfEnv('antigravity', { ORBIT_ANTIGRAVITY_GOOGLE_DIR: `/root/.orbit/antigravity-accounts/${WORK}/` }, accounts)).toBe(WORK);
+    expect(accountOfEnv('antigravity', { ORBIT_ANTIGRAVITY_GOOGLE_DIR: '/elsewhere' }, accounts)).toBeNull();
+    // A Gemini key of the session's own spends no account's subscription.
+    expect(accountOfEnv('antigravity', { GEMINI_API_KEY: 'key' }, accounts)).toBeNull();
   });
 });

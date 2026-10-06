@@ -1,4 +1,4 @@
--- 0387 — sign-in providers (docs/google-sign-in-design.md §7.1).
+-- 0390 — sign-in providers (docs/google-sign-in-design.md §7.1).
 --
 -- What an administrator saves in the admin area's Sign-in settings, one row per provider; only
 -- `google` exists. The configuration is kept here rather than in environment variables, so a
@@ -15,10 +15,12 @@
 -- `updated_by_id` is the administrator who saved last: an id without a foreign key, so deleting
 -- that user writes nothing here.
 --
--- 0387: the next number on main when this was written (2026-10-06), whose highest was
--- 0386_project_handoff_move_request, and spelled by no branch of origin. Every statement can run
--- twice: IF NOT EXISTS, and constraints inside a `duplicate_object` guard. Nothing existing is
--- altered and no row is written.
+-- 0390: written as 0387, the next number on main at the time (2026-10-06), and renumbered before
+-- landing because main's 0387_antigravity_account took that number first, while 0388 and 0389 were
+-- held by other branches. Only the number changed, not a statement below, and no database applied
+-- it as 0387: the project branch it lived on was never deployed. Every statement can run twice: IF
+-- NOT EXISTS, and constraints inside a `duplicate_object` guard. Nothing existing is altered and no
+-- row is written.
 
 CREATE TABLE IF NOT EXISTS "sign_in_provider" (
   "provider"          TEXT NOT NULL,

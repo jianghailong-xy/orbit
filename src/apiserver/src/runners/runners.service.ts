@@ -31,6 +31,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import {
   CLAUDE_ACCOUNT_REMOVE_V1,
+  ANTIGRAVITY_ACCOUNT_REMOVE_V1,
   CODEX_ACCOUNT_REMOVE_V1,
   LOGIN_RELAY_TIMEOUT_MS,
 } from '../runner-api/runner-api.controller';
@@ -950,12 +951,14 @@ export function installStateOf(r: {
 const ACCOUNT_REMOVE_TOO_OLD: Record<string, string> = {
   codex: 'This runner is too old to remove a Codex account — update it, then try again.',
   claude: 'This runner is too old to remove a Claude account — update it, then try again.',
+  antigravity: 'This runner is too old to remove an Antigravity account — update it, then try again.',
 };
 
 /** The capability each engine's removal needs the runner to declare. */
 const ACCOUNT_REMOVE_CAPABILITIES: Record<string, string> = {
   codex: CODEX_ACCOUNT_REMOVE_V1,
   claude: CLAUDE_ACCOUNT_REMOVE_V1,
+  antigravity: ANTIGRAVITY_ACCOUNT_REMOVE_V1,
 };
 
 /** Project a runner row onto the browser-facing account-removal view. */
