@@ -24,12 +24,16 @@ import (
 var loginHelp = `orbit login — act as yourself, with a personal access token
 
 Usage:
+  orbit login [--server URL] [--name NAME] [--scopes PRESET|LIST] [--expires 90d|never]
   orbit login --with-token [--server URL] < token.txt
 
-Reads a personal access token from stdin — never from an argument, so it stays out of your shell
-history — checks it with the server, and saves it with the server's URL in $ORBIT_HOME/user.json
-(default ~/.orbit/user.json, 0600, in a 0700 directory). Issue the token in Orbit under
-Settings → Access tokens, with the scopes your scripts need.
+Signs in through the browser: asks the server for a personal access token, opens
+<server>/cli-login?code=… — sign in to Orbit there, check the token's name, scopes, expiry and
+this host, and approve it — and waits up to ten minutes for the token. With --with-token it reads
+a token already issued under Settings → Access tokens from stdin instead — never from an argument,
+so it stays out of your shell history. Either way it checks the token with the server and saves it
+with the server's URL in $ORBIT_HOME/user.json (default ~/.orbit/user.json, 0600, in a 0700
+directory).
 
 ORBIT_USER_TOKEN (with ORBIT_SERVER_URL) takes precedence over a saved login, for CI and
 containers. The runner service never reads user.json, and inside an Orbit session the CLI ignores
@@ -37,10 +41,13 @@ it. On a runner machine whose service runs as this OS user, though, every agent 
 starts can read the file: orbit login warns when that is the case.
 
 Options:
-  --with-token             Read the token from stdin (required: signing in through the browser
-                           is not available yet)
   --server <url>           The Orbit server (default: ORBIT_SERVER_URL, the saved login's server,
                            this machine's runner's server, or ` + defaultServer + `)
+  --name <name>            The token's name (default: orbit CLI on <this host's name>)
+  --scopes <preset|list>   read-only (default), read-write, or scopes separated by commas, such
+                           as tasks:read,tasks:write
+  --expires <lifetime>     30d, 90d (default), 365d or never
+  --with-token             Read an issued token from stdin instead of signing in through the browser
 `
 
 const logoutHelp = `orbit logout — stop acting as yourself here
@@ -94,7 +101,7 @@ Options:
   --json                   Print compact JSON (default: indented)
 
 An answer other than 2xx is printed too, and the command exits non-zero. A 401 means the token is
-invalid, revoked or expired: run 'orbit login --with-token' with a new one.
+invalid, revoked or expired: run 'orbit login' again.
 `
 
 // The commands that act as the person (§7.3), in `orbit capabilities`. Human terminal doors, withheld
@@ -106,20 +113,25 @@ var userCLICapabilities = []cliCapabilitySpec{
 	{
 		Tool:  "login",
 		Argv:  []string{"orbit", "login"},
-		Usage: "orbit login --with-token [--server URL] < token.txt",
+		Usage: "orbit login [--server URL] [--name NAME] [--scopes PRESET|LIST] [--expires 90d|never], or orbit login --with-token [--server URL] < token.txt",
 		Arguments: []string{
-			"--with-token (required; the token is read from stdin, never from an argument)",
 			"--server <url> (default: ORBIT_SERVER_URL, the saved login's server, this runner's server, or the built-in one)",
+			"--name <name> (the token's name; default: orbit CLI on <this host's name>)",
+			"--scopes <read-only|read-write|scope,scope,...> (default read-only)",
+			"--expires <30d|90d|365d|never> (default 90d)",
+			"--with-token (read an issued token from stdin, never from an argument, instead of signing in through the browser)",
 		},
-		Description: "Log in as yourself with a personal access token issued under Settings → Access tokens: check it with the server and save it in $ORBIT_HOME/user.json (0600). Warns when this machine's runner runs as the same OS user, whose agents could read that file.",
+		Description: "Log in as yourself: ask the server for a personal access token, open <server>/cli-login to approve it signed in to Orbit, wait for it, check it and save it in $ORBIT_HOME/user.json (0600) — or, with --with-token, read one issued under Settings → Access tokens from stdin. Warns when this machine's runner runs as the same OS user, whose agents could read that file.",
 		Mutates:     true,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"withToken": map[string]interface{}{"type": "boolean", "const": true, "description": "Read the token from stdin."},
 				"server":    map[string]interface{}{"type": "string", "description": "The Orbit server's URL."},
+				"name":      map[string]interface{}{"type": "string", "description": "The token's name."},
+				"scopes":    map[string]interface{}{"type": "string", "description": "read-only, read-write, or scopes separated by commas."},
+				"expires":   map[string]interface{}{"type": "string", "enum": []string{"30d", "90d", "365d", "never"}},
+				"withToken": map[string]interface{}{"type": "boolean", "description": "Read an issued token from stdin instead of signing in through the browser."},
 			},
-			"required": []string{"withToken"},
 		},
 		HeadlessOnly: true,
 	},
@@ -182,6 +194,9 @@ func cmdLoginCLI(args []string, in io.Reader, out, errOut io.Writer) error {
 	fs := newCLIFlagSet("orbit login")
 	withToken := fs.Bool("with-token", false, "read a personal access token from stdin")
 	server := fs.String("server", "", "the Orbit server")
+	name := fs.String("name", "", "the token's name")
+	scopes := fs.String("scopes", "", "read-only, read-write, or scopes separated by commas")
+	expires := fs.String("expires", "", "30d, 90d, 365d or never")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -196,14 +211,30 @@ func cmdLoginCLI(args []string, in io.Reader, out, errOut io.Writer) error {
 	if insideSession() {
 		return errors.New("refused inside an Orbit session (ORBIT_SESSION_ID is set): a session acts as itself, and a personal access token is its user's alone — log in from your own terminal")
 	}
-	if !*withToken {
-		return errors.New("signing in through the browser is not available yet: issue a token under Settings → Access tokens and run `orbit login --with-token < token.txt`")
+	var request *deviceLoginRequest
+	if *withToken {
+		for _, flag := range []string{"name", "scopes", "expires"} {
+			if flagWasSet(fs, flag) {
+				return fmt.Errorf("--%s describes the token orbit login asks for through the browser; a token read with --with-token was issued already, with its own", flag)
+			}
+		}
+	} else {
+		r, err := newDeviceLoginRequest(*name, *scopes, *expires)
+		if err != nil {
+			return err
+		}
+		request = r
 	}
 	base, err := normalizeServerURL(firstNonEmpty(strings.TrimSpace(*server), loginServerDefault()))
 	if err != nil {
 		return err
 	}
-	token, err := readTokenFromStdin(in, errOut)
+	var token string
+	if request != nil {
+		token, err = signInThroughBrowser(base, *request, errOut)
+	} else {
+		token, err = readTokenFromStdin(in, errOut)
+	}
 	if err != nil {
 		return err
 	}
@@ -212,6 +243,9 @@ func cmdLoginCLI(args []string, in io.Reader, out, errOut io.Writer) error {
 		return fmt.Errorf("checking the token with %s: %w", base, err)
 	}
 	if refused {
+		if request != nil {
+			return fmt.Errorf("%s refused the token it had just issued (401): it was revoked or has expired already. Run `orbit login` again", base)
+		}
 		return fmt.Errorf("%s refused the token (401): it is invalid, revoked or expired. Issue a new one under Settings → Access tokens and run `orbit login --with-token` again", base)
 	}
 	previous, _ := loadUserLogin()
@@ -233,6 +267,168 @@ func cmdLoginCLI(args []string, in io.Reader, out, errOut io.Writer) error {
 		fmt.Fprint(errOut, runnerSharesLoginWarning(runner))
 	}
 	return nil
+}
+
+// deviceLoginRequest is POST /api/access-tokens/device/start: the token `orbit login` asks the server
+// for through the browser (§7.3) — its name, its scopes listed or as a preset, its lifetime in days
+// (null: it never expires), and this host, which the approval page shows.
+type deviceLoginRequest struct {
+	Name          string   `json:"name"`
+	Scopes        []string `json:"scopes,omitempty"`
+	Preset        string   `json:"preset,omitempty"`
+	ExpiresInDays *int     `json:"expiresInDays"`
+	Hostname      string   `json:"hostname,omitempty"`
+}
+
+// The presets --scopes names. The server expands them from its own list of scopes, so a CLI built
+// before a scope was added still asks for all of them.
+var loginScopePresets = []string{"read-only", "read-write"}
+
+// newDeviceLoginRequest is what --name, --scopes and --expires ask for, defaulted as the Settings
+// page's New token dialog defaults them: read-only, for 90 days.
+func newDeviceLoginRequest(name, scopes, expires string) (*deviceLoginRequest, error) {
+	host := hostnameOr()
+	request := &deviceLoginRequest{Name: strings.TrimSpace(name), Hostname: host}
+	if request.Name == "" {
+		request.Name = "orbit CLI on " + host
+	}
+	switch scopes = strings.TrimSpace(scopes); {
+	case scopes == "":
+		request.Preset = "read-only"
+	case contains(loginScopePresets, scopes):
+		request.Preset = scopes
+	default:
+		for _, scope := range strings.Split(scopes, ",") {
+			if scope = strings.TrimSpace(scope); scope != "" {
+				request.Scopes = append(request.Scopes, scope)
+			}
+		}
+		if len(request.Scopes) == 0 {
+			return nil, errors.New("--scopes names no scope: pass read-only, read-write, or scopes separated by commas, such as tasks:read,tasks:write")
+		}
+	}
+	days := map[string]int{"": 90, "30d": 30, "90d": 90, "365d": 365}
+	switch expires = strings.TrimSpace(expires); {
+	case expires == "never":
+		// Left nil: sent as null, a token that never expires.
+	case days[expires] != 0:
+		lifetime := days[expires]
+		request.ExpiresInDays = &lifetime
+	default:
+		return nil, fmt.Errorf("--expires must be 30d, 90d, 365d or never, not %q", expires)
+	}
+	return request, nil
+}
+
+// openLoginPage opens the approval page for `orbit login`: a variable so tests can stand in for the
+// person at the browser.
+var openLoginPage = openBrowser
+
+// loginPollFloor is the shortest wait between two polls, whatever the server asks for.
+var loginPollFloor = time.Second
+
+// deviceLoginStart is the answer to POST /api/access-tokens/device/start.
+type deviceLoginStart struct {
+	DeviceCode string `json:"deviceCode"`
+	UserCode   string `json:"userCode"`
+	Interval   int    `json:"interval"`
+	ExpiresIn  int    `json:"expiresIn"`
+}
+
+// signInThroughBrowser is `orbit login` without --with-token (§7.3), in `orbit register`'s device-flow
+// shape: ask the server for a token, send the person to <server>/cli-login?code=… to approve it signed
+// in to Orbit, and poll until the server answers with the token — issued to whoever approved, in that
+// one answer — or says the request was denied or ran out. Neither request carries a credential: the
+// device code, which only this process holds, is what the poll is made with.
+func signInThroughBrowser(base string, request deviceLoginRequest, errOut io.Writer) (string, error) {
+	body, err := json.Marshal(request)
+	if err != nil {
+		return "", err
+	}
+	res, err := userAPIRequest(base, "", http.MethodPost, "/api/access-tokens/device/start", body)
+	if err != nil {
+		return "", fmt.Errorf("asking %s for a token: %w", base, err)
+	}
+	if res.status == http.StatusNotFound {
+		return "", fmt.Errorf("%s does not offer signing in through the browser (404): issue a token under Settings → Access tokens and run `orbit login --with-token`", base)
+	}
+	if res.status < 200 || res.status >= 300 {
+		return "", fmt.Errorf("%s refused the login request (%d): %s", base, res.status, answerMessage(res.body))
+	}
+	var start deviceLoginStart
+	if err := json.Unmarshal(res.body, &start); err != nil || start.DeviceCode == "" || start.UserCode == "" {
+		return "", fmt.Errorf("%s did not answer the login request with a code", base)
+	}
+	link := base + "/cli-login?code=" + url.QueryEscape(start.UserCode)
+	fmt.Fprintf(errOut, "\nTo log in, open this page, sign in to Orbit and approve the request:\n\n  %s\n\n  Verification code: %s\n\n"+
+		"It asks for a token named %q. Waiting for approval...\n", link, start.UserCode, request.Name)
+	openLoginPage(link)
+
+	poll, err := json.Marshal(map[string]string{"deviceCode": start.DeviceCode})
+	if err != nil {
+		return "", err
+	}
+	interval := time.Duration(start.Interval) * time.Second
+	if interval < loginPollFloor {
+		interval = loginPollFloor
+	}
+	for deadline := time.Now().Add(time.Duration(start.ExpiresIn) * time.Second); time.Now().Before(deadline); {
+		time.Sleep(interval)
+		res, err := userAPIRequest(base, "", http.MethodPost, "/api/access-tokens/device/poll", poll)
+		if err != nil || res.status >= 500 || res.status == http.StatusTooManyRequests {
+			continue // transient: keep waiting until the request runs out
+		}
+		if res.status < 200 || res.status >= 300 {
+			return "", fmt.Errorf("%s refused the login (%d): %s", base, res.status, answerMessage(res.body))
+		}
+		var answer struct {
+			Status string `json:"status"`
+			Token  string `json:"token"`
+		}
+		if err := json.Unmarshal(res.body, &answer); err != nil {
+			continue
+		}
+		switch answer.Status {
+		case "pending":
+			continue
+		case "approved":
+			if !strings.HasPrefix(answer.Token, userTokenPrefix) {
+				return "", fmt.Errorf("%s approved the login but answered no personal access token", base)
+			}
+			return answer.Token, nil
+		case "denied":
+			return "", errors.New("the login request was denied in the browser; no token was issued")
+		case "expired":
+			return "", errors.New("the login request expired before it was approved: run `orbit login` again")
+		case "delivered":
+			return "", fmt.Errorf("the token was issued to an earlier answer that never arrived here: revoke %q under Settings → Access tokens and run `orbit login` again", request.Name)
+		default:
+			return "", fmt.Errorf("%s answered the login with %q", base, answer.Status)
+		}
+	}
+	return "", errors.New("timed out waiting for approval: run `orbit login` again")
+}
+
+// answerMessage is what an answer's body says: its `message` (a list of them joined), or the body.
+func answerMessage(body []byte) string {
+	var answer struct {
+		Message any `json:"message"`
+	}
+	if json.Unmarshal(body, &answer) == nil {
+		switch message := answer.Message.(type) {
+		case string:
+			if message != "" {
+				return message
+			}
+		case []any:
+			parts := make([]string, 0, len(message))
+			for _, part := range message {
+				parts = append(parts, fmt.Sprint(part))
+			}
+			return strings.Join(parts, "; ")
+		}
+	}
+	return strings.TrimSpace(string(body))
 }
 
 // loginServerDefault is the server `orbit login` signs in to without --server: ORBIT_SERVER_URL, the
@@ -498,9 +694,9 @@ func (identity *cliIdentity) confirm(self *patSelf) {
 // not tell a token that never existed from one revoked or expired, and the way out is the same.
 func userTokenRefused(identity cliIdentity) error {
 	if identity.Source == envUserToken {
-		return errors.New("the personal access token in ORBIT_USER_TOKEN was refused (401): it is invalid, revoked or expired. Set a new one (Settings → Access tokens), or unset it and run `orbit login --with-token`")
+		return errors.New("the personal access token in ORBIT_USER_TOKEN was refused (401): it is invalid, revoked or expired. Set a new one (Settings → Access tokens), or unset it and run `orbit login`")
 	}
-	return errors.New("the personal access token `orbit login` saved was refused (401): it is invalid, revoked or expired. Run `orbit login --with-token` with a new one (Settings → Access tokens)")
+	return errors.New("the personal access token `orbit login` saved was refused (401): it is invalid, revoked or expired. Run `orbit login` again")
 }
 
 // actingUser is nil when this process acts as its user, and otherwise why a command that acts as them
@@ -518,7 +714,7 @@ func actingUser(identity cliIdentity) error {
 	case identityService:
 		return errors.New("it acts as you, and ORBIT_SERVICE_TOKEN is set, which comes first: unset it to act as yourself")
 	default:
-		return errors.New("it acts as you, and you are not logged in: run `orbit login --with-token` (or set ORBIT_USER_TOKEN); the runner's credential is the machine's, never yours")
+		return errors.New("it acts as you, and you are not logged in: run `orbit login` (or set ORBIT_USER_TOKEN); the runner's credential is the machine's, never yours")
 	}
 }
 
@@ -720,7 +916,8 @@ type userAPIResponse struct {
 	body   []byte
 }
 
-// userAPIRequest sends one request to target — a path under /api, with its query — on server, as token.
+// userAPIRequest sends one request to target — a path under /api, with its query — on server, as token
+// (none when token is empty).
 func userAPIRequest(server, token, method, target string, body []byte) (*userAPIResponse, error) {
 	base, err := normalizeServerURL(server)
 	if err != nil {
@@ -736,7 +933,10 @@ func userAPIRequest(server, token, method, target string, body []byte) (*userAPI
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	// `orbit login` starts and polls with no credential at all.
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	req.Header.Set("Accept", "application/json")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")

@@ -24,6 +24,8 @@ type fakeUserAPI struct {
 	// Every request, "METHOD /path?query token", and its body.
 	requests []string
 	bodies   []string
+	// `orbit login` through the browser (user_login_device_test.go).
+	device fakeDeviceLogin
 }
 
 type fakePAT struct {
@@ -60,6 +62,10 @@ func (f *fakeUserAPI) serve(w http.ResponseWriter, r *http.Request) {
 	f.requests = append(f.requests, r.Method+" "+r.URL.RequestURI()+" "+token)
 	f.bodies = append(f.bodies, string(body))
 	w.Header().Set("Content-Type", "application/json")
+	if strings.HasPrefix(r.URL.Path, "/api/access-tokens/device/") {
+		f.serveDeviceLogin(w, r, body)
+		return
+	}
 	pat := f.tokens[token]
 	if pat == nil || pat.revoked {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -161,7 +167,7 @@ func TestLoginTakesTheTokenFromStdinOnlyAndOnlyAPersonalAccessToken(t *testing.T
 		{"nothing on stdin", []string{"--with-token", "--server", api.URL}, "", "no token on stdin"},
 		{"not a personal access token", []string{"--with-token", "--server", api.URL}, "eyJhbGciOiJIUzI1NiJ9.e30.sig\n", "not a personal access token"},
 		{"a token the server refuses", []string{"--with-token", "--server", api.URL}, userTokenPrefix + "revoked\n", "refused the token (401)"},
-		{"no --with-token", []string{"--server", api.URL}, laptopToken + "\n", "--with-token"},
+		{"--with-token and --name", []string{"--with-token", "--name", "laptop", "--server", api.URL}, laptopToken + "\n", "--name describes the token orbit login asks for through the browser"},
 		{"a server that is not a URL", []string{"--with-token", "--server", "orbit.example.com"}, laptopToken + "\n", "not a server URL"},
 	}
 	for _, tc := range cases {
@@ -416,7 +422,7 @@ func TestWhoamiWithNoIdentityExitsNonZero(t *testing.T) {
 	userModeEnv(t)
 	var out, errOut bytes.Buffer
 	err := cmdWhoamiCLI(nil, &out, &errOut)
-	if err == nil || !strings.Contains(err.Error(), "orbit login --with-token") {
+	if err == nil || !strings.Contains(err.Error(), "run `orbit login` to act as yourself") {
 		t.Fatalf("err = %v", err)
 	}
 	if !strings.Contains(out.String(), "identity:   none") {

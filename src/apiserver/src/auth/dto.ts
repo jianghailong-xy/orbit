@@ -6,10 +6,11 @@ import {
   IsIn,
   IsOptional,
   IsString,
+  MaxLength,
   MinLength,
 } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
-import { PAT_EXPIRY_CHOICES } from './pat.service';
+import { PAT_EXPIRY_CHOICES, PAT_SCOPE_PRESETS, type PatScopePreset } from './pat.service';
 
 export class LoginDto {
   @IsEmail()
@@ -61,6 +62,41 @@ export class IssueAccessTokenDto {
   @IsOptional()
   @IsIn(PAT_EXPIRY_CHOICES)
   expiresInDays?: (typeof PAT_EXPIRY_CHOICES)[number] | null;
+}
+
+/**
+ * `POST /access-tokens/device/start`, what `orbit login` asks for (docs/personal-access-token-design.md
+ * §7.3): the token's name, its scopes — listed, or a preset of them, one of the two — its lifetime as
+ * `POST /access-tokens` takes one, and the host the CLI runs on, shown on the approval page.
+ */
+export class StartPatDeviceLoginDto {
+  @IsString()
+  name!: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  scopes?: string[];
+
+  @IsOptional()
+  @IsIn(Object.keys(PAT_SCOPE_PRESETS))
+  preset?: PatScopePreset;
+
+  @IsOptional()
+  @IsIn(PAT_EXPIRY_CHOICES)
+  expiresInDays?: (typeof PAT_EXPIRY_CHOICES)[number] | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  hostname?: string;
+}
+
+/** `POST /access-tokens/device/poll`: the device code `start` answered, which only the CLI holds. */
+export class PollPatDeviceLoginDto {
+  @IsString()
+  deviceCode!: string;
 }
 
 export class BootstrapDto {
