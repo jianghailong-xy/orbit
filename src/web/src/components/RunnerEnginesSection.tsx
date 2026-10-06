@@ -18,6 +18,7 @@ import {
   RUNNER_ENGINE_SIGNED_IN,
   RUNNER_ENGINE_SIGNED_OUT,
   runnerEngineAccountsSignedIn,
+  runnerEngineNext,
 } from '../lib/runnerCopy';
 import { DSH_STATE_LABEL, dshRunnerState } from '../lib/dshRuntime';
 import { ENGINE_CLI_NAME, engineVersionNumber, updateNoteOf } from '../lib/runnerEngines';
@@ -261,7 +262,7 @@ function EngineLine({ runner, health }: { runner: Runner; health: RunnerEngineHe
       </div>
       <div className={`rd-engine-auth ${signIn.tone}`}>{signIn.text}</div>
       <div className={`rd-engine-quota${quota.length === 0 && !signedIn ? ' empty' : ''}`}>
-        {quota.length > 0 && next && <div className="rd-quota-next">{`Next: ${accountNameOf(next)}`}</div>}
+        {quota.length > 0 && next && <div className="rd-quota-next">{runnerEngineNext(accountNameOf(next))}</div>}
         {quota.length > 0 ? (
           quota.map((row) => (
             <div key={row.key} className={`rd-quota${row.nearLimit ? ' near' : ''}`}>
