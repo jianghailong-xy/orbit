@@ -35,6 +35,19 @@ const MODEL_CATALOG = {
     { value: 'claude-haiku-4-5', label: 'Haiku 4.5' },
   ],
 };
+// The runner's Antigravity, run on the machine's Gemini key: Default, not signed in to Google, runs
+// on that key; a second account is a Google sign-in, with what agy says is left of its 5-hour bucket.
+const ANTIGRAVITY = {
+  engine: 'antigravity', installed: true, auth: 'yes', authSource: 'env_key', version: '1.3.0',
+  accounts: [
+    { id: 'default', home: '/home/orbit/.orbit/antigravity/google', auth: 'no' },
+    { id: 'work', name: 'Work', home: '/home/orbit/.orbit/antigravity-accounts/work', auth: 'yes' },
+  ],
+  planUsage: {
+    provider: 'antigravity', buckets: [{ id: 'gemini-weekly', window: 'weekly', remainingFraction: 0.72 }],
+    accounts: { work: { provider: 'antigravity', buckets: [{ id: 'gemini-5h', window: '5h', remainingFraction: 0.04 }] } },
+  },
+};
 const brief = (taskId, title, status) => ({ id: taskId, title, status });
 const prerequisites = [
   brief(PILOT_IDS.prerequisiteDone, 'Inventory existing components', 'DONE'),
@@ -115,9 +128,11 @@ const shareLink = (taskId, title, over = {}) => ({
 /**
  * Install the pilot routes. `options.reopen` decides the stopped task's PATCH ('refuse' answers 409
  * with REOPEN_ERROR, 'accept' reopens); `options.upload` decides POST /attachments ('fail' answers
- * 503 with UPLOAD_ERROR). Returns the requests it answered, with their bodies, for behaviour traces.
+ * 503 with UPLOAD_ERROR); `options.antigravity` adds ANTIGRAVITY's two accounts to the runner and
+ * answers the workspace form's POST /workspaces. Returns the requests it answered, with their
+ * bodies, for behaviour traces.
  */
-export async function installPilotFixtures(page, { theme = 'light', modelRouting = true, reopen = 'refuse', upload = 'ok' } = {}) {
+export async function installPilotFixtures(page, { theme = 'light', modelRouting = true, reopen = 'refuse', upload = 'ok', antigravity = false } = {}) {
   const requests = [];
   // The P0 account (fixtures.mjs), with the smart model selection switch this pilot needs.
   const account = { id: FIXTURE_IDS.user, name: 'Baseline Reviewer', email: 'reviewer@example.test', createdAt: earlier,
@@ -131,7 +146,7 @@ export async function installPilotFixtures(page, { theme = 'light', modelRouting
   const runner = { ...RUNNER, modelCatalog: MODEL_CATALOG, engines: [{ ...RUNNER.engines[0], accounts: [
     { id: 'default', home: '/home/orbit/.claude', auth: 'yes' },
     { id: 'work', name: 'Work', home: '/home/orbit/.claude-work', auth: 'yes' },
-  ] }] };
+  ] }, ...(antigravity ? [ANTIGRAVITY] : [])] };
   const search = [
     { ...base, id: PILOT_IDS.prerequisiteDone, title: 'Inventory existing components', status: 'DONE', outcome: 'DONE' },
     { ...base, id: PILOT_IDS.prerequisiteOpen, title: 'Capture browser baselines' },
@@ -148,6 +163,7 @@ export async function installPilotFixtures(page, { theme = 'light', modelRouting
     if (method === 'GET' && path === '/api/users/me') return json(account);
     if (method === 'GET' && path === '/api/runners') return json([runner]);
     if (method === 'GET' && path === '/api/workspaces') return json([{ ...WORKSPACE, modelRouting: true }]);
+    if (antigravity && method === 'POST' && path === '/api/workspaces') return json({ ...WORKSPACE, id: id('021'), ...request.postDataJSON() });
     if (method === 'GET' && path === '/api/task-lists') return json(lists);
     if (method === 'GET' && path === '/api/tasks/page' && searchParams.get('counts') === 'none') {
       const q = (searchParams.get('q') ?? '').toLowerCase();

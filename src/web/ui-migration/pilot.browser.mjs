@@ -408,4 +408,34 @@ test.describe('workspace account pilot', () => {
     trace.push(await observe(page, pilot, 'account Work'));
     await testInfo.attach('trace', { body: JSON.stringify(trace, null, 2), contentType: 'application/json' });
   });
+
+  test('the Antigravity account picker: Default on the Gemini key, a Google account with what is left', async ({ evidence }, testInfo) => {
+    const { page, capture } = evidence;
+    const pilot = await installPilotFixtures(page, { theme: testInfo.project.use.colorScheme, antigravity: true });
+    const trace = [];
+    await page.goto(PILOT_PATHS.runner);
+    await page.getByRole('button', { name: /Add workspace/ }).click();
+    await page.getByPlaceholder('e.g. tea-cli builder').fill('Antigravity pilot');
+    await page.locator('.rd-adv-toggle').click();
+    const account = page.locator('.rd-form-field').filter({ has: page.locator('.rd-form-label', { hasText: /^Antigravity account$/ }) });
+    await expect(account.locator('.rd-codex-account')).toContainText('Automatic');
+    await account.scrollIntoViewIfNeeded();
+    await capture('pilot-antigravity-account', { field: account });
+    await account.getByRole('combobox').click();
+    // Rows by their visible text, as in the Claude picker above.
+    const row = (text) => page.getByText(text, { exact: true }).filter({ visible: true }).last();
+    for (const text of ['Automatic', 'Default (~/.orbit/antigravity/google)', 'env key · runs on your Gemini key', 'Work', 'gemini-5h 4% left · signed in']) {
+      await expect(row(text)).toBeVisible();
+    }
+    await capture('pilot-antigravity-account-open', { envKey: row('env key · runs on your Gemini key'), left: row('gemini-5h 4% left · signed in') });
+    trace.push(await observe(page, pilot, 'antigravity account open'));
+    await row('Work').click();
+    await expect(account.locator('.rd-codex-account')).toContainText('Work');
+    trace.push(await observe(page, pilot, 'antigravity account Work'));
+    // What the form sends: the picked account's id beside the rest of the new workspace.
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await expect(account).toHaveCount(0);
+    trace.push(await observe(page, pilot, 'workspace created'));
+    await testInfo.attach('trace', { body: JSON.stringify(trace, null, 2), contentType: 'application/json' });
+  });
 });
