@@ -102,9 +102,10 @@ An export in an interactive shell does not update an already-running systemd/lau
 ## CLI acting as a person
 
 The `orbit` CLI can act as a user with a personal access token, on any machine and with or without a runner.
-`orbit login --with-token` saves the token and its server in `$ORBIT_HOME/user.json` (mode `0600`), apart from
-the runner's `config.json`; the runner service never reads it. These variables take its place where a saved
-login is impractical, such as CI. See [personal access tokens](runner-cli.md#personal-access-tokens).
+`orbit login` (approved in the browser, or `--with-token` from stdin) saves the token and its server in
+`$ORBIT_HOME/user.json` (mode `0600`), apart from the runner's `config.json`; the runner service never reads it.
+These variables take its place where a saved login is impractical, such as CI. See
+[personal access tokens](runner-cli.md#personal-access-tokens).
 
 | Variable | Required / default | Purpose | Secret? | Apply change |
 | --- | --- | --- | --- | --- |

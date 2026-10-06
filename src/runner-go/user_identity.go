@@ -208,7 +208,7 @@ func resolveCLIIdentity() cliIdentity {
 		identity := cliIdentity{Kind: identityUser, Reason: "the login `orbit login` saved in " + path, Source: path}
 		login, err := loadUserLogin()
 		if err != nil {
-			identity.Problem = fmt.Sprintf("%v: run `orbit login --with-token` to save it again, or `orbit logout --keep-token` to remove it", err)
+			identity.Problem = fmt.Sprintf("%v: run `orbit login` to save it again, or `orbit logout --keep-token` to remove it", err)
 			return identity
 		}
 		identity.ServerURL = login.ServerURL
@@ -238,7 +238,7 @@ func resolveCLIIdentity() cliIdentity {
 	return cliIdentity{
 		Kind:    identityNone,
 		Reason:  "no ORBIT_SESSION_ID, ORBIT_SERVICE_TOKEN or ORBIT_USER_TOKEN, no saved login and no runner credential",
-		Problem: "not logged in: run `orbit login --with-token` to act as yourself, or `orbit register` to make this machine a runner",
+		Problem: "not logged in: run `orbit login` to act as yourself, or `orbit register` to make this machine a runner",
 	}
 }
 

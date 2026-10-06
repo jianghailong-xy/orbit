@@ -460,7 +460,7 @@ orbit api [-X METHOD] PATH [--data JSON | --data-file -] [--paginate] [--json]  
 
 落地时（CLI 任务，2026-10-06）：
 
-- `orbit login` 不带 `--with-token` 时报错（设备流是下一个任务）。`--with-token` 读 stdin 第一行，必须以 `orbit_pat_` 开头；
+- `orbit login` 不带 `--with-token` 时走设备流（见下面「落地时（设备流任务）」）。`--with-token` 读 stdin 第一行，必须以 `orbit_pat_` 开头；
   令牌出现在参数里直接拒绝，也不回显。先 `GET /pat/self` 核对，401 不写文件；成功后原子写入 `user.json`
   `{serverUrl, token, tokenId, name, email}`（`name` 是令牌名）。服务器默认值依次是 `--server`、`ORBIT_SERVER_URL`、
   已保存登录的服务器、本机 runner 的服务器、内置服务器。
@@ -513,6 +513,34 @@ orbit api [-X METHOD] PATH [--data JSON | --data-file -] [--paginate] [--json]  
 - 已知后果：runner 起的不带 `ORBIT_SESSION_ID` 的进程（EXECUTABLE 验收命令、`!` shell）同样按 §7.2 解析身份。
   若 runner 的 `ORBIT_HOME` 里存了 `user.json`（第 8 节警告的同一 OS 用户登录），这些进程里的 `orbit task …`
   会以登录者身份运行，`orbit wiki check` 等机器命令会被拒绝，而不是像之前那样静默用 runner 凭证。
+
+落地时（设备流任务，2026-10-06）：
+
+- 路由都在 `/api/access-tokens/device` 下（`auth/pat-device-login.controller.ts`）。`POST start`、`POST poll` 不需要凭证：
+  device code 只有 CLI 持有（库里只存 sha256），它就是轮询的凭证。`GET :userCode`、`POST :userCode/approve`、`POST :userCode/deny`
+  走 JwtAuthGuard，controller 级 `@PatForbidden('TOKEN_MANAGEMENT')`，令牌一律 403：批准就是签发，令牌不能签发令牌。
+  普查的 `/access-tokens*` 规则也钉住这三条。查询、批准、拒绝按用户限流（5 分钟 20 次），与 runner 的设备码查询一致。
+- **令牌在批准之后、CLI 下一次轮询时才签发**，不在批准时签发再暂存（runner 流程把 runner 凭证明文暂存在行里，等 CLI 取走）。
+  批准只记录谁、何时批准。轮询先用 CAS 把请求从 APPROVED 改成 DELIVERED，再以批准者的名义签发（`created_via = CLI_DEVICE`）。
+  明文只出现在这一次轮询应答里，§3「只存 sha256、明文只出现一次」照样成立。并发或重试的轮询拿不到第二个令牌，只得到 `delivered`。
+  签发被拒时（批准之后名字被占，或到了 50 个上限）撤回认领，把 409 答给 CLI。批准时先按同样的规则查名字与上限，浏览器里就能看到 409。
+  CLI 在批准前退出的话，令牌不会签发。
+- 新表 `pat_device_login`（迁移 0388；当时 main 最高是 0386，0387 被另一条在途分支占用）：请求的名字、scope、天数（NULL = 永不过期）、主机名，
+  状态 `PENDING | APPROVED | DENIED | DELIVERED`，决定者与决定时间，请求自身 10 分钟的到期。决定者被删除时级联删除。
+- 轮询应答 `{status}`：`pending`、`approved`（带签发应答的全部字段，含 `token`）、`denied`、`expired`、`delivered`。
+  已拒绝、已取走的请求过了 10 分钟仍如实回答；已批准却没在 10 分钟内取走的答 `expired`，不再签发。
+  过期请求的查询、批准、拒绝都是 404。拒绝过的再批准、已批准的再拒绝是 409 `PAT_DEVICE_LOGIN_DECIDED`；
+  同一个人重复同一决定，照原样回答。
+- `start` 按签发的规则校验：名字去掉空白后非空、至多 100 字符；`scopes` 列表与 `preset`（`read-only` | `read-write`，
+  由服务端按 `PAT_SCOPES` 展开）二选一；`expiresInDays` 取 30、90、365 或 `null`，不传为 90。
+- Web `/cli-login?code=`（`pages/CliLoginPage.tsx`）与 `/enroll` 同构，未登录先跳登录页再回来。页面展示令牌名、scope（摘要加逐条）、
+  到期（天数与大致日期；永不过期时加标记和警告）、来源主机名、用户码，以及 Approve、Deny 两个按钮。
+  名字已被自己的有效令牌占用时说明原因，Approve 不可点。
+- CLI：`orbit login [--server URL] [--name NAME] [--scopes PRESET|LIST] [--expires 30d|90d|365d|never]`。默认名字是
+  `orbit CLI on <主机名>`，默认 `read-only`、`90d`，与设置页新建对话框的默认一致。链接和用户码打印到 stderr，并尝试打开浏览器；
+  按服务端给的间隔轮询，网络错误、5xx、429 视为暂时性的。拿到令牌后与 `--with-token` 走同一条路径：`GET /pat/self` 核对后写 `user.json`。
+  `--name`、`--scopes`、`--expires` 与 `--with-token` 同时出现时拒绝。start 与 poll 不带 `Authorization` 头。
+- 401 等提示里的「运行 `orbit login --with-token`」改为「运行 `orbit login`」。
 
 ### 7.4 能力与一致性
 

@@ -37,6 +37,17 @@ export const PAT_SCOPES = [
 ] as const;
 export type PatScopeName = (typeof PAT_SCOPES)[number];
 
+/**
+ * The presets `orbit login --scopes` names (§4, §7.3), as the settings dialog offers them: every read
+ * scope, or every scope. Expanded here, from PAT_SCOPES, so a CLI built before a scope was added still
+ * asks for all of them.
+ */
+export const PAT_SCOPE_PRESETS = {
+  'read-only': PAT_SCOPES.filter((scope) => scope.endsWith(':read')),
+  'read-write': [...PAT_SCOPES],
+} as const satisfies Record<string, readonly PatScopeName[]>;
+export type PatScopePreset = keyof typeof PAT_SCOPE_PRESETS;
+
 export type PatCreatedVia = 'WEB' | 'CLI_DEVICE';
 export type PatRevokedReason = 'USER' | 'EXPIRED' | 'PASSWORD_CHANGED' | 'USER_DELETED' | 'ADMIN';
 
@@ -111,11 +122,7 @@ export class PatService {
       createdVia: PatCreatedVia;
     },
   ) {
-    const name = input.name.trim();
-    if (!name) throw new BadRequestException('a token needs a name');
-    if (name.length > PAT_NAME_MAX_LENGTH) {
-      throw new BadRequestException(`a token name is at most ${PAT_NAME_MAX_LENGTH} characters`);
-    }
+    const name = patNameOf(input.name);
     const scopes = parseScopes(input.scopes);
     const workspaceIds = await this.ownedWorkspaces(ownerId, input.workspaceIds ?? []);
     const now = new Date();
@@ -125,12 +132,7 @@ export class PatService {
     // A soft cap: two issues racing at the last place can both land. It exists to stop a runaway
     // loop, and every issue after the cap is crossed is refused.
     const active = await this.prisma.personalAccessToken.count({ where: { ownerId, revokedAt: null } });
-    if (active >= PAT_MAX_ACTIVE_PER_USER) {
-      throw new ConflictException({
-        code: 'PAT_LIMIT_REACHED',
-        message: `You already have ${PAT_MAX_ACTIVE_PER_USER} access tokens — revoke one before issuing another`,
-      });
-    }
+    if (active >= PAT_MAX_ACTIVE_PER_USER) throw limitReached();
 
     const token = PAT_PREFIX + randomBytes(32).toString('base64url');
     try {
@@ -159,14 +161,27 @@ export class PatService {
       };
     } catch (error) {
       // The name's partial unique index (0383); a token_hash collision would need 2^128 tokens.
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new ConflictException({
-          code: 'PAT_NAME_IN_USE',
-          message: `You already have an access token named "${name}" — revoke it or pick another name`,
-        });
-      }
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw nameInUse(name);
       throw error;
     }
+  }
+
+  /**
+   * Refuse, with the 409 `issue` would answer, a token `ownerId` could not be issued under `name`
+   * now: the name is held by one of their live tokens, or they hold PAT_MAX_ACTIVE_PER_USER of them.
+   * Read only — a token past its expiry holds nothing, as `issue` settles it first — so an approval
+   * can say so before the token is issued, which checks it again.
+   */
+  async assertIssuable(ownerId: string, name: string): Promise<void> {
+    if (await this.nameHeld(ownerId, name)) throw nameInUse(name);
+    if ((await this.prisma.personalAccessToken.count({ where: liveTokensOf(ownerId) })) >= PAT_MAX_ACTIVE_PER_USER) {
+      throw limitReached();
+    }
+  }
+
+  /** Whether one of `ownerId`'s live tokens is named `name`. */
+  async nameHeld(ownerId: string, name: string): Promise<boolean> {
+    return (await this.prisma.personalAccessToken.count({ where: { ...liveTokensOf(ownerId), name } })) > 0;
   }
 
   /**
@@ -329,7 +344,33 @@ export class PatService {
   }
 }
 
-function parseScopes(scopes: string[]): PatScopeName[] {
+/** A token's name as it is kept: trimmed, not blank, at most PAT_NAME_MAX_LENGTH characters. */
+export function patNameOf(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) throw new BadRequestException('a token needs a name');
+  if (trimmed.length > PAT_NAME_MAX_LENGTH) {
+    throw new BadRequestException(`a token name is at most ${PAT_NAME_MAX_LENGTH} characters`);
+  }
+  return trimmed;
+}
+
+/** A user's tokens that still work: not revoked, and not past their expiry. */
+const liveTokensOf = (ownerId: string) =>
+  ({ ownerId, revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }) satisfies Prisma.PersonalAccessTokenWhereInput;
+
+const nameInUse = (name: string) =>
+  new ConflictException({
+    code: 'PAT_NAME_IN_USE',
+    message: `You already have an access token named "${name}" — revoke it or pick another name`,
+  });
+
+const limitReached = () =>
+  new ConflictException({
+    code: 'PAT_LIMIT_REACHED',
+    message: `You already have ${PAT_MAX_ACTIVE_PER_USER} access tokens — revoke one before issuing another`,
+  });
+
+export function parseScopes(scopes: string[]): PatScopeName[] {
   const requested = [...new Set(scopes.map((scope) => scope.trim()).filter(Boolean))];
   if (requested.length === 0) throw new BadRequestException('at least one scope is required');
   const allowed = new Set<string>(PAT_SCOPES);
