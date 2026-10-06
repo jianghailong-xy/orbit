@@ -1,0 +1,300 @@
+
+ExecuteExternalTool /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/actool --print-asset-tag-combinations --output-format xml1 /Users/runner/work/orbit/orbit/src/ios/Support/Assets.xcassets
+
+ExecuteExternalTool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+ReadFileContents /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/share/docc/features.json
+
+ExecuteExternalTool /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/actool --version --output-format xml1
+
+Build description signature: 2e15fcbc0a943c7a16431ff50ceddca5
+Build description path: /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/XCBuildData/2e15fcbc0a943c7a16431ff50ceddca5.xcbuilddata
+ClangStatCache /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk /Users/runner/work/orbit/orbit/.wiki-probe/.dd/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-688ef53f1462e2c8f657fdc38a81448ff45c64a1807a658693f2a61704f17a36.sdkstatcache
+    cd /Users/runner/work/orbit/orbit/.wiki-probe/WikiProbe.xcodeproj
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -o /Users/runner/work/orbit/orbit/.wiki-probe/.dd/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-688ef53f1462e2c8f657fdc38a81448ff45c64a1807a658693f2a61704f17a36.sdkstatcache
+
+CompileAssetCatalogVariant thinned /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app /Users/runner/work/orbit/orbit/src/ios/Support/Assets.xcassets (in target 'WikiProbe' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/actool /Users/runner/work/orbit/orbit/src/ios/Support/Assets.xcassets --compile /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/assetcatalog_output/thinned --output-format human-readable-text --notices --warnings --export-dependency-info /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/assetcatalog_dependencies_thinned --output-partial-info-plist /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/assetcatalog_generated_info.plist_thinned --app-icon AppIcon --accent-color AccentColor --compress-pngs --enable-on-demand-resources YES --filter-for-thinning-device-configuration iPad16,9 --filter-for-device-os-version 26.5 --development-region en --target-device iphone --target-device ipad --minimum-deployment-target 17.0 --platform iphonesimulator
+/* com.apple.actool.compilation-results */
+/Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/assetcatalog_generated_info.plist_thinned
+/Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/assetcatalog_output/thinned/AppIcon60x60@2x.png
+/Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/assetcatalog_output/thinned/AppIcon76x76@2x~ipad.png
+/Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/assetcatalog_output/thinned/Assets.car
+
+
+LinkAssetCatalog /Users/runner/work/orbit/orbit/src/ios/Support/Assets.xcassets (in target 'WikiProbe' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-linkAssetCatalog --thinned /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/assetcatalog_output/thinned --thinned-dependencies /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/assetcatalog_dependencies_thinned --thinned-info-plist-content /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/assetcatalog_generated_info.plist_thinned --unthinned /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/assetcatalog_output/unthinned --unthinned-dependencies /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/assetcatalog_dependencies_unthinned --unthinned-info-plist-content /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/assetcatalog_generated_info.plist_unthinned --output /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app --plist-output /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/assetcatalog_generated_info.plist
+note: Emplaced /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/Assets.car (in target 'WikiProbe' from project 'WikiProbe')
+note: Emplaced /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/AppIcon60x60@2x.png (in target 'WikiProbe' from project 'WikiProbe')
+note: Emplaced /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/AppIcon76x76@2x~ipad.png (in target 'WikiProbe' from project 'WikiProbe')
+
+ProcessInfoPlistFile /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/Info.plist /Users/runner/work/orbit/orbit/.wiki-probe/Info.plist (in target 'WikiProbe' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-infoPlistUtility /Users/runner/work/orbit/orbit/.wiki-probe/Info.plist -producttype com.apple.product-type.application -genpkginfo /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/PkgInfo -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/assetcatalog_generated_info.plist -o /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/Info.plist
+
+CopySwiftLibs /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app (in target 'WikiProbe' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/WikiProbe.debug.dylib --scan-folder /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/Frameworks --scan-folder /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/PlugIns --scan-folder /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/SystemExtensions --scan-folder /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.CNescN/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbe.app/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbe.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+
+ProcessInfoPlistFile /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/Info.plist /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/empty-WikiProbeUITests.plist (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-infoPlistUtility /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/empty-WikiProbeUITests.plist -producttype com.apple.product-type.bundle.ui-testing -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/ProductTypeInfoPlistAdditions.plist -o /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/Info.plist
+
+CopySwiftLibs /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest (in target 'WikiProbeUITests' from project 'WikiProbe')
+    cd /Users/runner/work/orbit/orbit/.wiki-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/WikiProbeUITests --scan-folder /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/Frameworks --scan-folder /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/PlugIns --scan-folder /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/SystemExtensions --scan-folder /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.CNescN/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Products/Debug-iphonesimulator/WikiProbeUITests-Runner.app/PlugIns/WikiProbeUITests.xctest/Frameworks --strip-bitcode --scan-executable /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/orbit/orbit/.wiki-probe/.dd/Build/Intermediates.noindex/WikiProbe.build/Debug-iphonesimulator/WikiProbeUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+
+2026-10-06 21:41:56.361405+0000 WikiProbeUITests-Runner[90726:246358] [Default] Running tests...
+2026-10-06 21:41:56.571940+0000 WikiProbeUITests-Runner[90726:246358] [UIKit App Config] Update the Info.plist: Launch screens will soon be required.
+2026-10-06 21:41:56.581187+0000 WikiProbeUITests-Runner[90726:249502] [General] Failed to send CA Event for app launch measurements for ca_event_type: 0 event_name: com.apple.app_launch_measurement.FirstFramePresentationMetric
+2026-10-06 21:41:56.626659+0000 WikiProbeUITests-Runner[90726:249502] [General] Failed to send CA Event for app launch measurements for ca_event_type: 1 event_name: com.apple.app_launch_measurement.ExtendedLaunchMetrics
+objc[90726]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x10873c310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x108620398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'Selected tests' started at 2026-10-06 21:42:16.592.
+Test Suite 'WikiProbeUITests.xctest' started at 2026-10-06 21:42:16.594.
+Test Suite 'WikiPadShotsTests' started at 2026-10-06 21:42:16.595.
+Test Case '-[WikiProbeUITests.WikiPadShotsTests testTheDirectoryBesideTheContent]' started.
+    t =     0.00s Start Test at 2026-10-06 21:42:16.597
+    t =     3.38s Set Up
+    t =     3.38s Setting device orientation to Landscape Left
+    t =     3.98s     Device orientation changed to Landscape Left
+    t =     4.44s     Interface orientation changed to Landscape Right
+    t =     5.85s     Wait for com.apple.DocumentManager.DockFolderViewService to idle
+    t =     6.26s     Wait for com.apple.springboard to idle
+    t =     6.84s Open io.orbitd.wikiprobe
+    t =     6.84s     Launch io.orbitd.wikiprobe
+2026-10-06 21:42:28.032 xcodebuild[84982:232576] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 21:42:28.035 xcodebuild[84982:232576] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    37.33s         Setting up automation session
+    t =    43.94s         Wait for io.orbitd.wikiprobe to idle
+    t =    48.29s Waiting 60.0s for Button (First Match) to exist
+    t =    49.35s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    49.35s         Checking existence of `Button (First Match)`
+    t =    53.04s Tap Button (First Match)
+    t =    53.04s     Wait for io.orbitd.wikiprobe to idle
+    t =    53.04s     Find the Button (First Match)
+    t =    53.35s     Check for interrupting elements affecting "Wiki, 1 waiting on you" Button
+    t =    55.10s         Wait for com.apple.springboard to idle
+    t =    55.75s     Synthesize event
+    t =    56.27s     Wait for io.orbitd.wikiprobe to idle
+    t =    58.51s Waiting 20.0s for Any (First Match) to exist
+    t =    59.53s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    59.53s         Checking existence of `Any (First Match)`
+    t =    60.21s Checking existence of `Any (First Match)`
+    t =    61.86s Find the Any (First Match)
+    t =    62.90s Find the "Browse by category" Button
+    t =    63.61s Find the "Browse by category" Button
+    t =    64.32s Find the "Browse by category" Button
+    t =    65.14s Find the "Browse by category" Button
+    t =    66.06s Waiting 20.0s for Any (First Match) to exist
+    t =    67.08s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    67.09s         Checking existence of `Any (First Match)`
+    t =    67.88s Checking existence of `Any (First Match)`
+    t =    68.58s Find the Any (First Match)
+    t =    69.36s Find the "A–Z index" Button
+    t =    70.35s Find the "A–Z index" Button
+    t =    71.07s Find the "A–Z index" Button
+    t =    71.93s Find the "A–Z index" Button
+    t =    72.71s Waiting 20.0s for Any (First Match) to exist
+    t =    73.73s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    73.74s         Checking existence of `Any (First Match)`
+    t =    74.19s Checking existence of `Any (First Match)`
+    t =    74.67s Find the Any (First Match)
+    t =    75.27s Find the "Plan" Button
+    t =    76.03s Find the "Plan" Button
+    t =    76.52s Find the "Plan" Button
+    t =    77.00s Find the "Plan" Button
+    t =    77.43s Waiting 20.0s for Any (First Match) to exist
+    t =    78.48s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    78.49s         Checking existence of `Any (First Match)`
+    t =    78.93s Checking existence of `Any (First Match)`
+    t =    79.38s Find the Any (First Match)
+    t =    79.86s Find the "35 documents · 5 written" StaticText
+    t =    80.41s Find the "35 documents · 5 written" StaticText
+    t =    80.96s Find the "35 documents · 5 written" StaticText
+    t =    81.62s Find the "35 documents · 5 written" StaticText
+    t =    82.24s Waiting 20.0s for Any (First Match) to exist
+    t =    83.28s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    83.28s         Checking existence of `Any (First Match)`
+    t =    83.85s Checking existence of `Any (First Match)`
+    t =    84.38s Find the Any (First Match)
+    t =    84.89s Find the "1.1, 产品定位与核心能力, Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上，计划、历史和控制都留在一个自托管的地方。" Button
+    t =    85.37s Find the "1.1, 产品定位与核心能力, Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上，计划、历史和控制都留在一个自托管的地方。" Button
+    t =    85.92s Find the "1.1, 产品定位与核心能力, Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上，计划、历史和控制都留在一个自托管的地方。" Button
+    t =    86.50s Find the "1.1, 产品定位与核心能力, Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上，计划、历史和控制都留在一个自托管的地方。" Button
+    t =    87.04s Checking existence of `Any (First Match)`
+    t =    87.77s Checking existence of `Any (First Match)`
+    t =    88.32s Checking existence of `Any (First Match)`
+    t =    88.92s Waiting 10.0s for "The codebase this wiki describes" StaticText to exist
+    t =    89.95s     Checking `Expect predicate `existsNoRetry == 1` for object "The codebase this wiki describes" StaticText`
+    t =    89.97s         Checking existence of `"The codebase this wiki describes" StaticText`
+    t =    90.21s Waiting 10.0s for "Activity" Button to exist
+    t =    91.25s     Checking `Expect predicate `existsNoRetry == 1` for object "Activity" Button`
+    t =    91.25s         Checking existence of `"Activity" Button`
+    t =    91.44s Find the "Activity" Button
+    t =    94.69s Added attachment named '31-pad-wiki'
+    t =    94.70s Requesting snapshot of accessibility hierarchy for app with pid 94253
+    t =    96.33s Requesting snapshot of accessibility hierarchy for app with pid 94253
+    t =    96.63s Get all elements bound by index for: Elements matching predicate 'label CONTAINS "Session 运行与恢复"'
+    t =    96.82s Checking existence of `Button (Element at index 0)`
+    t =    97.01s Find the Button (Element at index 0)
+    t =    97.21s Checking existence of `"3.1, Session 运行与恢复, session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。" Button`
+    t =    97.40s Find the "3.1, Session 运行与恢复, session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。" Button
+    t =    97.62s Find the "3.1, Session 运行与恢复, session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。" Button
+    t =    97.78s Find the "3.1, Session 运行与恢复, session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。" Button
+    t =    98.02s Find the "3.1, Session 运行与恢复, session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。" Button
+    t =    98.24s Find the "3.1, Session 运行与恢复, session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。" Button
+    t =    98.51s Tap "3.1, Session 运行与恢复, session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。" Button
+    t =    98.51s     Wait for io.orbitd.wikiprobe to idle
+    t =    98.51s     Find the "3.1, Session 运行与恢复, session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。" Button
+    t =    98.75s     Check for interrupting elements affecting "3.1, Session 运行与恢复, session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。" Button
+    t =    99.04s         Wait for com.apple.springboard to idle
+    t =    99.14s     Synthesize event
+    t =    99.59s     Wait for io.orbitd.wikiprobe to idle
+    t =   100.07s Waiting 30.0s for Any (First Match) to exist
+    t =   101.13s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   101.14s         Checking existence of `Any (First Match)`
+    t =   103.26s Checking existence of `Any (First Match)`
+    t =   104.44s Find the Any (First Match)
+    t =   105.26s Find the "会话运行模型与长连接：总览" StaticText
+    t =   106.00s Find the "会话运行模型与长连接：总览" StaticText
+    t =   106.57s Find the "会话运行模型与长连接：总览" StaticText
+    t =   107.77s Find the "会话运行模型与长连接：总览" StaticText
+    t =   108.48s Checking existence of `Any (First Match)`
+    t =   109.12s Checking existence of `Any (First Match)`
+    t =   109.71s Checking existence of `Any (First Match)`
+    t =   112.56s Added attachment named '32-pad-doc'
+    t =   112.57s Requesting snapshot of accessibility hierarchy for app with pid 94253
+    t =   113.82s Requesting snapshot of accessibility hierarchy for app with pid 94253
+    t =   114.10s Get all elements bound by index for: Elements matching predicate 'label CONTAINS "Home"'
+    t =   114.32s Checking existence of `Button (Element at index 0)`
+    t =   114.46s Find the Button (Element at index 0)
+    t =   114.63s Tap "Home" Button
+    t =   114.63s     Wait for io.orbitd.wikiprobe to idle
+    t =   114.63s     Find the "Home" Button
+    t =   114.80s     Check for interrupting elements affecting "Home" Button
+    t =   114.96s         Wait for com.apple.springboard to idle
+    t =   115.01s     Synthesize event
+    t =   115.38s     Wait for io.orbitd.wikiprobe to idle
+    t =   115.68s Waiting 30.0s for Any (First Match) to exist
+    t =   116.76s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   116.76s         Checking existence of `Any (First Match)`
+    t =   117.30s Checking existence of `Any (First Match)`
+    t =   117.87s Find the Any (First Match)
+    t =   118.51s Find the "35 documents · 5 written" StaticText
+    t =   119.04s Find the "35 documents · 5 written" StaticText
+    t =   119.56s Find the "35 documents · 5 written" StaticText
+    t =   120.29s Find the "35 documents · 5 written" StaticText
+    t =   121.04s Waiting 10.0s for "Activity" Button to exist
+    t =   122.08s     Checking `Expect predicate `existsNoRetry == 1` for object "Activity" Button`
+    t =   122.09s         Checking existence of `"Activity" Button`
+    t =   122.20s Tap "Activity" Button
+    t =   122.20s     Wait for io.orbitd.wikiprobe to idle
+    t =   122.20s     Find the "Activity" Button
+    t =   122.36s     Check for interrupting elements affecting "Activity" Button
+    t =   122.54s         Wait for com.apple.springboard to idle
+    t =   122.60s     Synthesize event
+    t =   123.24s     Wait for io.orbitd.wikiprobe to idle
+    t =   123.96s Waiting 30.0s for Any (First Match) to exist
+    t =   125.02s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   125.02s         Checking existence of `Any (First Match)`
+    t =   125.56s Checking existence of `Any (First Match)`
+    t =   126.15s Find the Any (First Match)
+    t =   126.57s Find the "1 proposal to review" Button
+    t =   126.96s Find the "1 proposal to review" Button
+    t =   127.43s Find the "1 proposal to review" Button
+    t =   128.03s Find the "1 proposal to review" Button
+    t =   128.46s Waiting 20.0s for Any (First Match) to exist
+    t =   129.48s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   129.49s         Checking existence of `Any (First Match)`
+    t =   129.86s Checking existence of `Any (First Match)`
+    t =   130.26s Find the Any (First Match)
+    t =   130.63s Find the "Recent decisions" StaticText
+    t =   131.06s Find the "Recent decisions" StaticText
+    t =   131.55s Find the "Recent decisions" StaticText
+    t =   132.38s Find the "Recent decisions" StaticText
+    t =   132.87s Waiting 20.0s for Any (First Match) to exist
+    t =   133.93s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   133.94s         Checking existence of `Any (First Match)`
+    t =   134.25s Checking existence of `Any (First Match)`
+    t =   134.66s Find the Any (First Match)
+    t =   134.96s Find the "Browse by category" Button
+    t =   135.23s Find the "Browse by category" Button
+    t =   135.52s Find the "Browse by category" Button
+    t =   135.85s Find the "Browse by category" Button
+    t =   138.43s Added attachment named '33-pad-activity'
+    t =   138.44s Requesting snapshot of accessibility hierarchy for app with pid 94253
+    t =   139.64s Requesting snapshot of accessibility hierarchy for app with pid 94253
+    t =   139.86s Get all elements bound by index for: Elements matching predicate 'label CONTAINS "Home"'
+    t =   140.03s Checking existence of `Button (Element at index 0)`
+    t =   140.17s Find the Button (Element at index 0)
+    t =   140.32s Tap "Home" Button
+    t =   140.32s     Wait for io.orbitd.wikiprobe to idle
+    t =   140.32s     Find the "Home" Button
+    t =   140.50s     Check for interrupting elements affecting "Home" Button
+    t =   140.66s         Wait for com.apple.springboard to idle
+    t =   140.71s     Synthesize event
+    t =   141.04s     Wait for io.orbitd.wikiprobe to idle
+    t =   141.14s Waiting 30.0s for Any (First Match) to exist
+    t =   142.16s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   142.16s         Checking existence of `Any (First Match)`
+    t =   142.60s Checking existence of `Any (First Match)`
+    t =   143.08s Find the Any (First Match)
+    t =   143.84s Find the "35 documents · 5 written" StaticText
+    t =   145.12s Find the "35 documents · 5 written" StaticText
+    t =   146.05s Find the "35 documents · 5 written" StaticText
+    t =   147.27s Find the "35 documents · 5 written" StaticText
+    t =   147.90s Get all elements bound by index for: Elements matching predicate 'label CONTAINS "Settings"'
+    t =   148.11s Checking existence of `Button (Element at index 0)`
+    t =   148.26s Find the Button (Element at index 0)
+    t =   148.46s Checking existence of `Button (Element at index 1)`
+    t =   148.65s Find the Button (Element at index 1)
+    t =   148.78s Find the "gearshape" Button
+    t =   148.98s Find the "gearshape" Button
+    t =   149.13s Checking existence of `"gearshape" Button`
+    t =   149.32s Find the "gearshape" Button
+    t =   149.54s Find the "gearshape" Button
+    t =   149.75s Find the "gearshape" Button
+    t =   149.93s Find the "gearshape" Button
+    t =   150.16s Find the "gearshape" Button
+    t =   150.39s Tap "gearshape" Button
+    t =   150.39s     Wait for io.orbitd.wikiprobe to idle
+    t =   150.39s     Find the "gearshape" Button
+    t =   150.54s     Check for interrupting elements affecting "gearshape" Button
+    t =   150.78s         Wait for com.apple.springboard to idle
+    t =   150.82s     Synthesize event
+    t =   151.25s     Wait for io.orbitd.wikiprobe to idle
+    t =   152.38s Waiting 30.0s for Any (First Match) to exist
+    t =   153.40s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   153.40s         Checking existence of `Any (First Match)`
+    t =   153.93s Checking existence of `Any (First Match)`
+    t =   154.50s Find the Any (First Match)
+    t =   154.95s Find the "Maintenance" StaticText
+    t =   155.43s Find the "Maintenance" StaticText
+    t =   155.88s Find the "Maintenance" StaticText
+    t =   156.35s Find the "Maintenance" StaticText
+    t =   159.14s Added attachment named '34-pad-settings'
+    t =   159.15s Requesting snapshot of accessibility hierarchy for app with pid 94253
+    t =   160.46s Requesting snapshot of accessibility hierarchy for app with pid 94253
+    t =   160.71s Tear Down
+Test Case '-[WikiProbeUITests.WikiPadShotsTests testTheDirectoryBesideTheContent]' passed (161.144 seconds).
+Test Suite 'WikiPadShotsTests' passed at 2026-10-06 21:44:57.741.
+	 Executed 1 test, with 0 failures (0 unexpected) in 161.144 (161.146) seconds
+Test Suite 'WikiProbeUITests.xctest' passed at 2026-10-06 21:44:57.744.
+	 Executed 1 test, with 0 failures (0 unexpected) in 161.144 (161.150) seconds
+Test Suite 'Selected tests' passed at 2026-10-06 21:44:57.745.
+	 Executed 1 test, with 0 failures (0 unexpected) in 161.144 (161.153) seconds
+2026-10-06 21:45:34.667 xcodebuild[84982:232576] [MT] IDETestOperationsObserverDebug: 269.151 elapsed -- Testing started completed.
+2026-10-06 21:45:34.669 xcodebuild[84982:232576] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-06 21:45:34.670 xcodebuild[84982:232576] [MT] IDETestOperationsObserverDebug: 269.151 sec, +269.151 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.wiki-probe/results/pad.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

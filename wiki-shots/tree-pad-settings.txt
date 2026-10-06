@@ -1,0 +1,388 @@
+Attributes: Application, 0x116b0df40, pid: 94253, label: 'WikiProbe'
+Element subtree:
+ →Application, 0x116b0df40, pid: 94253, label: 'WikiProbe'
+    Window (Main), 0x116b0e080, {{0.0, 0.0}, {1180.0, 820.0}}
+      Other, 0x116b0e1c0, {{0.0, 0.0}, {1180.0, 820.0}}
+        Other, 0x116b0e300, {{0.0, 0.0}, {1180.0, 820.0}}
+          Other, 0x116b0e440, {{0.0, 0.0}, {1180.0, 820.0}}
+            Other, 0x116b0e580, {{0.0, 0.0}, {1180.0, 820.0}}
+              Other, 0x116b0f980, {{0.0, 0.0}, {1180.0, 820.0}}
+                Other, 0x116b0fac0, {{0.0, 0.0}, {1180.0, 820.0}}
+                  Other, 0x116b0fe80, {{0.0, 0.0}, {1180.0, 820.0}}
+                    Other, 0x116b0ed00, {{10.0, 32.0}, {320.0, 778.0}}
+                      Other, 0x116b0ee40, {{10.0, 32.0}, {320.0, 778.0}}
+                        Other, 0x116b0ef80, {{10.0, 32.0}, {320.0, 778.0}}
+                          NavigationBar, 0x116b0f0c0, {{10.0, 32.0}, {320.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+                            Other, 0x116b0f200, {{14.0, 40.5}, {36.0, 27.0}}, label: 'Orbit'
+                              Other, 0x116b0f340, {{14.0, 40.5}, {36.0, 27.0}}
+                                StaticText, 0x116b0f480, {{14.8, 40.8}, {34.5, 26.5}}, label: 'Orbit'
+                            Other, 0x116b0f5c0, {{215.5, 36.0}, {50.0, 36.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+                              Other, 0x116b0f700, {{215.5, 36.0}, {50.0, 36.0}}
+                                Button, 0x116b0d400, {{215.5, 36.0}, {50.0, 36.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+                            Button, 0x116b0d540, {{271.5, 36.0}, {54.5, 36.0}}, label: 'Hide Sidebar'
+                          Other, 0x116b0d680, {{10.0, 32.0}, {320.0, 778.0}}
+                            Other, 0x116b0ebc0, {{10.0, 32.0}, {320.0, 778.0}}
+                              Other, 0x116b0f840, {{10.0, 32.0}, {320.0, 778.0}}
+                                Other, 0x116b0e6c0, {{10.0, 32.0}, {320.0, 778.0}}
+                                  CollectionView, 0x116b0e800, {{10.0, 32.0}, {320.0, 778.0}}
+                                    Other, 0x116b0e940, {{10.0, -1470.0}, {320.0, 3379.0}}
+                                    Other, 0x116b0ea80, {{10.0, 32.0}, {320.0, 778.0}}
+                                      Other, 0x116b0d7c0, {{10.0, 32.0}, {320.0, 108.8}}
+                                    Other, 0x116b0d900, {{10.0, 32.0}, {320.0, 778.0}}
+                                    Cell, 0x116b0da40, {{10.0, 86.0}, {320.0, 44.5}}
+                                      Other, 0x116b0db80, {{10.0, 86.0}, {320.0, 44.5}}
+                                        Other, 0x116b0dcc0, {{10.0, 86.0}, {320.0, 44.5}}
+                                          Other, 0x116b0de00, {{10.0, 86.0}, {320.0, 44.5}}
+                                      Other, 0x116b0fc00, {{10.0, 86.0}, {320.0, 44.5}}
+                                        Other, 0x116b0fd40, {{10.0, 86.0}, {320.0, 44.5}}
+                                          Other, 0x116be92c0, {{10.0, 86.0}, {320.0, 44.5}}
+                                            Button, 0x116beaf80, {{10.0, 86.0}, {320.0, 44.5}}, label: 'Projects'
+                                              Image, 0x116beb0c0, {{36.5, 100.5}, {15.5, 15.5}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                                              StaticText, 0x116be9f40, {{68.0, 98.0}, {62.5, 20.5}}, label: 'Projects'
+                                    Cell, 0x116be8f00, {{10.0, 130.5}, {320.0, 44.5}}
+                                      Other, 0x116be9040, {{10.0, 130.5}, {320.0, 44.5}}
+                                        Other, 0x116be9180, {{10.0, 130.5}, {320.0, 44.5}}
+                                          Other, 0x116be9900, {{10.0, 130.5}, {320.0, 44.5}}
+                                      Other, 0x116be9a40, {{10.0, 130.5}, {320.0, 44.5}}
+                                        Other, 0x116beb840, {{10.0, 130.5}, {320.0, 44.5}}
+                                          Other, 0x116bea940, {{10.0, 130.5}, {320.0, 44.5}}
+                                            Button, 0x116beaa80, {{10.0, 130.5}, {320.0, 44.5}}, label: 'Tasks'
+                                              Image, 0x116beabc0, {{34.5, 144.5}, {19.0, 17.0}}, identifier: 'checklist', label: 'checklist'
+                                              StaticText, 0x116bead00, {{68.0, 142.5}, {43.0, 20.5}}, label: 'Tasks'
+                                    Cell, 0x116beae40, {{10.0, 175.0}, {320.0, 44.5}}
+                                      Other, 0x116be8dc0, {{10.0, 175.0}, {320.0, 44.5}}
+                                        Other, 0x116be9400, {{10.0, 175.0}, {320.0, 44.5}}
+                                          Other, 0x116be9540, {{10.0, 175.0}, {320.0, 44.5}}
+                                      Other, 0x116be9680, {{10.0, 175.0}, {320.0, 44.5}}
+                                        Other, 0x116beb980, {{10.0, 175.0}, {320.0, 44.5}}
+                                          Other, 0x116bebac0, {{10.0, 175.0}, {320.0, 44.5}}
+                                            Button, 0x116bebc00, {{10.0, 175.0}, {320.0, 44.5}}, label: 'Wiki, 1 waiting on you'
+                                              Image, 0x116bebd40, {{37.0, 188.5}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                                              StaticText, 0x116bebe80, {{68.0, 187.0}, {34.5, 20.5}}, label: 'Wiki'
+                                              StaticText, 0x116be9b80, {{302.0, 190.5}, {6.0, 13.5}}, label: '1 waiting on you'
+                                    Cell, 0x116be9cc0, {{10.0, 219.5}, {320.0, 44.5}}
+                                      Other, 0x116bea800, {{10.0, 219.5}, {320.0, 44.5}}
+                                        Other, 0x116be97c0, {{10.0, 219.5}, {320.0, 44.5}}
+                                          Other, 0x116be83c0, {{10.0, 219.5}, {320.0, 44.5}}
+                                      Other, 0x116be8500, {{10.0, 219.5}, {320.0, 44.5}}
+                                        Other, 0x116be8640, {{10.0, 219.5}, {320.0, 44.5}}
+                                          Other, 0x116be8780, {{10.0, 219.5}, {320.0, 44.5}}
+                                            StaticText, 0x116be88c0, {{10.0, 219.5}, {320.0, 44.5}}, label: 'Workspaces'
+                                    Cell, 0x116be8a00, {{10.0, 264.0}, {320.0, 44.5}}
+                                      Other, 0x116be8b40, {{10.0, 264.0}, {320.0, 44.5}}
+                                        Other, 0x116be8c80, {{10.0, 264.0}, {320.0, 44.5}}
+                                          Other, 0x116bec000, {{10.0, 264.0}, {320.0, 44.5}}
+                                      Other, 0x116bec140, {{10.0, 264.0}, {320.0, 44.5}}
+                                        Other, 0x116bec280, {{10.0, 264.0}, {320.0, 44.5}}
+                                          Other, 0x116bec3c0, {{10.0, 264.0}, {320.0, 44.5}}
+                                            Button, 0x116bec500, {{10.0, 264.0}, {320.0, 44.5}}, label: 'orbit-develop,  · hpc'
+                                              Other, 0x116bec640, {{34.5, 278.5}, {19.0, 15.5}}, label: 'Runner offline'
+                                                Image, 0x116bec780, {{34.5, 278.5}, {19.0, 15.5}}, identifier: 'folder', label: 'Move'
+                                              StaticText, 0x116bec8c0, {{68.0, 276.0}, {103.0, 20.5}}, label: 'orbit-develop'
+                                              StaticText, 0x116beca00, {{171.0, 276.0}, {42.0, 20.5}}, label: ' · hpc'
+                                    Cell, 0x116becb40, {{10.0, 308.5}, {320.0, 44.5}}
+                                      Other, 0x116becc80, {{10.0, 308.5}, {320.0, 44.5}}
+                                        Other, 0x116becdc0, {{10.0, 308.5}, {320.0, 44.5}}
+                                          Other, 0x116becf00, {{10.0, 308.5}, {320.0, 44.5}}
+                                      Other, 0x116bed040, {{10.0, 308.5}, {320.0, 44.5}}
+                                        Other, 0x116bed180, {{10.0, 308.5}, {320.0, 44.5}}
+                                          Other, 0x116bed2c0, {{10.0, 308.5}, {320.0, 44.5}}
+                                            Button, 0x116bed400, {{10.0, 308.5}, {320.0, 44.5}}, label: 'orbit-macos,  · mac-mini'
+                                              Other, 0x116bed540, {{34.5, 323.0}, {19.0, 15.5}}, label: 'Runner offline'
+                                                Image, 0x116bed680, {{34.5, 323.0}, {19.0, 15.5}}, identifier: 'folder', label: 'Move'
+                                              StaticText, 0x116bed7c0, {{68.0, 320.5}, {93.0, 20.5}}, label: 'orbit-macos'
+                                              StaticText, 0x116bed900, {{161.0, 320.5}, {85.0, 20.5}}, label: ' · mac-mini'
+                                    Other, 0x116beda40, {{297.0, 86.0}, {30.0, 702.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x116bedb80, {{324.0, 476.0}, {3.0, 309.0}}
+                                    Other, 0x116bedcc0, {{297.0, 86.0}, {30.0, 702.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x116bede00, {{324.0, 476.0}, {3.0, 309.0}}
+                                  Button, 0x116bedf40, {{20.0, 748.5}, {165.5, 43.5}}, label: 'New session'
+                                    Image, 0x116bee080, {{41.0, 761.0}, {18.5, 18.5}}, identifier: 'square.and.pencil', label: 'Compose'
+                                    StaticText, 0x116bee1c0, {{67.5, 759.8}, {100.0, 20.5}}, label: 'New session'
+                                  Button, 0x116bee300, {{276.0, 748.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+                          Other, 0x116bee440, {{10.0, 32.0}, {320.0, 778.0}}
+                            Other, 0x116bee580, {{10.0, 32.0}, {320.0, 778.0}}
+                      Other, 0x116bee6c0, {{10.0, 32.0}, {320.0, 778.0}}
+                        Other, 0x116bee800, {{10.0, 32.0}, {320.0, 778.0}}
+                          Other, 0x116bee940, {{10.0, 32.0}, {320.0, 778.0}}
+                            Other, 0x116beea80, {{10.0, 32.0}, {320.0, 778.0}}
+                              Other, 0x116beebc0, {{10.0, 32.0}, {320.0, 778.0}}
+                                Other, 0x116beed00, {{10.0, 32.0}, {320.0, 778.0}}
+                            Other, 0x116beee40, {{10.0, 32.0}, {320.0, 778.0}}
+                              Other, 0x116beef80, {{10.0, 32.0}, {320.0, 778.0}}
+                    Other, 0x116bef0c0, {{0.0, 0.0}, {715.5, 820.0}}
+                      Other, 0x116bef200, {{0.0, 0.0}, {715.5, 820.0}}
+                        NavigationBar, 0x116bef340, {{0.0, 32.0}, {715.5, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+                        Other, 0x116bef480, {{0.0, 0.0}, {715.5, 820.0}}
+                          Other, 0x116bef5c0, {{0.0, 0.0}, {715.5, 820.0}}
+                            Other, 0x116bef700, {{0.0, 0.0}, {715.5, 820.0}}
+                              Other, 0x116bef840, {{0.0, 0.0}, {715.5, 820.0}}
+                                CollectionView, 0x116bef980, {{0.0, 0.0}, {715.5, 820.0}}
+                                  Other, 0x116befac0, {{0.0, -1554.0}, {715.5, 1706.0}}
+                                  Other, 0x116befc00, {{0.0, 0.0}, {715.5, 820.0}}
+                                    Other, 0x116befd40, {{0.0, 0.0}, {715.5, 140.8}}
+                                  Other, 0x116befe80, {{0.0, 0.0}, {715.5, 820.0}}
+                                  Cell, 0x116bf0000, {{0.0, 86.0}, {715.5, 66.0}}
+                                    Other, 0x116bf0140, {{0.0, 86.0}, {715.5, 66.0}}
+                                      Other, 0x116bf0280, {{0.0, 86.0}, {715.5, 66.0}}
+                                    Other, 0x116bf03c0, {{330.0, 86.0}, {385.5, 66.0}}
+                                      Other, 0x116bf0500, {{330.0, 86.0}, {385.5, 66.0}}
+                                        Other, 0x116bf0640, {{330.0, 86.0}, {385.5, 66.0}}
+                                          StaticText, 0x116bf0780, {{346.0, 108.8}, {34.5, 20.5}}, label: 'Wiki'
+                                          StaticText, 0x116bf08c0, {{390.5, 105.0}, {52.5, 28.0}}, label: 'The codebase this wiki describes', value: orbit
+                                  Cell, 0x116bf0a00, {{0.0, 152.0}, {715.5, 52.0}}
+                                    Other, 0x116bf0b40, {{0.0, 152.0}, {715.5, 52.0}}
+                                      Other, 0x116bf0c80, {{0.0, 152.0}, {715.5, 52.0}}
+                                        Other, 0x116bf0dc0, {{0.0, 152.0}, {715.5, 52.0}}
+                                    Other, 0x116bf0f00, {{330.0, 152.0}, {385.5, 52.0}}
+                                      Other, 0x116bf1040, {{330.0, 152.0}, {385.5, 52.0}}
+                                        Other, 0x116bf1180, {{330.0, 152.0}, {385.5, 52.0}}
+                                          Button, 0x116bf12c0, {{0.0, 152.0}, {715.5, 52.0}}, label: 'Home'
+                                            Image, 0x116bf1400, {{348.0, 169.5}, {20.0, 17.5}}, identifier: 'house', label: 'Home'
+                                            StaticText, 0x116bf1540, {{382.0, 167.8}, {45.5, 20.5}}, label: 'Home'
+                                  Other, 0x116bf1680, {{0.0, 152.0}, {715.5, 208.0}}
+                                  Cell, 0x116bf17c0, {{0.0, 204.0}, {715.5, 52.0}}
+                                    Other, 0x116bf1900, {{0.0, 204.0}, {715.5, 52.0}}
+                                      Other, 0x116bf1a40, {{0.0, 204.0}, {715.5, 52.0}}
+                                        Other, 0x116bf1b80, {{0.0, 204.0}, {715.5, 52.0}}
+                                    Other, 0x116bf1cc0, {{330.0, 204.0}, {385.5, 52.0}}
+                                      Other, 0x116bf1e00, {{330.0, 204.0}, {385.5, 52.0}}
+                                        Other, 0x116bf1f40, {{330.0, 204.0}, {385.5, 52.0}}
+                                          Button, 0x116bf2080, {{0.0, 204.0}, {715.5, 52.0}}, label: 'Browse by category'
+                                            Image, 0x116bf21c0, {{350.5, 222.5}, {15.5, 15.5}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                                            StaticText, 0x116bf2300, {{382.0, 219.8}, {151.0, 20.5}}, label: 'Browse by category'
+                                  Other, 0x116bf2440, {{382.0, 203.0}, {317.5, 1.0}}
+                                  Cell, 0x116bf2580, {{0.0, 256.0}, {715.5, 52.0}}
+                                    Other, 0x116bf26c0, {{0.0, 256.0}, {715.5, 52.0}}
+                                      Other, 0x116bf2800, {{0.0, 256.0}, {715.5, 52.0}}
+                                        Other, 0x116bf2940, {{0.0, 256.0}, {715.5, 52.0}}
+                                    Other, 0x116bf2a80, {{330.0, 256.0}, {385.5, 52.0}}
+                                      Other, 0x116bf2bc0, {{330.0, 256.0}, {385.5, 52.0}}
+                                        Other, 0x116bf2d00, {{330.0, 256.0}, {385.5, 52.0}}
+                                          Button, 0x116bf2e40, {{0.0, 256.0}, {715.5, 52.0}}, label: 'A–Z index'
+                                            Image, 0x116bf2f80, {{344.0, 276.0}, {28.0, 12.5}}, identifier: 'textformat.abc', label: 'Abc'
+                                            StaticText, 0x116bf30c0, {{382.0, 271.8}, {76.5, 20.5}}, label: 'A–Z index'
+                                  Other, 0x116bf3200, {{382.0, 255.0}, {317.5, 1.0}}
+                                  Cell, 0x116bf3340, {{0.0, 308.0}, {715.5, 52.0}}
+                                    Other, 0x116bf3480, {{0.0, 308.0}, {715.5, 52.0}}
+                                      Other, 0x116bf35c0, {{0.0, 308.0}, {715.5, 52.0}}
+                                        Other, 0x116bf3700, {{0.0, 308.0}, {715.5, 52.0}}
+                                    Other, 0x116bf3840, {{330.0, 308.0}, {385.5, 52.0}}
+                                      Other, 0x116bf3980, {{330.0, 308.0}, {385.5, 52.0}}
+                                        Other, 0x116bf3ac0, {{330.0, 308.0}, {385.5, 52.0}}
+                                          Button, 0x116bf3c00, {{0.0, 308.0}, {715.5, 52.0}}, label: 'Plan'
+                                            Image, 0x116bf3d40, {{348.0, 326.5}, {20.0, 15.5}}, identifier: 'list.bullet.rectangle', label: 'list.bullet.rectangle'
+                                            StaticText, 0x116bf3e80, {{382.0, 323.8}, {33.0, 20.5}}, label: 'Plan'
+                                  Other, 0x116bf4000, {{382.0, 307.0}, {317.5, 1.0}}
+                                  Cell, 0x116bf4140, {{0.0, 360.0}, {715.5, 52.0}}
+                                    Other, 0x116bf4280, {{0.0, 360.0}, {715.5, 52.0}}
+                                      Other, 0x116bf43c0, {{0.0, 360.0}, {715.5, 52.0}}
+                                    Other, 0x116bf4500, {{330.0, 360.0}, {385.5, 52.0}}
+                                      Other, 0x116bf4640, {{330.0, 360.0}, {385.5, 52.0}}
+                                        Other, 0x116bf4780, {{330.0, 360.0}, {385.5, 52.0}}
+                                          StaticText, 0x116bf48c0, {{0.0, 360.0}, {715.5, 52.0}}, label: '产品概览与架构'
+                                  Other, 0x116bf4a00, {{0.0, 360.0}, {715.5, 208.0}}
+                                  Other, 0x116bf4b40, {{382.0, 359.0}, {317.5, 1.0}}
+                                  Cell, 0x116bf4c80, {{0.0, 412.0}, {715.5, 52.0}}
+                                    Other, 0x116bf4dc0, {{0.0, 412.0}, {715.5, 52.0}}
+                                      Other, 0x116bf4f00, {{0.0, 412.0}, {715.5, 52.0}}
+                                        Other, 0x116bf5040, {{0.0, 412.0}, {715.5, 52.0}}
+                                    Other, 0x116bf5180, {{330.0, 412.0}, {385.5, 52.0}}
+                                      Other, 0x116bf52c0, {{330.0, 412.0}, {385.5, 52.0}}
+                                        Other, 0x116bf5400, {{330.0, 412.0}, {385.5, 52.0}}
+                                          Button, 0x116bf5540, {{0.0, 412.0}, {715.5, 52.0}}, label: '1.1, 产品定位与核心能力'
+                                            StaticText, 0x116bf5680, {{346.0, 429.0}, {23.0, 18.0}}, label: '1.1'
+                                            StaticText, 0x116bf57c0, {{379.0, 427.8}, {152.0, 20.5}}, label: '产品定位与核心能力'
+                                            Image, 0x116bf5900, {{693.0, 433.0}, {6.0, 10.0}}, identifier: 'chevron.forward', label: 'Forward'
+                                  Cell, 0x116bf5a40, {{0.0, 464.0}, {715.5, 52.0}}
+                                    Other, 0x116bf5b80, {{0.0, 464.0}, {715.5, 52.0}}
+                                      Other, 0x116bf5cc0, {{0.0, 464.0}, {715.5, 52.0}}
+                                        Other, 0x116bf5e00, {{0.0, 464.0}, {715.5, 52.0}}
+                                    Other, 0x116bf5f40, {{330.0, 464.0}, {385.5, 52.0}}
+                                      Other, 0x116bf6080, {{330.0, 464.0}, {385.5, 52.0}}
+                                        Other, 0x116bf61c0, {{330.0, 464.0}, {385.5, 52.0}}
+                                          Button, 0x116bf6300, {{0.0, 464.0}, {715.5, 52.0}}, label: '1.2, 系统架构与数据流'
+                                            StaticText, 0x116bf6440, {{346.0, 481.0}, {23.0, 18.0}}, label: '1.2'
+                                            StaticText, 0x116bf6580, {{379.0, 479.8}, {135.0, 20.5}}, label: '系统架构与数据流'
+                                            Image, 0x116bf66c0, {{693.0, 485.0}, {6.0, 10.0}}, identifier: 'chevron.forward', label: 'Forward'
+                                  Other, 0x116bf6800, {{346.0, 463.0}, {353.5, 1.0}}
+                                  Cell, 0x116bf6940, {{0.0, 516.0}, {715.5, 52.0}}
+                                    Other, 0x116bf6a80, {{0.0, 516.0}, {715.5, 52.0}}
+                                      Other, 0x116bf6bc0, {{0.0, 516.0}, {715.5, 52.0}}
+                                        Other, 0x116bf6d00, {{0.0, 516.0}, {715.5, 52.0}}
+                                    Other, 0x116bf6e40, {{330.0, 516.0}, {385.5, 52.0}}
+                                      Other, 0x116bf6f80, {{330.0, 516.0}, {385.5, 52.0}}
+                                        Other, 0x116bf70c0, {{330.0, 516.0}, {385.5, 52.0}}
+                                          Button, 0x116bf7200, {{0.0, 516.0}, {715.5, 52.0}}, label: '1.3, 自部署与首次运行'
+                                            StaticText, 0x116bf7340, {{346.0, 533.0}, {23.0, 18.0}}, label: '1.3'
+                                            StaticText, 0x116bf7480, {{379.0, 531.8}, {135.0, 20.5}}, label: '自部署与首次运行'
+                                            Image, 0x116bf75c0, {{693.0, 537.0}, {6.0, 10.0}}, identifier: 'chevron.forward', label: 'Forward'
+                                  Other, 0x116bf7700, {{346.0, 515.0}, {353.5, 1.0}}
+                                  Cell, 0x116bf7840, {{0.0, 568.0}, {715.5, 52.0}}
+                                    Other, 0x116bf7980, {{0.0, 568.0}, {715.5, 52.0}}
+                                      Other, 0x116bf7ac0, {{0.0, 568.0}, {715.5, 52.0}}
+                                    Other, 0x116bf7c00, {{330.0, 568.0}, {385.5, 52.0}}
+                                      Other, 0x116bf7d40, {{330.0, 568.0}, {385.5, 52.0}}
+                                        Other, 0x116bf7e80, {{330.0, 568.0}, {385.5, 52.0}}
+                                          StaticText, 0x116bf8000, {{0.0, 568.0}, {715.5, 52.0}}, label: '任务与项目'
+                                  Other, 0x116bf8140, {{0.0, 568.0}, {715.5, 260.0}}
+                                  Other, 0x116bf8280, {{346.0, 567.0}, {353.5, 1.0}}
+                                  Cell, 0x116bf83c0, {{0.0, 620.0}, {715.5, 52.0}}
+                                    Other, 0x116bf8500, {{0.0, 620.0}, {715.5, 52.0}}
+                                      Other, 0x116bf8640, {{0.0, 620.0}, {715.5, 52.0}}
+                                        Other, 0x116bf8780, {{0.0, 620.0}, {715.5, 52.0}}
+                                    Other, 0x116bf88c0, {{330.0, 620.0}, {385.5, 52.0}}
+                                      Other, 0x116bf8a00, {{330.0, 620.0}, {385.5, 52.0}}
+                                        Other, 0x116bf8b40, {{330.0, 620.0}, {385.5, 52.0}}
+                                          Button, 0x116bf8c80, {{0.0, 620.0}, {715.5, 52.0}}, label: '2.1, 任务生命周期与依赖'
+                                            StaticText, 0x116bf8dc0, {{346.0, 637.0}, {23.0, 18.0}}, label: '2.1'
+                                            StaticText, 0x116bf8f00, {{379.0, 635.8}, {152.0, 20.5}}, label: '任务生命周期与依赖'
+                                            Image, 0x116bf9040, {{693.0, 641.0}, {6.0, 10.0}}, identifier: 'chevron.forward', label: 'Forward'
+                                  Cell, 0x116bf9180, {{0.0, 672.0}, {715.5, 52.0}}
+                                    Other, 0x116bf92c0, {{0.0, 672.0}, {715.5, 52.0}}
+                                      Other, 0x116bf9400, {{0.0, 672.0}, {715.5, 52.0}}
+                                        Other, 0x116bf9540, {{0.0, 672.0}, {715.5, 52.0}}
+                                    Other, 0x116bf9680, {{330.0, 672.0}, {385.5, 52.0}}
+                                      Other, 0x116bf97c0, {{330.0, 672.0}, {385.5, 52.0}}
+                                        Other, 0x116bf9900, {{330.0, 672.0}, {385.5, 52.0}}
+                                          Button, 0x116bf9a40, {{0.0, 672.0}, {715.5, 52.0}}, label: '2.2, 项目启动与协调'
+                                            StaticText, 0x116bf9b80, {{346.0, 689.0}, {23.0, 18.0}}, label: '2.2'
+                                            StaticText, 0x116bf9cc0, {{379.0, 687.8}, {118.0, 20.5}}, label: '项目启动与协调'
+                                            Image, 0x116bf9e00, {{693.0, 693.0}, {6.0, 10.0}}, identifier: 'chevron.forward', label: 'Forward'
+                                  Other, 0x116bf9f40, {{346.0, 671.0}, {353.5, 1.0}}
+                                  Cell, 0x116bfa080, {{0.0, 724.0}, {715.5, 52.0}}
+                                    Other, 0x116bfa1c0, {{0.0, 724.0}, {715.5, 52.0}}
+                                      Other, 0x116bfa300, {{0.0, 724.0}, {715.5, 52.0}}
+                                        Other, 0x116bfa440, {{0.0, 724.0}, {715.5, 52.0}}
+                                    Other, 0x116bfa580, {{330.0, 724.0}, {385.5, 52.0}}
+                                      Other, 0x116bfa6c0, {{330.0, 724.0}, {385.5, 52.0}}
+                                        Other, 0x116bfa800, {{330.0, 724.0}, {385.5, 52.0}}
+                                          Button, 0x116bfa940, {{0.0, 724.0}, {715.5, 52.0}}, label: '2.3, 完成判据与验收'
+                                            StaticText, 0x116bfaa80, {{346.0, 741.0}, {23.0, 18.0}}, label: '2.3'
+                                            StaticText, 0x116bfabc0, {{379.0, 739.8}, {118.0, 20.5}}, label: '完成判据与验收'
+                                            Image, 0x116bfad00, {{693.0, 745.0}, {6.0, 10.0}}, identifier: 'chevron.forward', label: 'Forward'
+                                  Other, 0x116bfae40, {{346.0, 723.0}, {353.5, 1.0}}
+                                  Cell, 0x116bfaf80, {{0.0, 776.0}, {715.5, 52.0}}
+                                    Other, 0x116bfb0c0, {{0.0, 776.0}, {715.5, 52.0}}
+                                      Other, 0x116bfb200, {{0.0, 776.0}, {715.5, 52.0}}
+                                        Other, 0x116bfb340, {{0.0, 776.0}, {715.5, 52.0}}
+                                    Other, 0x116bfb480, {{330.0, 776.0}, {385.5, 52.0}}
+                                      Other, 0x116bfb5c0, {{330.0, 776.0}, {385.5, 52.0}}
+                                        Other, 0x116bfb700, {{330.0, 776.0}, {385.5, 52.0}}
+                                          Button, 0x116bfb840, {{0.0, 776.0}, {715.5, 52.0}}, label: '2.4, 项目集成线与落地'
+                                            StaticText, 0x116bfb980, {{346.0, 793.0}, {23.0, 18.0}}, label: '2.4'
+                                            StaticText, 0x116bfbac0, {{379.0, 791.8}, {135.0, 20.5}}, label: '项目集成线与落地'
+                                            Image, 0x116bfbc00, {{693.0, 797.0}, {6.0, 10.0}}, identifier: 'chevron.forward', label: 'Forward'
+                                  Other, 0x116bfbd40, {{346.0, 775.0}, {353.5, 1.0}}
+                                  Other, 0x116bfbe80, {{682.5, 86.0}, {30.0, 734.0}}, label: 'Vertical scroll bar, 4 pages', value: 0%
+                                    Other, 0x116bfc000, {{709.5, 89.0}, {3.0, 228.0}}
+                                  Other, 0x116bfc140, {{682.5, 86.0}, {30.0, 734.0}}, label: 'Vertical scroll bar, 4 pages', value: 0%
+                                    Other, 0x116bfc280, {{709.5, 89.0}, {3.0, 228.0}}
+                        Other, 0x116bfc3c0, {{0.0, 0.0}, {715.5, 820.0}}
+                          Other, 0x116bfc500, {{0.0, 0.0}, {715.5, 820.0}}
+                    Other, 0x116bfc640, {{715.5, 0.0}, {0.5, 820.0}}
+                    Other, 0x116bfc780, {{716.0, 0.0}, {464.0, 820.0}}
+                      Other, 0x116bfc8c0, {{716.0, 0.0}, {464.0, 820.0}}
+                        NavigationBar, 0x116bfca00, {{716.0, 32.0}, {464.0, 54.0}}, identifier: 'Wiki settings'
+                          StaticText, 0x116bfcb40, {{896.5, 43.5}, {103.0, 21.0}}, label: 'Wiki settings'
+                        Other, 0x116bfcc80, {{716.0, 0.0}, {464.0, 820.0}}
+                          Other, 0x116bfcdc0, {{716.0, 0.0}, {464.0, 820.0}}
+                            Other, 0x116bfcf00, {{716.0, 0.0}, {464.0, 820.0}}
+                              Other, 0x116bfd040, {{716.0, 0.0}, {464.0, 820.0}}
+                                CollectionView, 0x116bfd180, {{716.0, 0.0}, {464.0, 820.0}}
+                                  Other, 0x116bfd2c0, {{696.0, -1554.0}, {504.0, 1744.5}}
+                                  Other, 0x116bfd400, {{716.0, 0.0}, {464.0, 820.0}}
+                                  Other, 0x116bfd540, {{716.0, 0.0}, {464.0, 820.0}}
+                                  Cell, 0x116bfd680, {{736.0, 121.0}, {424.0, 52.0}}
+                                    Other, 0x116bfd7c0, {{736.0, 121.0}, {424.0, 52.0}}
+                                      Other, 0x116bfd900, {{736.0, 121.0}, {424.0, 52.0}}
+                                        Other, 0x116bfda40, {{736.0, 121.0}, {424.0, 52.0}}
+                                    Other, 0x116bfdb80, {{736.0, 121.0}, {424.0, 52.0}}
+                                      Other, 0x116bfdcc0, {{736.0, 121.0}, {424.0, 52.0}}
+                                        Other, 0x116bfde00, {{736.0, 121.0}, {424.0, 52.0}}
+                                          StaticText, 0x116bfdf40, {{736.0, 121.0}, {424.0, 52.0}}, label: 'github-com-jianghailong-xy-orbit · github.com/jianghailong-xy/orbit'
+                                  Other, 0x116bfe080, {{696.0, 190.5}, {504.0, 540.5}}
+                                  Cell, 0x116bfe1c0, {{736.0, 190.5}, {424.0, 40.5}}
+                                    Other, 0x116bfe300, {{736.0, 190.5}, {424.0, 40.5}}
+                                    Other, 0x116bfe440, {{736.0, 190.5}, {424.0, 40.5}}
+                                      Other, 0x116bfe580, {{736.0, 190.5}, {424.0, 40.5}}
+                                        Other, 0x116bfe6c0, {{736.0, 190.5}, {424.0, 40.5}}
+                                          StaticText, 0x116bfe800, {{736.0, 190.5}, {424.0, 40.5}}, label: 'Review mode'
+                                  Cell, 0x116bfe940, {{736.0, 231.0}, {424.0, 87.5}}
+                                    Other, 0x116bfea80, {{736.0, 231.0}, {424.0, 87.5}}
+                                      Other, 0x116bfebc0, {{736.0, 231.0}, {424.0, 87.5}}
+                                    Other, 0x116bfed00, {{736.0, 231.0}, {424.0, 87.5}}
+                                      Other, 0x116bfee40, {{736.0, 231.0}, {424.0, 87.5}}
+                                        Other, 0x116bfef80, {{736.0, 231.0}, {424.0, 87.5}}
+                                          Button, 0x116bff0c0, {{736.0, 231.0}, {424.0, 87.5}}, label: 'Manual, Every change from sessions, maintenance and imports waits for you in Review.', Selected
+                                            StaticText, 0x116bff200, {{756.0, 246.0}, {55.5, 20.5}}, label: 'Manual'
+                                            StaticText, 0x116bff340, {{756.0, 269.5}, {334.0, 34.0}}, label: 'Every change from sessions, maintenance and imports waits for you in Review.'
+                                            Image, 0x116bff480, {{1123.0, 248.5}, {15.0, 15.0}}, identifier: 'checkmark', label: 'Selected', Selected
+                                  Cell, 0x116bff5c0, {{736.0, 318.5}, {424.0, 105.5}}
+                                    Other, 0x116bff700, {{736.0, 318.5}, {424.0, 105.5}}
+                                      Other, 0x116bff840, {{736.0, 318.5}, {424.0, 105.5}}
+                                    Other, 0x116bff980, {{736.0, 318.5}, {424.0, 105.5}}
+                                      Other, 0x116bffac0, {{736.0, 318.5}, {424.0, 105.5}}
+                                        Other, 0x116bffc00, {{736.0, 318.5}, {424.0, 105.5}}
+                                          Button, 0x116bffd40, {{736.0, 318.5}, {424.0, 105.5}}, label: 'Tiered, default, Your own words and machine-checked entries apply at once; the rest show as Unreviewed and are not sent to agents.'
+                                            StaticText, 0x116bffe80, {{756.0, 333.5}, {48.5, 20.5}}, label: 'Tiered'
+                                            StaticText, 0x1154e8000, {{810.5, 337.0}, {42.5, 16.0}}, label: 'default'
+                                            StaticText, 0x1154e8140, {{756.0, 357.0}, {335.0, 52.0}}, label: 'Your own words and machine-checked entries apply at once; the rest show as Unreviewed and are not sent to agents.'
+                                  Other, 0x1154e8280, {{756.0, 317.5}, {384.0, 1.0}}
+                                  Cell, 0x1154e83c0, {{736.0, 424.0}, {424.0, 105.5}}
+                                    Other, 0x1154e8500, {{736.0, 424.0}, {424.0, 105.5}}
+                                      Other, 0x1154e8640, {{736.0, 424.0}, {424.0, 105.5}}
+                                    Other, 0x1154e8780, {{736.0, 424.0}, {424.0, 105.5}}
+                                      Other, 0x1154e88c0, {{736.0, 424.0}, {424.0, 105.5}}
+                                        Other, 0x1154e8a00, {{736.0, 424.0}, {424.0, 105.5}}
+                                          Button, 0x1154e8b40, {{736.0, 424.0}, {424.0, 105.5}}, label: 'Automatic, local-vllm checks each change against its sources first: supported ones apply, partly supported ones show as Unreviewed, the rest are rejected with a reason.'
+                                            StaticText, 0x1154e8c80, {{756.0, 439.0}, {77.5, 20.5}}, label: 'Automatic'
+                                            StaticText, 0x1154e8dc0, {{756.0, 462.5}, {338.0, 52.0}}, label: 'local-vllm checks each change against its sources first: supported ones apply, partly supported ones show as Unreviewed, the rest are rejected with a reason.'
+                                  Other, 0x1154e8f00, {{756.0, 423.0}, {384.0, 1.0}}
+                                  Cell, 0x1154e9040, {{736.0, 529.5}, {424.0, 123.5}}
+                                    Other, 0x1154e9180, {{736.0, 529.5}, {424.0, 123.5}}
+                                      Other, 0x1154e92c0, {{736.0, 529.5}, {424.0, 123.5}}
+                                    Other, 0x1154e9400, {{736.0, 529.5}, {424.0, 123.5}}
+                                      Other, 0x1154e9540, {{736.0, 529.5}, {424.0, 123.5}}
+                                        Other, 0x1154e9680, {{736.0, 529.5}, {424.0, 123.5}}
+                                          Switch, 0x1154e97c0, {{736.0, 529.5}, {424.0, 123.5}}, label: 'Spot-check Automatic, Send 1 in 200 of the changes it applies to Review, to see what it lets through. Off by default; spot checks do not count toward the 30 waiting in Review.', value: 0, Disabled
+                                            StaticText, 0x1154e9900, {{756.0, 544.5}, {170.5, 20.5}}, label: 'Spot-check Automatic', Disabled
+                                            StaticText, 0x1154e9a40, {{756.0, 568.0}, {303.0, 70.0}}, label: 'Send 1 in 200 of the changes it applies to Review, to see what it lets through. Off by default; spot checks do not count toward the 30 waiting in Review.', Disabled
+                                            Switch, 0x1154e9b80, {{1079.0, 577.5}, {63.0, 28.0}}, value: 0, Disabled
+                                  Other, 0x1154e9cc0, {{756.0, 528.5}, {384.0, 1.0}}
+                                  Cell, 0x1154e9e00, {{736.0, 653.0}, {424.0, 78.0}}
+                                    Other, 0x1154e9f40, {{736.0, 653.0}, {424.0, 78.0}}
+                                    Other, 0x1154ea080, {{736.0, 653.0}, {424.0, 78.0}}
+                                      Other, 0x1154ea1c0, {{736.0, 653.0}, {424.0, 78.0}}
+                                        Other, 0x1154ea300, {{736.0, 653.0}, {424.0, 78.0}}
+                                          StaticText, 0x1154ea440, {{736.0, 653.0}, {424.0, 78.0}}, label: 'Always asks you, in any mode: principles, anything a session proposed after reading the web, and changes to entries you wrote or confirmed. A run that would change more than 10% of the wiki stops.'
+                                  Other, 0x1154ea580, {{696.0, 731.0}, {504.0, 318.0}}
+                                  Cell, 0x1154ea6c0, {{736.0, 731.0}, {424.0, 40.5}}
+                                    Other, 0x1154ea800, {{736.0, 731.0}, {424.0, 40.5}}
+                                    Other, 0x1154ea940, {{736.0, 731.0}, {424.0, 40.5}}
+                                      Other, 0x1154eaa80, {{736.0, 731.0}, {424.0, 40.5}}
+                                        Other, 0x1154eabc0, {{736.0, 731.0}, {424.0, 40.5}}
+                                          StaticText, 0x1154ead00, {{736.0, 731.0}, {424.0, 40.5}}, label: 'Maintenance'
+                                  Cell, 0x1154eae40, {{736.0, 771.5}, {424.0, 52.0}}
+                                    Other, 0x1154eaf80, {{736.0, 771.5}, {424.0, 52.0}}
+                                      Other, 0x1154eb0c0, {{736.0, 771.5}, {424.0, 52.0}}
+                                    Other, 0x1154eb200, {{736.0, 771.5}, {424.0, 52.0}}
+                                      Other, 0x1154eb340, {{736.0, 771.5}, {424.0, 52.0}}
+                                        Other, 0x1154eb480, {{736.0, 771.5}, {424.0, 52.0}}
+                                          StaticText, 0x1154eb5c0, {{756.0, 787.2}, {49.0, 20.5}}, label: 'Status'
+                                          StaticText, 0x1154eb700, {{736.0, 771.5}, {424.0, 52.0}}, label: 'Status, On'
+                                  Other, 0x1154eb840, {{1147.0, 86.0}, {30.0, 702.0}}, label: 'Vertical scroll bar, 2 pages', value: 0%
+                                    Other, 0x1154eb980, {{1174.0, 790.0}, {3.0, 7.0}}
+                                  Other, 0x1154ebac0, {{1147.0, 86.0}, {30.0, 702.0}}, label: 'Vertical scroll bar, 2 pages', value: 0%
+                                    Other, 0x1154ebc00, {{1174.0, 790.0}, {3.0, 7.0}}
+                        Other, 0x1154ebd40, {{716.0, 0.0}, {464.0, 820.0}}
+                          Other, 0x1154ebe80, {{716.0, 0.0}, {464.0, 820.0}}
+                  Other, 0x1154fc000, {{0.0, 0.0}, {1180.0, 820.0}}
+                    Other, 0x1154fc140, {{0.0, 0.0}, {1180.0, 820.0}}
+Path to element:
+ →Application, 0x116b0df40, pid: 94253, label: 'WikiProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.wikiprobe'
+  Output: {
+    Application, 0x1154fc280, pid: 94253, label: 'WikiProbe'
+  }

@@ -1,0 +1,14 @@
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testPrinciplesThenANewSpace]' started.
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/iOS/WikiPhoneShotsTests.swift:126: error: -[WikiProbeUITests.WikiPhoneShotsTests testPrinciplesThenANewSpace] : Failed to not hittable: Button, {{0.0, 216.7}, {305.3, 44.3}}, label: 'Wiki, 4 waiting on you'
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testPrinciplesThenANewSpace]' failed (193.218 seconds).
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testTheHeadComesFirstThenTheDocuments]' started.
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testTheHeadComesFirstThenTheDocuments]' passed (99.340 seconds).
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testTheHomeIsTheDocuments]' started.
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testTheHomeIsTheDocuments]' passed (142.247 seconds).
+Test Suite 'WikiPhoneShotsTests' failed at 2026-10-06 21:38:58.100.
+	 Executed 3 tests, with 1 failure (0 unexpected) in 434.805 (434.812) seconds
+Test Suite 'WikiProbeUITests.xctest' failed at 2026-10-06 21:38:58.101.
+	 Executed 3 tests, with 1 failure (0 unexpected) in 434.805 (434.819) seconds
+Test Suite 'Selected tests' failed at 2026-10-06 21:38:58.102.
+	 Executed 3 tests, with 1 failure (0 unexpected) in 434.805 (434.822) seconds
+** TEST FAILED **

@@ -1,0 +1,5 @@
+Query chain:
+ →Find: Target Application 'io.orbitd.wikimacprobe'
+  ↪︎Find: Descendants matching type Any
+    ↪︎Find: Elements matching predicate 'label CONTAINS "Browse by category" OR value CONTAINS "Browse by category"'
+      ↪︎Find: First Match

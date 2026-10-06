@@ -1,0 +1,67 @@
+==> stubs ready after 2s
+iPhone iPhone 17 Pro com.apple.CoreSimulator.SimRuntime.iOS-26-5
+iPad iPad Air 11-inch (M4) com.apple.CoreSimulator.SimRuntime.iOS-26-5
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B, iPad CD273885-3D56-471B-AD88-07FFF01EA675
+Test Case '-[WikiMacProbeUITests.WikiMacShotsTests testTheDirectoryBesideTheContent]' started.
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/Shared/WikiShotsSupport.swift:40: error: -[WikiMacProbeUITests.WikiMacShotsTests testTheDirectoryBesideTheContent] : Failed to get matching snapshots: Timed out while evaluating UI query.
+Test Case '-[WikiMacProbeUITests.WikiMacShotsTests testTheDirectoryBesideTheContent]' failed (261.372 seconds).
+	 Executed 1 test, with 1 failure (0 unexpected) in 261.372 (261.375) seconds
+	 Executed 1 test, with 1 failure (0 unexpected) in 261.372 (261.378) seconds
+	 Executed 1 test, with 1 failure (0 unexpected) in 261.372 (261.381) seconds
+** TEST FAILED **
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testPrinciplesThenANewSpace]' started.
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/iOS/WikiPhoneShotsTests.swift:126: error: -[WikiProbeUITests.WikiPhoneShotsTests testPrinciplesThenANewSpace] : Failed to not hittable: Button, {{0.0, 216.7}, {305.3, 44.3}}, label: 'Wiki, 4 waiting on you'
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testPrinciplesThenANewSpace]' failed (193.218 seconds).
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testTheHeadComesFirstThenTheDocuments]' started.
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testTheHeadComesFirstThenTheDocuments]' passed (99.340 seconds).
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testTheHomeIsTheDocuments]' started.
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testTheHomeIsTheDocuments]' passed (142.247 seconds).
+	 Executed 3 tests, with 1 failure (0 unexpected) in 434.805 (434.812) seconds
+	 Executed 3 tests, with 1 failure (0 unexpected) in 434.805 (434.819) seconds
+	 Executed 3 tests, with 1 failure (0 unexpected) in 434.805 (434.822) seconds
+** TEST FAILED **
+Test Case '-[WikiProbeUITests.WikiPadShotsTests testTheDirectoryBesideTheContent]' started.
+Test Case '-[WikiProbeUITests.WikiPadShotsTests testTheDirectoryBesideTheContent]' passed (161.144 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 161.144 (161.146) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 161.144 (161.150) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 161.144 (161.153) seconds
+** TEST SUCCEEDED **
+.wiki-probe/run.sh: line 85:  4085 Terminated: 15          python3 -u stub.py 8765 "$OUT/requests-one.log" one > "$OUT/stub-one.out" 2>&1
+.wiki-probe/run.sh: line 85:  4086 Terminated: 15          python3 -u stub.py 8766 "$OUT/requests-three.log" three > "$OUT/stub-three.out" 2>&1
+.wiki-probe/run.sh: line 85:  4087 Terminated: 15          SLOW=25 python3 -u stub.py 8767 "$OUT/requests-slow.log" slow > "$OUT/stub-slow.out" 2>&1
+total 9432
+drwxr-xr-x  35 runner  staff    1120 Oct  6 21:45 .
+drwxr-xr-x  17 runner  staff     544 Oct  6 21:40 ..
+-rw-r--r--   1 runner  staff  562492 Oct  6 21:37 01-phone-drawer.png
+-rw-r--r--   1 runner  staff  301946 Oct  6 21:37 02-phone-home.png
+-rw-r--r--   1 runner  staff  291217 Oct  6 21:38 03-phone-home-unfolded.png
+-rw-r--r--   1 runner  staff  343999 Oct  6 21:38 04-phone-home-foot.png
+-rw-r--r--   1 runner  staff  137230 Oct  6 21:34 11-phone-drawer-three.png
+-rw-r--r--   1 runner  staff  562777 Oct  6 21:35 21-phone-drawer-slow.png
+-rw-r--r--   1 runner  staff  120227 Oct  6 21:35 22-phone-loading.png
+-rw-r--r--   1 runner  staff  302588 Oct  6 21:36 23-phone-loaded.png
+-rw-r--r--   1 runner  staff  443811 Oct  6 21:43 31-pad-wiki.png
+-rw-r--r--   1 runner  staff  503475 Oct  6 21:44 32-pad-doc.png
+-rw-r--r--   1 runner  staff  466248 Oct  6 21:44 33-pad-activity.png
+-rw-r--r--   1 runner  staff  465995 Oct  6 21:44 34-pad-settings.png
+drwxr-xr-x   7 runner  staff     224 Oct  6 21:45 attachments-mac
+drwxr-xr-x   8 runner  staff     256 Oct  6 21:45 attachments-pad
+drwxr-xr-x  18 runner  staff     576 Oct  6 21:45 attachments-phone
+-rw-r--r--   1 runner  staff     168 Oct  6 21:45 not-served.txt
+-rw-r--r--   1 runner  staff   19486 Oct  6 21:44 requests-one.log
+-rw-r--r--   1 runner  staff    3962 Oct  6 21:36 requests-slow.log
+-rw-r--r--   1 runner  staff    2079 Oct  6 21:34 requests-three.log
+-rw-r--r--   1 runner  staff      55 Oct  6 21:01 stub-one.out
+-rw-r--r--   1 runner  staff      56 Oct  6 21:01 stub-slow.out
+-rw-r--r--   1 runner  staff      57 Oct  6 21:01 stub-three.out
+-rw-r--r--@  1 runner  staff   42909 Oct  6 21:44 tree-pad-activity.txt
+-rw-r--r--@  1 runner  staff   38779 Oct  6 21:44 tree-pad-doc.txt
+-rw-r--r--@  1 runner  staff   38370 Oct  6 21:44 tree-pad-settings.txt
+-rw-r--r--@  1 runner  staff   44135 Oct  6 21:43 tree-pad-wiki.txt
+-rw-r--r--@  1 runner  staff   25444 Oct  6 21:38 tree-phone-home-foot.txt
+-rw-r--r--@  1 runner  staff   23261 Oct  6 21:37 tree-phone-home.txt
+-rw-r--r--@  1 runner  staff   17417 Oct  6 21:35 tree-phone-loading.txt
+-rw-r--r--@  1 runner  staff    1941 Oct  6 21:44 WikiPadShotsTeststestTheDirectoryBesideTheContent-notes.txt
+-rw-r--r--@  1 runner  staff     129 Oct  6 21:34 WikiPhoneShotsTeststestPrinciplesThenANewSpace-notes.txt
+-rw-r--r--@  1 runner  staff     502 Oct  6 21:36 WikiPhoneShotsTeststestTheHeadComesFirstThenTheDocuments-notes.txt
+-rw-r--r--@  1 runner  staff    1982 Oct  6 21:38 WikiPhoneShotsTeststestTheHomeIsTheDocuments-notes.txt

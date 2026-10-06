@@ -1,0 +1,44 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "628060c1c6d6151560dae5925dba159e16c14035",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "172F7111-483E-4C85-B9B6-3A367F4AE793.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Debug description for `Any (First Match)`_0_B96971CD-C0E0-49B3-96FA-8FDA1248B863.txt",
+        "timestamp" : 1791321291.513
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "628060c1c6d6151560dae5925dba159e16c14035",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "5C06551E-D9CD-4769-8DD8-6E1AB530EF4C",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Synthesized Event 2026-10-06 at 09.14.30 PM",
+        "timestamp" : 1791321270.889
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "628060c1c6d6151560dae5925dba159e16c14035",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "975E2BE4-737B-405C-A070-0115E702F5CA.mp4",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Screen Recording 2026-10-06 at 09.14.22 PM.mp4",
+        "timestamp" : 1791321262.637
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "628060c1c6d6151560dae5925dba159e16c14035",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "EB825D59-5DAA-4BB5-841A-226E78A593E1.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Spindump_0_1ECD5F57-7B8F-452C-B49B-5370F21DF96E.txt",
+        "timestamp" : 1791321513.62
+      }
+    ],
+    "testIdentifier" : "WikiMacShotsTests/testTheDirectoryBesideTheContent()",
+    "testIdentifierURL" : "test://com.apple.xcode/WikiProbe/WikiMacProbeUITests/WikiMacShotsTests/testTheDirectoryBesideTheContent"
+  }
+]

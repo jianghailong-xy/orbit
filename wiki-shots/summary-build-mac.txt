@@ -1,0 +1,10 @@
+Test Case '-[WikiMacProbeUITests.WikiMacShotsTests testTheDirectoryBesideTheContent]' started.
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/Shared/WikiShotsSupport.swift:40: error: -[WikiMacProbeUITests.WikiMacShotsTests testTheDirectoryBesideTheContent] : Failed to get matching snapshots: Timed out while evaluating UI query.
+Test Case '-[WikiMacProbeUITests.WikiMacShotsTests testTheDirectoryBesideTheContent]' failed (261.372 seconds).
+Test Suite 'WikiMacShotsTests' failed at 2026-10-06 21:18:35.189.
+	 Executed 1 test, with 1 failure (0 unexpected) in 261.372 (261.375) seconds
+Test Suite 'WikiMacProbeUITests.xctest' failed at 2026-10-06 21:18:35.190.
+	 Executed 1 test, with 1 failure (0 unexpected) in 261.372 (261.378) seconds
+Test Suite 'All tests' failed at 2026-10-06 21:18:35.190.
+	 Executed 1 test, with 1 failure (0 unexpected) in 261.372 (261.381) seconds
+** TEST FAILED **
