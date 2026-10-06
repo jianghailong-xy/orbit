@@ -1,0 +1,118 @@
+
+==== environment
+$ sw_vers; uname -m; id; ls -ld /usr/local/bin; ls -l /usr/local/bin/orbit 2>&1; ls -la ~/.orbit 2>&1; cat /Users/runner/work/_temp/orbit-layout/dl/version.json
+ProductName:		macOS
+ProductVersion:		15.7.9
+BuildVersion:		24G830
+arm64
+uid=501(runner) gid=20(staff) groups=20(staff),12(everyone),61(localaccounts),79(_appserverusr),80(admin),81(_appserveradm),264(_webdeveloper),701(com.apple.sharepoint.group.1),33(_appstore),98(_lpadmin),100(_lpoperator),204(_developer),250(_analyticsusers),395(com.apple.access_ftp),398(com.apple.access_screensharing),399(com.apple.access_ssh),400(com.apple.access_remote_ae)
+drwxrwxr-x  55 runner  admin  1760 Sep  7 05:19 /usr/local/bin
+ls: /usr/local/bin/orbit: No such file or directory
+ls: /Users/runner/.orbit: No such file or directory
+{"version":"0.1.216","capabilityRevision":2,"schemaRevision":2,"minimumCapabilityRevision":1,"minimumSchemaRevision":1,"contractDigest":"bbdd980c70dc56bfd09dfc311c41b3fdff8727912642ee4f529d8ddf36d3a696","assets":{"darwin-arm64":{"file":"orbit-darwin-arm64.gz","sha256":"055a8e1dd2ab79d26ef86f6567b199a4d86f01aeb5cc382869b851b4c2a7c6f6"}}}
+
+==== A. install.sh as runner (uid 501, not root): sudo only for the /usr/local/bin link
+$ curl -fsSL http://127.0.0.1:8765/install.sh | ORBIT_NO_REGISTER=1 bash
+Downloading orbit-darwin-arm64...
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100 4892k  100 4892k    0     0   942M      0 --:--:-- --:--:-- --:--:--  955M
+Linking /usr/local/bin/orbit -> /Users/runner/.orbit/bin/orbit (needs sudo)...
+
+✓ orbit 0.1.216 installed to /Users/runner/.orbit/bin/orbit
+  /usr/local/bin/orbit -> /Users/runner/.orbit/bin/orbit
+Next:  orbit register
+
+==== A result
+$ ls -l /usr/local/bin/orbit ~/.orbit/bin/orbit
+-rwx--x--x  1 runner  staff  12726642 Oct  6 05:35 /Users/runner/.orbit/bin/orbit
+lrwxr-xr-x  1 root    admin        30 Oct  6 05:35 /usr/local/bin/orbit -> /Users/runner/.orbit/bin/orbit
+$ stat -f '%Su:%Sg %Lp %N' ~/.orbit ~/.orbit/bin ~/.orbit/bin/orbit
+runner:staff 700 /Users/runner/.orbit
+runner:staff 755 /Users/runner/.orbit/bin
+runner:staff 711 /Users/runner/.orbit/bin/orbit
+$ readlink /usr/local/bin/orbit; command -v orbit; orbit version
+/Users/runner/.orbit/bin/orbit
+/usr/local/bin/orbit
+0.1.216
+
+==== A2. orbit register by hand: the LaunchAgent runs the resolved ~/.orbit/bin/orbit
+$ orbit register --server http://127.0.0.1:8765 --token demo-enroll --name layout-probe-mac --no-auto-install-engines 2>&1 | grep -E 'registered runner|oving orbit|LaunchAgent|Plist:|Logs:|note:|failed'
+✓ registered runner "layout-probe-mac" (runner-layout-demo).
+✓ com.orbit.runner LaunchAgent installed and started.
+  Plist:   /Users/runner/Library/LaunchAgents/com.orbit.runner.plist
+  Logs:    /Users/runner/.orbit/runner.log
+  Stop:    launchctl unload /Users/runner/Library/LaunchAgents/com.orbit.runner.plist
+$ plutil -p /Users/runner/Library/LaunchAgents/com.orbit.runner.plist
+{
+  "EnvironmentVariables" => {
+    "HOME" => "/Users/runner"
+    "ORBIT_HOME" => "/Users/runner/.orbit"
+    "PATH" => "/Users/runner/.opencode/bin:/Users/runner/.kimi-code/bin:/Users/runner/go/bin:/Users/runner/hostedtoolcache/go/1.27.1/arm64/bin:/opt/homebrew/lib/ruby/gems/3.3.0/bin:/opt/homebrew/opt/ruby@3.3/bin:/Users/runner/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/runner/.cargo/bin:/usr/local/opt/curl/bin:/usr/local/bin:/usr/local/sbin:/Users/runner/bin:/Users/runner/.yarn/bin:/Users/runner/Library/Android/sdk/tools:/Users/runner/Library/Android/sdk/platform-tools:/Library/Frameworks/Python.framework/Versions/Current/bin:/Library/Frameworks/Mono.framework/Versions/Current/Commands:/usr/bin:/bin:/usr/sbin:/sbin:/Users/runner/.dotnet/tools"
+  }
+  "ExitTimeOut" => 180
+  "KeepAlive" => 1
+  "Label" => "com.orbit.runner"
+  "ProgramArguments" => [
+    0 => "/Users/runner/.orbit/bin/orbit"
+    1 => "run"
+  ]
+  "RunAtLoad" => 1
+  "StandardErrorPath" => "/Users/runner/.orbit/runner.log"
+  "StandardOutPath" => "/Users/runner/.orbit/runner.log"
+}
+$ grep -n ORBIT_NO_SELFUPDATE /Users/runner/Library/LaunchAgents/com.orbit.runner.plist || echo 'no ORBIT_NO_SELFUPDATE in the LaunchAgent'
+no ORBIT_NO_SELFUPDATE in the LaunchAgent
+$ sleep 3; launchctl print gui/501/com.orbit.runner 2>&1 | grep -E '^\s*(program|state|path) =' || launchctl list | grep com.orbit.runner || echo 'not loaded'
+	path = /Users/runner/Library/LaunchAgents/com.orbit.runner.plist
+	state = spawn scheduled
+	program = /Users/runner/.orbit/bin/orbit
+
+==== C. legacy: a root-owned binary and a LaunchAgent naming it, then one sudo orbit upgrade
+$ ls -l /usr/local/orbit-legacy/bin/orbit; stat -f '%Su:%Sg %N' /usr/local/orbit-legacy/bin; plutil -extract ProgramArguments.0 raw /Users/runner/Library/LaunchAgents/com.orbit.runner.plist
+-rwxr-xr-x  1 root  wheel  12726642 Oct  6 05:35 /usr/local/orbit-legacy/bin/orbit
+root:wheel /usr/local/orbit-legacy/bin
+/usr/local/orbit-legacy/bin/orbit
+$ printf 'HOME under sudo: '; sudo printenv HOME
+HOME under sudo: /Users/runner
+$ sudo /usr/local/orbit-legacy/bin/orbit upgrade
+checking http://127.0.0.1:8765 for updates...
+updating 0.1.215 -> 0.1.216...
+moved orbit to /Users/runner/.orbit/bin/orbit (/usr/local/orbit-legacy/bin/orbit links to it), so runner's runner can update itself
+✓ orbit is now 0.1.216
+
+==== C result
+$ ls -l /usr/local/orbit-legacy/bin/orbit ~/.orbit/bin/orbit
+-rwxr-xr-x  1 runner  staff  12726642 Oct  6 05:35 /Users/runner/.orbit/bin/orbit
+lrwxr-xr-x  1 root    wheel        30 Oct  6 05:35 /usr/local/orbit-legacy/bin/orbit -> /Users/runner/.orbit/bin/orbit
+$ stat -f '%Su:%Sg %Lp %N' ~/.orbit ~/.orbit/bin ~/.orbit/bin/orbit
+runner:staff 700 /Users/runner/.orbit
+runner:staff 755 /Users/runner/.orbit/bin
+runner:staff 755 /Users/runner/.orbit/bin/orbit
+$ plutil -extract ProgramArguments.0 raw /Users/runner/Library/LaunchAgents/com.orbit.runner.plist; grep -n ORBIT_NO_SELFUPDATE /Users/runner/Library/LaunchAgents/com.orbit.runner.plist || echo 'no ORBIT_NO_SELFUPDATE in the LaunchAgent'
+/Users/runner/.orbit/bin/orbit
+no ORBIT_NO_SELFUPDATE in the LaunchAgent
+$ sleep 3; launchctl print gui/501/com.orbit.runner 2>&1 | grep -E '^\s*(program|state) =' || echo 'not loaded'
+	state = spawn scheduled
+	program = /Users/runner/.orbit/bin/orbit
+$ ~/.orbit/bin/orbit version
+0.1.216
+
+==== control-plane requests
+2026/10/06 05:35:49 GET /dl/version.json
+2026/10/06 05:35:49 GET /install.sh
+2026/10/06 05:35:49 GET /dl/orbit-darwin-arm64.gz
+2026/10/06 05:35:49 POST /api/runner/register
+2026/10/06 05:35:49 GET /dl/version.json
+2026/10/06 05:35:49 GET /api/runner/sessions/reclaim
+2026/10/06 05:35:49 GET /api/runner/me
+2026/10/06 05:35:49 GET /api/runner/wake
+2026/10/06 05:35:52 GET /dl/version.json
+2026/10/06 05:35:52 GET /api/runner/sessions/reclaim
+2026/10/06 05:35:52 GET /api/runner/me
+2026/10/06 05:35:52 GET /dl/version.json
+2026/10/06 05:35:53 GET /dl/orbit-darwin-arm64.gz
+2026/10/06 05:35:53 GET /dl/version.json
+2026/10/06 05:35:53 GET /api/runner/sessions/reclaim
+2026/10/06 05:35:53 GET /api/runner/me
+exit: 0
