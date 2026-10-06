@@ -1743,7 +1743,15 @@ final class AppModel {
     /// the console which card first, so the read that console runs on appearing is the one that
     /// spends the press: a card delivered by that read is scrolled to as it arrives, rather than a
     /// moment after the reader has looked away.
-    func openNeedsYouItem(_ s: Session, _ item: SessionOwnerItem) {
+    func openNeedsYouItem(_ s: Session, _ item: SessionOwnerItem, projectInColumn: Bool = false) {
+        #if os(iOS)
+        // The merge into main is answered on the project's sessions page, where its card is (owner
+        // decision 2026-10-06); the coordinator's conversation keeps only a line about it. A wide
+        // shell opens that page in its session column, as the drawer's project row does.
+        if item.kind == .promotionApproval, let projectID = s.projectMembership?.projectId {
+            return openProjectSessions(projectID, inColumn: projectInColumn)
+        }
+        #endif
         consoleRegistry?.model(for: s.id, agentID: s.agent?.id ?? s.agentId).focus(ownerItem: item)
         openNeedsYouSession(s)
     }
@@ -1778,9 +1786,10 @@ final class AppModel {
     /// selected, and the one whose tap only closes the drawer.
     var drawerDestination: DrawerDestination { nav.drawerDestination(agentID: selectedAgentID) }
 
-    /// iOS compact: the page on top is its drawer destination's own — a section's list or a
-    /// project's sessions page — so the left screen edge opens the drawer; over any page pushed above
-    /// it the edge is the system back-swipe's.
+    /// iOS compact: the page on top is its drawer destination's own — a section's list, or a
+    /// project's sessions page put up as the project's own rather than pushed by a list row — so the
+    /// left screen edge opens the drawer; over any page pushed above one the edge is the system
+    /// back-swipe's.
     var atDestinationRoot: Bool { nav.atDestinationRoot }
 
     /// True when the current section's navigation stack is at its root (nothing pushed) — the
@@ -2202,6 +2211,9 @@ final class AppModel {
     private(set) var projectSessionsIntegrationReadAt: Date?
     private(set) var projectSessionsIntegrationReadFailed = false
     private var projectSessionsAddress: SessionProjectAddress?
+    /// The merge into main for the project whose sessions page is showing: the card under its
+    /// progress card and the merges on its timeline (owner decision 2026-10-06).
+    private(set) var projectSessionsMerge: ProjectMergeModel?
 
     var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
 
@@ -2237,7 +2249,8 @@ final class AppModel {
     }
 
     /// A project's sessions page over its coordinator's workspace (or the one already showing).
-    /// Without any workspace it opens the project's page.
+    /// Without any workspace it opens the project's page. On a phone it is the stack's whole content,
+    /// the project's own page, rather than a page pushed over that workspace's list.
     private func openProjectSessions(_ projectID: String, inColumn: Bool) {
         let key = PublicID.storageKey(projectID)
         let coordinator = (sessions + (agents?.allSessions ?? [])).first {
@@ -2255,7 +2268,7 @@ final class AppModel {
         if inColumn {
             nav.enterProjectSessions(address)
         } else {
-            nav.path = [.sessionProject(address)]
+            nav.path = [.sessionProject(address, asDestination: true)]
         }
     }
 
@@ -2310,13 +2323,31 @@ final class AppModel {
         }
     }
 
-    /// A member may belong to another Workspace. Carry its record into the console's cache and
-    /// change the Workspace without replacing the project page underneath that console.
+    /// One poll of the page's merge into main. Kept apart from `loadProjectSessions` so the
+    /// sessions are on screen before the promotion reads answer; another project's merge is
+    /// dropped the moment the address changes, never shown under this one.
+    func loadProjectMerge(_ address: SessionProjectAddress, force: Bool = false) async {
+        guard let api else { return }
+        if projectSessionsMerge?.projectID != address.projectID {
+            projectSessionsMerge = ProjectMergeModel(projectID: address.projectID, api: api)
+        }
+        await projectSessionsMerge?.load(force: force)
+    }
+
+    /// A member may belong to another Workspace. Carry its record into the console's cache, which
+    /// is where its console reads that Workspace from. A phone pushes the console over the page it
+    /// was opened from and leaves the Workspace beneath alone, so back retraces the way in to the
+    /// Workspace the project's page was entered from (owner, 2026-10-06). A wide shell's list column
+    /// follows the console into its Workspace, without replacing the project page underneath it.
     func openProjectMember(_ session: Session, push: Bool) {
         sessionDetails.store(session)
-        if let agentID = session.agent?.id ?? session.agentId { selectedAgentID = agentID }
         let node = NavNode.console(sessionID: session.id, origin: .list)
-        if push { self.push(node) } else { nav.selectConsole(node) }
+        if push {
+            self.push(node)
+        } else {
+            if let agentID = session.agent?.id ?? session.agentId { selectedAgentID = agentID }
+            nav.selectConsole(node)
+        }
     }
 
     /// Load the owner's folder library: when a workspace's session list appears, and again when
@@ -2879,6 +2910,14 @@ final class AppModel {
         case .open(let route): self.route(to: route)
         case let .approve(sid, behavior): Task { await approveAll(sessionID: sid, behavior: behavior) }
         case let .reply(sid, text): Task { await reply(sessionID: sid, text: text) }
+        case let .openProjectMerge(projectID, sid):
+            #if os(iOS)
+            // A push names its project by the stored UUID; every list row spells it base62.
+            settingsPresented = false
+            openProjectSessions(PublicID.toPublic(projectID), inColumn: false)
+            #else
+            route(to: .session(sid))
+            #endif
         }
     }
 

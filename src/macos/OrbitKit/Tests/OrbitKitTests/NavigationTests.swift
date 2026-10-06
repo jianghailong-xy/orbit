@@ -139,19 +139,28 @@ final class NavigationTests: XCTestCase {
         XCTAssertNotEqual(DrawerDestination.project(projectID: uuid), .workspace(agentID: uuid))
     }
 
-    /// The left edge opens the drawer on a destination's own page — a section's root or a project's
-    /// sessions page — and is the system back-swipe on any page pushed over one.
+    /// The left edge opens the drawer on a destination's own page — a section's root, or a project's
+    /// sessions page put up as the project's own — and is the system back-swipe on any page pushed
+    /// over one. A project's sessions page a session list's row pushed is such a page (owner,
+    /// 2026-10-06): the swipe goes back to that list rather than opening the drawer.
     func testTheLeftEdgeBelongsToTheDrawerOnlyOnADestinationsOwnPage() {
+        let project = SessionProjectAddress(projectID: "p1", agentID: "a1", view: .open)
         var nav = NavState(section: .agents)
         XCTAssertTrue(nav.atDestinationRoot, "the workspace's list")
         nav.push(.console(sessionID: "s1", origin: .list))
         XCTAssertFalse(nav.atDestinationRoot, "a console over it")
 
         nav.popToRoot()
+        nav.enterProjectSessions(project)
+        XCTAssertFalse(nav.atDestinationRoot, "a project's sessions page the workspace's list pushed")
+        nav.popToRoot()
         nav.enterFolder(SessionFolderAddress(folderID: "f1", agentID: "a1", view: .open))
         XCTAssertFalse(nav.atDestinationRoot, "a folder's page is pushed over the list")
-        nav.enterProjectSessions(SessionProjectAddress(projectID: "p1", agentID: "a1", view: .open))
-        XCTAssertTrue(nav.atDestinationRoot, "a project's sessions page, wherever it was opened")
+        nav.enterProjectSessions(project)
+        XCTAssertFalse(nav.atDestinationRoot, "and so is a project's sessions page its row pushed")
+
+        nav.path = [.sessionProject(project, asDestination: true)]
+        XCTAssertTrue(nav.atDestinationRoot, "the project's own page, as the drawer's row puts it up")
         nav.push(.projectDetail(projectID: "p1"))
         XCTAssertFalse(nav.atDestinationRoot, "the project's page pushed over it")
         nav.pop()

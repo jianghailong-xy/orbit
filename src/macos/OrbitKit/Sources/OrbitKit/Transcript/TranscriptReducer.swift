@@ -676,6 +676,9 @@ public struct TranscriptReducer: Sendable, Codable {
                 // And who sent it, when it is another session's message: drawn "From [that session]"
                 // while it waits, and never handed back to the composer (web parity: `q.sessionMessage`).
                 bubble.sessionMessage = turn.senderCard
+                // And the outcomes a reply turn hands back, as the reply cards its echo will be
+                // (web parity: `q.sessionReplies`).
+                bubble.sessionReplies = turn.replyCards
                 // And a confirmation review's two turns, as the cards their echoes will be.
                 bubble.reviewRequest = turn.reviewRequestCard
                 bubble.reviewReturn = turn.reviewReturnCard
@@ -689,6 +692,7 @@ public struct TranscriptReducer: Sendable, Codable {
                                              itemCard: turn.itemCard,
                                              startedCard: turn.startedCard,
                                              sessionMessage: turn.senderCard,
+                                             sessionReplies: turn.replyCards,
                                              authoredByOrbit: turn.authoredByOrbit == true,
                                              reviewRequest: turn.reviewRequestCard,
                                              reviewReturn: turn.reviewReturnCard))

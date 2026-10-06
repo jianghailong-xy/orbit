@@ -30,6 +30,11 @@ import {
   projectPromotionQuery,
 } from '../lib/queries';
 import { ago, formatSpan } from '../lib/watches';
+import {
+  REVIEW,
+  promotionEventLine,
+  promotionReceiptLine,
+} from '../lib/projectMerge';
 
 /**
  * The card that asks the account owner to merge a project branch into main (mock 4,
@@ -409,6 +414,14 @@ function MergedRows({
         {ordinals.length > 0
           ? ` · ${ordinals.length === 1 ? 'criterion' : 'criteria'} ${ordinals.join(', ')} show “on ${shortRef(promotion.upstreamRef)}”`
           : null}
+        {/* By name: a count says how much went onto main, not what. */}
+        {(promotion.tasks ?? []).length > 0 ? (
+          <ul className="project-promotion-tasks">
+            {promotion.tasks.map((task) => (
+              <li key={task.taskId}>{task.title}</li>
+            ))}
+          </ul>
+        ) : null}
       </Row>
       {merged.automatic && merged.revert ? (
         <Row k="Undo">
@@ -572,10 +585,32 @@ export function resolvingPress(
   return { label: `${RESOLVING}${waited ? ` · ${waited}` : ''}`, spinning: true };
 }
 
+/**
+ * A merge's one line in the coordinator conversation (owner decision 2026-10-06): the card lives on
+ * the project's sessions view, and the conversation keeps where each moment happened. The line says
+ * the card's own state in a few words (`promotionEventLine`), orange only while it waits on the
+ * reader, and opens the full card as its review.
+ */
+export function PromotionLineContent({
+  text,
+  action = null,
+}: {
+  text: string;
+  action?: string | null;
+}): JSX.Element {
+  return (
+    <>
+      <span className="promotion-line-text">{text}</span>
+      {action ? <span className="promotion-line-action">{`· ${action}`}</span> : null}
+      <span className="promotion-line-chev" aria-hidden="true">›</span>
+    </>
+  );
+}
+
 /** `POST /projects/:id/promotions/:promotionId/{confirm|decline|cancel}` — the owner's three doors
  *  (§3.4 M-F3). The confirmation names the SHA the card was drawn from, so a candidate the branch
  *  has moved past is refused rather than merged as whatever is on the branch now. */
-function decidePromotion(
+export function decidePromotion(
   projectId: string,
   promotionId: string,
   door: 'confirm' | 'decline' | 'cancel',
@@ -601,6 +636,8 @@ export function ProjectPromotionCard({
   project,
   now,
   onChat,
+  asLine = false,
+  bare = false,
 }: {
   projectId: string;
   promotion: ProjectPromotionView;
@@ -613,6 +650,11 @@ export function ProjectPromotionCard({
   /** State D's "Chat about this" into the host's own composer — given by the coordinator
    *  conversation, which is where the chat is held. Without it the press opens that conversation. */
   onChat?: (subject: CoordinatorChatSubject) => void;
+  /** Drawn as its one line on every width, the card itself the review it opens: how the
+   *  coordinator conversation draws it now that its home is the project's sessions view. */
+  asLine?: boolean;
+  /** The card alone, with no preview or review of its own — for a host that already put it in one. */
+  bare?: boolean;
 }): JSX.Element | null {
   const qc = useQueryClient();
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -637,7 +679,10 @@ export function ProjectPromotionCard({
   // ⌘/Ctrl + Enter is `Merge to main` while this card is asking and is the highest card asking
   // (`CardHotkey.ts`) — the chord rather than the bare key, because this press changes main.
   const anchor = useRef<HTMLDivElement>(null);
-  const keys = useCardKeyClaim((!narrow || reviewOpen) && promotion.state === 'READY' && !decide.isPending, anchor);
+  const keys = useCardKeyClaim(
+    (bare || !(narrow || asLine) || reviewOpen) && promotion.state === 'READY' && !decide.isPending,
+    anchor,
+  );
   useApproveHotkey(keys, () => decide.mutate('confirm'), { anchor });
 
   if (!DRAWN_STATES.includes(promotion.state as (typeof DRAWN_STATES)[number])) return null;
@@ -662,14 +707,12 @@ export function ProjectPromotionCard({
     else if (coordinator) navigate(coordinatorChatPath(coordinator, chatSubject));
   };
 
-  return (
-    <ReviewCard enabled={!merged} title={promotionHeading(promotion)}
-      summary={shortRef(promotion.sourceRef)} meta={promotion.state === 'READY' ? 'Ready to merge · review checks and included work' : promotion.state.toLowerCase()}
-      id={`promotion-${promotion.promotionId}`} open={reviewOpen} onOpenChange={setReviewOpen}>
+  const line = promotionEventLine(promotion);
+  const card = (
     <div
       ref={anchor}
       className={`approval-card criteria-decision project-promotion is-${promotion.state.toLowerCase()}`}
-      id={merged ? `promotion-${promotion.promotionId}` : undefined}
+      id={merged && !bare ? `promotion-${promotion.promotionId}` : undefined}
       data-state={promotion.state}
     >
       <div className="approval-head project-promotion-head">
@@ -786,6 +829,17 @@ export function ProjectPromotionCard({
         </CardActions>
       )}
     </div>
+  );
+  if (bare) return card;
+  return (
+    <ReviewCard enabled={!merged} title={promotionHeading(promotion)}
+      summary={shortRef(promotion.sourceRef)} meta={promotion.state === 'READY' ? 'Ready to merge · review checks and included work' : promotion.state.toLowerCase()}
+      id={`promotion-${promotion.promotionId}`} open={reviewOpen} onOpenChange={setReviewOpen}
+      preview={asLine ? {
+        className: `promotion-line is-${line.tone}`,
+        content: <PromotionLineContent text={line.text} action={line.tone === 'needsYou' ? REVIEW : null} />,
+      } : undefined}>
+      {card}
     </ReviewCard>
   );
 }
@@ -811,6 +865,8 @@ export function ProjectPromotion({
   now = Date.now(),
   drawRecords = true,
   onChat,
+  asLine = false,
+  bare = false,
 }: {
   projectId: string | null | undefined;
   now?: number;
@@ -819,6 +875,9 @@ export function ProjectPromotion({
   drawRecords?: boolean;
   /** State D's "Chat about this" into the host's composer (`ProjectPromotionCard`). */
   onChat?: (subject: CoordinatorChatSubject) => void;
+  /** `ProjectPromotionCard`'s two ways of being drawn somewhere other than the project page. */
+  asLine?: boolean;
+  bare?: boolean;
 }): JSX.Element | null {
   const promotion = useQuery({
     ...projectPromotionQuery(projectId ?? ''),
@@ -849,6 +908,8 @@ export function ProjectPromotion({
       project={project.data ?? null}
       now={now}
       onChat={onChat}
+      asLine={asLine}
+      bare={bare}
     />
   );
 }
@@ -872,16 +933,21 @@ export function ProjectPromotion({
 export function ProjectPromotionReceipt({
   promotion,
   now = Date.now(),
+  asLine = false,
 }: {
   promotion: ProjectPromotionView;
   /** Passed in so a test reads a fixed clock; the hosts give it `Date.now()`. */
   now?: number;
+  /** One line where the merge happened, the record the review it opens: how the coordinator
+   *  conversation draws it (owner decision 2026-10-06). */
+  asLine?: boolean;
 }): JSX.Element | null {
+  const [open, setOpen] = useState(false);
   if (promotion.state !== 'MERGED' || !promotion.merged) return null;
-  return (
+  const record = (
     <div
       className="approval-card project-promotion is-merged project-promotion-receipt"
-      id={`promotion-receipt-${promotion.promotionId}`}
+      id={asLine ? undefined : `promotion-receipt-${promotion.promotionId}`}
       data-state={promotion.state}
     >
       <div className="approval-head project-promotion-head">
@@ -894,5 +960,16 @@ export function ProjectPromotionReceipt({
         <MergedRows promotion={promotion} project={null} now={now} />
       </div>
     </div>
+  );
+  if (!asLine) return record;
+  return (
+    <ReviewCard title={promotionHeading(promotion)} summary={shortRef(promotion.sourceRef)}
+      id={`promotion-receipt-${promotion.promotionId}`} open={open} onOpenChange={setOpen}
+      preview={{
+        className: 'promotion-line is-receipt',
+        content: <PromotionLineContent text={promotionReceiptLine(promotion)} />,
+      }}>
+      {record}
+    </ReviewCard>
   );
 }

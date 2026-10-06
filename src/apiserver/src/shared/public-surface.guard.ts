@@ -62,7 +62,7 @@ export class SharedRateLimiter {
  * proxy's peer is the CDN's edge, which makes the budget per edge address rather than per person —
  * one reason it is generous.
  */
-function visitorAddress(req: Request): string {
+export function visitorAddress(req: Request): string {
   const real = req.headers['x-real-ip'];
   return (typeof real === 'string' && real) || req.socket.remoteAddress || '';
 }
