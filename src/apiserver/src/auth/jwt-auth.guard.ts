@@ -1,18 +1,26 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
+import type { AuthUser } from '../common/current-user.decorator';
+import { visitorAddress } from '../shared/public-surface.guard';
 import { ALLOW_QUERY_TOKEN } from './allow-query-token.decorator';
+import { PAT_PREFIX, PatService } from './pat.service';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly jwt: JwtService,
     private readonly reflector: Reflector,
+    // AuthModule provides it everywhere. A module that does not (a test harness) has no personal
+    // access tokens: every one is answered 401, as an unknown token is.
+    @Optional() private readonly pats?: PatService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -20,6 +28,7 @@ export class JwtAuthGuard implements CanActivate {
     const header: string | undefined = req.headers['authorization'];
 
     let token: string | undefined;
+    let fromQuery = false;
     if (header && header.startsWith('Bearer ')) {
       token = header.slice('Bearer '.length);
     } else if (typeof req.query?.access_token === 'string') {
@@ -30,13 +39,45 @@ export class JwtAuthGuard implements CanActivate {
         context.getHandler(),
         context.getClass(),
       ]);
-      if (allowQuery) token = req.query.access_token;
+      if (allowQuery) {
+        token = req.query.access_token;
+        fromQuery = true;
+      }
     }
     if (!token) throw new UnauthorizedException('missing bearer token');
 
+    if (token.startsWith(PAT_PREFIX)) {
+      // A personal access token lives for months, so it is never taken from a URL, where access
+      // logs would keep it (§6.1). It is not looked up either: the answer is an unknown token's.
+      if (fromQuery) throw new UnauthorizedException('invalid token');
+      const grant = await this.pats?.verify(token, {
+        ip: visitorAddress(req),
+        userAgent: req.headers['user-agent'],
+      });
+      if (!grant) throw new UnauthorizedException('invalid token');
+      const user: AuthUser = {
+        userId: grant.userId,
+        email: grant.email,
+        credential: {
+          kind: 'PAT',
+          tokenId: grant.tokenId,
+          scopes: grant.scopes,
+          workspaceIds: grant.workspaceIds,
+        },
+      };
+      req.user = user;
+      // Fail-closed (§6.2): a token reaches a route only once the route declares the scope it needs
+      // (@PatScope) — and no route declares one yet, so no route is open to a token.
+      throw new ForbiddenException({
+        code: 'PAT_SCOPE_MISSING',
+        message: 'This route declares no access token scope, so a personal access token cannot call it',
+      });
+    }
+
     try {
       const payload = await this.jwt.verifyAsync(token);
-      req.user = { userId: payload.sub, email: payload.email };
+      const user: AuthUser = { userId: payload.sub, email: payload.email, credential: { kind: 'LOGIN' } };
+      req.user = user;
       return true;
     } catch {
       throw new UnauthorizedException('invalid token');

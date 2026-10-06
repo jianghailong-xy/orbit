@@ -240,8 +240,12 @@ import {
   appendSessionRepliesContext,
   closeUnansweredRequests,
   closeUnreadSteerRequests,
+  foldQueuedReplyTurnsInto,
+  foldRequeuedReplyTurns,
   holdTurnRepliesForRetry,
+  isSessionReplyTurn,
   readRequestForBlock,
+  releaseUnreadSteerReplies,
   settleUnrunSessionRequests,
 } from '../sessions/session-request';
 import { readTurnCards } from '../sessions/turn-cards';
@@ -324,6 +328,7 @@ import {
   PROVIDER_UNAVAILABLE_ERROR,
   SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
   advertisedRunnerProviders,
+  dshRuntimeUnavailable,
   runnerAdvertisesProvider,
   withProviderDeclarations,
 } from './runner-provider-support';
@@ -526,6 +531,20 @@ async function persistedDshSupport(db: Prisma.TransactionClient, runnerId: strin
     where: { id: runnerId }, select: { capabilities: true, capabilitiesReportedAt: true },
   });
   return !!snapshot?.capabilitiesReportedAt && snapshot.capabilities.includes('provider:dsh');
+}
+
+/**
+ * What a claim from a runner whose request names dsh must withhold dsh sessions for: the upgrade
+ * notice when its persisted heartbeat does not declare dsh (P1b), else the install state its engine
+ * report gives (dshRuntimeUnavailable), null when it can start one. Reclaim and lease takeover ask
+ * only persistedDshSupport: they hand back sessions this runner already runs.
+ */
+async function persistedDshRefusal(db: Prisma.TransactionClient, runnerId: string): Promise<string | null> {
+  const snapshot = await db.runner.findUnique({
+    where: { id: runnerId }, select: { capabilities: true, capabilitiesReportedAt: true, engines: true },
+  });
+  if (!snapshot?.capabilitiesReportedAt || !snapshot.capabilities.includes('provider:dsh')) return DSH_RUNNER_UPGRADE_ERROR;
+  return dshRuntimeUnavailable(snapshot.engines);
 }
 
 async function assertDshLeaseSupport(
@@ -2132,9 +2151,16 @@ export class RunnerApiController {
     const supportsTerminalHandoff = runnerSupportsCapability(capabilities, SESSION_TERMINAL_HANDOFF_V1);
     const supportsSourcePin = runnerSupportsCapability(capabilities, SESSION_SOURCE_PIN_V1);
     const supportedProviders = advertisedRunnerProviders(providerHeader);
-    if (supportedProviders.includes(AgentProvider.DSH) && !await persistedDshSupport(this.prisma, runner.id)) {
+    const dshRefusal = supportedProviders.includes(AgentProvider.DSH)
+      ? await persistedDshRefusal(this.prisma, runner.id)
+      : null;
+    if (dshRefusal === DSH_RUNNER_UPGRADE_ERROR) {
       supportedProviders.splice(supportedProviders.indexOf(AgentProvider.DSH), 1);
     }
+    // Declared but not startable on this machine (not installed, or a platform or version the
+    // runner rejects). The declaration stays as sent; the queue holds the dsh rows instead, and
+    // they wait with that notice until a heartbeat reports the CLI ready, rather than failing.
+    const dshUnavailable = dshRefusal === DSH_RUNNER_UPGRADE_ERROR ? null : dshRefusal;
     for (const { provider, upgradeError } of ADVERTISED_RUNTIMES) {
       if (supportedProviders.includes(provider)) continue;
       // Explain the stall on the OpenCode/Antigravity rows themselves — a Gemini key's included,
@@ -2153,7 +2179,7 @@ export class RunnerApiController {
       await this.markSourceProtocolUnsupported(runner.id);
     }
     const job = await this.queue.claimSessionForRunner(
-      { id: runner.id, supportedProviders },
+      { id: runner.id, supportedProviders, ...(dshUnavailable ? { dshUnavailable } : {}) },
       LONG_POLL_MS,
       supportsTerminalHandoff,
       supportsSourcePin,
@@ -3533,9 +3559,10 @@ export class RunnerApiController {
         // outcomes held for this session's next turn — the ones whose reply turn an interrupt dropped,
         // or that came back while it had ended. Outside the first-delivery branch for the reason the
         // wake is: a reply turn handed out again after its runner died still has to say what it is
-        // for. Not best-effort: for a reply turn this block IS the turn.
-        if (t.kind === 'message') {
-          content = (await appendSessionRepliesContext(tx, sessionId, t.clientTurnId, content)) ?? content;
+        // for. Not best-effort: for a reply turn this block IS the turn. An outcome written into the
+        // running turn is a reply steer, and carries its blocks the same way, saying which turn they join.
+        if (t.kind === 'message' || (t.kind === 'steer' && isSessionReplyTurn(t.clientTurnId))) {
+          content = (await appendSessionRepliesContext(tx, sessionId, t.clientTurnId, content, t.kind)) ?? content;
         }
         // A confirmation request handed to this session for review, and a reviewer's return handed to
         // a run (docs/owner-confirmation-review-contract.md §2 D6, §8 B3): turns with nobody's words,
@@ -3545,6 +3572,10 @@ export class RunnerApiController {
         if (t.kind === 'message') {
           content = (await appendOwnerConfirmationReviewContext(tx, t.clientTurnId, content)) ?? content;
           content = (await appendConfirmationReturnContext(tx, t.clientTurnId, content)) ?? content;
+        }
+        // An evidence revision is also written into the running turn (evidence-review.service.ts),
+        // so a steer carries its block the way a job's exit does.
+        if (t.kind === 'message' || t.kind === 'steer') {
           content = (await appendEvidenceReviewContext(tx, t.clientTurnId, content)) ?? content;
         }
         // The background work this session left running, said to the engine that comes back to it.
@@ -4321,6 +4352,9 @@ export class RunnerApiController {
           // A background job's exit the engine never read is a wake turn of its own again, and a
           // wake already queued for the next turn joins it rather than opening a second one.
           await foldQueuedWakeTurnsInto(tx, sessionId, steering);
+          // So is an outcome handed back to this session: the reply steer is its next-turn reply turn
+          // now, still carrying it, and a reply turn already queued joins it (session-request.ts).
+          await foldQueuedReplyTurnsInto(tx, sessionId, steering);
         }
         return {
           applied: requeued.count > 0,
@@ -4361,6 +4395,11 @@ export class RunnerApiController {
           && steering.deliveryStatus !== 'ACKNOWLEDGED'
           ? await closeUnreadSteerRequests(tx, sessionId, [dto.turnId])
           : [];
+        // And a reply steer the engine never took said nothing of the outcomes it carries back to this
+        // session as an asker: they are let go, for the request worker to hand back again.
+        if (acked.count > 0 && failedCurrentWork) {
+          await releaseUnreadSteerReplies(tx, sessionId, steering.clientTurnId);
+        }
         return {
           applied: acked.count > 0,
           steer: true,
@@ -4725,8 +4764,12 @@ export class RunnerApiController {
         const requeuedSteers = await requeueUnreadCurrentWorkSteers(tx, sessionId, [completedTurn.id]);
         currentWorkRequeued = requeuedSteers.length;
         // A background job's exit that missed this turn is a wake turn of its own again; a wake
-        // already queued for the next turn joins it rather than opening a second one behind it.
-        if (requeuedSteers.length > 0) await foldRequeuedWakeTurns(tx, sessionId, requeuedSteers);
+        // already queued for the next turn joins it rather than opening a second one behind it. The
+        // same for an outcome handed back to this session that missed it (session-request.ts).
+        if (requeuedSteers.length > 0) {
+          await foldRequeuedWakeTurns(tx, sessionId, requeuedSteers);
+          await foldRequeuedReplyTurns(tx, sessionId, requeuedSteers);
+        }
       } else if (completedTurn) {
         // A failing turn takes the session with it, and the drain below answers every queued row.
         // Requeueing into a queue about to be emptied would lose the message with nothing said;

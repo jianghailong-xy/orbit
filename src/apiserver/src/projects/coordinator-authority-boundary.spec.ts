@@ -88,7 +88,7 @@ async function ownerFromMintedCredential() {
     query: {},
   };
   await new JwtAuthGuard(jwt, {} as never).canActivate(httpContext(request));
-  assert.deepEqual(request.user, { userId: OWNER, email: 'owner@example.test' });
+  assert.deepEqual(request.user, { userId: OWNER, email: 'owner@example.test', credential: { kind: 'LOGIN' } });
   return request.user as { userId: string; email: string };
 }
 

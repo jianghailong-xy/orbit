@@ -1017,7 +1017,9 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 	cmd := exec.CommandContext(procCtx, "codex", args...)
 	configureSessionProcessTree(cmd)
 	cmd.Dir = execDir
-	cmd.Env = processEnv
+	// processEnv is the caller's (envWithAgent plus CODEX_HOME), and this is where the session's
+	// ORBIT_* go on, so a person's own credential is dropped here whatever the caller handed in.
+	cmd.Env = withoutUserCredentials(processEnv)
 	cmd.Env = append(cmd.Env,
 		"ORBIT_SESSION_ID="+publicID(job.SessionID),
 		"ORBIT_AGENT_ID="+publicID(job.AgentID),

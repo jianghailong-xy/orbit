@@ -57,6 +57,24 @@ P3 按以下顺序接入：
 
 上述脱敏覆盖 P2 准备器、目录探针、健康和 API 边界。P3 启用生产 seam 前须对运行时 stderr 与 RPC Message/Data 另行脱敏，并统一 canonical cwd；不得将原始运行时错误直接送入普通日志或 turn settlement。
 
+## 未安装时的派发门禁
+
+runner 在 `X-Orbit-Supported-Providers` 和心跳里声明 `dsh`，只表示它支持这一协议，不表示 CLI 已安装（D1）。所以服务端另外读取该 runner 最近一次心跳里的引擎报告 `engines[dsh]`（`runner-provider-support.ts` 的 `dshRuntimeUnavailable`）。只有固定版本已安装、版本核对通过、平台准入时，才会派发 dsh 会话。快照缺失、报告里没有 dsh 条目，或者字段无法解析时，一律按未安装处理，不放行。
+
+- 新建会话（`POST /sessions`）和恢复已结束的会话（`POST /sessions/:id/resume`）返回 409，提示与升级提示同类。提示以 runner 自己的诊断码开头，Web 的 `dshRepair` 和 OrbitKit 的 `DshRuntime.repair` 按已有修复卡识别：
+  - `DSH_NOT_INSTALLED: DeepSeek Harness is not installed on this runner, or the runner has not reported it yet; install it from Providers, then try again`
+  - `DSH_PLATFORM_UNSUPPORTED: …`，报告为 `DSH_PLATFORM_UNSUPPORTED` 或 `DSH_NODE_UNSUPPORTED` 时使用
+  - `DSH_VERSION_INCOMPATIBLE: …; reinstall it from Providers, then try again`，用于已安装但版本不符或版本探测失败。客户端暂无对应修复卡，只显示原文。
+
+  被拒绝的请求不写会话，也不改变已有会话。runner 没有声明 dsh 时，仍先得到 P1b 的升级提示，升级提示优先于权限模式校验；安装状态在权限模式校验之后判断。
+- 领取（`GET /runner/sessions/claim`）：runner 的声明原样保留。该 runner 上的 dsh 会话（内置 `dsh`，以及 runtime 为 dsh 的配置 provider）不派发；PENDING 行写上同一条提示，机制与升级提示相同，领取成功时清除。已持久化会话的后续消息照常入队，保持 PENDING，不会被领取后失败。数据库层的 `orbit.runner_supports_dsh` 在这次领取中同样为 `0`。
+- 安装完成（Providers 的 Install，即 `POST /runners/:id/install {engine: dsh}`）后，runner 重新探测引擎，下一次心跳（30 秒以内）带上 `installed=true`。新建和恢复随即放行。等待中的会话在下一个领取长轮询（25 秒以内）派发，沿用原 runtimeSessionId 和 DSH_HOME 续聊。
+- 不受影响的部分：runner 重启后的 reclaim 和租约接管只检查声明，因为它们交还的是这台 runner 已经在运行的会话；修改会话配置不读取安装状态；其他引擎照常派发，不会被 dsh 未安装卡住。
+- 时效：门禁以最近一次报告为准，领取长轮询在开始时读取报告。已经发布的安装目录如果事后消失，在下一次探测（5 分钟以内）上报之前，以及其后一个领取长轮询内，会话仍可能被领取，并在 runner 上以 `DSH_NOT_INSTALLED` 失败。从未安装过的 runner 不存在这个窗口。
+- 运维：升级 runner 后不必赶在开放入口前先装好 dsh。未安装期间，API、CLI 和自动派发的任务都会得到上述提示，而不是一个失败的会话。
+
+验收入口：`bash scripts/test-dsh-install-gate.sh`。脚本使用真实 PostgreSQL、生产 apiserver，以及从本仓库编译的 runner；先在已安装状态跑两个会话，再移除版本目录、重启同一个 runner（等同于已升级未安装），最后通过 Orbit 的安装中继安装。共 6 个具名场景，缺失、跳过或失败均非零退出。服务端分支由 `src/apiserver/src/sessions/dsh-install-preflight.spec.ts`、`src/apiserver/src/queue/dsh-install-gate.spec.ts` 和 `src/apiserver/src/queue/dsh-install-gate.pg.spec.ts`（`scripts/run-pg-spec.sh`）覆盖。结果在 `docs/evidence/deepseek-harness/install-gate/`。
+
 ## 验证入口与范围
 
 在仓库根运行 `bash scripts/test-dsh-runtime-environment.sh`。脚本重新编译 shared 和 API，强制执行 45 个具名 Go/API 场景及 9 个脚本防护测试；缺失、未匹配、跳过、启动失败或测试失败均非零退出。node:test 的两个输出流直接写普通文件。

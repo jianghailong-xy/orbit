@@ -199,7 +199,7 @@ import {
 } from './transcript-around';
 import { EngineSignedOutConflict, engineSignInAction, signedOutEngineRefusal } from './engine-signin-preflight';
 import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
-import { DSH_RUNNER_UPGRADE_ERROR } from '../runner-api/runner-provider-support';
+import { DSH_RUNNER_UPGRADE_ERROR, dshRuntimeUnavailable } from '../runner-api/runner-provider-support';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import {
   accountLabel,
@@ -1106,6 +1106,10 @@ export class SessionsService {
         dto.model ?? '',
         resolvePermissionMode(dto.permissionMode ?? accountPermissionMode, null),
       );
+      // Declaring dsh does not install it. Refused here like the upgrade, rather than creating a
+      // session the runner would claim only to fail at launch (dshRuntimeUnavailable).
+      const unavailable = dshRuntimeUnavailable(targetRunner.engines);
+      if (unavailable) throw new ConflictException(unavailable);
     }
     // The Codex or Claude account this session runs on: the one picked for it — which pins it there —
     // else, when its workspace leaves the account to Orbit, the runner's account whose quota resets
@@ -4906,7 +4910,9 @@ export class SessionsService {
        * answered under the same Session lock in the same transaction — and as the NEXT_TURN message
        * it was otherwise. A route, never a refusal: nothing here answers 409 for a turn that cannot
        * steer. An option of this call and never a field of `dto`, so no request body can ask for it;
-       * a background job's exit is its one caller (runner-api `backgroundWake`).
+       * its callers are the platform's own deliveries: a background job's exit (runner-api
+       * `backgroundWake`) and a session request's outcome handed back to its asker
+       * (`SessionRequestService.handOff`).
        */
       steerIfLive?: boolean;
       /**
@@ -5765,7 +5771,8 @@ export class SessionsService {
     for (const turn of turns) {
       if (!turn.clientTurnId || turn.status !== 'PENDING') continue;
       if (isSessionReplyTurn(turn.clientTurnId)) {
-        const replies = await queuedRepliesContent(this.prisma, sessionId, turn.clientTurnId);
+        // In the turn's own kind too: a reply steer's blocks say which turn they join.
+        const replies = await queuedRepliesContent(this.prisma, sessionId, turn.clientTurnId, turn.kind);
         if (replies) wakeContent.set(turn.id, replies);
         continue;
       }
@@ -7322,7 +7329,7 @@ export class SessionsService {
       const current = await tx.session.findUniqueOrThrow({
         where: { id },
         include: {
-          assignedRunner: { select: { id: true, status: true, lastHeartbeatAt: true, capabilities: true, capabilitiesReportedAt: true } },
+          assignedRunner: { select: { id: true, status: true, lastHeartbeatAt: true, capabilities: true, capabilitiesReportedAt: true, engines: true } },
         },
       });
       // Everything was locked in the order project → task → session, but the SESSION was the last
@@ -7461,6 +7468,9 @@ export class SessionsService {
           dto.model ?? current.model ?? '',
           resolvePermissionMode(dto.permissionMode ?? current.permissionMode, null),
         );
+        // Nothing is written: the session stays as it was and revives once the CLI is installed.
+        const unavailable = dshRuntimeUnavailable(current.assignedRunner.engines);
+        if (unavailable) throw new ConflictException(unavailable);
       }
       // The orchestration charge, in the same place createTurn puts it: past idempotency and
       // every refusal above, before the row it is paying for. A revive that is refused after
