@@ -7,9 +7,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -152,12 +155,42 @@ func selfUpdateEnabled() bool {
 	return version != "dev" && os.Getenv("ORBIT_NO_SELFUPDATE") == "" && platformKey() != ""
 }
 
-// publishedManifest fetches and negotiates the control plane's current runner release. Keeping
+// publishedManifest fetches and negotiates the runner release this runner is to run. Keeping
 // this read separate from downloadAndSwap lets a live runner cheaply decide whether to drain, and
 // makes an incompatible release a no-op rather than a binary swap followed by rejected writes.
+//
+// /dl publishes the latest release (version.json) and, once one release has replaced another, the
+// one it replaced (previous/version.json). A runner registered with server asks it which of the two
+// to run (assignedManifest), so a staged rollout can hold it at the previous release and a rollback
+// can send it back there. Without a credential for server, or from a control plane older than that
+// question, it is the latest.
 func publishedManifest(ctx context.Context, server string) (Manifest, error) {
 	server = strings.TrimRight(server, "/")
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server+"/dl/version.json", nil)
+	m, err := fetchManifest(ctx, server, "")
+	if err != nil {
+		return Manifest{}, err
+	}
+	if token := runnerTokenFor(server); token != "" {
+		if m, err = assignedManifest(ctx, server, token, m); err != nil {
+			return Manifest{}, err
+		}
+	} else {
+		recordRolloutHold("")
+	}
+	if err := manifestProtocolCompatible(m); err != nil {
+		return Manifest{}, err
+	}
+	return m, nil
+}
+
+// errNotPublished is fetchManifest finding no manifest at all: /dl/previous/ before any release
+// has replaced another.
+var errNotPublished = errors.New("not published")
+
+// fetchManifest reads <server>/dl/<dir>version.json, the manifest of the release whose assets sit
+// beside it.
+func fetchManifest(ctx context.Context, server, dir string) (Manifest, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server+"/dl/"+dir+"version.json", nil)
 	if err != nil {
 		return Manifest{}, err
 	}
@@ -167,6 +200,9 @@ func publishedManifest(ctx context.Context, server string) (Manifest, error) {
 		return Manifest{}, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return Manifest{}, fmt.Errorf("/dl/%sversion.json: %w (HTTP 404)", dir, errNotPublished)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return Manifest{}, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
@@ -177,22 +213,109 @@ func publishedManifest(ctx context.Context, server string) (Manifest, error) {
 	if m.Version == "" {
 		return Manifest{}, fmt.Errorf("empty published version")
 	}
-	if err := manifestProtocolCompatible(m); err != nil {
+	m.dir = dir
+	return m, nil
+}
+
+// releaseAssignment is the control plane's answer to which of the releases /dl publishes this
+// runner is to run (GET /api/runner/release; src/apiserver/src/runner-api/runner-release.ts).
+type releaseAssignment struct {
+	Version string `json:"version"`
+	// The control plane moved its release pointer back to Version: install it although it is older.
+	Rollback bool `json:"rollback"`
+	// Version is the previous release only because this runner is outside the latest's rollout.
+	HeldByRollout bool `json:"heldByRollout"`
+}
+
+// assignedManifest asks server which release this runner is to run, of latest and the release
+// /dl/previous/ keeps, and returns that one's manifest.
+func assignedManifest(ctx context.Context, server, token string, latest Manifest) (Manifest, error) {
+	query := url.Values{"latest": {latest.Version}}
+	previous, err := fetchManifest(ctx, server, "previous/")
+	if err == nil {
+		query.Set("previous", previous.Version)
+	} else if !errors.Is(err, errNotPublished) {
 		return Manifest{}, err
+	}
+	var assigned releaseAssignment
+	err = NewTransport(server, token).do(ctx, http.MethodGet, "/runner/release?"+query.Encode(), nil, &assigned, 8*time.Second)
+	if isTransportHTTPStatus(err, http.StatusNotFound) {
+		// A control plane older than the question: every runner runs the latest, as before it.
+		recordRolloutHold("")
+		return latest, nil
+	}
+	if err != nil {
+		return Manifest{}, err
+	}
+	m := latest
+	switch {
+	case assigned.Version == latest.Version:
+	case previous.Version != "" && assigned.Version == previous.Version:
+		m = previous
+	default:
+		return Manifest{}, fmt.Errorf("the control plane assigned release %q, which /dl does not publish", assigned.Version)
+	}
+	m.rollback = assigned.Rollback
+	if assigned.HeldByRollout && isNewer(latest.Version, version) {
+		recordRolloutHold(latest.Version)
+	} else {
+		recordRolloutHold("")
 	}
 	return m, nil
 }
 
-func publishedVersion(ctx context.Context, server string) (string, error) {
-	m, err := publishedManifest(ctx, server)
-	if err != nil {
-		return "", err
+// runnerTokenFor is the credential this machine registered with at server — the one server alone
+// is ever sent — or "" when it registered with none there.
+func runnerTokenFor(server string) string {
+	cfg := loadConfig()
+	if cfg == nil || strings.TrimRight(cfg.ServerURL, "/") != server {
+		return ""
 	}
-	return m.Version, nil
+	return cfg.RunnerToken
+}
+
+// rolloutHeldFrom is the newer release the last release check found withheld from this runner
+// only because a staged rollout has not reached it: "" while nothing is.
+var rolloutHeldFrom atomic.Pointer[string]
+
+func recordRolloutHold(latest string) { rolloutHeldFrom.Store(&latest) }
+
+// heldByRollout reports whether this runner stays on an older release only because the latest one's
+// rollout has not reached it yet, and which release it is held back from — as the last release
+// check found it. It is the heldByRollout reason the runner reports for not updating.
+func heldByRollout() (string, bool) {
+	if latest := rolloutHeldFrom.Load(); latest != nil && *latest != "" {
+		return *latest, true
+	}
+	return "", false
+}
+
+var rollbackRefusedOnce sync.Once
+
+// wantsRelease reports whether a runner on local installs m: a newer release always, an older one
+// only when the control plane moved its release pointer back to it. Even then never a release that
+// predates assigned releases: rolled back to it, a runner would read /dl/version.json at its next
+// check and reinstall the release it was rolled back from.
+func wantsRelease(m Manifest, local string) bool {
+	if isNewer(m.Version, local) {
+		return true
+	}
+	if !m.rollback || !isNewer(local, m.Version) {
+		return false
+	}
+	if !m.RunsAssignedRelease {
+		rollbackRefusedOnce.Do(func() {
+			logln(fmt.Sprintf("the control plane rolled orbit back to %s, which predates assigned releases "+
+				"and would reinstall %s at its next check; staying on %s", m.Version, local, local))
+		})
+		return false
+	}
+	return true
 }
 
 // availableSelfUpdate reports the release that a running runner should drain
-// for. Errors are deliberately silent: the next periodic check will retry and
+// for: a newer one, or an older one the control plane rolled back to. Errors are
+// deliberately silent: the next periodic check will retry and
 // ordinary runner work must remain available through a control-plane hiccup.
 // An update this process could not install is not reported: draining for one
 // tears down live sessions mid-turn every check interval, forever, without the
@@ -201,15 +324,15 @@ func availableSelfUpdate(ctx context.Context, server string) (string, bool) {
 	if !selfUpdateEnabled() {
 		return "", false
 	}
-	remote, err := publishedVersion(ctx, server)
-	if err != nil || !isNewer(remote, version) {
+	m, err := publishedManifest(ctx, server)
+	if err != nil || !wantsRelease(m, version) {
 		return "", false
 	}
 	if dir, ok := selfUpdateInstallable(); !ok {
-		warnSelfUpdateBlocked(remote, dir)
+		warnSelfUpdateBlocked(m.Version, dir)
 		return "", false
 	}
-	return remote, true
+	return m.Version, true
 }
 
 type downloadedCapabilities struct {
@@ -262,7 +385,7 @@ func downloadAndSwap(server, key string, manifest Manifest, logf func(string)) b
 
 	asset := "orbit-" + key + ".gz"
 	client := &http.Client{Timeout: 120 * time.Second}
-	resp, err := client.Get(server + "/dl/" + asset)
+	resp, err := client.Get(server + "/dl/" + manifest.dir + asset)
 	if err != nil {
 		logf("download failed: " + err.Error() + "\n")
 		return false
@@ -282,11 +405,11 @@ func downloadAndSwap(server, key string, manifest Manifest, logf func(string)) b
 	sum := sha256.Sum256(body)
 	got, want := hex.EncodeToString(sum[:]), manifest.Assets[key].SHA256
 	if want == "" {
-		logf(fmt.Sprintf("warning: version.json publishes no sha256 for %s (a control plane older than "+
-			"asset digests); installing it unverified\n", asset))
+		logf(fmt.Sprintf("warning: %sversion.json publishes no sha256 for %s (a control plane older than "+
+			"asset digests); installing it unverified\n", manifest.dir, asset))
 	} else if !strings.EqualFold(got, want) {
-		logf(fmt.Sprintf("downloaded %s has sha256 %s, but version.json publishes %s; keeping current version\n",
-			asset, got, want))
+		logf(fmt.Sprintf("downloaded %s has sha256 %s, but %sversion.json publishes %s; keeping current version\n",
+			asset, got, manifest.dir, want))
 		return false
 	}
 	gz, err := gzip.NewReader(bytes.NewReader(body))
@@ -356,8 +479,13 @@ func execCurrentProcess() error {
 	return syscall.Exec(exe, os.Args, os.Environ())
 }
 
-// selfUpdate silently pulls a strictly-newer orbit and re-execs. A dev build
-// (version == "dev") or ORBIT_NO_SELFUPDATE disables it; failures never block.
+// restartIntoUpdate starts the binary selfUpdate just installed. A package var so tests can
+// install a release without the test process replacing itself.
+var restartIntoUpdate = execCurrentProcess
+
+// selfUpdate silently installs the release this runner is assigned — a newer one, or an older one
+// the control plane rolled back to — and re-execs. A dev build (version == "dev") or
+// ORBIT_NO_SELFUPDATE disables it; failures never block.
 func selfUpdate(server string) {
 	if !selfUpdateEnabled() {
 		return
@@ -366,19 +494,23 @@ func selfUpdate(server string) {
 	server = strings.TrimRight(server, "/")
 
 	manifest, err := publishedManifest(context.Background(), server)
-	if err != nil || !isNewer(manifest.Version, version) {
+	if err != nil || !wantsRelease(manifest, version) {
 		return
 	}
 	remote := manifest.Version
 
-	fmt.Printf("orbit %s -> %s: downloading update...\n", version, remote)
+	if isNewer(remote, version) {
+		fmt.Printf("orbit %s -> %s: downloading update...\n", version, remote)
+	} else {
+		fmt.Printf("orbit %s -> %s: the control plane rolled %s back; downloading...\n", version, remote, version)
+	}
 	// Never swallow the reason: a silent failure here leaves the runner pinned to
 	// an old release with nothing in the log but the line above.
 	if !downloadAndSwap(server, key, manifest, func(s string) { fmt.Fprint(os.Stderr, s) }) {
 		return
 	}
 	fmt.Printf("orbit updated to %s; restarting...\n", remote)
-	_ = execCurrentProcess()
+	_ = restartIntoUpdate()
 }
 
 // upgrade is the loud manual fallback (`orbit upgrade`) for when the silent
@@ -408,31 +540,25 @@ func upgrade(server string) {
 	}
 
 	fmt.Printf("checking %s for updates...\n", server)
-	client := &http.Client{Timeout: 8 * time.Second}
-	resp, err := client.Get(server + "/dl/version.json")
+	// The same release the runner's own update check would install: the one the control plane
+	// assigns this runner when it is registered there, and the latest otherwise.
+	m, err := publishedManifest(context.Background(), server)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "failed to reach control plane:", err)
-		os.Exit(1)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		fmt.Fprintf(os.Stderr, "failed to reach control plane: HTTP %d\n", resp.StatusCode)
-		os.Exit(1)
-	}
-	var m Manifest
-	if json.NewDecoder(resp.Body).Decode(&m) != nil || m.Version == "" {
-		fmt.Fprintln(os.Stderr, "the control plane did not publish a version")
-		os.Exit(1)
-	}
-	if err := manifestProtocolCompatible(m); err != nil {
-		fmt.Fprintln(os.Stderr, "the control plane published an incompatible runner:", err)
+		fmt.Fprintln(os.Stderr, "cannot read the release to install from the control plane:", err)
 		os.Exit(1)
 	}
 
-	if m.Version == version {
+	switch {
+	case m.Version == version:
 		fmt.Printf("already on %s; reinstalling to repair...\n", version)
-	} else {
+	case isNewer(m.Version, version):
 		fmt.Printf("updating %s -> %s...\n", version, m.Version)
+	case wantsRelease(m, version):
+		fmt.Printf("the control plane rolled %s back; installing %s...\n", version, m.Version)
+	default:
+		fmt.Printf("orbit %s is newer than %s, the release %s assigns this runner; nothing to install\n",
+			version, m.Version, server)
+		return
 	}
 	// As root — the `sudo orbit upgrade` a runner that cannot update itself asks for — first
 	// move a legacy install out of root's /usr/local/bin, so this release lands where the

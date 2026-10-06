@@ -17,6 +17,7 @@ import { RunnerProvidersController } from './runner-providers.controller';
 import { RunnerNotifyController } from './runner-notify.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
 import { RunnerWatchesController } from './runner-watches.controller';
+import { RunnerReleaseController } from './runner-release.controller';
 import { RunnerSessionAuthGuard } from './runner-session-auth.guard';
 import {
   createServiceTokenJwt,
@@ -85,6 +86,8 @@ import { RunnerWikiMaintainController } from './runner-wiki-maintain.controller'
     RunnerNotifyController,
     RunnerProjectsController,
     RunnerWatchesController,
+    // Which runner release each runner is to run (runner-release.ts).
+    RunnerReleaseController,
     RunnerWikiController,
     // The maintenance run's two routes (contract `maintenance`): its own controller, so the one above
     // injects exactly what it always did.
