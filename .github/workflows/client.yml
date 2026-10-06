@@ -1,112 +1,23 @@
-# CI for both native client shells (src/macos + src/ios). They share OrbitKit and the OrbitApp
-# SwiftUI sources (the iOS app reuses them in place — Structure B), so changes to either shell
-# compile both platforms here:
-#
-#   • macos — macOS compile gate: `swift test`s OrbitKit on macOS (builds the `#if os(macOS)`
-#     Keychain + URLSession-SSE paths) and `swift build`s OrbitApp (SwiftUI; can't build on Linux).
-#   • ios — iOS compile gate: XcodeGen + `xcodebuild` for the Simulator (no signing). Surfaces
-#     iOS-only SDK nits in the shared SwiftUI surface.
-#
-# OrbitKit's platform-agnostic Linux tests run for every pull request in ci.yml, where they can be
-# a required check without path-filter deadlocks.
-#
-# Signed/distributable builds live in release.yml (tag-triggered). macOS runners bill at 10×, so the
-# two Xcode jobs run only on pull_request or an explicit workflow_dispatch — never plain pushes. A
-# PR touching the shared OrbitKit/OrbitApp exercises both compile gates (correct — the code is
-# shared); a PR touching only one client's own dir still runs both, which is a small, safe overpay.
+# TEMPORARY (probe branch, never merged). Photographs Settings → Access tokens on the iPhone and the Mac
+# for task 34ajRKoVR1CNRAVNE4KbK, on the commit under test, from a host that can neither dispatch a
+# workflow nor read a run's logs (no gh, no token): .pat-probe/run.sh drives the real shared sources
+# against .pat-probe/stub.py. client.yml's own jobs run on probe/pat-clients-gates. The report job
+# pushes the pictures, notes and request logs to probe/pat-clients-results.
 name: Client CI (macOS + iOS)
 
 on:
   push:
-    branches: ["**"]        # branches only — tags are handled by release.yml
-    paths:
-      - "src/macos/**"
-      - "src/ios/**"
-      - ".github/workflows/client.yml"
-      # The nav guard's rules live outside this file, so it is listed on its own — otherwise a
-      # broken edit to it would only be discovered by the next navigation change.
-      - "scripts/ci/nav-push-gate.sh"
-  pull_request:
-    paths:
-      - "src/macos/**"
-      - "src/ios/**"
-      - ".github/workflows/client.yml"
-      - "scripts/ci/nav-push-gate.sh"
-  # Manual trigger to compile a branch on the Mac runners without opening a throwaway PR, e.g.
-  # `gh workflow run client.yml --ref <branch>`.
-  workflow_dispatch:
+    branches: ["probe/pat-clients"]
 
 concurrency:
   group: client-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # Type-ramp guard: views must use the semantic tokens in Views/Typography.swift (the one file
-  # allowed to hold fixed sizes) so iOS/macOS sizing stays platform-appropriate and Dynamic Type
-  # keeps working. Hard fail — the sweep landed; add a token instead of a bare size.
-  font-tokens:
-    name: Font tokens (bare system(size:) audit)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Audit bare system(size:) outside Typography.swift
-        run: |
-          hits=$(grep -rn "system(size" src/macos/OrbitApp/Sources src/ios/Sources --include='*.swift' \
-                 | grep -v "Views/Typography.swift" || true)
-          if [ -n "$hits" ]; then
-            echo "$hits"
-            count=$(echo "$hits" | wc -l)
-            echo "::error::$count bare system(size:) call site(s) outside Views/Typography.swift — use the Font.orbit* tokens (see the Typography.swift header)"
-            exit 1
-          else
-            echo "No bare system(size:) call sites outside Typography.swift."
-          fi
-
-  # Navigation guard: pushes go onto the section's navigation stack (NavState/NavNode in OrbitKit)
-  # and nowhere else — no boolean push beside it, no stored selection that can disagree with what
-  # the stack shows, no flag telling the model which shell it is drawn in. Text scan only, so it
-  # runs here rather than on the 10× Mac runners; the same rules are pinned in OrbitKitTests, which
-  # a PR that cannot run `swift test` still gets held to by this job (see scripts/ci/nav-push-gate.sh
-  # for why each rule exists and what to write instead).
-  nav-push:
-    name: Navigation (one push mechanism per stack)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Gate a second push mechanism
-        run: bash scripts/ci/nav-push-gate.sh
-
-  macos:
-    name: macOS (build + test)
-    # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v7
-      # The SwiftUI app relies on newer-Swift MainActor-isolation inference; pin latest stable
-      # Xcode so the runner's Swift compiles it (the default image's Swift rejects it).
-      - name: Select latest Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
-      - name: Toolchain
-        run: swift --version && xcodebuild -version
-      # Compiles the macOS-only code in OrbitKit (Keychain token store, URLSession SSE transport)
-      # that the Linux job's `#if` guards skip.
-      - name: Test OrbitKit (macOS)
-        working-directory: src/macos/OrbitKit
-        run: swift test
-      # First real compile of the SwiftUI layer (views, @Observable models, MenuBarExtra,
-      # UNUserNotificationCenter, launchctl glue). If this surfaces SDK nits, that's its job.
-      - name: Build OrbitApp
-        working-directory: src/macos/OrbitApp
-        run: swift build
-
-  ios:
-    name: iOS (generate + build)
-    # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-    runs-on: macos-15
+  shots:
+    name: Access tokens probe (iPhone + Mac)
+    runs-on: macos-26
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
       - name: Select latest Xcode
@@ -116,19 +27,62 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Toolchain
-        run: swift --version && xcodebuild -version && xcodegen --version
-      - name: Generate Xcode project
-        working-directory: src/ios
-        run: xcodegen generate
-      # First real compile of the iOS app: shared SwiftUI views + @Observable models + OrbitKit,
-      # built for the simulator so no signing is needed. Surfaces any iOS-availability nits.
-      - name: Build for iOS Simulator
-        working-directory: src/ios
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Build, drive and capture
+        id: capture
+        continue-on-error: true
         run: |
-          xcodebuild \
-            -project Orbit.xcodeproj \
-            -scheme Orbit \
-            -destination 'generic/platform=iOS Simulator' \
-            -configuration Debug \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-            build
+          bash .pat-probe/run.sh 2>&1 | tee run-output.log
+          exit "${PIPESTATUS[0]}"
+      - name: Keep the build's errors and the run's output beside the shots
+        if: always()
+        run: |
+          mkdir -p .pat-probe/shots
+          cp run-output.log .pat-probe/shots/run-output.log 2>/dev/null || true
+          for log in .pat-probe/build-*.log; do
+            [ -f "$log" ] || continue
+            base=$(basename "$log" .log)
+            grep -E "error:|Test Case|Executed|\*\* TEST|\*\* BUILD" "$log" | head -400 > ".pat-probe/shots/summary-$base.txt" || true
+            tail -300 "$log" > ".pat-probe/shots/tail-$base.txt" || true
+          done
+          find .pat-probe/shots -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;
+          echo "capture=${{ steps.capture.outcome }}" > .pat-probe/shots/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pat-shots
+          path: .pat-probe/shots
+      - name: Fail as the capture did
+        if: steps.capture.outcome != 'success'
+        run: exit 1
+
+  report:
+    name: Push the results where a clone can read them
+    needs: [shots]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Push to probe/pat-clients-results
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          {
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "shots: ${{ needs.shots.result }}"
+          } > RESULTS.txt
+          cat RESULTS.txt
+          git init -q
+          git config user.name "orbit-probe"
+          git config user.email "probe@orbit.invalid"
+          git checkout -q -b results
+          git add -A
+          git commit -q -m "probe results for ${{ github.sha }} (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
+            results:refs/heads/probe/pat-clients-results
