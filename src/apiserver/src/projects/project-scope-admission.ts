@@ -271,7 +271,11 @@ export function scopeRefusalBody(
     blockerKind: outcome.blockerKind,
     message:
       `${outcome.code} (${where}): `
-      + (REFUSAL_PROSE[outcome.requiredAction ?? ''] ?? 'This write is outside its scope.'),
+      // R6 reached by a declared crossing: declaring it is not the way through, holding an end is.
+      + (outcome.rule === 'R6_OUT_OF_SCOPE' && outcome.crossing
+        ? 'A move is asked for from one of its ends — the project the task is in, or the project '
+          + 'it would go to — and this session holds neither.'
+        : (REFUSAL_PROSE[outcome.requiredAction ?? ''] ?? 'This write is outside its scope.')),
     taskId,
     scope: outcome.ends.from === null ? null : { projectId: outcome.ends.from },
     target: outcome.ends.to === null ? null : { projectId: outcome.ends.to },

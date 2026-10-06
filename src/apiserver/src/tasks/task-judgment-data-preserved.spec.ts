@@ -1928,7 +1928,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // index, constraint, enum, type, function or trigger is created, replaced or dropped; no
       // task, project, acceptance or DONE fence object is named; no INSERT, UPDATE or DELETE —
       // every runner reads NULL, "not reported" and "nobody asked", until its next heartbeat.
-      '0385_runner_self_update'],
+      '0385_runner_self_update',
+      // Move requests (0386): one nullable `requested_criterion_definition_id` on
+      // project_handoff_approval with a CHECK keeping it to MOVE_TASK rows, one partial unique index
+      // (one PENDING move per owner, task and pair of projects) and one new function + BEFORE UPDATE
+      // trigger freezing the new column. 0155's guard is not replaced; no task, project,
+      // acceptance or DONE fence object is named, and no row is written or backfilled.
+      '0386_project_handoff_move_request'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

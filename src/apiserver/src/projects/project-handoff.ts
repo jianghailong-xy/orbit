@@ -17,11 +17,13 @@
  *
  * WHAT IS REACHABLE, EXACTLY. `FILE_TASK` — new work filed over the line — and the `DEPEND_ON_TASK`
  * edge a plan asks for: both are declared on a create, and both file a question. `MOVE_TASK` is
- * still declared by no writer: `TasksService.update` admits a re-filing as `UPDATE_TASK` and builds
- * no declaration from the `handoff` its DTO accepts, so §4 R7 refuses a declared move exactly as it
- * refuses an undeclared one, and moving work between two goals stays the account owner's own write
- * (§4 R1 exempts them). The kind is defined here because the approval it would need is the same row;
- * what is missing is the writer, not the rule.
+ * declared on the edit door: a session that sends `task_update` with another `projectId` and a
+ * `handoff` (`--project` with `--handoff-reason` at a terminal) is asking for an existing task to be
+ * moved, and `TasksService.update` files that question and moves nothing. It may be asked from
+ * either end of the move — the project the task is leaving or the one it would enter — and one
+ * question stands per task and destination at a time. An undeclared move is still §4 R7, and the
+ * account owner's own move is still theirs to make directly (§4 R1). What the yes then does is the
+ * account owner's confirmation to apply; re-sending the request moves nothing.
  *
  * The gap this unit closed was never a missing endpoint. It was a missing FACT: "the user said yes
  * to THIS crossing" is not derivable from any column the schema has.
@@ -261,6 +263,36 @@ export function handoffDependentDigest(dependent: {
       v: 2,
       taskId: dependent.taskId ?? null,
       identity: dependent.identity ? handoffPayloadDigest(dependent.identity) : null,
+    }))
+    .digest('hex');
+}
+
+/**
+ * The payload half for a move: what the moved task will carry into the target, and who asked.
+ *
+ * A move changes one fact about a task that already exists — which goal it counts towards — so its
+ * plan is not a task's fields. What the answer authorises beyond the two ends and the subject (all
+ * three already in the crossing key) is the criterion of the TARGET project the task will declare
+ * once it is there, when the request names one: a yes to "move it and count it towards criterion
+ * 2" is not a yes to "move it and count it towards nothing". The asker is bound for the reason
+ * `HandoffSourceEvidence` gives, and because `ProjectHandoffService.answerFor` refuses a row asked
+ * by anybody else: two sessions asking for the same move are two questions here, and what stops
+ * them standing side by side is the one-pending-move index of migration 0386, not this digest.
+ */
+export function handoffMoveDigest(move: {
+  criterionDefinitionId: string | null;
+  source: HandoffSourceEvidence;
+}): string {
+  return createHash('sha256')
+    .update(canonicalJson({
+      v: 1,
+      criterionDefinitionId: move.criterionDefinitionId ?? null,
+      source: {
+        projectId: move.source.projectId ?? null,
+        taskId: move.source.taskId ?? null,
+        sessionId: move.source.sessionId ?? null,
+        triggerEvent: move.source.triggerEvent ?? null,
+      },
     }))
     .digest('hex');
 }
