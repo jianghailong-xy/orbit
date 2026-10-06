@@ -9998,10 +9998,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                  FOR UPDATE`;
             }
             if (consumesVerificationRequest && verifiesTaskId) {
+              // The caller's own rows: a subject named from another account is not waited for or
+              // held here — the hierarchy check below refuses it as not found.
               const taskIds = orderedIds([id, verifiesTaskId]);
               await tx.$queryRaw`
                 SELECT "id" FROM "task"
-                 WHERE "id" = ANY(${taskIds}::uuid[])
+                 WHERE "id" = ANY(${taskIds}::uuid[]) AND "owner_id" = ${ownerId}::uuid
                  ORDER BY "id" FOR UPDATE`;
             }
             if (attachesVerifier) {
