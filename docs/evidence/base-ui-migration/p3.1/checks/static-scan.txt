@@ -1,0 +1,23 @@
+## Orbit Textarea and its CSS: AntD imports, .ant-* selectors or internal refs (expect none)
+none
+
+## Every resizableTextArea read under src/web/src (production pages owned by P3.2/P5.3; fixture = AntD reference side)
+src/web/src/components/WorkspaceView.tsx:6896:    const ta: HTMLTextAreaElement | undefined = taRef.current?.resizableTextArea?.textArea;
+src/web/src/components/WorkspaceView.tsx:6917:    const ta: HTMLTextAreaElement | undefined = taRef.current?.resizableTextArea?.textArea;
+src/web/src/components/ui/__fixtures__/ComposerFixture.tsx:52:    impl === 'ant' ? ant.current?.resizableTextArea?.textArea : orbit.current, []);
+src/web/src/components/TaskDetailPanel.tsx:1070:      const ta: HTMLTextAreaElement | undefined = taRef.current?.resizableTextArea?.textArea;
+
+## Textarea public surface
+4:export interface TextareaAutoSize {
+9:export interface TextareaProps extends ComponentPropsWithRef<'textarea'> {
+12:  variant?: 'outlined' | 'borderless';
+17:  autoSize?: boolean | TextareaAutoSize;
+20:export function Textarea({
+21:  invalid = false, variant = 'outlined', autoSize = false, className, style, disabled, ref,
+25:  const fitted = useAutoSize(field, autoSize, props.value);
+38:      data-variant={variant === 'borderless' ? 'borderless' : undefined}
+46:function useAutoSize(field: { current: HTMLTextAreaElement | null }, autoSize: TextareaProps['autoSize'], value: unknown) {
+47:  const enabled = !!autoSize;
+48:  const minRows = typeof autoSize === 'object' ? autoSize.minRows : undefined;
+49:  const maxRows = typeof autoSize === 'object' ? autoSize.maxRows : undefined;
+84:  'font-size', 'font-variant', 'text-rendering', 'text-transform', 'width', 'text-indent', 'padding-left',

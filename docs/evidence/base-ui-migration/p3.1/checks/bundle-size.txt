@@ -1,0 +1,59 @@
+{
+  "tip": {
+    "files": [
+      "assets/Transcript-BfjZ1DhY.js",
+      "assets/Transcript-BtITXXF3.css",
+      "assets/index-BSMMCwjL.css",
+      "assets/index-Cgoshc9K.js",
+      "assets/projectDependencyGraph-1nwRqkOT.js",
+      "assets/rolldown-runtime-hePW80VL.js",
+      "assets/taskDependencyGraph-B91604km.js"
+    ],
+    "js": {
+      "raw": 3311072,
+      "gzip": 1006802
+    },
+    "css": {
+      "raw": 392012,
+      "gzip": 65152
+    }
+  },
+  "delivered": {
+    "files": [
+      "assets/Transcript-BfjZ1DhY.js",
+      "assets/Transcript-BtITXXF3.css",
+      "assets/index-Br3u9PNP.css",
+      "assets/index-yheWZICj.js",
+      "assets/projectDependencyGraph-1nwRqkOT.js",
+      "assets/rolldown-runtime-hePW80VL.js",
+      "assets/taskDependencyGraph-B91604km.js"
+    ],
+    "js": {
+      "raw": 3311072,
+      "gzip": 1006804
+    },
+    "css": {
+      "raw": 392436,
+      "gzip": 65195
+    }
+  },
+  "swap": {
+    "files": [
+      "assets/Transcript-BfjZ1DhY.js",
+      "assets/Transcript-BtITXXF3.css",
+      "assets/index-BhismHrM.css",
+      "assets/index-DUmRfGuN.js",
+      "assets/projectDependencyGraph-1nwRqkOT.js",
+      "assets/rolldown-runtime-hePW80VL.js",
+      "assets/taskDependencyGraph-B91604km.js"
+    ],
+    "js": {
+      "raw": 3313550,
+      "gzip": 1007875
+    },
+    "css": {
+      "raw": 395421,
+      "gzip": 65736
+    }
+  }
+}

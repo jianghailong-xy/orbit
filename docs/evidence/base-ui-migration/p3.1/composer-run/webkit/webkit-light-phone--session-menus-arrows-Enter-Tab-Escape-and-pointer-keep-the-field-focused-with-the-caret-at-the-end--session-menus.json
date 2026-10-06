@@ -1,0 +1,1218 @@
+{
+  "ant": [
+    {
+      "label": "slash-open",
+      "value": "/re",
+      "caret": [
+        3,
+        3
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": [
+        {
+          "text": "/refactorcmdRestructure without changing behavior",
+          "active": true
+        },
+        {
+          "text": "/releaseskillCut a release",
+          "active": false
+        },
+        {
+          "text": "/reviewcmdReview the current diff",
+          "active": false
+        }
+      ],
+      "chips": [],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "/",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "r",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "e",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "slash-arrow-wraps-to-first",
+      "value": "/re",
+      "caret": [
+        3,
+        3
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": [
+        {
+          "text": "/refactorcmdRestructure without changing behavior",
+          "active": true
+        },
+        {
+          "text": "/releaseskillCut a release",
+          "active": false
+        },
+        {
+          "text": "/reviewcmdReview the current diff",
+          "active": false
+        }
+      ],
+      "chips": [],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "ArrowDown",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "ArrowDown",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "ArrowDown",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "slash-arrow-up-wraps-to-last",
+      "value": "/re",
+      "caret": [
+        3,
+        3
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": [
+        {
+          "text": "/refactorcmdRestructure without changing behavior",
+          "active": false
+        },
+        {
+          "text": "/releaseskillCut a release",
+          "active": false
+        },
+        {
+          "text": "/reviewcmdReview the current diff",
+          "active": true
+        }
+      ],
+      "chips": [],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "ArrowUp",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "slash-enter-picked",
+      "value": "/review ",
+      "caret": [
+        8,
+        8
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": null,
+      "chips": [],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "Enter",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "slash-tab-picked",
+      "value": "/review /release ",
+      "caret": [
+        17,
+        17
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": null,
+      "chips": [],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "/",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "r",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "e",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "l",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "Tab",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "slash-escape-dismissed",
+      "value": "/review /release /",
+      "caret": [
+        18,
+        18
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": null,
+      "chips": [],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "/",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "Escape",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "mention-ignores-composing-keys",
+      "value": "/review /release @or",
+      "caret": [
+        20,
+        20
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": [
+        {
+          "text": "@orbit-developworkspace",
+          "active": true
+        },
+        {
+          "text": "@orbit-docsworkspace",
+          "active": false
+        }
+      ],
+      "chips": [
+        [
+          "composer-chip composer-chip--mention",
+          "@or"
+        ]
+      ],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "ArrowDown",
+          true,
+          false
+        ],
+        [
+          "keydown",
+          "Backspace",
+          false,
+          false
+        ],
+        [
+          "input",
+          "deleteContentBackward",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "@",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "o",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "r",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "ArrowDown",
+          true,
+          false
+        ],
+        [
+          "keydown",
+          "Enter",
+          true,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "mention-picked",
+      "value": "/review /release @orbit-docs ",
+      "caret": [
+        29,
+        29
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": null,
+      "chips": [
+        [
+          "composer-chip composer-chip--mention",
+          "@orbit-docs"
+        ]
+      ],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "ArrowDown",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "Enter",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "reference-open",
+      "value": "/review /release @orbit-docs #rel",
+      "caret": [
+        33,
+        33
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": [
+        {
+          "text": "#Release checklistlist",
+          "active": true
+        }
+      ],
+      "chips": [
+        [
+          "composer-chip composer-chip--mention",
+          "@orbit-docs"
+        ]
+      ],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "#",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "r",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "e",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "l",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "reference-picked",
+      "value": "/review /release @orbit-docs #Release checklist ",
+      "caret": [
+        48,
+        48
+      ],
+      "focused": true,
+      "height": 62,
+      "menu": null,
+      "chips": [
+        [
+          "composer-chip composer-chip--mention",
+          "@orbit-docs"
+        ],
+        [
+          "composer-chip composer-chip--list",
+          "#Release checklist"
+        ]
+      ],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "Enter",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "mention-picked-with-pointer",
+      "value": "/review /release @orbit-docs #Release checklist @web-pilot ",
+      "caret": [
+        59,
+        59
+      ],
+      "focused": true,
+      "height": 62,
+      "menu": null,
+      "chips": [
+        [
+          "composer-chip composer-chip--mention",
+          "@orbit-docs"
+        ],
+        [
+          "composer-chip composer-chip--list",
+          "#Release checklist"
+        ],
+        [
+          "composer-chip composer-chip--mention",
+          "@web-pilot"
+        ]
+      ],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "@",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "w",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "e",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "b",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "sent-with-materialized-reference",
+      "value": "",
+      "caret": [
+        0,
+        0
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": null,
+      "chips": [],
+      "staged": [],
+      "sent": "[\"/review /release @orbit-docs [Release checklist](orbit-list:list-2) @web-pilot \"]",
+      "events": [
+        [
+          "keydown",
+          "Enter",
+          false,
+          false
+        ]
+      ]
+    }
+  ],
+  "orbit": [
+    {
+      "label": "slash-open",
+      "value": "/re",
+      "caret": [
+        3,
+        3
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": [
+        {
+          "text": "/refactorcmdRestructure without changing behavior",
+          "active": true
+        },
+        {
+          "text": "/releaseskillCut a release",
+          "active": false
+        },
+        {
+          "text": "/reviewcmdReview the current diff",
+          "active": false
+        }
+      ],
+      "chips": [],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "/",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "r",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "e",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "slash-arrow-wraps-to-first",
+      "value": "/re",
+      "caret": [
+        3,
+        3
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": [
+        {
+          "text": "/refactorcmdRestructure without changing behavior",
+          "active": true
+        },
+        {
+          "text": "/releaseskillCut a release",
+          "active": false
+        },
+        {
+          "text": "/reviewcmdReview the current diff",
+          "active": false
+        }
+      ],
+      "chips": [],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "ArrowDown",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "ArrowDown",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "ArrowDown",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "slash-arrow-up-wraps-to-last",
+      "value": "/re",
+      "caret": [
+        3,
+        3
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": [
+        {
+          "text": "/refactorcmdRestructure without changing behavior",
+          "active": false
+        },
+        {
+          "text": "/releaseskillCut a release",
+          "active": false
+        },
+        {
+          "text": "/reviewcmdReview the current diff",
+          "active": true
+        }
+      ],
+      "chips": [],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "ArrowUp",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "slash-enter-picked",
+      "value": "/review ",
+      "caret": [
+        8,
+        8
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": null,
+      "chips": [],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "Enter",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "slash-tab-picked",
+      "value": "/review /release ",
+      "caret": [
+        17,
+        17
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": null,
+      "chips": [],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "/",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "r",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "e",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "l",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "Tab",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "slash-escape-dismissed",
+      "value": "/review /release /",
+      "caret": [
+        18,
+        18
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": null,
+      "chips": [],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "/",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "Escape",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "mention-ignores-composing-keys",
+      "value": "/review /release @or",
+      "caret": [
+        20,
+        20
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": [
+        {
+          "text": "@orbit-developworkspace",
+          "active": true
+        },
+        {
+          "text": "@orbit-docsworkspace",
+          "active": false
+        }
+      ],
+      "chips": [
+        [
+          "composer-chip composer-chip--mention",
+          "@or"
+        ]
+      ],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "ArrowDown",
+          true,
+          false
+        ],
+        [
+          "keydown",
+          "Backspace",
+          false,
+          false
+        ],
+        [
+          "input",
+          "deleteContentBackward",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "@",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "o",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "r",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "ArrowDown",
+          true,
+          false
+        ],
+        [
+          "keydown",
+          "Enter",
+          true,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "mention-picked",
+      "value": "/review /release @orbit-docs ",
+      "caret": [
+        29,
+        29
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": null,
+      "chips": [
+        [
+          "composer-chip composer-chip--mention",
+          "@orbit-docs"
+        ]
+      ],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "ArrowDown",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "Enter",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "reference-open",
+      "value": "/review /release @orbit-docs #rel",
+      "caret": [
+        33,
+        33
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": [
+        {
+          "text": "#Release checklistlist",
+          "active": true
+        }
+      ],
+      "chips": [
+        [
+          "composer-chip composer-chip--mention",
+          "@orbit-docs"
+        ]
+      ],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "#",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "r",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "e",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "l",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "reference-picked",
+      "value": "/review /release @orbit-docs #Release checklist ",
+      "caret": [
+        48,
+        48
+      ],
+      "focused": true,
+      "height": 62,
+      "menu": null,
+      "chips": [
+        [
+          "composer-chip composer-chip--mention",
+          "@orbit-docs"
+        ],
+        [
+          "composer-chip composer-chip--list",
+          "#Release checklist"
+        ]
+      ],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "Enter",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "mention-picked-with-pointer",
+      "value": "/review /release @orbit-docs #Release checklist @web-pilot ",
+      "caret": [
+        59,
+        59
+      ],
+      "focused": true,
+      "height": 62,
+      "menu": null,
+      "chips": [
+        [
+          "composer-chip composer-chip--mention",
+          "@orbit-docs"
+        ],
+        [
+          "composer-chip composer-chip--list",
+          "#Release checklist"
+        ],
+        [
+          "composer-chip composer-chip--mention",
+          "@web-pilot"
+        ]
+      ],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "@",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "w",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "e",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "b",
+          false,
+          false
+        ],
+        [
+          "input",
+          "insertText",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "sent-with-materialized-reference",
+      "value": "",
+      "caret": [
+        0,
+        0
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": null,
+      "chips": [],
+      "staged": [],
+      "sent": "[\"/review /release @orbit-docs [Release checklist](orbit-list:list-2) @web-pilot \"]",
+      "events": [
+        [
+          "keydown",
+          "Enter",
+          false,
+          false
+        ]
+      ]
+    }
+  ]
+}
