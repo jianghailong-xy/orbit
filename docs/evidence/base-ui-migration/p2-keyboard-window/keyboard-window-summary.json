@@ -14759,11 +14759,876 @@
    }
   }
  },
- "dataset:baseline": {
-  "scope": "baseline-menu + baseline-select-a + baseline-select-b + baseline-select-c + baseline-select-d",
+ "baseline-select-e": {
+  "scope": "unchanged tree, select-enter-down-enter, select-down-7-enter, select-down-n-enter: 20 burst + 20 paced each",
   "playwright": {
-   "expected": 2068,
-   "unexpected": 12,
+   "expected": 359,
+   "unexpected": 1,
+   "skipped": 0,
+   "flaky": 0
+  },
+  "targets": {
+   "antd-sample select-down-7-enter": {
+    "keys": [
+     "ArrowDown",
+     "7",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "Never | list closed": 20
+    },
+    "burst": {
+     "Never | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 0,
+    "reference": "Never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "antd-sample select-down-n-enter": {
+    "keys": [
+     "ArrowDown",
+     "n",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": "select-down-enter-from-7",
+    "paced": {
+     "7 days | list closed": 19
+    },
+    "burst": {
+     "7 days | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 0,
+    "reference": "7 days | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "antd-sample select-enter-down-enter": {
+    "keys": [
+     "Enter",
+     "ArrowDown",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "7 days | list closed": 20
+    },
+    "burst": {
+     "7 days | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 0,
+    "reference": "7 days | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-field select-down-7-enter": {
+    "keys": [
+     "ArrowDown",
+     "7",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "7 | list closed": 20
+    },
+    "burst": {
+     "7 | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "7 | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-field select-down-n-enter": {
+    "keys": [
+     "ArrowDown",
+     "n",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": "select-down-enter-from-7",
+    "paced": {
+     "never | list closed": 20
+    },
+    "burst": {
+     "never | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-field select-enter-down-enter": {
+    "keys": [
+     "Enter",
+     "ArrowDown",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "7 | list closed": 20
+    },
+    "burst": {
+     "7 | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "7 | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-sample select-down-7-enter": {
+    "keys": [
+     "ArrowDown",
+     "7",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "7 days | list closed": 20
+    },
+    "burst": {
+     "7 days | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "7 days | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-sample select-down-n-enter": {
+    "keys": [
+     "ArrowDown",
+     "n",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": "select-down-enter-from-7",
+    "paced": {
+     "Never | list closed": 20
+    },
+    "burst": {
+     "Never | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "Never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-sample select-enter-down-enter": {
+    "keys": [
+     "Enter",
+     "ArrowDown",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "7 days | list closed": 20
+    },
+    "burst": {
+     "7 days | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "7 days | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   }
+  },
+  "sequences": {
+   "select-down-7-enter": {
+    "orbitBurstWrong": {
+     "orbit-field": "0/20",
+     "orbit-sample": "0/20"
+    },
+    "orbitPaced": {
+     "orbit-field": "7 | list closed",
+     "orbit-sample": "7 days | list closed"
+    },
+    "orbitWindowHits": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "orbitHandedOver": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "antdPaced": "Never | list closed",
+    "antdBurstWrong": "0/20",
+    "antdWindowHits": 20,
+    "antdGivesTheKeyAFunction": false,
+    "antdControlPaced": null,
+    "orbitControlPaced": {},
+    "orbitPacedMatchesAntd": {
+     "orbit-field": false,
+     "orbit-sample": false
+    },
+    "decision": "antd-no-function: record, no change"
+   },
+   "select-down-n-enter": {
+    "orbitBurstWrong": {
+     "orbit-field": "0/20",
+     "orbit-sample": "0/20"
+    },
+    "orbitPaced": {
+     "orbit-field": "never | list closed",
+     "orbit-sample": "Never | list closed"
+    },
+    "orbitWindowHits": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "orbitHandedOver": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "antdPaced": "7 days | list closed",
+    "antdBurstWrong": "0/20",
+    "antdWindowHits": 20,
+    "antdGivesTheKeyAFunction": false,
+    "antdControlPaced": null,
+    "orbitControlPaced": {},
+    "orbitPacedMatchesAntd": {
+     "orbit-field": false,
+     "orbit-sample": false
+    },
+    "decision": "antd-no-function: record, no change"
+   },
+   "select-enter-down-enter": {
+    "orbitBurstWrong": {
+     "orbit-field": "0/20",
+     "orbit-sample": "0/20"
+    },
+    "orbitPaced": {
+     "orbit-field": "7 | list closed",
+     "orbit-sample": "7 days | list closed"
+    },
+    "orbitWindowHits": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "orbitHandedOver": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "antdPaced": "7 days | list closed",
+    "antdBurstWrong": "0/20",
+    "antdWindowHits": 20,
+    "antdGivesTheKeyAFunction": false,
+    "antdControlPaced": null,
+    "orbitControlPaced": {},
+    "orbitPacedMatchesAntd": {
+     "orbit-field": true,
+     "orbit-sample": true
+    },
+    "decision": "antd-no-function: record, no change"
+   }
+  }
+ },
+ "baseline-rerun": {
+  "scope": "unchanged tree, the baseline samples whose page never mounted (environmental), run again",
+  "playwright": {
+   "expected": 13,
+   "unexpected": 0,
+   "skipped": 0,
+   "flaky": 0
+  },
+  "targets": {
+   "antd-sample select-down-home-enter": {
+    "keys": [
+     "ArrowDown",
+     "Home",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": "select-down-enter-from-7",
+    "paced": {
+     "7 days | list closed": 1
+    },
+    "burst": {},
+    "windowHits": 0,
+    "handedOver": 0,
+    "reference": "7 days | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "antd-sample select-down-n-enter": {
+    "keys": [
+     "ArrowDown",
+     "n",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": "select-down-enter-from-7",
+    "paced": {
+     "7 days | list closed": 1
+    },
+    "burst": {},
+    "windowHits": 0,
+    "handedOver": 0,
+    "reference": "7 days | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-field select-down-end-enter": {
+    "keys": [
+     "ArrowDown",
+     "End",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {},
+    "burst": {
+     "never | list closed": 1
+    },
+    "windowHits": 1,
+    "handedOver": 1,
+    "reference": null,
+    "pacedUnanimous": false,
+    "burstWrong": 1,
+    "wrong": [
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-6--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 126.3,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 169.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 170.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 171.5,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     }
+    ]
+   },
+   "orbit-field select-down-enter-from-7": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": null,
+    "paced": {
+     "7 | list closed": 2
+    },
+    "burst": {},
+    "windowHits": 0,
+    "handedOver": 0,
+    "reference": "7 | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-field select-down-pagedown-enter": {
+    "keys": [
+     "ArrowDown",
+     "PageDown",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {},
+    "burst": {
+     "never | list closed": 1
+    },
+    "windowHits": 1,
+    "handedOver": 1,
+    "reference": null,
+    "pacedUnanimous": false,
+    "burstWrong": 1,
+    "wrong": [
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-pagedown-enter-burst-sample-19--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 45.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "PageDown",
+        "t": 66.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 66.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 67.3,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     }
+    ]
+   },
+   "orbit-menu menu-enter": {
+    "keys": [
+     "Enter"
+    ],
+    "from": null,
+    "control": null,
+    "paced": {},
+    "burst": {
+     "open": 1
+    },
+    "windowHits": 0,
+    "handedOver": 0,
+    "reference": null,
+    "pacedUnanimous": false,
+    "burstWrong": 1,
+    "wrong": [
+     {
+      "file": "chromium-dark-desktop--orbit-menu-menu-enter-burst-sample-7--keyboard-window.json",
+      "result": "open",
+      "keyLog": [
+       {
+        "key": "Enter",
+        "t": 124.1,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "focused": "button:Add attachment",
+        "listbox": false,
+        "highlighted": null
+       }
+      ]
+     }
+    ]
+   },
+   "orbit-menu menu-enter-down-enter": {
+    "keys": [
+     "Enter",
+     "ArrowDown",
+     "Enter"
+    ],
+    "from": null,
+    "control": null,
+    "paced": {
+     "ran Image": 1
+    },
+    "burst": {},
+    "windowHits": 0,
+    "handedOver": 0,
+    "reference": "ran Image",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-menu-sample menu-enter": {
+    "keys": [
+     "Enter"
+    ],
+    "from": null,
+    "control": null,
+    "paced": {
+     "open": 1
+    },
+    "burst": {},
+    "windowHits": 0,
+    "handedOver": 0,
+    "reference": "open",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-menu-sample menu-enter-down-enter": {
+    "keys": [
+     "Enter",
+     "ArrowDown",
+     "Enter"
+    ],
+    "from": null,
+    "control": null,
+    "paced": {},
+    "burst": {
+     "closed": 1
+    },
+    "windowHits": 1,
+    "handedOver": 0,
+    "reference": null,
+    "pacedUnanimous": false,
+    "burstWrong": 1,
+    "wrong": [
+     {
+      "file": "chromium-dark-desktop--orbit-menu-sample-menu-enter-down-enter-burst-sample-0--keyboard-window.json",
+      "result": "closed",
+      "keyLog": [
+       {
+        "key": "Enter",
+        "t": 67.7,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "focused": "button:Add attachment",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 209.7,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "focused": "button:Add attachment",
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 210.7,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "focused": "button:Add attachment",
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     }
+    ]
+   },
+   "orbit-menu-sample menu-enter-enter": {
+    "keys": [
+     "Enter",
+     "Enter"
+    ],
+    "from": null,
+    "control": null,
+    "paced": {},
+    "burst": {
+     "closed": 1
+    },
+    "windowHits": 1,
+    "handedOver": 0,
+    "reference": null,
+    "pacedUnanimous": false,
+    "burstWrong": 1,
+    "wrong": [
+     {
+      "file": "chromium-dark-desktop--orbit-menu-sample-menu-enter-enter-burst-sample-1--keyboard-window.json",
+      "result": "closed",
+      "keyLog": [
+       {
+        "key": "Enter",
+        "t": 60.3,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "focused": "button:Add attachment",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 175.1,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "focused": "button:Add attachment",
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     }
+    ]
+   },
+   "orbit-sample select-down-pageup-enter": {
+    "keys": [
+     "ArrowDown",
+     "PageUp",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": "select-down-enter-from-7",
+    "paced": {
+     "7 days | list closed": 1
+    },
+    "burst": {},
+    "windowHits": 0,
+    "handedOver": 0,
+    "reference": "7 days | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-sample select-down-space": {
+    "keys": [
+     "ArrowDown",
+     "Space"
+    ],
+    "from": "Never",
+    "control": "select-down",
+    "paced": {},
+    "burst": {
+     "Never | list closed": 1
+    },
+    "windowHits": 1,
+    "handedOver": 0,
+    "reference": null,
+    "pacedUnanimous": false,
+    "burstWrong": 1,
+    "wrong": [
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-space-burst-sample-15--keyboard-window.json",
+      "result": "Never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 47.9,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": " ",
+        "t": 68,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "sequences": {
+   "menu-enter": {
+    "orbitBurstWrong": {
+     "orbit-menu": "1/1",
+     "orbit-menu-sample": "0/0"
+    },
+    "orbitPaced": {
+     "orbit-menu": null,
+     "orbit-menu-sample": "open"
+    },
+    "orbitWindowHits": {
+     "orbit-menu": 0,
+     "orbit-menu-sample": 0
+    },
+    "orbitHandedOver": {
+     "orbit-menu": 0,
+     "orbit-menu-sample": 0
+    },
+    "decision": "control"
+   },
+   "menu-enter-down-enter": {
+    "orbitBurstWrong": {
+     "orbit-menu": "0/0",
+     "orbit-menu-sample": "1/1"
+    },
+    "orbitPaced": {
+     "orbit-menu": "ran Image",
+     "orbit-menu-sample": null
+    },
+    "orbitWindowHits": {
+     "orbit-menu": 0,
+     "orbit-menu-sample": 1
+    },
+    "orbitHandedOver": {
+     "orbit-menu": 0,
+     "orbit-menu-sample": 0
+    },
+    "decision": "incomplete"
+   },
+   "menu-enter-enter": {
+    "orbitBurstWrong": {
+     "orbit-menu-sample": "1/1"
+    },
+    "orbitPaced": {
+     "orbit-menu-sample": null
+    },
+    "orbitWindowHits": {
+     "orbit-menu-sample": 1
+    },
+    "orbitHandedOver": {
+     "orbit-menu-sample": 0
+    },
+    "decision": "incomplete"
+   },
+   "select-down-end-enter": {
+    "orbitBurstWrong": {
+     "orbit-field": "1/1"
+    },
+    "orbitPaced": {
+     "orbit-field": null
+    },
+    "orbitWindowHits": {
+     "orbit-field": 1
+    },
+    "orbitHandedOver": {
+     "orbit-field": 1
+    },
+    "decision": "incomplete"
+   },
+   "select-down-enter-from-7": {
+    "orbitBurstWrong": {
+     "orbit-field": "0/0"
+    },
+    "orbitPaced": {
+     "orbit-field": "7 | list closed"
+    },
+    "orbitWindowHits": {
+     "orbit-field": 0
+    },
+    "orbitHandedOver": {
+     "orbit-field": 0
+    },
+    "decision": "control"
+   },
+   "select-down-home-enter": {
+    "orbitBurstWrong": {},
+    "orbitPaced": {},
+    "orbitWindowHits": {},
+    "orbitHandedOver": {},
+    "antdPaced": "7 days | list closed",
+    "antdBurstWrong": "0/0",
+    "antdWindowHits": 0,
+    "antdGivesTheKeyAFunction": false,
+    "antdControlPaced": null,
+    "orbitControlPaced": {},
+    "orbitPacedMatchesAntd": {},
+    "decision": "antd-no-function: record, no change"
+   },
+   "select-down-n-enter": {
+    "orbitBurstWrong": {},
+    "orbitPaced": {},
+    "orbitWindowHits": {},
+    "orbitHandedOver": {},
+    "antdPaced": "7 days | list closed",
+    "antdBurstWrong": "0/0",
+    "antdWindowHits": 0,
+    "antdGivesTheKeyAFunction": false,
+    "antdControlPaced": null,
+    "orbitControlPaced": {},
+    "orbitPacedMatchesAntd": {},
+    "decision": "antd-no-function: record, no change"
+   },
+   "select-down-pagedown-enter": {
+    "orbitBurstWrong": {
+     "orbit-field": "1/1"
+    },
+    "orbitPaced": {
+     "orbit-field": null
+    },
+    "orbitWindowHits": {
+     "orbit-field": 1
+    },
+    "orbitHandedOver": {
+     "orbit-field": 1
+    },
+    "decision": "incomplete"
+   },
+   "select-down-pageup-enter": {
+    "orbitBurstWrong": {
+     "orbit-sample": "0/0"
+    },
+    "orbitPaced": {
+     "orbit-sample": "7 days | list closed"
+    },
+    "orbitWindowHits": {
+     "orbit-sample": 0
+    },
+    "orbitHandedOver": {
+     "orbit-sample": 0
+    },
+    "decision": "incomplete"
+   },
+   "select-down-space": {
+    "orbitBurstWrong": {
+     "orbit-sample": "1/1"
+    },
+    "orbitPaced": {
+     "orbit-sample": null
+    },
+    "orbitWindowHits": {
+     "orbit-sample": 1
+    },
+    "orbitHandedOver": {
+     "orbit-sample": 0
+    },
+    "decision": "incomplete"
+   }
+  }
+ },
+ "dataset:baseline": {
+  "scope": "baseline-menu + baseline-select-a + baseline-select-b + baseline-select-c + baseline-select-d + baseline-select-e + baseline-rerun",
+  "playwright": {
+   "expected": 2440,
+   "unexpected": 13,
    "skipped": 0,
    "flaky": 0
   },
@@ -15793,6 +16658,27 @@
     "burstWrong": 0,
     "wrong": []
    },
+   "antd-sample select-down-7-enter": {
+    "keys": [
+     "ArrowDown",
+     "7",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "Never | list closed": 20
+    },
+    "burst": {
+     "Never | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 0,
+    "reference": "Never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
    "antd-sample select-down-end-enter": {
     "keys": [
      "ArrowDown",
@@ -15863,7 +16749,28 @@
     "from": "7 days",
     "control": "select-down-enter-from-7",
     "paced": {
-     "7 days | list closed": 19
+     "7 days | list closed": 20
+    },
+    "burst": {
+     "7 days | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 0,
+    "reference": "7 days | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "antd-sample select-down-n-enter": {
+    "keys": [
+     "ArrowDown",
+     "n",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": "select-down-enter-from-7",
+    "paced": {
+     "7 days | list closed": 20
     },
     "burst": {
      "7 days | list closed": 20
@@ -15938,6 +16845,27 @@
     "burstWrong": 0,
     "wrong": []
    },
+   "antd-sample select-enter-down-enter": {
+    "keys": [
+     "Enter",
+     "ArrowDown",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "7 days | list closed": 20
+    },
+    "burst": {
+     "7 days | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 0,
+    "reference": "7 days | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
    "antd-sample select-space-down-enter": {
     "keys": [
      "Space",
@@ -15978,6 +16906,27 @@
     "burstWrong": 0,
     "wrong": []
    },
+   "orbit-field select-down-7-enter": {
+    "keys": [
+     "ArrowDown",
+     "7",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "7 | list closed": 20
+    },
+    "burst": {
+     "7 | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "7 | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
    "orbit-field select-down-end-enter": {
     "keys": [
      "ArrowDown",
@@ -15990,13 +16939,13 @@
      "never | list open": 20
     },
     "burst": {
-     "never | list closed": 19
+     "never | list closed": 20
     },
-    "windowHits": 19,
-    "handedOver": 19,
+    "windowHits": 20,
+    "handedOver": 20,
     "reference": "never | list open",
     "pacedUnanimous": true,
-    "burstWrong": 19,
+    "burstWrong": 20,
     "wrong": [
      {
       "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-0--keyboard-window.json",
@@ -16795,6 +17744,48 @@
         "highlighted": "Never"
        }
       ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-6--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 126.3,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 169.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 170.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 171.5,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
      }
     ]
    },
@@ -16826,7 +17817,7 @@
     "from": "7 days",
     "control": null,
     "paced": {
-     "7 | list closed": 18
+     "7 | list closed": 20
     },
     "burst": {
      "7 | list closed": 20
@@ -17700,6 +18691,27 @@
      }
     ]
    },
+   "orbit-field select-down-n-enter": {
+    "keys": [
+     "ArrowDown",
+     "n",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": "select-down-enter-from-7",
+    "paced": {
+     "never | list closed": 20
+    },
+    "burst": {
+     "never | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
    "orbit-field select-down-pagedown-enter": {
     "keys": [
      "ArrowDown",
@@ -17712,10 +18724,10 @@
      "never | list closed": 20
     },
     "burst": {
-     "never | list closed": 19
+     "never | list closed": 20
     },
-    "windowHits": 19,
-    "handedOver": 19,
+    "windowHits": 20,
+    "handedOver": 20,
     "reference": "never | list closed",
     "pacedUnanimous": true,
     "burstWrong": 0,
@@ -18262,6 +19274,27 @@
       ]
      }
     ]
+   },
+   "orbit-field select-enter-down-enter": {
+    "keys": [
+     "Enter",
+     "ArrowDown",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "7 | list closed": 20
+    },
+    "burst": {
+     "7 | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "7 | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
    },
    "orbit-field select-space-down-enter": {
     "keys": [
@@ -19498,7 +20531,7 @@
      "open": 20
     },
     "burst": {
-     "open": 19
+     "open": 20
     },
     "windowHits": 0,
     "handedOver": 0,
@@ -19516,7 +20549,7 @@
     "from": null,
     "control": null,
     "paced": {
-     "ran Image": 19
+     "ran Image": 20
     },
     "burst": {
      "closed": 20
@@ -22785,7 +23818,7 @@
     "from": null,
     "control": null,
     "paced": {
-     "open": 19
+     "open": 20
     },
     "burst": {
      "open": 20
@@ -22809,13 +23842,13 @@
      "ran Image": 20
     },
     "burst": {
-     "closed": 19
+     "closed": 20
     },
-    "windowHits": 19,
+    "windowHits": 20,
     "handedOver": 0,
     "reference": "ran Image",
     "pacedUnanimous": true,
-    "burstWrong": 19,
+    "burstWrong": 20,
     "wrong": [
      {
       "file": "chromium-dark-desktop--orbit-menu-sample-menu-enter-down-enter-burst-sample-1--keyboard-window.json",
@@ -23443,6 +24476,39 @@
         "highlighted": "File"
        }
       ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-sample-menu-enter-down-enter-burst-sample-0--keyboard-window.json",
+      "result": "closed",
+      "keyLog": [
+       {
+        "key": "Enter",
+        "t": 67.7,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "focused": "button:Add attachment",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "ArrowDown",
+        "t": 209.7,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "focused": "button:Add attachment",
+        "listbox": true,
+        "highlighted": "File"
+       },
+       {
+        "key": "Enter",
+        "t": 210.7,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "focused": "button:Add attachment",
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
      }
     ]
    },
@@ -23457,13 +24523,13 @@
      "ran File": 20
     },
     "burst": {
-     "closed": 19
+     "closed": 20
     },
-    "windowHits": 19,
+    "windowHits": 20,
     "handedOver": 0,
     "reference": "ran File",
     "pacedUnanimous": true,
-    "burstWrong": 19,
+    "burstWrong": 20,
     "wrong": [
      {
       "file": "chromium-dark-desktop--orbit-menu-sample-menu-enter-enter-burst-sample-0--keyboard-window.json",
@@ -23913,6 +24979,30 @@
        {
         "key": "Enter",
         "t": 83.1,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "focused": "button:Add attachment",
+        "listbox": true,
+        "highlighted": "File"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-menu-sample-menu-enter-enter-burst-sample-1--keyboard-window.json",
+      "result": "closed",
+      "keyLog": [
+       {
+        "key": "Enter",
+        "t": 60.3,
+        "target": "button:Add attachment",
+        "trusted": true,
+        "focused": "button:Add attachment",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Enter",
+        "t": 175.1,
         "target": "button:Add attachment",
         "trusted": true,
         "focused": "button:Add attachment",
@@ -24822,6 +25912,27 @@
     "windowHits": 0,
     "handedOver": 0,
     "reference": "Never | list open",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-sample select-down-7-enter": {
+    "keys": [
+     "ArrowDown",
+     "7",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "7 days | list closed": 20
+    },
+    "burst": {
+     "7 days | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "7 days | list closed",
     "pacedUnanimous": true,
     "burstWrong": 0,
     "wrong": []
@@ -26590,6 +27701,27 @@
      }
     ]
    },
+   "orbit-sample select-down-n-enter": {
+    "keys": [
+     "ArrowDown",
+     "n",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": "select-down-enter-from-7",
+    "paced": {
+     "Never | list closed": 20
+    },
+    "burst": {
+     "Never | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "Never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
    "orbit-sample select-down-pagedown-enter": {
     "keys": [
      "ArrowDown",
@@ -26620,7 +27752,7 @@
     "from": "7 days",
     "control": "select-down-enter-from-7",
     "paced": {
-     "7 days | list closed": 19
+     "7 days | list closed": 20
     },
     "burst": {
      "7 days | list closed": 20
@@ -26643,11 +27775,32 @@
      "Never | list closed": 20
     },
     "burst": {
-     "Never | list closed": 19
+     "Never | list closed": 20
     },
-    "windowHits": 19,
+    "windowHits": 20,
     "handedOver": 0,
     "reference": "Never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-sample select-enter-down-enter": {
+    "keys": [
+     "Enter",
+     "ArrowDown",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "7 days | list closed": 20
+    },
+    "burst": {
+     "7 days | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "7 days | list closed",
     "pacedUnanimous": true,
     "burstWrong": 0,
     "wrong": []
@@ -26758,7 +27911,7 @@
    },
    "menu-enter": {
     "orbitBurstWrong": {
-     "orbit-menu": "0/19",
+     "orbit-menu": "0/20",
      "orbit-menu-sample": "0/20"
     },
     "orbitPaced": {
@@ -26781,7 +27934,7 @@
    "menu-enter-down-enter": {
     "orbitBurstWrong": {
      "orbit-menu": "20/20",
-     "orbit-menu-sample": "19/19"
+     "orbit-menu-sample": "20/20"
     },
     "orbitPaced": {
      "orbit-menu": "ran Image",
@@ -26789,7 +27942,7 @@
     },
     "orbitWindowHits": {
      "orbit-menu": 20,
-     "orbit-menu-sample": 19
+     "orbit-menu-sample": 20
     },
     "orbitHandedOver": {
      "orbit-menu": 0,
@@ -26808,7 +27961,7 @@
    "menu-enter-enter": {
     "orbitBurstWrong": {
      "orbit-menu": "20/20",
-     "orbit-menu-sample": "19/19"
+     "orbit-menu-sample": "20/20"
     },
     "orbitPaced": {
      "orbit-menu": "ran File",
@@ -26816,7 +27969,7 @@
     },
     "orbitWindowHits": {
      "orbit-menu": 20,
-     "orbit-menu-sample": 19
+     "orbit-menu-sample": 20
     },
     "orbitHandedOver": {
      "orbit-menu": 0,
@@ -26904,9 +28057,41 @@
     "antdWindowHits": 0,
     "decision": "control"
    },
+   "select-down-7-enter": {
+    "orbitBurstWrong": {
+     "orbit-field": "0/20",
+     "orbit-sample": "0/20"
+    },
+    "orbitPaced": {
+     "orbit-field": "7 | list closed",
+     "orbit-sample": "7 days | list closed"
+    },
+    "orbitWindowHits": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "orbitHandedOver": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "antdPaced": "Never | list closed",
+    "antdBurstWrong": "0/20",
+    "antdWindowHits": 20,
+    "antdGivesTheKeyAFunction": false,
+    "antdControlPaced": "Never | list closed",
+    "orbitControlPaced": {
+     "orbit-field": "never | list closed",
+     "orbit-sample": "Never | list closed"
+    },
+    "orbitPacedMatchesAntd": {
+     "orbit-field": false,
+     "orbit-sample": false
+    },
+    "decision": "antd-no-function: record, no change"
+   },
    "select-down-end-enter": {
     "orbitBurstWrong": {
-     "orbit-field": "19/19",
+     "orbit-field": "20/20",
      "orbit-sample": "20/20"
     },
     "orbitPaced": {
@@ -26914,11 +28099,11 @@
      "orbit-sample": "Never | list open"
     },
     "orbitWindowHits": {
-     "orbit-field": 19,
+     "orbit-field": 20,
      "orbit-sample": 20
     },
     "orbitHandedOver": {
-     "orbit-field": 19,
+     "orbit-field": 20,
      "orbit-sample": 20
     },
     "antdPaced": "Never | list closed",
@@ -27012,9 +28197,9 @@
     },
     "decision": "antd-no-function: record, no change"
    },
-   "select-down-pagedown-enter": {
+   "select-down-n-enter": {
     "orbitBurstWrong": {
-     "orbit-field": "0/19",
+     "orbit-field": "0/20",
      "orbit-sample": "0/20"
     },
     "orbitPaced": {
@@ -27022,11 +28207,43 @@
      "orbit-sample": "Never | list closed"
     },
     "orbitWindowHits": {
-     "orbit-field": 19,
+     "orbit-field": 20,
      "orbit-sample": 20
     },
     "orbitHandedOver": {
-     "orbit-field": 19,
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "antdPaced": "7 days | list closed",
+    "antdBurstWrong": "0/20",
+    "antdWindowHits": 20,
+    "antdGivesTheKeyAFunction": false,
+    "antdControlPaced": "7 days | list closed",
+    "orbitControlPaced": {
+     "orbit-field": "7 | list closed",
+     "orbit-sample": "7 days | list closed"
+    },
+    "orbitPacedMatchesAntd": {
+     "orbit-field": false,
+     "orbit-sample": false
+    },
+    "decision": "antd-no-function: record, no change"
+   },
+   "select-down-pagedown-enter": {
+    "orbitBurstWrong": {
+     "orbit-field": "0/20",
+     "orbit-sample": "0/20"
+    },
+    "orbitPaced": {
+     "orbit-field": "never | list closed",
+     "orbit-sample": "Never | list closed"
+    },
+    "orbitWindowHits": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "orbitHandedOver": {
+     "orbit-field": 20,
      "orbit-sample": 20
     },
     "antdPaced": "Never | list closed",
@@ -27079,7 +28296,7 @@
    "select-down-space": {
     "orbitBurstWrong": {
      "orbit-field": "0/20",
-     "orbit-sample": "0/19"
+     "orbit-sample": "0/20"
     },
     "orbitPaced": {
      "orbit-field": "never | list closed",
@@ -27087,7 +28304,7 @@
     },
     "orbitWindowHits": {
      "orbit-field": 20,
-     "orbit-sample": 19
+     "orbit-sample": 20
     },
     "orbitHandedOver": {
      "orbit-field": 0,
@@ -27131,6 +28348,38 @@
      "orbit-field": "never | list open"
     },
     "decision": "antd-no-function: record, no change"
+   },
+   "select-enter-down-enter": {
+    "orbitBurstWrong": {
+     "orbit-field": "0/20",
+     "orbit-sample": "0/20"
+    },
+    "orbitPaced": {
+     "orbit-field": "7 | list closed",
+     "orbit-sample": "7 days | list closed"
+    },
+    "orbitWindowHits": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "orbitHandedOver": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "antdPaced": "7 days | list closed",
+    "antdBurstWrong": "0/20",
+    "antdWindowHits": 20,
+    "antdGivesTheKeyAFunction": true,
+    "antdControlPaced": "Never | list closed",
+    "orbitControlPaced": {
+     "orbit-field": "never | list closed",
+     "orbit-sample": "Never | list closed"
+    },
+    "orbitPacedMatchesAntd": {
+     "orbit-field": true,
+     "orbit-sample": true
+    },
+    "decision": "both-correct: no change"
    },
    "select-space-down-enter": {
     "orbitBurstWrong": {
