@@ -12215,6 +12215,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * settle it with the primary key rather than with an exception that would abort whatever
    * transaction they were in.
    */
+  /** Whether this caller has already pressed with this token, whatever became of what it pressed on. */
+  private async hasRunReceipt(ownerId: string, actionKind: string, requestToken: string): Promise<boolean> {
+    const rows = await this.prisma.$queryRaw<Array<{ status: string }>>`
+      SELECT "status" FROM "task_run_request"
+       WHERE "owner_id" = ${ownerId}::uuid
+         AND "action_kind" = ${actionKind}
+         AND "request_token" = ${requestToken}`;
+    return rows.length > 0;
+  }
+
   private async leaseRunRequest(
     ownerId: string,
     actionKind: string,
@@ -13512,6 +13522,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // never named. Stable artifact ids cannot fix that, because the door refuses before it reaches
     // them. So a request that has already been answered is answered from its answer.
     const runRequestToken = requestToken ?? randomUUID();
+    // Except a press on a task the caller does not have — another account's, or none at all. The
+    // receipt is the caller's own row, but a request about something it cannot see leaves nothing
+    // behind (the tenant isolation census, docs/google-sign-in-design.md §11 T1), and what it would
+    // be answered below is this same 404. A token already pressed is still answered from its receipt,
+    // whatever has become of the task since.
+    if (
+      !(await this.prisma.task.findFirst({ where: { id, ownerId }, select: { id: true } }))
+      && !(requestToken && (await this.hasRunReceipt(ownerId, TASK_RUN_ACTION.execute, requestToken)))
+    ) {
+      throw new NotFoundException('task not found');
+    }
     const recordAnswer = async (answer: TaskRunAnswer): Promise<TaskRunAnswer> => answer;
     const lease = await this.leaseRunRequest(
       ownerId, TASK_RUN_ACTION.execute, runRequestToken, taskRunFingerprint.execute(id),
