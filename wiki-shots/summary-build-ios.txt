@@ -1,0 +1,14 @@
+Test Case '-[WikiProbeUITests.WikiShotsTests testOneSpace]' started.
+Test Case '-[WikiProbeUITests.WikiShotsTests testOneSpace]' passed (80.905 seconds).
+Test Case '-[WikiProbeUITests.WikiShotsTests testThreeSpaces]' started.
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:71: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertTrue failed - a menu row says github.com/jianghailong-xy/orbit
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:71: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertTrue failed - a menu row says github.com/jianghailong-xy/wikova
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:71: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertTrue failed - a menu row says No documents yet
+Test Case '-[WikiProbeUITests.WikiShotsTests testThreeSpaces]' failed (79.229 seconds).
+Test Suite 'WikiShotsTests' failed at 2026-10-06 18:42:22.191.
+	 Executed 2 tests, with 3 failures (0 unexpected) in 160.134 (160.138) seconds
+Test Suite 'WikiProbeUITests.xctest' failed at 2026-10-06 18:42:22.192.
+	 Executed 2 tests, with 3 failures (0 unexpected) in 160.134 (160.139) seconds
+Test Suite 'All tests' failed at 2026-10-06 18:42:22.192.
+	 Executed 2 tests, with 3 failures (0 unexpected) in 160.134 (160.141) seconds
+** TEST FAILED **

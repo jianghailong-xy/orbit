@@ -1,0 +1,4 @@
+Query chain:
+ →Find: Target Application 'io.orbitd.wikiprobe'
+  ↪︎Find: Descendants matching type Button
+    ↪︎Find: Elements matching predicate '"The codebase this wiki describes" IN identifiers'
