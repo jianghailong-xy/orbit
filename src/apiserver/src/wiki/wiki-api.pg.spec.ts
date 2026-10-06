@@ -31,7 +31,7 @@ import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { PrismaClient } from '@prisma/client';
-import { WIKI_LIMITS, toUuid } from '@orbit/shared';
+import { WIKI_LIMITS, WIKI_SOURCE_ROW_ID_KINDS, toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -287,14 +287,15 @@ async function turn(h: Harness, sessionId: string, seq: number, content: string)
   return id;
 }
 
-/** A tool call, whose output is what a quote is checked against. */
-async function toolCall(h: Harness, sessionId: string, name: string, output: unknown): Promise<string> {
+/** A tool call, whose output is what a quote is checked against — and the tool_use_id its engine gave it, if any. */
+async function toolCall(h: Harness, sessionId: string, name: string, output: unknown, toolUseId?: string): Promise<string> {
   const id = randomUUID();
-  await h.sql.query(`INSERT INTO "tool_call"("id","session_id","name","output") VALUES ($1,$2,$3,$4)`, [
+  await h.sql.query(`INSERT INTO "tool_call"("id","session_id","name","output","tool_use_id") VALUES ($1,$2,$3,$4,$5)`, [
     id,
     sessionId,
     name,
     JSON.stringify(output),
+    toolUseId ?? null,
   ]);
   return id;
 }
@@ -529,6 +530,202 @@ test('0307 · the wiki write path', { skip, concurrency: 1, timeout: 300_000 }, 
     ]);
     expectStatus(wrapped, 200, "a whitespace-normalized quote is still the record's words");
     assert.equal(await h.prisma.wikiEntry.count({ where: { ownerId: owner.id } }), 1, 'only the op that passed left a row');
+  });
+
+  await t.test('a ref that can name no row is refused 4xx at its path, on the dry run alike, and writes nothing', async () => {
+    const owner = await account(h, 'refs');
+    const machine = await runner(h, owner.id);
+    const ws = await workspace(h, owner.id, { repoUrl: 'github.com/orbit/refs.git' });
+    const mine = await session(h, owner.id, { workspaceId: ws, runnerId: machine.id });
+    const tool = await toolCall(h, mine, 'Bash', 'the row id names the call');
+    const propose = (ops: unknown[], dryRun?: true) =>
+      call(h, { runner: machine.token, headers: { 'x-orbit-session-id': mine } }, 'POST', '/runner/wiki/changesets', {
+        rationale: 'what a source ref may be',
+        ops,
+        ...(dryRun ? { dryRun } : {}),
+      });
+    const written = async () => [
+      await h.prisma.wikiChangeset.count({ where: { ownerId: owner.id } }),
+      await h.prisma.wikiChangesetOp.count({ where: { ownerId: owner.id } }),
+      await h.prisma.wikiEntry.count({ where: { ownerId: owner.id } }),
+      await h.prisma.wikiSource.count({ where: { ownerId: owner.id } }),
+    ];
+    type Refused = { status: string; reasons: Array<{ code: string; message: string; errors?: Array<{ path: string; message: string }> }> };
+    // The request and its dry run are answered alike — the status and every op's outcome — and neither writes.
+    const refusedBothWays = async (ops: unknown[], status: number, why: string): Promise<Refused[]> => {
+      const before = await written();
+      const dry = await propose(ops, true);
+      const real = await propose(ops);
+      expectStatus(real, status, why);
+      expectStatus(dry, status, `${why}, on the dry run`);
+      assert.deepEqual(dry.body.ops, real.body.ops, `${why}: the dry run refuses what the request does, op for op`);
+      assert.deepEqual(await written(), before, `${why}: nothing is written`);
+      return real.body.ops as Refused[];
+    };
+
+    // The 500 this replaces: a tool_use_id where a row's id goes reached a uuid column as it came (P2007).
+    const [asTask] = await refusedBothWays(
+      [addOp({ title: 'A tool_use_id is not a task' }, [{ kind: 'tool_call', ref: tool }, { kind: 'task', ref: 'toolu_0195URa2d9G6F4AKQoGfVprN' }])],
+      400,
+      "a tool_use_id where a task's id goes",
+    );
+    assert.equal(asTask.status, 'refused');
+    assert.equal(asTask.reasons[0].code, 'WIKI_SCHEMA');
+    assert.deepEqual(asTask.reasons[0].errors?.map((e) => e.path), ['ops[0].sources[1].ref'], 'the op and the source, by path');
+    assert.match(asTask.reasons[0].errors![0].message, /a task source's ref is the task's id/u, 'and what goes there instead');
+
+    // Every kind whose ref is a row's id, garbled in the second source of an op of its own.
+    const garbled = await refusedBothWays(
+      WIKI_SOURCE_ROW_ID_KINDS.map((kind) =>
+        addOp({ title: `A garbled ${kind} ref` }, [{ kind: 'tool_call', ref: tool }, { kind, ref: 'not an id at all!' }])),
+      400,
+      'a garbled ref of each kind that names a row',
+    );
+    assert.deepEqual(
+      garbled.map((op) => [op.status, op.reasons[0].code, op.reasons[0].errors?.map((e) => e.path)]),
+      WIKI_SOURCE_ROW_ID_KINDS.map((_, i) => ['refused', 'WIKI_SCHEMA', [`ops[${i}].sources[1].ref`]]),
+    );
+    // A tool_call takes a tool_use_id as well, so only the lookup can refuse a garbled one: unresolved, by its path.
+    const [garbledCall] = await refusedBothWays(
+      [addOp({ title: 'A garbled tool call ref' }, [{ kind: 'tool_call', ref: tool }, { kind: 'tool_call', ref: 'not an id at all!' }])],
+      422,
+      'a garbled tool_call ref',
+    );
+    assert.equal(garbledCall.reasons[0].code, 'WIKI_SOURCE_UNRESOLVED');
+    assert.deepEqual(garbledCall.reasons[0].errors?.map((e) => e.path), ['ops[0].sources[1].ref']);
+    assert.match(garbledCall.reasons[0].message, /^ops\[0\]\.sources\[1\] does not resolve among this account's own records/u);
+    assert.match(garbledCall.reasons[0].message, /the tool call's id, or the tool_use_id its engine gave the call/u, 'and what a tool_call takes');
+
+    // The owner's own writes may cite nothing, but what they cite is held to the same: refused by its path.
+    const spaceId = (await h.prisma.wikiSpace.findFirstOrThrow({ where: { ownerId: owner.id }, select: { id: true } })).id;
+    const ownersOwn = await call(h, { bearer: owner.bearer }, 'POST', `/wiki/spaces/${spaceId}/changesets`, {
+      rationale: 'the owner cites an event by a tool_use_id',
+      ops: [addOp({ title: "The owner's garbled ref" }, [{ kind: 'event', ref: 'toolu_0195URa2d9G6F4AKQoGfVprN' }])],
+    });
+    expectStatus(ownersOwn, 400, "the owner's write with a ref that names no row");
+    assert.deepEqual(ownersOwn.body.ops[0].reasons[0].errors.map((e: { path: string }) => e.path), ['ops[0].sources[0].ref']);
+    assert.deepEqual(await written(), [0, 0, 0, 0], 'nothing is written');
+
+    // Either spelling of a row's id is written as it always was, and stored as the row's id.
+    const legal = await propose([
+      addOp({ title: 'A source named by its id' }, [{ kind: 'tool_call', ref: tool, quote: 'names the call' }, { kind: 'tool_call', ref: uuidToBase62(tool) }]),
+    ]);
+    expectStatus(legal, 200, 'a row id, in either spelling');
+    assert.equal(legal.body.ops[0].status, 'pending');
+    const stored = await h.prisma.wikiSource.findMany({ where: { ownerId: owner.id }, select: { kind: true, ref: true, quoteVerified: true } });
+    assert.deepEqual(
+      stored.map((source) => [source.kind, source.ref, source.quoteVerified]).sort(),
+      [['tool_call', tool, false], ['tool_call', tool, true]],
+    );
+  });
+
+  await t.test("a tool_call's tool_use_id names the calling session's call, else the call of the one session that made it", async () => {
+    const owner = await account(h, 'tool use ids');
+    const machine = await runner(h, owner.id);
+    const ws = await workspace(h, owner.id, { repoUrl: 'github.com/orbit/tool-use-ids.git' });
+    const mine = await session(h, owner.id, { workspaceId: ws, runnerId: machine.id });
+    const other = await session(h, owner.id, { workspaceId: ws, runnerId: machine.id });
+    const third = await session(h, owner.id, { workspaceId: ws, runnerId: machine.id });
+    const stranger = await account(h, 'not the owner');
+    const theirs = await session(h, stranger.id, {});
+    const useId = (name: string) => `toolu_${name}_${randomUUID().slice(0, 8)}`;
+    const as = { runner: machine.token, headers: { 'x-orbit-session-id': mine } };
+    const propose = (title: string, ref: string, quote?: string, dryRun?: true) =>
+      call(h, as, 'POST', '/runner/wiki/changesets', {
+        rationale: 'cited by the tool_use_id the transcript shows',
+        ops: [addOp({ title }, [{ kind: 'tool_call', ref, ...(quote ? { quote } : {}) }])],
+        ...(dryRun ? { dryRun } : {}),
+      });
+    /** The one source the entry an answer added rests on, as stored. */
+    const storedSource = async (answer: Answer) => {
+      const revision = await h.prisma.wikiEntryRevision.findFirstOrThrow({ where: { entryId: toUuid(answer.body.ops[0].entryId), revision: 1 } });
+      const rows = await h.prisma.wikiSource.findMany({ where: { revisionId: revision.id }, select: { kind: true, ref: true, quoteVerified: true } });
+      assert.equal(rows.length, 1);
+      return rows[0];
+    };
+
+    // The calling session's own call, by the id its transcript shows: what is stored is the row's id, and the
+    // quote is checked against that row.
+    const own = useId('own');
+    const ownRow = await toolCall(h, mine, 'Bash', 'npm test printed: tests 0, skipped 3', own);
+    const dry = await propose('Cited by its tool_use_id', own, 'skipped 3', true);
+    expectStatus(dry, 200, 'the dry run of a tool_use_id the calling session made');
+    assert.equal(dry.body.ops[0].status, 'pending');
+    const cited = await propose('Cited by its tool_use_id', own, 'skipped 3');
+    expectStatus(cited, 200, 'a tool_use_id the calling session made');
+    assert.equal(cited.body.ops[0].status, dry.body.ops[0].status, 'the dry run said what the request did');
+    assert.deepEqual(await storedSource(cited), { kind: 'tool_call', ref: ownRow, quoteVerified: true });
+
+    // Recorded more than once in one session, it is still one call, read from its first row.
+    const recorded = useId('recorded');
+    const copies: string[] = [];
+    for (let i = 0; i < 3; i += 1) copies.push(await toolCall(h, mine, 'Bash', 'the same call, ingested again', recorded));
+    const copied = await propose('A call recorded three times', recorded, 'ingested again');
+    expectStatus(copied, 200, 'one call recorded three times in one session');
+    assert.equal((await storedSource(copied)).ref, [...copies].sort()[0], 'read from its first row');
+
+    // A call the calling session never made is the call of the one session of the owner's that made it ...
+    const elsewhere = useId('elsewhere');
+    const elsewhereRow = await toolCall(h, other, 'Bash', 'made by another session of the owner', elsewhere);
+    const another = await propose('A call another session made', elsewhere);
+    expectStatus(another, 200, "a tool_use_id one other session of the owner's made");
+    assert.equal((await storedSource(another)).ref, elsewhereRow);
+
+    // ... and the calling session's own call comes first, though another session carries the same id.
+    const shared = useId('shared');
+    const sharedOwn = await toolCall(h, mine, 'Bash', 'the calling session made it', shared);
+    await toolCall(h, other, 'Bash', 'and so did another', shared);
+    const preferred = await propose('The calling session made it, and so did another', shared);
+    expectStatus(preferred, 200, "the calling session's own call");
+    assert.equal((await storedSource(preferred)).ref, sharedOwn);
+
+    // Carried by two other sessions it names neither, and a stranger's names nothing: unresolved, by its path.
+    const twoSessions = useId('two');
+    await toolCall(h, other, 'Bash', 'one session made it', twoSessions);
+    await toolCall(h, third, 'Bash', 'and another made it too', twoSessions);
+    const strangers = useId('stranger');
+    await toolCall(h, theirs, 'Bash', "another account's call", strangers);
+    for (const [ref, why] of [
+      [twoSessions, 'a tool_use_id two other sessions carry'],
+      [strangers, "a tool_use_id only another account's session carries"],
+      [useId('nowhere'), 'a tool_use_id no session carries'],
+    ]) {
+      const before = await h.prisma.wikiEntry.count({ where: { ownerId: owner.id } });
+      const dryRefused = await propose(`Unresolved: ${why}`, ref, undefined, true);
+      const refused = await propose(`Unresolved: ${why}`, ref);
+      expectStatus(refused, 422, why);
+      expectStatus(dryRefused, 422, `${why}, on the dry run`);
+      assert.deepEqual(dryRefused.body.ops, refused.body.ops, `${why}: the dry run is answered as the request is`);
+      assert.equal(refusalOf(refused).code, 'WIKI_SOURCE_UNRESOLVED');
+      assert.deepEqual(refused.body.ops[0].reasons[0].errors.map((e: { path: string }) => e.path), ['ops[0].sources[0].ref']);
+      assert.equal(await h.prisma.wikiEntry.count({ where: { ownerId: owner.id } }), before, `${why}: nothing is written`);
+    }
+
+    // An op decided later is read again from what it was proposed with, against the session that proposed it:
+    // the id two sessions carry is still the proposer's own call when the owner accepts the amend.
+    const accepted = await call(h, { bearer: owner.bearer }, 'POST', `/wiki/changesets/${cited.body.changesetId}/decide`, {
+      decisions: [{ opId: cited.body.ops[0].opId, action: 'accept' }],
+    });
+    expectStatus(accepted, 200, 'the owner accepts the add');
+    const amend = await call(h, as, 'POST', '/runner/wiki/changesets', {
+      rationale: 'an amend that cites by tool_use_id',
+      ops: [{
+        op: 'amend',
+        entryId: cited.body.ops[0].entryId,
+        baseRevision: 1,
+        changes: { summary: 'A pg spec that skips proves nothing, and npm test said so.' },
+        sources: [{ kind: 'tool_call', ref: shared, quote: 'the calling session made it' }],
+      }],
+    });
+    expectStatus(amend, 200, 'the agent proposes the amend');
+    assert.equal(amend.body.ops[0].status, 'pending');
+    const decided = await call(h, { bearer: owner.bearer }, 'POST', `/wiki/changesets/${amend.body.changesetId}/decide`, {
+      decisions: [{ opId: amend.body.ops[0].opId, action: 'accept' }],
+    });
+    expectStatus(decided, 200, 'the owner accepts the amend');
+    const second = await h.prisma.wikiEntryRevision.findFirstOrThrow({ where: { entryId: toUuid(cited.body.ops[0].entryId), revision: 2 } });
+    const sources = await h.prisma.wikiSource.findMany({ where: { revisionId: second.id }, select: { ref: true, quoteVerified: true } });
+    assert.deepEqual(sources, [{ ref: sharedOwn, quoteVerified: true }], "the proposer's own call, read when the owner decided");
   });
 
   await t.test("the owner accepts, edits and rejects, and only an accepted proposal is confirmed", async () => {

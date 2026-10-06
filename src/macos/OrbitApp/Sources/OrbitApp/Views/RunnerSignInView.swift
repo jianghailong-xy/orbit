@@ -412,3 +412,52 @@ struct AntigravityRepairCardView: View {
         }
     }
 }
+
+/// A DeepSeek Harness session that could not run, as the remedy rather than the runner's sentence
+/// (web's `DshRepairCard`). Its credential is a configured key, never a sign-in on the runner, so a
+/// key problem is fixed on that key's page in Providers; everything else is about the machine.
+struct DshRepairCardView: View {
+    let console: ConsoleModel
+    let repair: DshRuntime.Repair
+    @Environment(\.openURL) private var openURL
+
+    private var title: String {
+        let machine = console.runnerName.flatMap { $0.isEmpty ? nil : "“\($0)”" }
+        switch repair {
+        case .notInstalled:
+            return machine.map { "DeepSeek Harness isn't installed on \($0)" } ?? repair.title
+        case .unsupportedPlatform:
+            return machine.map { "DeepSeek Harness can't run on \($0)" } ?? repair.title
+        default:
+            return repair.title
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange).font(.orbitProse.bold())
+            Text(repair.detail)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+            HStack {
+                if repair.isKeyProblem {
+                    Button("Update the API key") { Task { openURL(await console.dshKeyURL()) } }
+                        .buttonStyle(.borderedProminent)
+                    if !console.retryMessageText.isEmpty {
+                        Button("Retry — re-send my last message") { Task { await console.retryLastMessage() } }
+                            .buttonStyle(.bordered)
+                            .disabled(console.sending || console.retryInFlight)
+                    }
+                } else if repair == .notInstalled {
+                    Button("Install") { Task { await console.installDsh() } }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!console.canInstallDsh)
+                }
+            }
+            .font(.orbitLabel)
+        }
+        .padding(10)
+        .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .accessibilityIdentifier("dsh-repair-\(repair.rawValue)")
+    }
+}

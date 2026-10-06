@@ -19,6 +19,7 @@ import {
   RUNNER_ENGINE_SIGNED_OUT,
   runnerEngineAccountsSignedIn,
 } from '../lib/runnerCopy';
+import { DSH_STATE_LABEL, dshRunnerState } from '../lib/dshRuntime';
 import { ENGINE_CLI_NAME, engineVersionNumber, updateNoteOf } from '../lib/runnerEngines';
 import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
@@ -174,6 +175,12 @@ function signInOf(runner: Runner, health: RunnerEngineHealth): { text: string; t
   if (health.engine === 'opencode') {
     return health.installed ? none : { text: RUNNER_ENGINE_NOT_INSTALLED, tone: 'muted' };
   }
+  // Harness has no sign-in: each session brings a configured API key. What this machine decides is
+  // whether it can start one at all (dshRunnerState), which is what the column says instead.
+  if (health.engine === 'dsh') {
+    const state = dshRunnerState(runner);
+    return state === 'ready' ? { text: 'Uses API keys', tone: 'muted' } : { text: DSH_STATE_LABEL[state], tone: state === 'notInstalled' ? 'muted' : 'warn' };
+  }
   const kind = rowKindOf(health, runner.install, health.engine);
   if (kind === 'missing' || kind === 'install-failed') {
     return { text: RUNNER_ENGINE_NOT_INSTALLED, tone: 'muted' };
@@ -205,7 +212,7 @@ function EngineLine({ runner, health }: { runner: Runner; health: RunnerEngineHe
   // A quota belongs to a login that is in: signed out, its last reading is about a session that
   // can no longer start. Same reading Providers shows at the head of its row.
   const kind =
-    health.engine === 'opencode'
+    health.engine === 'opencode' || health.engine === 'dsh'
       ? null
       : rowKindOf(health, runner.install, health.engine);
   // With several accounts the engine's own snapshot is Default's alone, and one account's windows
@@ -226,7 +233,7 @@ function EngineLine({ runner, health }: { runner: Runner; health: RunnerEngineHe
   const name = ENGINE_CLI_NAME[health.engine] ?? health.engine;
   return (
     <Link className="rd-engine-row" to={engineSignInHref(runner.id, health.engine)}>
-      <ProviderTile slug={ENGINE_PRESET[health.engine] ?? health.engine} label={name} size={24} />
+      <ProviderTile slug={ENGINE_PRESET[health.engine] ?? (health.engine === 'dsh' ? 'deepseek-harness' : health.engine)} label={name} size={24} />
       <div className="rd-engine-main">
         <div className="rd-engine-name">{name}</div>
         {/* The machine's own sentence on hover — which path, which owner, which error. The line

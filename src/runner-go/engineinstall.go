@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -214,6 +215,13 @@ func installEngineNow(spec engineSpec) InstallResultRequest {
 	if path, ok := lookEngine(spec.bin); ok && engineRunnableAt(path) {
 		return InstallResultRequest{Status: installDone, Command: spec.installCmd}
 	}
+	// Present and unrunnable — the case this button exists for. Its bytes may be all that is wrong
+	// with its identity, and that repair is a copy rather than a download (rematerializeEngine).
+	// Everything a copy cannot fix falls through to the installer below.
+	if _, ok := lookEngine(spec.bin); ok && rematerializeEngine(spec.bin) {
+		logln("engine-install (requested):", spec.name, "refreshed the installed file in place")
+		return InstallResultRequest{Status: installDone, Command: engineRenewCmd}
+	}
 
 	logln("engine-install (requested):", spec.name, "->", spec.installCmd)
 	ctx, cancel := context.WithTimeout(context.Background(), engineInstallTimeout)
@@ -304,6 +312,14 @@ func ensureEngine(ctx context.Context, bin string, notify func(string)) string {
 		return ""
 	}
 	_, installed = lookEngine(bin)
+
+	// The engine is there and will not run: give it a fresh file at the same path before reaching
+	// for an installer — no download, no package manager, about a second (rematerializeEngine).
+	// Nothing is announced for it, because there is nothing for a reader to wait through.
+	if installed && rematerializeEngine(bin) {
+		logln("engine-install:", spec.name, "refreshed the installed file in place")
+		return ""
+	}
 
 	if installed {
 		// The installer is the repair: a binary that is present and cannot run is replaced by
@@ -501,6 +517,66 @@ func engineRunnable(bin string) bool {
 func engineRunnableAt(path string) bool {
 	return engineStarts(path, engineStartsProbe) || engineStarts(path, engineStartsProbeSlow)
 }
+
+// rematerializeEngine gives an engine that is installed and cannot be run a fresh file at the same
+// path, by copying the one already there.
+//
+// This is the repair for a file whose *content* is fine and whose identity is not — the shape
+// macOS produced on 2026-10-05: a complete, correctly signed native Claude Code that the kernel
+// refused to exec (exit 137, not a byte of output, no log entry) while a copy of the very same
+// bytes ran perfectly, and which came back repeatedly. The bytes ARE the fix and they are already
+// on disk, so the repair is a one-second local copy — where the installer is a 230MB download.
+// On the machine this exists for that is the difference between a blip and an outage.
+//
+// False means "this was not the repair": a read-only install, a package-manager tree, a binary
+// that is genuinely broken — the caller falls back to the engine's installer, which is the path
+// that was there before.
+func rematerializeEngine(bin string) bool {
+	path, ok := lookEngine(bin)
+	if !ok {
+		return false
+	}
+	real, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		real = path
+	}
+	info, err := os.Stat(real)
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	in, err := os.Open(real)
+	if err != nil {
+		return false
+	}
+	defer in.Close()
+	// Beside the original, so the swap is a rename on the same filesystem. The original is never
+	// opened for writing: on Linux that is ETXTBSY for a binary somebody is running, and every
+	// running process is protected from the rename anyway — it keeps the file it started with.
+	tmp := real + ".orbit-renew"
+	out, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, info.Mode().Perm())
+	if err != nil {
+		return false
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		_ = os.Remove(tmp)
+		return false
+	}
+	if err := out.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return false
+	}
+	if err := os.Rename(tmp, real); err != nil {
+		_ = os.Remove(tmp)
+		return false
+	}
+	return engineRunnableAt(real)
+}
+
+// engineRenewCmd is what a repair that copied the installed file reports in place of a command
+// line: nothing was downloaded and no installer ran, and saying so is the difference between a
+// machine that repaired itself and one that looks like it reinstalled something.
+const engineRenewCmd = "(refreshed the installed file in place)"
 
 // engineUnrunnableMessage is what a session is told when its engine is on this machine and cannot
 // run. Not the missing-engine message: "not found" would send whoever reads it looking for a file

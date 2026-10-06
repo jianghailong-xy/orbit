@@ -181,6 +181,11 @@ public enum Approvals {
     /// one rule per distinct sub-command (`bashCommandRules`); other tools get a tool-wide rule (no
     /// `ruleContent`). The running session stops asking, and the control plane keeps the rules on
     /// that session's workspace so its other sessions start with them too.
+    /// Whether an approval card may offer "Allow & remember" on this runtime (web's
+    /// `approvalRememberOffered`). Harness's approval bridge answers each ask once (allow-once /
+    /// reject-once) and drops remember rules, so on `dsh` the next call would ask again.
+    public static func rememberOffered(runtime: String) -> Bool { runtime != "dsh" }
+
     public static func rememberRules(toolName: String, input: JSONValue) -> [PermissionRule] {
         // Orbit's own asks have no repeatable form. Every batch creates a different set of tasks
         // and every restructure releases a different set, so "always allow" would be a standing

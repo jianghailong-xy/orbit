@@ -311,9 +311,13 @@ export function ApprovalPanel({
   answerable = true,
   onChatAbout,
   onDecline,
+  rememberable = true,
 }: {
   approval: ApprovalInfo;
   onDecide: OnDecide;
+  /** Whether this session's runtime honours remember rules (`approvalRememberOffered`). False
+   *  drops "Always allow" and its shortcut: the card is Approve / Reject only. */
+  rememberable?: boolean;
   active?: boolean;
   /** Whether an answer to this card can still reach anybody — see UNANSWERABLE_NOTE. */
   answerable?: boolean;
@@ -333,7 +337,7 @@ export function ApprovalPanel({
   // and the rule is kept on this session's workspace so its other sessions start with it too.
   // Empty for questions/plans and Bash commands with no clean prefix; a compound Bash line
   // yields one rule per distinct sub-command.
-  const rules = isQuestion ? [] : rememberRulesFor(approval);
+  const rules = isQuestion || !rememberable ? [] : rememberRulesFor(approval);
   // One claim for the card, so that the two triggers below are one card asking rather than two.
   // The keys are the card's only while it is the highest card asking: a question card above it on
   // the screen holds them first, and this one holds them over every card below it (`CardHotkey.ts`)

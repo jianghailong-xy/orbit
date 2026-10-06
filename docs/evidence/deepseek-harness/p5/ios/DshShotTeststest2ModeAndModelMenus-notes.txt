@@ -1,0 +1,16 @@
+mode-light: mode menu 9 label="Auto" value="" frame=(64.0, 496.0, 33.0, 18.0) hittable=true
+mode-light Default: ["Default enabled=true", "Default enabled=true"]
+mode-light Auto: ["Auto enabled=true", "Auto enabled=true", "Auto enabled=true"]
+mode-light Don't Ask: ["Don\'t Ask enabled=true"]
+mode-light Plan: ["Plan — not on DeepSeek Harness enabled=false"]
+mode-light Accept Edits: ["Accept Edits — not on DeepSeek Harness enabled=false"]
+mode-light Bypass: ["Bypass — not on DeepSeek Harness enabled=false"]
+model-light: (missing)
+mode-dark: mode menu 9 label="Auto" value="" frame=(64.0, 496.0, 33.0, 18.0) hittable=true
+mode-dark Default: ["Default enabled=true", "Default enabled=true"]
+mode-dark Auto: ["Auto enabled=true", "Auto enabled=true", "Auto enabled=true"]
+mode-dark Don't Ask: ["Don\'t Ask enabled=true"]
+mode-dark Plan: ["Plan — not on DeepSeek Harness enabled=false"]
+mode-dark Accept Edits: ["Accept Edits — not on DeepSeek Harness enabled=false"]
+mode-dark Bypass: ["Bypass — not on DeepSeek Harness enabled=false"]
+model-dark: (missing)

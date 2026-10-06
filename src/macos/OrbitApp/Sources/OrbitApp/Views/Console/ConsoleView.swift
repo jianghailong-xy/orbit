@@ -136,7 +136,10 @@ struct ConsoleView: View {
                         // Errors only, and sticky until the ✕ — this row is in flow, so anything that
                         // comes and goes on a timer here shoves the composer around while the user is
                         // typing in it. Confirmations belong in the toast host (see `showToast`).
-                        if let repair = console.queuedAntigravityRepair {
+                        if let repair = console.queuedDshRepair {
+                            DshRepairCardView(console: console, repair: repair)
+                                .padding(.bottom, .composerBandGap)
+                        } else if let repair = console.queuedAntigravityRepair {
                             AntigravityRepairCardView(console: console, repair: repair)
                                 .padding(.bottom, .composerBandGap)
                         }
@@ -1708,7 +1711,9 @@ struct TranscriptItemView: View {
         case .interrupt:
             Label("Interrupted", systemImage: "stop.circle").font(.orbitLabel).foregroundStyle(.secondary)
         case .error(_, let message):
-            if let repair = EngineAuth.antigravityRepair(message), let console, console.executesAntigravity {
+            if let console, console.executesDsh, let repair = DshRuntime.repair(message) {
+                DshRepairCardView(console: console, repair: repair)
+            } else if let repair = EngineAuth.antigravityRepair(message), let console, console.executesAntigravity {
                 AntigravityRepairCardView(console: console, repair: repair)
             } else if let summary = ToolFailureSummary.parse(message) {
                 ToolFailureCardView(message: message, summary: summary)

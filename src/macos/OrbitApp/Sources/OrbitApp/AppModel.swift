@@ -404,6 +404,12 @@ final class AppModel {
     /// whenever `sessions` is written any other way (an event folded in), so an "unchanged" answer
     /// only ever vouches for the list it describes. One per instance and sign-in.
     private var openListReader: OpenListReader?
+    /// Whether `sessions` is the list the reader last handed out, apart from the rows in
+    /// `eventWrittenRows` that `applySessionRow` has changed in place since — what lets a poll that
+    /// only changed rows in place be applied one row at a time (`fetchOpenSessions`). Any other
+    /// write goes through `applySessionSnapshot`, which clears it.
+    private var openListIsReaderBase = false
+    private var eventWrittenRows: Set<String> = []
 
     private static let instanceKey = "orbit.instance"
     /// The email of the last successful sign-in, prefilled on the login page.
@@ -707,6 +713,8 @@ final class AppModel {
         }
         configure(url)
 
+        email = LoginFailure.submittedEmail(email)
+
         busy = true
         defer { busy = false }
         do {
@@ -717,12 +725,8 @@ final class AppModel {
             user = try? await api!.me()
             password = ""
             signedIn = true
-        } catch APIError.unauthorized {
-            errorText = "Invalid email or password"
-        } catch is TokenNotStoredError {
-            errorText = "Signed in, but this device couldn't save the session to the Keychain."
         } catch {
-            errorText = "Sign-in failed — check the instance URL and that the server is reachable."
+            errorText = LoginFailure.message(for: error)
         }
     }
 
@@ -782,6 +786,8 @@ final class AppModel {
         resetNavigation()
         lastSnapshot = nil
         openListFromLaunchSnapshot = false
+        openListIsReaderBase = false
+        eventWrittenRows = []
         menuSummary = .empty
         updateDockBadge(nil)
         // Clear the write-skip trackers so the next sign-in's first snapshot always reconciles the
@@ -1153,26 +1159,11 @@ final class AppModel {
     }
 
     /// Fold a `session.created` / `session.updated` summary into the row already on hand. Returns
-    /// false when only the list query can answer the change, and the caller should nudge a refresh:
-    ///   • the session left Open — the row has to disappear, which membership alone decides;
-    ///   • the row isn't loaded — a session created elsewhere can't be built from the slim summary
-    ///     (no preview line, tags, runner or background count), and prepending a half-populated row
-    ///     would render worse than the ~½s wait for the real snapshot;
-    ///   • the run just reached a terminal status — whether that is an outcome or a failure the
-    ///     server is about to retry is decided by `retryAt`, which the summary doesn't carry, so
-    ///     folding the status in alone would announce a failure that undoes itself a minute later.
-    ///     Once per session ended, against a per-turn event: the refetch costs nothing here.
+    /// false when only the list query can answer the change (`OpenRowChange.merging` says when), and
+    /// the caller should nudge a refresh.
     private func mergeSessionSummary(_ summary: ControlSessionSummary) -> Bool {
         patchSessionProjectRelation(summary)
-        if let lifecycle = summary.effectiveLifecycleState, lifecycle != .open { return false }
-        if summary.effectiveRunStatus.isTerminal { return false }
-        guard let index = sessions.firstIndex(where: { $0.id == summary.id }) else { return false }
-        let merged = sessions[index].applying(summary)
-        guard merged != sessions[index] else { return true }   // nothing user-visible changed
-        var list = sessions
-        list[index] = merged
-        applySessionSnapshot(list)
-        return true
+        return applySessionRow(OpenRowChange.merging(summary, into: sessions))
     }
 
     /// Relation metadata has a different membership rule from run/lifecycle state: a Project can
@@ -1183,11 +1174,7 @@ final class AppModel {
         guard summary.projectId != nil || summary.projectTitle != nil || summary.projectMembership != nil else { return }
         if let index = sessions.firstIndex(where: { $0.id == summary.id }) {
             let merged = sessions[index].applyingProjectRelation(summary)
-            if merged != sessions[index] {
-                var list = sessions
-                list[index] = merged
-                applySessionSnapshot(list)
-            }
+            if merged != sessions[index] { applySessionRow(.replace(index: index, row: merged)) }
         }
         if let cached = sessionDetails.resolve(summary.id) {
             sessionDetails.store(cached.applyingProjectRelation(summary))
@@ -1205,13 +1192,8 @@ final class AppModel {
     /// gone.
     private func mergePendingApprovals(sessionID: String, pending: Int,
                                        waitingKind: SessionWaitingKind?) -> Bool {
-        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return false }
-        guard sessions[index].pendingApprovals != pending
-                || sessions[index].waitingKind != waitingKind else { return true }
-        var list = sessions
-        list[index] = list[index].settingPendingApprovals(pending, waitingKind: waitingKind)
-        applySessionSnapshot(list)
-        return true
+        applySessionRow(OpenRowChange.settingPendingApprovals(sessionID: sessionID, pending: pending,
+                                                              waitingKind: waitingKind, in: sessions))
     }
 
     /// The owner-level lists a control event can dirty, each backed by its own model.
@@ -1401,8 +1383,22 @@ final class AppModel {
                 return true
             }
             openListFromLaunchSnapshot = false
-            applySessionSnapshot(list)
+            // A poll that changed rows of the same sessions goes through the same one-row path as an
+            // event: the rows it changed, and the rows events wrote since the last adopted list
+            // (which the server's list now answers for), are all that can differ from it. A new
+            // order is then taken as it stands (`adoptOpenOrder`).
+            if openListIsReaderBase, let replaced = reader.replacedRows, lastSnapshot != nil,
+               let poll = OpenRowChange.replacements(
+                   of: Set(replaced.map(\.id)).union(eventWrittenRows), in: list, over: sessions) {
+                for change in poll.changes { applySessionRow(.replace(index: change.index, row: change.row)) }
+                if poll.reordered { adoptOpenOrder(list) }
+                scheduleReviewDueRefresh(sessions)
+            } else {
+                applySessionSnapshot(list)
+            }
             reader.adopted()
+            openListIsReaderBase = true
+            eventWrittenRows = []
             return true
         } catch APIError.unauthorized {
             logout()
@@ -1421,20 +1417,12 @@ final class AppModel {
     /// purge), where the diff would otherwise post a bogus "finished" alert.
     private func applySessionSnapshot(_ list: [Session], notify: Bool = true) {
         openListReader?.invalidate()   // see `openListReader`; a fetch marks it adopted once this is done
+        openListIsReaderBase = false
         // Notify on snapshot-to-snapshot transitions (skip the first load, which only primes). Skip
         // the session whose console is on screen — its own stream already shows the change.
         if notify, let prev = lastSnapshot {
-            for event in SessionDelta.diff(previous: prev, current: list,
-                                           focusedSessionID: focusedConsoleSessionID,
-                                           filed: filedSessions) {
-                #if os(iOS)
-                // The server already pushes approvals to this device over APNs, in every app state
-                // (PushService.notifyApprovalRequest) — posting the diff's banner too would alert
-                // twice for one approval. macOS has no APNs path, so it keeps announcing them here.
-                if case .needsApproval = event { continue }
-                #endif
-                notifications.post(Notifications.content(for: event))
-            }
+            post(SessionDelta.diff(previous: prev, current: list,
+                                   focusedSessionID: focusedConsoleSessionID, filed: filedSessions))
         }
         // A filing has done its silencing once a snapshot without the row lands: `lastSnapshot` no
         // longer holds it either, so nothing later can read its absence as a finish. Releasing here
@@ -1465,12 +1453,29 @@ final class AppModel {
             updateDockBadge(summary.badge)
         }
         #if os(iOS)
-        // Foreground reconcile: drop delivered approval banners for sessions that no longer need
-        // a reply (e.g. handled on web/macOS), so Notification Center matches the badge — and to
-        // cover the case a silent push couldn't (a force-quit app). See docs/cross-platform-badge-sync.md.
-        // Gated on the id set actually changing: this is a cross-process round-trip, and most
-        // snapshots (a turn ticking along) don't move it at all.
-        let needsYou = Set(SessionGrouping.group(list).needsYou.map(\.id))
+        reconcileDeliveredApprovals(Set(SessionGrouping.group(list).needsYou.map(\.id)))
+        #endif
+    }
+
+    private func post(_ events: [NotificationEvent]) {
+        for event in events {
+            #if os(iOS)
+            // The server already pushes approvals to this device over APNs, in every app state
+            // (PushService.notifyApprovalRequest) — posting the diff's banner too would alert
+            // twice for one approval. macOS has no APNs path, so it keeps announcing them here.
+            if case .needsApproval = event { continue }
+            #endif
+            notifications.post(Notifications.content(for: event))
+        }
+    }
+
+    #if os(iOS)
+    /// Foreground reconcile: drop delivered approval banners for sessions that no longer need
+    /// a reply (e.g. handled on web/macOS), so Notification Center matches the badge — and to
+    /// cover the case a silent push couldn't (a force-quit app). See docs/cross-platform-badge-sync.md.
+    /// Gated on the id set actually changing: this is a cross-process round-trip, and most
+    /// snapshots (a turn ticking along) don't move it at all.
+    private func reconcileDeliveredApprovals(_ needsYou: Set<String>) {
         if needsYou != lastNeedsYou {
             lastNeedsYou = needsYou
             // A server banner's thread id is the session's stored UUID; `needsYou` is list-spelled.
@@ -1480,7 +1485,87 @@ final class AppModel {
             // leave a card asking for something that's already been decided.
             toasts.clearApprovals(stillWaiting: needsYou)
         }
+    }
+    #endif
+
+    /// Apply a control event's change to ONE row of the Open list, leaving the same state behind as
+    /// `applySessionSnapshot` would with that row swapped in — without its whole-list work: the
+    /// notification diff, the derived surfaces (`OpenListDerived`) and the agent pane read only what
+    /// this row could have moved. Several running sessions send several of these a second, all on
+    /// the main thread. Returns false for `needsSnapshot`, as the callers' own contract does.
+    ///
+    /// That equivalence rests on `lastSnapshot` being the list in hand and on the derived values
+    /// having been derived from it, which holds once a fetched snapshot has primed it. Until then —
+    /// signed in but nothing fetched, or a launch's restored list — the full path runs instead.
+    @discardableResult
+    private func applySessionRow(_ change: OpenRowChange) -> Bool {
+        guard case .replace(let index, let row) = change else { return change == .unchanged }
+        guard lastSnapshot != nil, !openListFromLaunchSnapshot else {
+            var list = sessions
+            list[index] = row
+            applySessionSnapshot(list)
+            return true
+        }
+        openListReader?.invalidate()   // not a full write either; see `openListReader`
+        eventWrittenRows.insert(row.id)
+        let old = sessions[index]
+        // Every other row is unchanged, so this row's diff is the whole list's.
+        post(SessionDelta.diff(previous: [old], current: [row],
+                               focusedSessionID: focusedConsoleSessionID, filed: filedSessions))
+        sessions[index] = row
+        lastSnapshot = sessions
+        // The ids are the same, so `filedSessions` keeps every entry it had.
+        sessionDetails.reconcile(with: [row])
+
+        #if os(iOS)
+        let activity = OpenListDerived.Activity(runningWorkspaceIDs: runningWorkspaceIDs,
+                                                jobWorkspaceIDs: jobWorkspaceIDs,
+                                                coordinatorPulses: projectCoordinators)
+        #else
+        let activity: OpenListDerived.Activity? = nil
         #endif
+        var derived = OpenListDerived(needsYou: needsYouSessions, agentNeedsYou: agentNeedsYou,
+                                      menu: menuSummary, activity: activity)
+        derived.replace(old, with: row, in: sessions)
+        // Written only where they moved: Observation invalidates on any assignment.
+        #if os(iOS)
+        let needsYouIDsMoved = derived.needsYou.map(\.id) != needsYouSessions.map(\.id)
+        #endif
+        if derived.needsYou != needsYouSessions { needsYouSessions = derived.needsYou }
+        if derived.agentNeedsYou != agentNeedsYou { agentNeedsYou = derived.agentNeedsYou }
+        #if os(iOS)
+        if let marks = derived.activity {
+            if marks.runningWorkspaceIDs != runningWorkspaceIDs { runningWorkspaceIDs = marks.runningWorkspaceIDs }
+            if marks.jobWorkspaceIDs != jobWorkspaceIDs { jobWorkspaceIDs = marks.jobWorkspaceIDs }
+            if marks.coordinatorPulses != projectCoordinators { projectCoordinators = marks.coordinatorPulses }
+        }
+        #endif
+        agents?.applyOpenRow(sessions, workspaceIDs: [old.agent?.id ?? old.agentId, row.agent?.id ?? row.agentId])
+        if old.confirmationUnderReview?.dueAt != row.confirmationUnderReview?.dueAt {
+            scheduleReviewDueRefresh(sessions)
+        }
+        if derived.menu != menuSummary { menuSummary = derived.menu }
+        if lastBadge != derived.menu.badge {
+            lastBadge = derived.menu.badge
+            updateDockBadge(derived.menu.badge)
+        }
+        #if os(iOS)
+        if needsYouIDsMoved { reconcileDeliveredApprovals(Set(derived.needsYou.map(\.id))) }
+        #endif
+        return true
+    }
+
+    /// `list` is `sessions` in another order (`fetchOpenSessions` has already applied every row that
+    /// differs). Nothing transitions, so nothing is announced; only what is read in list order moves.
+    private func adoptOpenOrder(_ list: [Session]) {
+        sessions = list
+        lastSnapshot = list
+        var derived = OpenListDerived(needsYou: needsYouSessions, agentNeedsYou: agentNeedsYou,
+                                      menu: menuSummary, activity: nil)
+        derived.reorder(list)
+        if derived.needsYou != needsYouSessions { needsYouSessions = derived.needsYou }
+        if derived.menu != menuSummary { menuSummary = derived.menu }
+        agents?.applyOpenSnapshot(list)
     }
 
     /// The Open list and everything the drawer and the session lists derive from it. Written by a

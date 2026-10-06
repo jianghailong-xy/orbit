@@ -101,10 +101,20 @@ struct EngineSwitchSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
+            #else
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
             #endif
         }
         #if os(iOS)
         .presentationDetents([.medium, .large])
+        #else
+        // A macOS sheet takes its content's ideal size, and a List has none: without a frame the
+        // sheet collapsed to its title and first header, and no row could be picked.
+        .frame(minWidth: 420, idealWidth: 460, minHeight: 420, idealHeight: 520)
         #endif
     }
 
@@ -156,7 +166,8 @@ struct EngineSwitchSheet: View {
 
     private func trailing(_ engine: EngineChoice, greyed: Bool) -> String {
         guard let reason = engine.unavailable else { return engine.provider.note ?? engine.provider.modelLabel }
-        return greyed ? reason : engine.fixEngine == "antigravity" ? "\(reason) →" : "\(reason), sign in →"
+        return greyed ? reason
+            : ["antigravity", "dsh", DshRuntime.connectFix].contains(engine.fixEngine ?? "") ? "\(reason) →" : "\(reason), sign in →"
     }
 }
 
