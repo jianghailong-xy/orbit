@@ -19,8 +19,10 @@ import {
   wikiPlanFromVersion,
   wikiPlanLook,
   wikiPlanPath,
+  wikiPlanWaitingBanners,
   type WikiPlanLook,
 } from '../lib/wikiPlan';
+import { wikiInSpace } from '../lib/wiki';
 import { redraftWikiPlan, useWikiWrite } from '../lib/wikiWrites';
 import { useToast } from '../lib/toast';
 
@@ -54,6 +56,36 @@ export function WikiPlanBanner({ space }: { space: WikiSpace }) {
       <span className="t">{banner.text}</span>
       <RightOutlined className="ic" />
     </Link>
+  );
+}
+
+/**
+ * Activity's plan banners (design §12.3.3): the home's banner once for each kind of thing the plan waits
+ * on the owner for — how many it is in `data-waiting`, so the page's amber banners add up to the head's
+ * badge — and, with nothing waiting, the plan's blue banner as the home draws it. Another space's
+ * (`elsewhere`, its name) are only what waits there, each saying which space it is.
+ */
+export function WikiPlanBanners({ space, elsewhere = null }: { space: WikiSpace; elsewhere?: string | null }) {
+  const { plan, look, counts, maintenance } = usePlanLook(space);
+  if (!plan || !look) return null;
+  const context = { now: Date.now(), docs: counts, runnerOnline: maintenance.runnerOnline };
+  const waiting = wikiPlanWaitingBanners(plan, context);
+  const banners = waiting.length > 0 || elsewhere ? waiting : [{ ...wikiPlanBanner(look, plan, context), look, count: 0 }];
+  return (
+    <>
+      {banners.map((banner) => (
+        <Link
+          key={banner.look}
+          className={`wk-banner wk-plan-banner ${banner.tone}`}
+          data-waiting={banner.tone === 'amber' ? banner.count : undefined}
+          to={banner.to === 'settings' ? wikiSettingsPath(space.slug) : wikiPlanPath(space.slug)}
+        >
+          <WikiDot tone={banner.tone === 'amber' ? 'amber' : 'blue'} />
+          <span className="t">{elsewhere ? `${banner.text} ${wikiInSpace(elsewhere)}` : banner.text}</span>
+          <RightOutlined className="ic" />
+        </Link>
+      ))}
+    </>
   );
 }
 

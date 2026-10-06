@@ -1950,6 +1950,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // column, constraint, function, trigger or type is altered or dropped; no task, project,
       // acceptance or DONE fence object is named, and no row is written.
       '0388_pat_device_login',
+      // Confirmed moves (0389): one CREATE OR REPLACE of `task_claimed_project_move_guard` (0122,
+      // widened by 0130); its trigger, event and refusal are unchanged. The body still refuses a
+      // project change on a task with a live claim, except in the transaction that applies the
+      // account owner's confirmation of a MOVE_TASK for that task and those two projects — named by
+      // a transaction-local setting and an unspent, USER-approved project_handoff_approval row the
+      // function only reads. It is none of the six preserved triggers/functions and not the DONE
+      // fence; no table, column, constraint, index or type is touched, and no row is written.
+      '0389_move_task_confirmation_live_claim',
       // Sign-in providers (0390): one new table, sign_in_provider, with its primary key and two
       // CHECKs of its own, and no other index, foreign key, function or trigger. No existing table,
       // column, constraint, function, trigger or type is altered or dropped; no task, project,
