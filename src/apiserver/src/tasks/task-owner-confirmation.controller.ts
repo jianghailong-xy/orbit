@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Headers, Param, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden, PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { DecideOwnerConfirmationDto } from './dto';
@@ -18,11 +19,13 @@ import { TaskOwnerConfirmationService } from './task-owner-confirmation.service'
 export class TaskOwnerConfirmationController {
   constructor(private readonly confirmations: TaskOwnerConfirmationService) {}
 
+  @PatScope('tasks:read')
   @Get()
   read(@CurrentUser() user: AuthUser, @Param('taskId', PublicIdPipe) taskId: string) {
     return this.confirmations.read(user.userId, taskId);
   }
 
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post()
   decide(
     @CurrentUser() user: AuthUser,

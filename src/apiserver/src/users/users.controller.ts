@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -39,6 +40,7 @@ function asMe<T extends { avatar?: { updatedAt: Date } | null }>(account: T) {
   return { ...rest, avatarUpdatedAt: avatar?.updatedAt ?? null };
 }
 
+@PatForbidden('ACCOUNT')
 @Controller('users')
 export class UsersController {
   constructor(private readonly prisma: PrismaService) {}

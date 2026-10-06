@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { WorkspacesService } from './workspaces.service';
 import { CreateWorkspaceDto, ReorderWorkspacesDto, UpdateWorkspaceDto } from './dto';
@@ -22,11 +23,13 @@ import { CreateWorkspaceDto, ReorderWorkspacesDto, UpdateWorkspaceDto } from './
 export class WorkspacesController {
   constructor(private readonly workspaces: WorkspacesService) {}
 
+  @PatScope('workspaces:write')
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateWorkspaceDto) {
     return this.workspaces.create(user.userId, dto);
   }
 
+  @PatScope('workspaces:read')
   @Get()
   list(@CurrentUser() user: AuthUser) {
     return this.workspaces.list(user.userId);
@@ -34,21 +37,25 @@ export class WorkspacesController {
 
   // Persist the sidebar drag order. Declared before the `:id` routes; the static
   // path keeps it from being shadowed by a param route.
+  @PatScope('workspaces:write')
   @Post('reorder')
   reorder(@CurrentUser() user: AuthUser, @Body() dto: ReorderWorkspacesDto) {
     return this.workspaces.reorder(user.userId, dto.ids);
   }
 
+  @PatScope('workspaces:read')
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.workspaces.get(user.userId, id);
   }
 
+  @PatScope('workspaces:write')
   @Patch(':id')
   update(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateWorkspaceDto) {
     return this.workspaces.update(user.userId, id, dto);
   }
 
+  @PatScope('workspaces:write')
   @Delete(':id')
   remove(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.workspaces.remove(user.userId, id);
@@ -57,6 +64,7 @@ export class WorkspacesController {
   /** Ask this workspace's runner to clean up the shared checkout it works in (rescue what's there
    *  onto a branch, then return it to HEAD). Queued for the next heartbeat; the outcome lands on
    *  the workspace's repoCleanup fields. */
+  @PatScope('workspaces:write')
   @Post(':id/repo-cleanup')
   cleanUpRepo(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.workspaces.requestRepoCleanup(user.userId, id);
@@ -64,12 +72,14 @@ export class WorkspacesController {
 
   /** What this workspace's sessions no longer ask about ("always allow" answers that outlived
    *  the session they were given in). */
+  @PatScope('workspaces:read')
   @Get(':id/permission-rules')
   permissionRules(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.workspaces.listPermissionRules(user.userId, id);
   }
 
   /** Revoke one standing grant; this workspace's sessions ask about that call again. */
+  @PatScope('workspaces:write')
   @Delete(':id/permission-rules/:ruleId')
   removePermissionRule(
     @CurrentUser() user: AuthUser,

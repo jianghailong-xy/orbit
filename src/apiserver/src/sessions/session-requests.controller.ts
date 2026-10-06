@@ -1,6 +1,7 @@
 import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { SessionRequestService } from './session-request.service';
@@ -18,6 +19,7 @@ import { SessionRequestService } from './session-request.service';
 export class SessionRequestsController {
   constructor(private readonly requests: SessionRequestService) {}
 
+  @PatScope('sessions:read')
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.requests.view(user.userId, id);

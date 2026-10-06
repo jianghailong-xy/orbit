@@ -14,15 +14,17 @@
  *   (5) an expired token is 401; one whose `expires_at` is NULL does not expire; a deleted user's
  *       tokens go with them;
  *   (6) the `?access_token=` door never takes a token, even on the stream that allows it;
- *   (7) until routes declare the scope they need (@PatScope, the next task), every route refuses a
- *       token 403 PAT_SCOPE_MISSING;
+ *   (7) a route that declares neither @PatScope nor @PatForbidden refuses every token 403
+ *       PAT_ROUTE_UNDECLARED, one granted every scope included;
  *   (8) a name is unique among a user's live tokens, 50 live tokens is the cap, and a token's expiry
  *       frees both; input `issue` cannot honour is refused before anything is written;
  *   (9) `last_used_*` is written at most once a minute, and no request waits for the write;
- *  (10) the production apiserver — `build/main.js`, the whole AppModule — refuses a token 403 on the
- *       business routes a login JWT reaches, and writes nothing for it; answers revoked, expired
- *       and unknown tokens with one 401; and takes a login's `?access_token=` on the event stream
- *       but never a token's.
+ *  (10) the production apiserver — `build/main.js`, the whole AppModule — opens a route to a token
+ *       holding the scope the route declares and to no other: a write without its scope is 403
+ *       PAT_SCOPE_MISSING and writes nothing, and with it the write is made; routes no scope opens
+ *       (the account, the password, an owner's decision) refuse a token holding every scope, while a
+ *       login JWT reaches each of them as before; revoked, expired and unknown tokens are one 401;
+ *       and the event stream takes a login's `?access_token=` but never a token's.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/auth/personal-access-token.pg.spec.ts
  *
@@ -368,13 +370,13 @@ test('personal access tokens: issued once, stored as a hash, resolved by JwtAuth
     assert.equal((await present(guard, reader.token, { route: 'stream' })).user?.userId, owner.id);
   });
 
-  await t.test('(7) until routes declare scopes, every route refuses a token 403 PAT_SCOPE_MISSING — one granted every scope too', async () => {
+  await t.test('(7) a route that declares nothing refuses every token 403 PAT_ROUTE_UNDECLARED — one granted every scope too', async () => {
     const everything = await issue(owner, 'everything', { scopes: [...PAT_SCOPES] });
     for (const token of [issued.token, everything.token]) {
       for (const route of ['plain', 'stream'] as const) {
         const answer = await present(guard, token, { route });
         assert.equal(answer.status, 403, `${route}: ${JSON.stringify(answer.body)}`);
-        assert.equal((answer.body as { code?: string }).code, 'PAT_SCOPE_MISSING');
+        assert.equal((answer.body as { code?: string }).code, 'PAT_ROUTE_UNDECLARED');
       }
     }
   });
@@ -589,7 +591,7 @@ async function startApiserver(databaseUrl: string, jwtSecret: string): Promise<A
   }
 }
 
-test('(10) the production apiserver: business routes a login reaches refuse a token 403; revoked, expired and unknown tokens are one 401; the stream takes a login\'s ?access_token= and never a token\'s', {
+test('(10) the production apiserver: a token reaches a route holding the scope it declares and no other; routes no scope opens refuse every token while a login reaches them; revoked, expired and unknown tokens are one 401; the stream takes a login\'s ?access_token= and never a token\'s', {
   skip: !URL, concurrency: 1, timeout: 300_000,
 }, async (t) => {
   const url = URL!;
@@ -609,35 +611,55 @@ test('(10) the production apiserver: business routes a login reaches refuse a to
   const email = `production-${RUN}-${userId}@personal-access-token.invalid`;
   await db.user.create({ data: { id: userId, email, name: 'Before', passwordHash: 'x' } });
   const pats = new PatService(db as unknown as PrismaService);
-  const issue = (name: string) =>
-    pats.issue(userId, { name, scopes: [...PAT_SCOPES], expiresInDays: 90, createdVia: 'WEB' });
+  const issue = (name: string, scopes: readonly string[] = PAT_SCOPES) =>
+    pats.issue(userId, { name, scopes: [...scopes], expiresInDays: 90, createdVia: 'WEB' });
+  const reader = (await issue('reader', ['tasks:read', 'projects:read', 'sessions:read', 'workspaces:read'])).token;
   const token = (await issue('every scope')).token;
   const jwtSecret = `pat-spec-${randomUUID()}`;
   const login = await new JwtService({ secret: jwtSecret }).signAsync({ sub: userId, email });
   server = await startApiserver(url, jwtSecret);
 
-  // Each route twice: the token's attempt, whose writes must not happen, then a login's.
-  const routes: Array<[string, string, (by: string) => unknown]> = [
-    ['GET', '/api/tasks', () => undefined],
-    ['POST', '/api/tasks', (by) => ({
-      title: `written by ${by}`,
-      // Outside a project, the one criterion this door takes without more: a command and its exit code.
-      completionCriterion: 'EXECUTABLE',
-      acceptanceCommand: 'true',
-      acceptanceExpectedExitCode: 0,
-    })],
-    ['GET', '/api/projects', () => undefined],
-    ['GET', '/api/sessions', () => undefined],
-    ['GET', '/api/workspaces', () => undefined],
-    ['GET', '/api/users/me', () => undefined],
-    ['PATCH', '/api/users/me', (by) => ({ name: `renamed by ${by}` })],
-    ['POST', '/api/auth/change-password', () => ({ currentPassword: 'not-it', newPassword: 'a-new-password-1' })],
+  // A token holding the scope a route declares reaches it, as a login does.
+  for (const route of ['/api/tasks', '/api/projects', '/api/sessions', '/api/workspaces']) {
+    for (const [who, bearer] of [['a reading token', reader], ['a login', login]]) {
+      const answer = await call(server, 'GET', route, bearer);
+      assert.equal(answer.status, 200, `GET ${route} by ${who} answered ${answer.status}: ${answer.text}`);
+    }
+  }
+
+  // A write is refused to a token without its scope, before anything is written; holding it, the token writes.
+  const task = (by: string) => ({
+    title: `written by ${by}`,
+    // Outside a project, the one criterion this door takes without more: a command and its exit code.
+    completionCriterion: 'EXECUTABLE',
+    acceptanceCommand: 'true',
+    acceptanceExpectedExitCode: 0,
+  });
+  const withoutScope = await call(server, 'POST', '/api/tasks', reader, task('reader'));
+  assert.equal(withoutScope.status, 403, withoutScope.text);
+  assert.deepEqual(withoutScope.json, {
+    code: 'PAT_SCOPE_MISSING',
+    scope: 'tasks:write',
+    message: 'This access token was not granted the tasks:write scope this route needs',
+  });
+  for (const [by, bearer] of [['token', token], ['login', login]]) {
+    const created = await call(server, 'POST', '/api/tasks', bearer, task(by));
+    assert.equal(created.status, 201, `POST /api/tasks by ${by} answered ${created.status}: ${created.text}`);
+  }
+
+  // Routes no scope opens refuse a token holding every scope, with their reason and writing nothing,
+  // and a login reaches each of them as before.
+  const closed: Array<[string, string, (by: string) => unknown, string]> = [
+    ['GET', '/api/users/me', () => undefined, 'ACCOUNT'],
+    ['PATCH', '/api/users/me', (by) => ({ name: `renamed by ${by}` }), 'ACCOUNT'],
+    ['POST', '/api/auth/change-password', () => ({ currentPassword: 'not-it', newPassword: 'a-new-password-1' }), 'AUTH'],
+    ['POST', `/api/projects/${randomUUID()}/pause`, () => undefined, 'OWNER_INTERACTIVE'],
   ];
   const loginAnswers: string[] = [];
-  for (const [method, route, body] of routes) {
+  for (const [method, route, body, reason] of closed) {
     const byToken = await call(server, method, route, token, body('token'));
     assert.equal(byToken.status, 403, `${method} ${route} with a token answered ${byToken.status}: ${byToken.text}`);
-    assert.equal(byToken.json?.code, 'PAT_SCOPE_MISSING', `${method} ${route}: ${byToken.text}`);
+    assert.equal(byToken.json?.reason, reason, `${method} ${route}: ${byToken.text}`);
     const byLogin = await call(server, method, route, login, body('login'));
     assert.ok(
       byLogin.status !== 401 && byLogin.status !== 403,
@@ -646,15 +668,19 @@ test('(10) the production apiserver: business routes a login reaches refuse a to
     loginAnswers.push(`${method} ${route} ${byLogin.status}`);
   }
   const written = await sql.query(
-    `SELECT (SELECT count(*)::int FROM task WHERE owner_id = $1 AND title = 'written by token') AS by_token,
+    `SELECT (SELECT count(*)::int FROM task WHERE owner_id = $1 AND title = 'written by reader') AS by_reader,
+            (SELECT count(*)::int FROM task WHERE owner_id = $1 AND title = 'written by token') AS by_token,
             (SELECT count(*)::int FROM task WHERE owner_id = $1 AND title = 'written by login') AS by_login,
             (SELECT name FROM "user" WHERE id = $1) AS name`,
     [userId],
   );
-  assert.deepEqual(written.rows, [{ by_token: 0, by_login: 1, name: 'renamed by login' }], loginAnswers.join('; '));
+  assert.deepEqual(
+    written.rows,
+    [{ by_reader: 0, by_token: 1, by_login: 1, name: 'renamed by login' }],
+    loginAnswers.join('; '),
+  );
 
-  // Resolved, not merely refused: a 403 comes only after the app's own PatService verified the token
-  // (an unresolved one is 401), and it recorded the use from where the request came.
+  // The app's own PatService verified the token, and recorded the use from where the request came.
   const used = await eventually("the app to record the token's use", async () => {
     const current = (await sql.query(
       'SELECT last_used_at, last_used_ip FROM personal_access_token WHERE token_hash = $1',
@@ -679,7 +705,9 @@ test('(10) the production apiserver: business routes a login reaches refuse a to
   const tokenInUrl = await call(server, 'GET', asQuery(token));
   assert.equal(tokenInUrl.status, 401, tokenInUrl.text);
   assert.deepEqual(tokenInUrl.json, INVALID_TOKEN);
-  const tokenInHeader = await call(server, 'GET', '/api/events', token);
-  assert.equal(tokenInHeader.status, 403, tokenInHeader.text);
-  assert.equal(tokenInHeader.json?.code, 'PAT_SCOPE_MISSING');
+  // In the header, the stream is open to a token holding events:read, and to no other.
+  assert.equal((await call(server, 'GET', '/api/events', token)).status, 200, 'a token holding events:read');
+  const withoutEvents = await call(server, 'GET', '/api/events', reader);
+  assert.equal(withoutEvents.status, 403, withoutEvents.text);
+  assert.equal(withoutEvents.json?.scope, 'events:read');
 });
