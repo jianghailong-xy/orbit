@@ -26,7 +26,7 @@ import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest } from './worktree-artifact';
 import { isOrbitAuthoredTurn } from './orbit-authored-turn';
-import { readSessionProjectMembership, sessionProjectMembershipSql } from './session-project-membership';
+import { readSessionProjectMembership, sessionInProjectSql, sessionProjectMembershipSql } from './session-project-membership';
 import {
   closeRequestsTheRetryWillNotResend,
   isSessionReplyTurn,
@@ -2813,7 +2813,7 @@ export class SessionsService {
           SELECT 1 FROM project p
           WHERE p.id = ${filters.projectId}::uuid AND p.owner_id = ${ownerId}::uuid
         )
-        AND (${sessionProjectMembershipSql('s')} ->> 'projectId')::uuid = ${filters.projectId}::uuid`
+        AND ${sessionInProjectSql('s', filters.projectId)}`
       : Prisma.empty;
     // Paging is opt-in: a caller that omits `limit` (the native clients, any older web build)
     // still gets the whole list, so this can only ever shrink a response.
