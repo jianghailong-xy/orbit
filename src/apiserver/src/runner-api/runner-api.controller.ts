@@ -3567,6 +3567,10 @@ export class RunnerApiController {
         if (t.kind === 'message') {
           content = (await appendOwnerConfirmationReviewContext(tx, t.clientTurnId, content)) ?? content;
           content = (await appendConfirmationReturnContext(tx, t.clientTurnId, content)) ?? content;
+        }
+        // An evidence revision is also written into the running turn (evidence-review.service.ts),
+        // so a steer carries its block the way a job's exit does.
+        if (t.kind === 'message' || t.kind === 'steer') {
           content = (await appendEvidenceReviewContext(tx, t.clientTurnId, content)) ?? content;
         }
         // The background work this session left running, said to the engine that comes back to it.
