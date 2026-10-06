@@ -53,6 +53,7 @@ import {
 } from './integration-job-relay';
 import {
   AgentProvider,
+  openCodeKeyOf,
   AgentExecConfig,
   ActivateTurnLeasesRequest,
   ArtifactResultRequest,
@@ -277,7 +278,7 @@ import {
   withSessionReplies,
   withTaskStart,
 } from './control-plane-note';
-import { accountPoolRuntime, isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
+import { accountPoolRuntime, isBuiltinProvider, openCodeKeyRows, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
 import { bgLaunchConfirmed, bgLaunchKind } from './bg-launch-receipt';
 import { enginePhaseAfter, enginePhaseSinceAfter, engineTurnActiveAfter } from './engine-turn';
@@ -2413,11 +2414,13 @@ export class RunnerApiController {
           s.status === RunStatus.PENDING ? [{ id: s.id, error: s.error }] : []);
         continue;
       }
+      const openCodeKeys = declared === AgentProvider.OPENCODE ? await openCodeKeyRows(this.prisma, s.ownerId) : undefined;
       const resolveExec = (sessionModel: string | null) =>
         resolveProviderExec({
           declaredProvider: declared,
           declaredProviderBuiltin: s.providerBuiltin,
           customRow,
+          openCodeKeys,
           sessionModel,
           usesRuntimeDefaultModel: s.usesRuntimeDefaultModel,
           runtimeDefaultModels: s.assignedRunner?.runtimeDefaultModels,
@@ -3788,6 +3791,10 @@ export class RunnerApiController {
       declaredProvider: session.provider,
       declaredProviderBuiltin: session.providerBuiltin,
       customRow,
+      openCodeKeys:
+        session.provider === AgentProvider.OPENCODE && openCodeKeyOf(session.model)
+          ? await openCodeKeyRows(tx, session.ownerId)
+          : undefined,
       sessionModel: session.model,
       usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
       runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,

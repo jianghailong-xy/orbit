@@ -52,7 +52,7 @@ function hexAlpha(hex: string, alpha: number): string {
  * opens on click, and the pick is remembered on the workspace, so the common path is: read it, ignore
  * it, start typing. Which provider of the engine the session spends — its own sign-in, an account
  * pool, a key that borrows it, and which account — is picked in the composer's Provider menu, as it
- * is on a session that is already running; the card only says it ("via DeepSeek").
+ * is on a session that is already running, and only there: the card names the engine alone.
  */
 export function NewSessionProviderHero({
   current,

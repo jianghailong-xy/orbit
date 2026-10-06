@@ -61,9 +61,8 @@ struct ProviderMark: View {
 
 /// Engine picker opened from the new-session hero — which CLI runs this session, as opposed to the
 /// agent switcher (where it runs). One row per engine, landing on the provider of it the draft would
-/// spend (`SessionProviderChoices.engines`), and saying so ("via DeepSeek") when that is not the
-/// engine's own sign-in. Which provider and which account is the composer's Provider menu's
-/// question, as on a session already running. Each row previews the model it would switch to, so the
+/// spend (`SessionProviderChoices.engines`), which it does not name: which provider and which
+/// account is the composer's Provider menu's question, as on a session already running. Each row previews the model it would switch to, so the
 /// consequence is visible before the tap (web's `NewSessionProviderHero`).
 struct EngineSwitchSheet: View {
     let engines: [EngineChoice]

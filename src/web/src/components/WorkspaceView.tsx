@@ -165,6 +165,8 @@ import {
   modelOptionsForProvider,
   newSessionEffortForProvider,
   newSessionModelForProvider,
+  openCodeChoiceKey,
+  providerChoiceFor,
   normalizeEffortForProvider,
   providerIdentityResolved,
   runtimeForProvider,
@@ -3149,14 +3151,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     workspaceId?: string;
     provider: string;
   } | null>(null);
-  const draftProvider =
+  // What was picked, as the Provider menu names it — which for a key run on OpenCode is
+  // `opencode/<slug>` (openCodeKeyChoice) — and the provider that pick creates the session with.
+  const draftChoice =
     draftProviderPick && draftProviderPick.workspaceId === workspaceId ? draftProviderPick.provider : null;
+  const draftProvider = draftChoice && openCodeChoiceKey(draftChoice) ? AgentProvider.OPENCODE : draftChoice;
   // The provider a NEW session would run: an explicit pick, else what this project last ran on.
   // `lastProvider` is derived server-side from the workspace's most recent interactive session — an
   // workspace holds no provider of its own (apiserver workspaces/workspace-provider.ts). `provider` is the
   // deprecated alias of the same derived value, still served for older native builds.
-  const pickedProvider: string =
-    draftProvider ?? pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? 'claude';
+  const lastWorkspaceProvider = pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? 'claude';
+  const pickedProvider: string = draftProvider ?? lastWorkspaceProvider;
+  // The Provider-menu identity of that pick: the model space, the model seed and the menu's tick.
+  const pickedChoice: string = draftChoice ?? lastWorkspaceProvider;
   // The Codex or Claude account picked for the draft on the New Session hero, scoped to its workspace
   // like the provider pick. Without one a new session starts where Automatic or its workspace says.
   const [draftAccountPick, setDraftAccountPick] = useState<{
@@ -3292,7 +3299,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
 
   const pickedModelDefault = pickedWorkspace
     ? newSessionModelForProvider(
-        pickedProvider,
+        pickedChoice,
         me.data?.preferences?.defaultModels,
         runner.modelCatalog,
         configuredProviders,
@@ -3341,7 +3348,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const currentProviderChoiceForDraft = useMemo(
     () =>
       currentProviderChoice(
-        pickedProvider,
+        pickedChoice,
         providerChoicesForRunner,
         runner.modelCatalog,
         configuredProviders,
@@ -3349,7 +3356,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         runner.antigravity,
       ),
     [
-      pickedProvider,
+      pickedChoice,
       providerChoicesForRunner,
       runner.modelCatalog,
       configuredProviders,
@@ -3362,14 +3369,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // when no group holds it (`opencode`, a removed provider) or holds it but cannot run it.
   const draftEngines = useMemo(
     () =>
-      engineChoices(providerChoicesForRunner, configuredProviders, [
-        pickedProvider,
-        pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider,
-      ]),
-    [providerChoicesForRunner, configuredProviders, pickedProvider, pickedWorkspace?.lastProvider, pickedWorkspace?.provider],
+      engineChoices(providerChoicesForRunner, configuredProviders, [pickedChoice, lastWorkspaceProvider]),
+    [providerChoicesForRunner, configuredProviders, pickedChoice, lastWorkspaceProvider],
   );
   const currentDraftEngine =
-    draftEngines.find((engine) => engine.provider.slug === pickedProvider) ??
+    draftEngines.find((engine) => engine.provider.slug === pickedChoice) ??
     engineChoiceFor(currentProviderChoiceForDraft, configuredProviders);
   // What a switch just changed. Shown under the summary and cleared on a timer: the model move
   // is a silent side effect otherwise, and so is the write-back that remembers the pick.
@@ -3418,7 +3422,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // An account row under an engine: that engine, on that account — or on Automatic (`null`). Like the
   // provider, it binds the session being drafted and rewrites no workspace setting.
   const pickDraftAccount = (slug: string, account: string | null): void => {
-    if (slug !== pickedProvider) pickDraftProvider(slug);
+    if (slug !== pickedChoice) pickDraftProvider(slug);
     setDraftAccountPick(account === null ? null : { workspaceId, engine: slug, account });
   };
 
@@ -3428,7 +3432,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // never carries into the new one's namespace.
   const modelContextKey = selectedId
     ? `session:${selectedId}`
-    : `draft:${runner.id}:${workspaceId ?? 'none'}:${pickedProvider}`;
+    : `draft:${runner.id}:${workspaceId ?? 'none'}:${pickedChoice}`;
   const effortContextKey = selectedId
     ? `session:${selectedId}:${live ? 'live' : 'ended'}`
     : modelContextKey;
@@ -3438,10 +3442,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // picker. Once the user chooses any model, ignore seed changes until the Workspace/Session context
   // changes. Dirty is explicit rather than inferred from value equality: choosing the same value
   // is still an intentional choice.
+  // '' is a seed too — OpenCode's (and agy's) "pick for yourself" — so only null waits.
   useEffect(() => {
-    const decision = decideContextSeed(modelSeedState.current, modelContextKey, !!modelSeed);
+    const ready = modelSeed !== null && modelSeed !== undefined;
+    const decision = decideContextSeed(modelSeedState.current, modelContextKey, ready);
     modelSeedState.current = decision.state;
-    if (decision.apply && modelSeed) setModel(modelSeed);
+    if (decision.apply && ready) setModel(modelSeed);
   }, [modelContextKey, modelSeed]);
 
   // A new session defaults to Auto — the app-level default (DEFAULT_PERMISSION_MODE) — rather
@@ -7209,8 +7215,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // only thing that can be inheriting here is nothing.
   const effectiveFastMode: boolean = selected?.fastMode === true;
   const shownModel: string = live ? effectiveModel : model;
+  // The Provider-menu identity the composer is on: the provider, except that an OpenCode session on
+  // a configured key is on that key (`opencode/<slug>`) — whose models are the ones it lists.
+  const shownChoice: string = selected ? providerChoiceFor(shownProvider, shownModel) : pickedChoice;
   const catalogModelOptions = shownProviderCapabilitiesResolved
-    ? modelOptionsForProvider(shownProvider, runner.modelCatalog, configuredProviders)
+    ? modelOptionsForProvider(shownChoice, runner.modelCatalog, configuredProviders)
     : [];
   // Runtime configuration can name a valid model that is not in the reported catalog yet. Keep
   // that effective default/selectable session value visible in the picker instead of rendering a
@@ -7325,7 +7334,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     () =>
       live || resumable || !selected
         ? sameRuntimeChoices(
-            shownProvider,
+            shownChoice,
             providerChoicesForRunner,
             configuredProviders,
             runner.modelCatalog,
@@ -7337,7 +7346,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       live,
       resumable,
       selected,
-      shownProvider,
+      shownChoice,
       providerChoicesForRunner,
       configuredProviders,
       runner.modelCatalog,
@@ -7911,7 +7920,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // `account`, when the pick was one of the engine's accounts listed under it rather than the engine's
   // own row: the switch lands the session there (SessionConfigDto.account) — Automatic's pick otherwise.
   const pickProvider = (v: string, account?: string): void => {
-    if (v === shownProvider) {
+    if (v === shownChoice) {
       if (account !== undefined) pickAccount(account, false);
       return;
     }
@@ -7932,6 +7941,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (!selected) {
       if (account === undefined) pickDraftProvider(v);
       else pickDraftAccount(v, account === AUTOMATIC_ACCOUNT ? null : account);
+      return;
+    }
+    // Within OpenCode a key is part of the model (`orbit-<slug>/<model>`), so moving between its own
+    // config and its keys is a model change, onto the default of the one picked.
+    if (shownProvider === AgentProvider.OPENCODE && runtimeForProvider(v, configuredProviders) === AgentProvider.OPENCODE) {
+      pickModel(defaultModelForProvider(v, runner.modelCatalog, configuredProviders, runner.runtimeDefaultModels));
       return;
     }
     // Each provider owns its model space, so carry the running model only when the new one offers
@@ -8062,11 +8077,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         ...prev,
         preferences: {
           ...prev.preferences,
-          defaultModels: { ...prev.preferences?.defaultModels, [shownProvider]: v },
+          defaultModels: { ...prev.preferences?.defaultModels, [shownChoice]: v },
         },
       } : prev,
     );
-    modelPreferenceMut.mutate({ provider: shownProvider, model: v });
+    modelPreferenceMut.mutate({ provider: shownChoice, model: v });
     if (v === shownModel) {
       modelSeedState.current = dirtyContextSeed(modelContextKey);
       return;
@@ -8214,7 +8229,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             label: (
               <span className="scope-menu-row">
                 Provider
-                {menuValue(providerSwitchChoices.find((c) => c.slug === shownProvider)?.label ?? shownProvider)}
+                {menuValue(providerSwitchChoices.find((c) => c.slug === shownChoice)?.label ?? shownChoice)}
               </span>
             ),
             children: providerSwitchChoices.flatMap((choice) => {
@@ -8223,7 +8238,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               // it does something useful — it goes where the fix is (see pickProvider), which is
               // the New Session hero's behaviour for the same row. The running provider is
               // exempt: it is the chip's own provider, and needs no parenthetical.
-              const blocked = !!choice.unavailable && choice.slug !== shownProvider;
+              const blocked = !!choice.unavailable && choice.slug !== shownChoice;
               // Each built-in engine's accounts under it: on the
               // engine the session is on, the ones it moves between (switchAccount); under another,
               // the ones a switch onto that engine lands on (pickProvider with the account).
@@ -8254,7 +8269,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         : choice.label}
                       {choice.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}
                       {/* With its accounts listed, the tick is on the account the session runs on. */}
-                      {checkSlot(choice.slug === shownProvider && accounts.length === 0)}
+                      {checkSlot(choice.slug === shownChoice && accounts.length === 0)}
                     </span>
                   ),
                   onClick: () => pickProvider(choice.slug),
