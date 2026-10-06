@@ -70,6 +70,7 @@ import { ProviderPlanUsageService } from './plan-usage.service';
 import { encryptSecret } from './provider-crypto';
 import { ProvidersController } from './providers.controller';
 import { CodexLoginService } from './codex-login.service';
+import { DeepSeekBalanceService } from './deepseek-balance.service';
 import { ProvidersService } from './providers.service';
 
 declare global {
@@ -289,6 +290,8 @@ const doorsOver: { providers: unknown; sessions: unknown; prisma: unknown } = {
     // The ChatGPT sign-in's own controller dependency (migration 0323): no route this spec reads
     // reaches it, and a module that omitted it would fail to build the controller.
     { provide: CodexLoginService, useValue: {} },
+    // The DeepSeek balance route's dependency, for the same reason.
+    { provide: DeepSeekBalanceService, useValue: {} },
     { provide: SessionsService, useFactory: () => doorsOver.sessions },
     { provide: PrismaService, useFactory: () => doorsOver.prisma },
     { provide: RealtimeService, useValue: realtime },

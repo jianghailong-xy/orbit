@@ -46,6 +46,7 @@ struct SettingsSheet: View {
                         case .settingsPage(let page):     SettingsPageView(page: page)
                         case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)
                         case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)
+                        case .providerDetail(let providerID): ProviderDetailSettingsPage(providerID: providerID)
                         case .userDetail(let userID):     AdminUserDetailView(userID: userID)
                         default:                          EmptyView()
                         }
@@ -892,10 +893,13 @@ private struct ProvidersSettingsPage: View {
         ProvidersOverviewForm(runners: model.runners?.runners ?? [],
                               pools: pools,
                               sharedPools: model.sharedPools?.pools ?? [],
-                              keys: model.agents?.configuredProviders ?? [])
+                              keys: model.agents?.configuredProviders ?? [],
+                              mine: model.agents?.personalProviders ?? [],
+                              balances: model.agents?.deepSeekBalances ?? [:])
             .navigationTitle(SettingsPage.providers.title)
             .task { await model.runners?.load() }
             .task { await model.agents?.load() }
+            .task { await model.agents?.loadDeepSeekBalances() }
             .task { await model.sharedPools?.load() }
             .task(id: codexPoolIDs) {
                 for id in codexPoolIDs { await model.sharedPools?.loadAccess(id) }
@@ -978,6 +982,24 @@ private struct AccountPoolSettingsPage: View {
         model.sharedPools?.forget(pool.id)
         dismiss()
         return nil
+    }
+}
+
+/// A DeepSeek key's page, read-only: the key as the account's own list last read it, and the balance of
+/// its DeepSeek account — read with the list, and asked of DeepSeek again by Refresh or Retry.
+private struct ProviderDetailSettingsPage: View {
+    @Environment(AppModel.self) private var model
+    let providerID: String
+
+    var body: some View {
+        let key = PublicID.storageKey(providerID)
+        if let agents = model.agents,
+           let provider = agents.personalProviders.first(where: { $0.providerID.map(PublicID.storageKey) == key }) {
+            DeepSeekKeyPageView(key: provider, reading: agents.deepSeekBalances[providerID],
+                                refresh: { await agents.refreshDeepSeekBalance(providerID) })
+        } else {
+            ContentUnavailableView(ProvidersOverview.keyGone, systemImage: "key")
+        }
     }
 }
 

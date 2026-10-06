@@ -15,6 +15,8 @@ import { AccountPools, PoolHint } from '../components/AccountPools';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
 import { RunnerEngines } from '../components/RunnerEngines';
 import { DshRunnerStatus } from '../components/DshRunnerStatus';
+import { DeepSeekBalanceLine } from '../components/DeepSeekBalance';
+import { hasDeepSeekBalance } from '../lib/deepseekBalance';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { useToast } from '../lib/toast';
 import type { Runner } from '../components/TasksSidePanel';
@@ -111,6 +113,8 @@ export function ProvidersPage() {
                 <div>Runs on Claude Code</div>
               </div>
             )}
+            {/* A DeepSeek key also carries its whole account's balance (DeepSeekBalance.tsx). */}
+            {hasDeepSeekBalance(p) && <DeepSeekBalanceLine row={p} />}
           </div>
           {/* The Enabled column collapses to a dot on narrow screens — the tag's words would
               outrun a phone's width on their own. */}
