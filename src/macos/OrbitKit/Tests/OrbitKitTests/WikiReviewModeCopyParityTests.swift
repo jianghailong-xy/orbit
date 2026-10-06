@@ -748,7 +748,6 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                               ".accessibilityLabel(WikiModeCopy.settings)"], "the native gear")
         let screens = try native("Views/WikiScreens.swift")
         XCTAssertTrue(screens.contains("openSettings: { open(.wikiSettings) }"))
-        XCTAssertTrue(screens.contains("openRun: { id in open(.wikiRun(changesetID: id)) }"))
         let shell = try native("Views/CompactShell.swift")
         XCTAssertTrue(shell.contains("case .wikiSettings:           WikiSettingsView()"))
         XCTAssertTrue(shell.contains("case .wikiRun(let changesetID): WikiRunView(changesetID: changesetID)"))

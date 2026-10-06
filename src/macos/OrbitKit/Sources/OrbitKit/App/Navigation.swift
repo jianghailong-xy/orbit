@@ -339,6 +339,26 @@ public struct NavState: Equatable, Sendable {
         }
     }
 
+    /// The row of the Wiki's directory the page on top answers to — the one the iPad's and the Mac's directory
+    /// column lights (design §12.3, mock 32): the home at the root; Browse, the A–Z index, the plan (one of its
+    /// documents or sections too), a document or an article. An entry or a run opened over one of them keeps it
+    /// lit, as the web's drawer keeps the page it was opened over; Activity, Review and the settings answer to
+    /// no row.
+    public var wikiContentsAt: WikiContentsAt? {
+        for frame in path.reversed() {
+            switch frame {
+            case .wikiEntry, .wikiRun: continue
+            case .wikiBrowse: return .browse
+            case .wikiIndex: return .index
+            case .wikiPlan, .wikiPlanDoc, .wikiPlanSection: return .plan
+            case .wikiDoc(let slug, _): return .doc(slug: slug)
+            case .wikiArticle(let topic, let part): return .article(topic: topic, part: part)
+            default: return nil
+            }
+        }
+        return .home
+    }
+
     /// `AppModel.selectedUserID` — the account the Admin pane shows.
     public var selectedUserID: String? {
         guard case .userDetail(let id) = path.last else { return nil }
@@ -626,6 +646,15 @@ public struct WikiDocAddress: Hashable, Sendable {
         self.slug = slug
         self.section = section
     }
+}
+
+/// A row of the Wiki's directory, as the page it stands for: lit where that page is open (the Contents sheet
+/// opened over it, the wide shells' directory column beside it), a topic whose article is open listing its
+/// subtopic articles under it, a document that is open its sections.
+public enum WikiContentsAt: Hashable, Sendable {
+    case home, browse, index, plan
+    case article(topic: String, part: Int)
+    case doc(slug: String)
 }
 
 /// A page of the plan: the version (nil for the one shown first), a document of it, a section of that.
