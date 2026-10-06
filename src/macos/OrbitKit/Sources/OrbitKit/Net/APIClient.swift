@@ -136,14 +136,15 @@ public final class APIClient: @unchecked Sendable {
 
     /// List one canonical lifecycle scope. During a rolling upgrade, retry the legacy query spelling
     /// if the new one is rejected. Older servers silently treat unknown Completed/Trash values as
-    /// Open, so a mismatched (or empty, for those two scopes) response also triggers the fallback.
+    /// Open, so a response holding rows of another scope also triggers the fallback. An empty one is
+    /// an answer: a project with nothing completed is common, and asking again under the old
+    /// spelling only doubled that read, on every poll. (A pre-Completed server with nothing Open
+    /// answers an empty list for Completed too, and keeps it.)
     public func listSessions(view: SessionView = .open,
                              runnerId: String? = nil, projectId: String? = nil) async throws -> [Session] {
         do {
             let sessions = try await listSessions(queryValue: view.queryValue, runnerId: runnerId, projectId: projectId)
-            if view == .open || (!sessions.isEmpty && sessions.allSatisfy({
-                $0.effectiveLifecycleState == view.lifecycleState
-            })) {
+            if view == .open || sessions.allSatisfy({ $0.effectiveLifecycleState == view.lifecycleState }) {
                 return sessions
             }
         } catch APIError.http(let status, _) where [400, 404, 422].contains(status) {
