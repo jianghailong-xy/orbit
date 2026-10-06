@@ -98,6 +98,36 @@ describe('dshRepair', () => {
   });
 });
 
+describe('dshRepair failure semantics (D2)', () => {
+  // What the runner reports for the real DeepSeek 401 (P6), and the same text from an older runner.
+  const real = 'dsh session/prompt (-32603): Internal error: turn failed: Authentication Fails, Your api key: ****0000 is invalid (request_id: 64d2f58d-15e2-4744-aafd-d463abb21741) ';
+
+  it('D2 the real DeepSeek 401 wording reads as an invalid key', () => {
+    expect(dshRepair(`DSH_CREDENTIAL_INVALID: ${real}`)).toBe('invalidKey');
+    expect(dshRepair(real)).toBe('invalidKey');
+    expect(dshRepair('dsh session/prompt (-32603): Internal error: turn failed: Your API key: sk-****abcd is invalid')).toBe('invalidKey');
+  });
+
+  it('D2 rate limits server errors and dropped connections are not an invalid key', () => {
+    for (const message of [
+      'dsh session/prompt (-32603): Internal error: turn failed: Rate Limit Reached',
+      'dsh session/prompt (-32603): Internal error: turn failed: synthetic-429',
+      'dsh session/prompt (-32603): Internal error: turn failed: 503 Service Unavailable',
+      'dsh session/prompt (-32603): Internal error: turn failed: Insufficient Balance',
+      'dsh session/prompt (-32603): Internal error: turn failed: fetch failed: socket hang up (ECONNRESET)',
+      'dsh ACP transport closed: EOF',
+    ]) {
+      expect(dshRepair(message)).toBeNull();
+    }
+  });
+
+  it("D2 the runner's status verdict wins over key-like wording", () => {
+    expect(
+      dshRepair('DSH_REQUEST_FAILED: dsh session/prompt (-32603): Internal error: turn failed: invalid api key? {"error":{"statusCode":503}}'),
+    ).toBeNull();
+  });
+});
+
 describe('DeepSeek Harness identity in the pickers', () => {
   it('resolves a Harness key to the dsh runtime and keeps the DeepSeek preset on Claude', () => {
     expect(runtimeForProvider('deepseek-harness', [harness, deepseek])).toBe('dsh');

@@ -108,15 +108,21 @@ public enum DshRuntime {
     }
 
     /// The same evidence the runner's own `dshRequestValidation` accepts as a bad key; anything
-    /// vaguer (a rate limit, a 5xx) is not treated as one.
+    /// vaguer (a rate limit, a 5xx, a dropped connection) is not treated as one.
     static let keyRejected = [
-        "invalid api key", "api key is invalid", "authentication_error", "unauthorized", "status 401",
-        "status code 401", "http 401", "revoked api key", "api key has been revoked", "invalid credentials",
+        "invalid api key", "api key is invalid", "authentication_error", "authentication fails", "unauthorized",
+        "status 401", "status code 401", "http 401", "revoked api key", "api key has been revoked",
+        "invalid credentials",
     ]
+    /// The real DeepSeek 401 puts the masked key in between: "Your api key: ****0000 is invalid"
+    /// (runner `dshKeyRejectedPattern`, web `DSH_KEY_REJECTED_PATTERN`).
+    static let keyRejectedPattern = #"api key(?:: *\S+)? is invalid"#
 
-    /// Read a runner or server message about a Harness session for the remedy it implies.
+    /// Read a runner or server message about a Harness session for the remedy it implies. A
+    /// `DSH_REQUEST_FAILED` lead is the runner's verdict from an upstream status and wins over wording.
     public static func repair(_ message: String?) -> Repair? {
         let text = message ?? ""
+        if text.hasPrefix("DSH_REQUEST_FAILED") { return nil }
         if text.contains("DSH_CREDENTIAL_MISSING") { return .needsKey }
         if text.contains("DSH_CREDENTIAL_INVALID") { return .invalidKey }
         if text.hasPrefix("DeepSeek Harness requires a newer Orbit runner") { return .updateRunner }
@@ -127,6 +133,7 @@ public enum DshRuntime {
         let lower = text.lowercased()
         guard lower.hasPrefix("dsh ") else { return nil }
         if lower.contains("no api key") || lower.contains("missing api key") { return .needsKey }
-        return keyRejected.contains { lower.contains($0) } ? .invalidKey : nil
+        if keyRejected.contains(where: { lower.contains($0) }) { return .invalidKey }
+        return lower.range(of: keyRejectedPattern, options: .regularExpression) != nil ? .invalidKey : nil
     }
 }

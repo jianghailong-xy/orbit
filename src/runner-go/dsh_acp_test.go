@@ -407,6 +407,10 @@ func TestDshACPHelperProcess(t *testing.T) {
 				write(map[string]interface{}{"jsonrpc": "2.0", "id": id, "error": map[string]interface{}{"code": -32603, "message": "synthetic 401 failure"}})
 				continue
 			}
+			if failure, ok := dshMockPromptFailures[mode]; ok && prompts == 1 {
+				write(map[string]interface{}{"jsonrpc": "2.0", "id": id, "error": failure})
+				continue
+			}
 			if mode == "permission" {
 				update(map[string]interface{}{"sessionUpdate": "tool_call", "toolCallId": "perm-tool", "title": "write", "kind": "other", "status": "in_progress",
 					"rawInput": map[string]interface{}{"file_path": "approved.txt", "sandbox_permissions": "workspace-write"}})
