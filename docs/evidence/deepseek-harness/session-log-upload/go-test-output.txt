@@ -1,0 +1,10 @@
+=== RUN   TestDshSessionLogUploadDisabledByDefault
+--- PASS: TestDshSessionLogUploadDisabledByDefault (0.00s)
+=== RUN   TestDshRealSessionLogUpload
+=== RUN   TestDshRealSessionLogUpload/upstream-default
+--- PASS: TestDshRealSessionLogUpload/upstream-default (0.66s)
+=== RUN   TestDshRealSessionLogUpload/orbit-default
+--- PASS: TestDshRealSessionLogUpload/orbit-default (0.62s)
+--- PASS: TestDshRealSessionLogUpload (1.28s)
+PASS
+ok  	orbit	1.289s
