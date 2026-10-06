@@ -99,7 +99,7 @@ interface WiredWakeFact {
  * The fact kinds this work put behind a producer, and the control that proves the switch stops
  * each one.
  *
- * Eleven kinds, twenty controls. The mapping is many-to-one in both directions on purpose: one
+ * Eleven kinds, twenty-one controls. The mapping is many-to-one in both directions on purpose: one
  * kind is reached by more than one write path and is controlled once per path, one control can
  * cover two kinds when the same run drives both, and one PRODUCER can build two kinds when which
  * fact a committed world justifies is the thing it decides.
@@ -336,10 +336,16 @@ const WIRED: readonly WiredWakeFact[] = [
     // and with the switch off it still is: the first control says the revision is recorded, the
     // coordinator told nothing and nothing opened. The second is the producer's own authorizer
     // refusing on the column, for a claim made after the router read the switch as on.
+    //
+    // Since 2026-10-07 a second write path builds it: a confirmed MOVE_TASK hands a revision nobody
+    // has decided to the project the task moved into (`TasksService.handOverMovedEvidence`), through
+    // the same door and producer. Its own control is a target whose switch is off: the revision is
+    // recorded there, its coordinator told nothing and nothing opened.
     event: 'COMPLETION_EVIDENCE_REVISED',
     producedBy: [
       'projects/completion-input.ts#completionEvidenceRevisedFact',
       'tasks/task-completion-evidence.service.ts#submit',
+      'tasks/tasks.service.ts#handOverMovedEvidence',
     ],
     negatives: [
       {
@@ -349,6 +355,10 @@ const WIRED: readonly WiredWakeFact[] = [
       {
         spec: 'projects/automatic-evidence-to-coordinator.pg.spec.ts',
         test: '(4) a claim made after the switch went off is refused on it by the producer, tells nobody, and opens nothing',
+      },
+      {
+        spec: 'tasks/task-move-evidence-handover.pg.spec.ts',
+        test: '(e) a target that is not Automatic records the handed-over revision, tells its coordinator nothing, and asks the owner',
       },
     ],
   },

@@ -19,6 +19,8 @@ import Foundation
    ----------------------------
    The counts are read from `derivedDone.counts` and nothing here counts tasks or receipts: one
    place counts, and the met / on main / nothing-to-land numbers add up the same on every surface.
+   The Why-not-done tally splits the criteria's own answers by whether each is met
+   (`whyNotDoneTally`), so its parts add up to the criteria — still the server's answers, not tasks.
    Why a criterion is not on main is the server's own reason (`CriterionLandingReason`), and the
    Why-not-done card groups by it without deciding anything.
 
@@ -357,10 +359,14 @@ public struct ProjectDoneSubject: Equatable, Sendable {
     public let doneBy: ProjectDoneBy?
     public let doneAt: String?
     public let acceptedGaps: [AcceptedGap]
+    /// How many tasks hold each status (`tasksByStatus`) — what "no task is IN_PROGRESS" is read
+    /// off. Nil from a read that did not carry it.
+    public let tasksByStatus: [String: Int]?
 
     public init(title: String, status: String?, criteria: [Criterion] = [],
                 derivedDone: ProjectDerivedDone? = nil, doneBy: ProjectDoneBy? = nil,
-                doneAt: String? = nil, acceptedGaps: [AcceptedGap] = []) {
+                doneAt: String? = nil, acceptedGaps: [AcceptedGap] = [],
+                tasksByStatus: [String: Int]? = nil) {
         self.title = title
         self.status = status
         self.criteria = criteria
@@ -368,6 +374,7 @@ public struct ProjectDoneSubject: Equatable, Sendable {
         self.doneBy = doneBy
         self.doneAt = doneAt
         self.acceptedGaps = acceptedGaps
+        self.tasksByStatus = tasksByStatus
     }
 
     /// The counts, which is what a current server's read carries and an older one's does not: no
@@ -471,6 +478,9 @@ public enum ProjectDone {
     public static let notMetYet = "Not met yet"
     /// `WHY_NOT_DONE_NOT_MET_DETAIL`.
     public static let notMetDetail = "Its work has not met this criterion yet."
+    /// `WHY_NOT_DONE_NOT_MET` — how the Why-not-done tally counts the criteria whose work has not
+    /// met them: "2 not met".
+    public static let notMet = "not met"
 
     // Status, rows and the project page.
 
@@ -528,8 +538,13 @@ public enum ProjectDone {
 
     /// Each reason any criterion carries, in order: "1 in flight · 1 nothing to land".
     static func reasonParts(_ counts: ProjectDoneCounts) -> [String] {
+        reasonParts(counts.count)
+    }
+
+    /// The same, counted by `counted`.
+    static func reasonParts(_ counted: (CriterionLandingReason) -> Int) -> [String] {
         reasonOrder.compactMap { reason in
-            let count = counts.count(reason)
+            let count = counted(reason)
             return count > 0 ? "\(count) \(reasonLabel(reason))" : nil
         }
     }
@@ -563,11 +578,19 @@ public enum ProjectDone {
             .joined(separator: " · ")
     }
 
-    /// `projectWhyNotDoneTally` — the shorter "on main".
-    public static func whyNotDoneTally(_ counts: ProjectDoneCounts?) -> String {
-        guard let counts else { return "" }
-        return (["\(counts.criteria) criteria", "\(counts.met) met", "\(counts.onMain) \(onMain)"]
-            + reasonParts(counts)).joined(separator: " · ")
+    /// `projectWhyNotDoneTally` — the criteria, then where each one stands, in parts that add up to
+    /// them: a met criterion where its work is (the shorter "on main", or its reason), an unmet one
+    /// as not met and never by its landing lane. Read off the criteria's own answers, never tasks:
+    /// "8 criteria · 2 on main · 6 not met".
+    public static func whyNotDoneTally(_ derivedDone: ProjectDerivedDone?) -> String {
+        guard let derivedDone else { return "" }
+        let met = derivedDone.criteria.filter(\.satisfied)
+        let notMetCount = derivedDone.criteria.count - met.count
+        var parts = ["\(derivedDone.criteria.count) criteria",
+                     "\(met.filter { $0.landingReason == nil }.count) \(onMain)"]
+        parts += reasonParts { reason in met.filter { $0.landingReason == reason }.count }
+        if notMetCount > 0 { parts.append("\(notMetCount) \(notMet)") }
+        return parts.joined(separator: " · ")
     }
 
     /// `landingReasonLabel` — one criterion's reason, as a row says it. Nil is on main.
@@ -845,13 +868,13 @@ public enum ProjectDone {
     /// The one settlement card a coordinator conversation draws for its project — web's
     /// `SessionProjectSettlementCard`, read off the same reads.
     public enum Slot: Equatable, Sendable {
-        /// Nothing: not this project's coordinator, a read that has not answered, or a server whose
-        /// projection carries no counts.
+        /// Nothing: not this project's coordinator, a read that has not answered, a server whose
+        /// projection carries no counts — or a project that does not look finished.
         case none
-        /// "Why is this project not done?" — an OPEN, started project with criteria to be done
-        /// against, that the projection does not call done and nobody has asked to record
-        /// (`asksWhyNotDone`) — or, once Orbit has recorded it DONE itself, that card's terminal
-        /// state, "This project is done".
+        /// "Why is this project not done?" — an OPEN, started project that LOOKS finished (every
+        /// stated criterion met by its work, no task IN_PROGRESS) and that the projection does not
+        /// call done, which nobody has asked to record (`asksWhyNotDone`) — or, once Orbit has
+        /// recorded it DONE itself, that card's terminal state, "This project is done".
         case notDone
         /// "Is this project done?" — asked by the request named (nil when the owner is reminded
         /// without one) — or, once it is recorded, its receipt.
@@ -872,10 +895,14 @@ public enum ProjectDone {
         if subject.status == "DONE" {
             return subject.doneBy == .owner ? .done(requestID: nil) : .notDone
         }
-        // Asked why it is not done only of an OPEN project somebody started, with criteria to be
-        // done against, that the projection does not call done (`asksWhyNotDone`).
+        // Asked why it is not done only of a project that LOOKS finished and that the projection
+        // does not call done (`settlementHeldOnProject`, `asksWhyNotDone`): OPEN and started, every
+        // stated criterion met by its work, and no task IN_PROGRESS. "The work is not done yet" is
+        // not news — a card saying it under every unfinished project is what this is shaped to avoid.
+        let criteria = subject.derivedDone?.criteria ?? []
         guard subject.status == "OPEN", started == true, subject.derivedDone?.done != true,
-              !(subject.derivedDone?.criteria ?? []).isEmpty else { return .none }
+              !criteria.isEmpty, criteria.allSatisfy(\.satisfied),
+              (subject.tasksByStatus?["IN_PROGRESS"] ?? 0) == 0 else { return .none }
         return .notDone
     }
 
