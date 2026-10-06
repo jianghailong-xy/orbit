@@ -129,11 +129,6 @@ struct SettingsHomeView: View {
                 Text("Settings").font(.headline).opacity(headerScrolledAway ? 1 : 0)
             }
         }
-        .confirmationDialog(SettingsCopy.signOutTitle(instance: SettingsHome.instanceName(model.baseURL)),
-                            isPresented: $confirmingSignOut, titleVisibility: .visible) {
-            Button(SettingsCopy.signOut, role: .destructive) { model.logout() }
-            Button(SharePanelCopy.cancel, role: .cancel) {}
-        }
         .sheet(isPresented: $editingProfile) {
             ProfileEditSheet(name: model.user?.name ?? "")
         }
@@ -299,6 +294,14 @@ struct SettingsHomeView: View {
                 } icon: {
                     Image(systemName: "rectangle.portrait.and.arrow.right").foregroundStyle(Color.red)
                 }
+            }
+            // On the row, not on the `Form`: the system anchors the panel to the view this is declared
+            // on, and a `Form` covering the whole page put it at the top of the screen — over the
+            // header — while the row that asked for it sat at the bottom.
+            .confirmationDialog(SettingsCopy.signOutTitle(instance: SettingsHome.instanceName(model.baseURL)),
+                                isPresented: $confirmingSignOut, titleVisibility: .visible) {
+                Button(SettingsCopy.signOut, role: .destructive) { model.logout() }
+                Button(SharePanelCopy.cancel, role: .cancel) {}
             }
         } footer: {
             if let line = SettingsHome.versionLine(
