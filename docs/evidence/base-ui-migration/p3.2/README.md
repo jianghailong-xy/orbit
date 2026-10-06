@@ -116,7 +116,7 @@ P0.1 清单（[ownership.json](../ownership.json)、[css-ownership.json](../css-
 
 ## 试点对照结果
 
-记录运行（[checks](checks)，每项保存 argv、cwd、HEAD、未提交路径、源码哈希、退出码与完整输出）。最终代码为 `abb4c29e7`；中间提交上的记录运行保留为发现问题的过程（见下）。
+记录运行（[checks](checks)，每项保存 argv、cwd、HEAD、未提交路径、源码哈希、退出码与完整输出）。最终代码为 `abb4c29e7`；中间提交上的记录运行保留为发现问题的过程（见下）。[verify-claims.py](verify-claims.py) 按这些记录与对照文件逐条核对本文关于最终提交的结论（哪些运行在哪个提交上通过、请求与计算样式的差异范围、P0 失败只属 task 场景、审阅对话框与 OrbitKit 同 tip、choices 失败全是同一步）。
 
 | 检查 | 树 / 提交 | 结果 |
 | --- | --- | --- |
@@ -300,6 +300,7 @@ bash $R/final-runs.sh merge                  # 构建 + 全部 Web 单测
 bash $R/final-runs.sh measure                # 包体积、AntD 清单、同场景耗时
 bash $R/final-runs.sh measure-quiet N        # 同场景耗时：减少动态效果与默认动态效果各一轮
 bash $R/final-runs.sh bundle-composition     # 初始 JS 按来源包拆分
+python3 $R/verify-claims.py                 # 逐条核对本文结论，任何一条不成立即退出 1
 python3 $R/summarize-compare.py $R/pilot-compare-6.json
 python3 $R/diff-clusters.py expected.png actual.png out.png   # 单张截图的差异像素聚类与并排放大裁剪
 python3 $R/cost.py da13423d3 abb4c29e7
