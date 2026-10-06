@@ -29,6 +29,8 @@ import io.orbitd.android.auth.AuthViewModel
 import io.orbitd.android.core.BuildIdentity
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.reader.SessionReader
+import io.orbitd.android.wiki.WikiDestination
+import io.orbitd.android.watch.WatchDestination
 import io.orbitd.android.composer.NewSessionComposer
 import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.text.ReaderResources
@@ -185,6 +187,11 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.SEARCH -> SearchScreen(api, ::open)
                                 Destination.SESSION -> SessionReader(app, signedIn.handle, route, api, data, ::open)
                                 Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open)
+                                Destination.WIKI, Destination.WIKI_ENTRY, Destination.WIKI_BROWSE, Destination.WIKI_INDEX,
+                                Destination.WIKI_ARTICLE, Destination.WIKI_DOC, Destination.WIKI_REVIEW, Destination.WIKI_SETTINGS,
+                                Destination.WIKI_RUN, Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION ->
+                                    WikiDestination(app, signedIn.handle, route, revision, ::open)
+                                Destination.WATCH -> WatchDestination(app, signedIn.handle, route, revision, ::open)
                                 Destination.SETTINGS -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     AuthScreen(authState, authMessage, auth::login, auth::logout)
                                     Button(onClick = { open(OrbitRoute(Destination.BUILD)) }) { Text("Build information") }
@@ -207,7 +214,16 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.FOLDER -> data.folders.firstOrNull { ObjectId.same(it.id, route.id) }?.name ?: "Folder unavailable"
     Destination.SEARCH -> "Search sessions"
     Destination.DRAFT -> "New session"
-    Destination.WIKI_ENTRY -> "Wiki"
+    Destination.WIKI, Destination.WIKI_ENTRY -> "Wiki"
+    Destination.WIKI_BROWSE -> "Browse"
+    Destination.WIKI_INDEX -> "Index"
+    Destination.WIKI_ARTICLE -> "Article"
+    Destination.WIKI_DOC -> "Document"
+    Destination.WIKI_REVIEW -> "Review"
+    Destination.WIKI_SETTINGS -> "Wiki settings"
+    Destination.WIKI_RUN -> "Maintenance"
+    Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION -> "Wiki plan"
+    Destination.WATCH -> if (route.id == null) "Following" else "Watch"
     else -> route.destination.name.lowercase().replaceFirstChar(Char::uppercase)
 }
 

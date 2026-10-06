@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.cards.SessionCards
+import io.orbitd.android.watch.SessionWatches
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
@@ -190,6 +191,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     TextButton(onClick = { follow = true; model.latest() }) { Text("Jump to latest") }
                 }
                 }
+                SessionWatches(app, handle, route.id!!, open = open)
                 // Keep the composer and its activity-result launchers alive while card forms use the IME.
                 Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
                     focusRequest = composeFocus, inputFocusChanged = { composerFocused = it }) }
