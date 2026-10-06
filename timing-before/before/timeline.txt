@@ -1,0 +1,20 @@
+14:02:38.608 MARK p1-first tap
+14:02:42.967 MARK p1-first tap returned +4.35s
+14:02:44.233 p1-first arrival+0.56s header=Google 账号登录与开放注册, Project
+14:02:53.903 p1-first arrival+8.93s header=Google 账号登录与开放注册, Project · 5 sessions
+14:02:54.086 MARK p1-first read answered
+14:02:54.219 p1-first SUMMARY first-count=5 at arrival+8.93s at-arrival+1s=none final=5 reached=arrival+8.93s saw-0-sessions=no
+14:02:54.225 MARK p1-first polls-from
+14:03:14.244 MARK p1-first polls-to
+14:03:21.634 MARK p2-first tap
+14:03:23.670 MARK p2-first tap returned +2.04s
+14:03:24.900 p2-first arrival+0.30s header=Open-only probe project, Project
+14:03:39.773 p2-first arrival+15.85s header=Open-only probe project, Project · 2 sessions
+14:03:39.933 MARK p2-first read answered
+14:03:40.057 p2-first SUMMARY first-count=2 at arrival+15.85s at-arrival+1s=none final=2 reached=arrival+15.85s saw-0-sessions=no
+14:03:46.370 MARK p1-again tap
+14:03:47.893 MARK p1-again tap returned +1.52s
+14:03:48.531 p1-again arrival+0.21s header=Google 账号登录与开放注册, Project
+14:03:55.800 p1-again arrival+7.65s header=Google 账号登录与开放注册, Project · 5 sessions
+14:03:55.929 MARK p1-again read answered
+14:03:56.061 p1-again SUMMARY first-count=5 at arrival+7.65s at-arrival+1s=none final=5 reached=arrival+7.65s saw-0-sessions=no

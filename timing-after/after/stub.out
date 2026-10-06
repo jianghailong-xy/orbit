@@ -1,0 +1,30 @@
+stub listening on 127.0.0.1:8765 (python 3.14.7)
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 57238)
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/server.py", line 500, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/server.py", line 488, in handle_one_request
+    method()
+    ~~~~~~^^
+  File "/Users/runner/work/_temp/tree/.open-probe/stub.py", line 142, in do_GET
+    return self.send(200, rows)
+           ~~~~~~~~~^^^^^^^^^^^
+  File "/Users/runner/work/_temp/tree/.open-probe/stub.py", line 108, in send
+    self.wfile.write(data)
+    ~~~~~~~~~~~~~~~~^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py", line 845, in write
+    self._sock.sendall(b)
+    ~~~~~~~~~~~~~~~~~~^^^
+BrokenPipeError: [Errno 32] Broken pipe
+----------------------------------------

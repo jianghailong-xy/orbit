@@ -1,0 +1,125 @@
+13:52:30.225 "GET /api/agents HTTP/1.1" 200 -
+14:02:25.669 "GET /api/agents HTTP/1.1" 200 -
+14:02:25.718 "GET /api/projects/sidebar HTTP/1.1" 200 -
+14:02:25.612 "GET /api/agents HTTP/1.1" 200 -
+14:02:25.776 "GET /api/task-lists HTTP/1.1" 200 -
+14:02:25.797 "GET /api/projects HTTP/1.1" 200 -
+14:02:25.829 "GET /api/users/me HTTP/1.1" 404 -
+14:02:25.858 "GET /api/wiki/spaces HTTP/1.1" 404 -
+14:02:25.907 "GET /api/events HTTP/1.1" 404 -
+14:02:26.613 "GET /api/runners HTTP/1.1" 200 -
+14:02:27.011 "GET /api/providers HTTP/1.1" 200 -
+14:02:27.023 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 404 -
+14:02:27.076 "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+14:02:27.086 "GET /api/providers HTTP/1.1" 200 -
+14:02:27.244 "GET /api/providers/pools HTTP/1.1" 200 -
+14:02:27.314 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+14:02:27.354 "GET /api/providers/pools HTTP/1.1" 200 -
+14:02:27.360 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+14:02:27.367 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+14:02:27.430 "GET /api/watches HTTP/1.1" 200 -
+14:02:27.536 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+14:02:27.869 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+14:02:27.907 "GET /api/session-tags HTTP/1.1" 200 -
+14:02:28.841 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:02:28.861 "GET /api/session-folders HTTP/1.1" 200 -
+14:02:28.865 "GET /api/projects HTTP/1.1" 200 -
+14:02:28.870 "GET /api/projects/sidebar HTTP/1.1" 200 -
+14:02:28.875 "GET /api/projects/sidebar HTTP/1.1" 200 -
+14:02:28.884 "GET /api/projects HTTP/1.1" 200 -
+14:02:32.909 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:02:37.002 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:02:37.009 "GET /api/runners HTTP/1.1" 200 -
+14:02:41.222 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:02:43.507 "GET /api/projects/P1/integration HTTP/1.1" 404 -
+14:02:43.538 START "GET /api/sessions?view=completed&projectId=P1"
+14:02:43.617 START "GET /api/sessions?view=open&projectId=P1"
+14:02:45.577 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:02:45.591 "GET /api/projects HTTP/1.1" 200 -
+14:02:45.592 "GET /api/projects/sidebar HTTP/1.1" 200 -
+14:02:49.667 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:02:51.690 "GET /api/sessions?view=open&projectId=P1 HTTP/1.1" 200 -
+14:02:51.690 "GET /api/sessions?view=completed&projectId=P1 HTTP/1.1" 200 -
+14:02:51.699 "GET /api/projects/P1/promotions/current HTTP/1.1" 404 -
+14:02:53.621 "GET /api/projects/P1/promotions/merged HTTP/1.1" 404 -
+14:02:53.778 "GET /api/projects/sidebar HTTP/1.1" 200 -
+14:02:53.779 "GET /api/projects HTTP/1.1" 200 -
+14:02:53.780 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:02:53.788 "GET /api/runners HTTP/1.1" 200 -
+14:02:57.991 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:02:58.036 "GET /api/projects/P1/integration HTTP/1.1" 404 -
+14:02:58.036 START "GET /api/sessions?view=open&projectId=P1"
+14:02:58.036 START "GET /api/sessions?view=completed&projectId=P1"
+14:02:58.037 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+14:02:58.041 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+14:02:58.044 "GET /api/watches HTTP/1.1" 200 -
+14:02:58.050 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+14:03:02.185 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:03:02.222 "GET /api/projects HTTP/1.1" 200 -
+14:03:02.223 "GET /api/projects/sidebar HTTP/1.1" 200 -
+14:03:06.085 "GET /api/sessions?view=open&projectId=P1 HTTP/1.1" 200 -
+14:03:06.086 "GET /api/sessions?view=completed&projectId=P1 HTTP/1.1" 200 -
+14:03:06.120 "GET /api/projects/P1/promotions/current HTTP/1.1" 404 -
+14:03:06.163 "GET /api/projects/P1/promotions/merged HTTP/1.1" 404 -
+14:03:06.412 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:03:10.249 START "GET /api/sessions?view=open&projectId=P1"
+14:03:10.250 "GET /api/projects/P1/integration HTTP/1.1" 404 -
+14:03:10.253 START "GET /api/sessions?view=completed&projectId=P1"
+14:03:10.682 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:03:10.689 "GET /api/runners HTTP/1.1" 200 -
+14:03:15.166 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:03:15.276 "GET /api/session-tags HTTP/1.1" 200 -
+14:03:15.515 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:03:15.548 "GET /api/session-folders HTTP/1.1" 200 -
+14:03:15.552 "GET /api/projects/sidebar HTTP/1.1" 200 -
+14:03:15.552 "GET /api/projects HTTP/1.1" 200 -
+14:03:18.404 "GET /api/sessions?view=open&projectId=P1 HTTP/1.1" 200 -
+14:03:18.404 "GET /api/sessions?view=completed&projectId=P1 HTTP/1.1" 200 -
+14:03:18.413 "GET /api/projects/P1/promotions/current HTTP/1.1" 404 -
+14:03:18.424 "GET /api/projects/P1/promotions/merged HTTP/1.1" 404 -
+14:03:19.702 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:03:19.776 "GET /api/projects HTTP/1.1" 200 -
+14:03:19.776 "GET /api/projects/sidebar HTTP/1.1" 200 -
+14:03:22.890 "GET /api/projects/P2/integration HTTP/1.1" 404 -
+14:03:22.896 START "GET /api/sessions?view=open&projectId=P2"
+14:03:22.896 START "GET /api/sessions?view=completed&projectId=P2"
+14:03:23.996 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:03:28.035 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:03:28.046 "GET /api/runners HTTP/1.1" 200 -
+14:03:28.052 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+14:03:28.056 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+14:03:28.068 "GET /api/watches HTTP/1.1" 200 -
+14:03:28.089 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+14:03:30.960 "GET /api/sessions?view=open&projectId=P2 HTTP/1.1" 200 -
+14:03:31.110 "GET /api/sessions?view=completed&projectId=P2 HTTP/1.1" 200 -
+14:03:31.123 START "GET /api/sessions?view=archived&projectId=P2"
+14:03:32.186 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:03:36.341 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:03:36.349 "GET /api/projects/sidebar HTTP/1.1" 200 -
+14:03:36.350 "GET /api/projects HTTP/1.1" 200 -
+14:03:39.199 "GET /api/sessions?view=archived&projectId=P2 HTTP/1.1" 200 -
+14:03:39.220 "GET /api/projects/P2/promotions/current HTTP/1.1" 404 -
+14:03:39.288 "GET /api/projects/P2/promotions/merged HTTP/1.1" 404 -
+14:03:39.304 "GET /api/projects/sidebar HTTP/1.1" 200 -
+14:03:39.309 "GET /api/projects HTTP/1.1" 200 -
+14:03:40.404 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:03:40.590 "GET /api/session-tags HTTP/1.1" 200 -
+14:03:40.736 "GET /api/session-folders HTTP/1.1" 200 -
+14:03:40.739 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:03:40.761 "GET /api/projects/sidebar HTTP/1.1" 200 -
+14:03:40.762 "GET /api/projects HTTP/1.1" 200 -
+14:03:44.456 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:03:44.461 "GET /api/runners HTTP/1.1" 200 -
+14:03:46.963 START "GET /api/sessions?view=open&projectId=P1"
+14:03:47.082 "GET /api/projects/P1/integration HTTP/1.1" 404 -
+14:03:47.085 START "GET /api/sessions?view=completed&projectId=P1"
+14:03:48.530 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:03:52.599 "GET /api/sessions?view=open HTTP/1.1" 200 -
+14:03:52.617 "GET /api/projects HTTP/1.1" 200 -
+14:03:52.617 "GET /api/projects/sidebar HTTP/1.1" 200 -
+14:03:55.113 "GET /api/sessions?view=open&projectId=P1 HTTP/1.1" 200 -
+14:03:55.302 "GET /api/sessions?view=completed&projectId=P1 HTTP/1.1" 200 -
+14:03:55.311 "GET /api/projects/P1/promotions/current HTTP/1.1" 404 -
+14:03:55.375 "GET /api/projects/P1/promotions/merged HTTP/1.1" 404 -
+14:03:55.388 "GET /api/projects HTTP/1.1" 200 -
+14:03:55.389 "GET /api/projects/sidebar HTTP/1.1" 200 -

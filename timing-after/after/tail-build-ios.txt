@@ -1,0 +1,300 @@
+2026-10-06 14:03:54.256 appintentsnltrainingprocessor[17340:52155] Parsing options for appintentsnltrainingprocessor
+2026-10-06 14:03:54.257 appintentsnltrainingprocessor[17340:52155] Starting AppIntents SSU YAML Generation
+2026-10-06 14:03:54.271 appintentsnltrainingprocessor[17340:52155] No AppShortcuts found - Skipping.
+
+CodeSign /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbe.app/SwipeProbe.debug.dylib (in target 'SwipeProbe' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbe.app/SwipeProbe.debug.dylib
+
+CodeSign /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbe.app/__preview.dylib (in target 'SwipeProbe' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbe.app/__preview.dylib
+
+CodeSign /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbe.app (in target 'SwipeProbe' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbe.app
+
+RegisterExecutionPolicyException /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbe.app (in target 'SwipeProbe' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbe.app
+
+Validate /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbe.app (in target 'SwipeProbe' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    builtin-validationUtility /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbe.app -shallow-bundle -infoplist-subpath Info.plist
+
+Touch /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbe.app (in target 'SwipeProbe' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    /usr/bin/touch -c /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbe.app
+
+ProcessInfoPlistFile /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest/Info.plist /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Intermediates.noindex/SwipeProbe.build/Debug-iphonesimulator/SwipeProbeUITests.build/empty-SwipeProbeUITests.plist (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    builtin-infoPlistUtility /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Intermediates.noindex/SwipeProbe.build/Debug-iphonesimulator/SwipeProbeUITests.build/empty-SwipeProbeUITests.plist -producttype com.apple.product-type.bundle.ui-testing -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Intermediates.noindex/SwipeProbe.build/Debug-iphonesimulator/SwipeProbeUITests.build/ProductTypeInfoPlistAdditions.plist -o /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest/Info.plist
+
+Ld /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest/SwipeProbeUITests normal (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios17.0-simulator -bundle -isysroot /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -O0 -L/Users/runner/work/_temp/tree/.open-probe/.dd/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -L/Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator -L/Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F/Users/runner/work/_temp/tree/.open-probe/.dd/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator -iframework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -iframework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/Developer/Library/Frameworks -filelist /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Intermediates.noindex/SwipeProbe.build/Debug-iphonesimulator/SwipeProbeUITests.build/Objects-normal/arm64/SwipeProbeUITests.LinkFileList -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @loader_path/Frameworks -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Intermediates.noindex/SwipeProbe.build/Debug-iphonesimulator/SwipeProbeUITests.build/Objects-normal/arm64/SwipeProbeUITests_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Intermediates.noindex/SwipeProbe.build/Debug-iphonesimulator/SwipeProbeUITests.build/Objects-normal/arm64/SwipeProbeUITests_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Intermediates.noindex/SwipeProbe.build/Debug-iphonesimulator/SwipeProbeUITests.build/Objects-normal/arm64/SwipeProbeUITests.swiftmodule @/Users/runner/work/_temp/tree/.open-probe/.dd/Build/Intermediates.noindex/SwipeProbe.build/Debug-iphonesimulator/SwipeProbeUITests.build/Objects-normal/arm64/SwipeProbeUITests-linker-args.resp -Xlinker -needed_framework -Xlinker XCTest -framework XCTest -Xlinker -needed-lXCTestSwiftSupport -lXCTestSwiftSupport -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __entitlements -Xlinker /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Intermediates.noindex/SwipeProbe.build/Debug-iphonesimulator/SwipeProbeUITests.build/SwipeProbeUITests.xctest-Simulated.xcent -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __ents_der -Xlinker /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Intermediates.noindex/SwipeProbe.build/Debug-iphonesimulator/SwipeProbeUITests.build/SwipeProbeUITests.xctest-Simulated.xcent.der -Xlinker -no_adhoc_codesign -o /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest/SwipeProbeUITests
+
+ExtractAppIntentsMetadata (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.P8Y4D9/Metal.xctoolchain --module-name SwipeProbeUITests --sdk-root /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk --xcode-version 17F113 --platform-family iOS --deployment-target 17.0 --bundle-identifier io.orbitd.swipeprobe.uitests --output /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest --target-triple arm64-apple-ios17.0-simulator --binary-file /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest/SwipeProbeUITests --dependency-file /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Intermediates.noindex/SwipeProbe.build/Debug-iphonesimulator/SwipeProbeUITests.build/Objects-normal/arm64/SwipeProbeUITests_dependency_info.dat --stringsdata-file /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Intermediates.noindex/SwipeProbe.build/Debug-iphonesimulator/SwipeProbeUITests.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Intermediates.noindex/SwipeProbe.build/Debug-iphonesimulator/SwipeProbeUITests.build/Objects-normal/arm64/SwipeProbeUITests.SwiftFileList --metadata-file-list /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Intermediates.noindex/SwipeProbe.build/Debug-iphonesimulator/SwipeProbeUITests.build/SwipeProbeUITests.DependencyMetadataFileList --static-metadata-file-list /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Intermediates.noindex/SwipeProbe.build/Debug-iphonesimulator/SwipeProbeUITests.build/SwipeProbeUITests.DependencyStaticMetadataFileList --swift-const-vals-list /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Intermediates.noindex/SwipeProbe.build/Debug-iphonesimulator/SwipeProbeUITests.build/Objects-normal/arm64/SwipeProbeUITests.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-10-06 14:03:58.519 appintentsmetadataprocessor[17627:52819] Starting appintentsmetadataprocessor export
+2026-10-06 14:03:58.522 appintentsmetadataprocessor[17627:52819] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+CopySwiftLibs /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest/SwipeProbeUITests --scan-folder /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest/Frameworks --scan-folder /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest/PlugIns --scan-folder /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest/SystemExtensions --scan-folder /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.P8Y4D9/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest/Frameworks --strip-bitcode --scan-executable /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Intermediates.noindex/SwipeProbe.build/Debug-iphonesimulator/SwipeProbeUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+
+AppIntentsSSUTraining (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest/Info.plist --temp-dir-path /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Intermediates.noindex/SwipeProbe.build/Debug-iphonesimulator/SwipeProbeUITests.build/ssu --bundle-id io.orbitd.swipeprobe.uitests --product-path /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest --extracted-metadata-path /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest/Metadata.appintents --metadata-file-list /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Intermediates.noindex/SwipeProbe.build/Debug-iphonesimulator/SwipeProbeUITests.build/SwipeProbeUITests.DependencyMetadataFileList --source-file /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest/Info.plist --archive-ssu-assets
+2026-10-06 14:03:58.741 appintentsnltrainingprocessor[17649:52867] Parsing options for appintentsnltrainingprocessor
+2026-10-06 14:03:58.741 appintentsnltrainingprocessor[17649:52867] Starting AppIntents SSU YAML Generation
+2026-10-06 14:03:58.742 appintentsnltrainingprocessor[17649:52867] No AppShortcuts found - Skipping.
+
+MkDir /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    /bin/mkdir -p /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app
+
+CopyAndPreserveArchs /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/SwipeProbeUITests-Runner (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/lipo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/XCTRunner -output /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/SwipeProbeUITests-Runner -extract arm64
+
+CopyPlistFile /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Info.plist /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Info.plist (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    builtin-copyPlist --validate --convert xml1 --macro-expansion WRAPPEDPRODUCTNAME SwipeProbeUITests-Runner --macro-expansion WRAPPEDPRODUCTBUNDLEIDENTIFIER io.orbitd.swipeprobe.uitests.xctrunner --macro-expansion TESTPRODUCTNAME SwipeProbeUITests --macro-expansion TESTPRODUCTBUNDLEIDENTIFIER io.orbitd.swipeprobe.uitests --copy-value UIDeviceFamily /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest/Info.plist --outdir /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app -- /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Info.plist
+
+Copy /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PkgInfo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/PkgInfo (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/PkgInfo /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app
+
+Copy /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks/libXCTestSwiftSupport.dylib /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks/XCUnit.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks/XCUIAutomation.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks/XCTestSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks/XCTestCore.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks/XCTest.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks/XCTAutomationSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks/Testing.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks
+
+CodeSign /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest
+
+CodeSign /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app
+/Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app: replacing existing signature
+
+RegisterExecutionPolicyException /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest
+
+Touch /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    /usr/bin/touch -c /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest
+
+2026-10-06 14:04:40.837451+0000 SwipeProbeUITests-Runner[18944:56308] [Default] Running tests...
+2026-10-06 14:04:40.987291+0000 SwipeProbeUITests-Runner[18944:57808] [General] Failed to send CA Event for app launch measurements for ca_event_type: 0 event_name: com.apple.app_launch_measurement.FirstFramePresentationMetric
+2026-10-06 14:04:41.029721+0000 SwipeProbeUITests-Runner[18944:57808] [General] Failed to send CA Event for app launch measurements for ca_event_type: 1 event_name: com.apple.app_launch_measurement.ExtendedLaunchMetrics
+objc[18944]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x107118310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x102efc398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'All tests' started at 2026-10-06 14:04:49.704.
+Test Suite 'SwipeProbeUITests.xctest' started at 2026-10-06 14:04:49.705.
+Test Suite 'ProjectPageOpenTimingTests' started at 2026-10-06 14:04:49.706.
+Test Case '-[SwipeProbeUITests.ProjectPageOpenTimingTests testOpeningTheProjectPage]' started.
+    t =     0.00s Start Test at 2026-10-06 14:04:49.707
+    t =     1.06s Set Up
+    t =     1.07s Open io.orbitd.swipeprobe
+    t =     1.07s     Launch io.orbitd.swipeprobe
+2026-10-06 14:04:52.191 xcodebuild[3809:16854] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 14:04:52.192 xcodebuild[3809:16854] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    48.68s         Setting up automation session
+    t =    51.19s         Wait for io.orbitd.swipeprobe to idle
+    t =    56.50s Waiting 60.0s for Any (First Match) to exist
+    t =    57.57s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    57.57s         Checking existence of `Any (First Match)`
+    t =    58.33s         Capturing element debug description
+    t =    58.53s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    58.53s         Checking existence of `Any (First Match)`
+    t =    60.06s Waiting 20.0s for Any (First Match) to exist
+    t =    61.10s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    61.11s         Checking existence of `Any (First Match)`
+    t =    83.89s Added attachment named '00-list'
+    t =    83.89s Waiting 20.0s for Any (First Match) to exist
+    t =    84.96s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    84.96s         Checking existence of `Any (First Match)`
+    t =    85.76s Tap Any (First Match)
+    t =    85.76s     Wait for io.orbitd.swipeprobe to idle
+    t =    85.76s     Find the Any (First Match)
+    t =    86.01s     Check for interrupting elements affecting "Google 账号登录与开放注册, 15m ago, 2/4, Watching the members." Button
+    t =    97.29s     Synthesize event
+    t =    98.53s     Wait for io.orbitd.swipeprobe to idle
+    t =    99.93s Added attachment named 'p1-first-arrival'
+    t =    99.94s Checking existence of `Any (First Match)`
+    t =   100.17s Find the Any (First Match)
+    t =   100.31s Checking existence of `"No sessions" StaticText`
+    t =   100.91s Added attachment named 'p1-first-first-count'
+    t =   101.12s Checking existence of `Any (First Match)`
+    t =   101.25s Find the Any (First Match)
+    t =   101.31s Checking existence of `"No sessions" StaticText`
+    t =   101.61s Added attachment named 'p1-first-arrival+1s'
+    t =   101.82s Checking existence of `Any (First Match)`
+    t =   101.89s Find the Any (First Match)
+    t =   101.97s Checking existence of `"No sessions" StaticText`
+    t =   102.31s Checking existence of `Any (First Match)`
+    t =   102.38s Find the Any (First Match)
+    t =   102.46s Checking existence of `"No sessions" StaticText`
+    t =   102.75s Checking existence of `Any (First Match)`
+    t =   102.83s Find the Any (First Match)
+    t =   102.89s Checking existence of `"No sessions" StaticText`
+    t =   103.18s Checking existence of `Any (First Match)`
+    t =   103.24s Find the Any (First Match)
+    t =   103.29s Checking existence of `"No sessions" StaticText`
+    t =   103.61s Checking existence of `Any (First Match)`
+    t =   103.71s Find the Any (First Match)
+    t =   103.79s Checking existence of `"No sessions" StaticText`
+    t =   104.10s Checking existence of `Any (First Match)`
+    t =   104.19s Find the Any (First Match)
+    t =   104.24s Checking existence of `"No sessions" StaticText`
+    t =   104.60s Checking existence of `Any (First Match)`
+    t =   104.71s Find the Any (First Match)
+    t =   104.80s Checking existence of `"No sessions" StaticText`
+    t =   105.13s Checking existence of `Any (First Match)`
+    t =   105.26s Find the Any (First Match)
+    t =   105.35s Checking existence of `"No sessions" StaticText`
+    t =   105.63s Checking existence of `Any (First Match)`
+    t =   105.72s Find the Any (First Match)
+    t =   105.82s Checking existence of `"No sessions" StaticText`
+    t =   106.12s Checking existence of `Any (First Match)`
+    t =   106.17s Find the Any (First Match)
+    t =   106.23s Checking existence of `"No sessions" StaticText`
+    t =   106.51s Checking existence of `Any (First Match)`
+    t =   106.59s Find the Any (First Match)
+    t =   106.65s Checking existence of `"No sessions" StaticText`
+    t =   106.94s Checking existence of `Any (First Match)`
+    t =   107.01s Find the Any (First Match)
+    t =   107.09s Checking existence of `"No sessions" StaticText`
+    t =   107.41s Checking existence of `Any (First Match)`
+    t =   107.51s Find the Any (First Match)
+    t =   107.60s Checking existence of `"No sessions" StaticText`
+    t =   107.93s Checking existence of `Any (First Match)`
+    t =   108.01s Find the Any (First Match)
+    t =   108.11s Checking existence of `"No sessions" StaticText`
+    t =   117.40s Checking existence of `Any (First Match)`
+    t =   117.53s Find the Any (First Match)
+    t =   117.59s Checking existence of `"No sessions" StaticText`
+    t =   117.89s Added attachment named 'p1-first-final'
+    t =   138.15s Added attachment named 'p1-first-after-polls'
+    t =   138.16s Checking existence of `"BackButton" Button`
+    t =   138.80s Tap "BackButton" Button
+    t =   138.80s     Wait for io.orbitd.swipeprobe to idle
+    t =   138.80s     Find the "BackButton" Button
+    t =   139.51s     Check for interrupting elements affecting "BackButton" Button
+    t =   139.89s     Synthesize event
+    t =   140.30s     Wait for io.orbitd.swipeprobe to idle
+    t =   141.62s Waiting 10.0s for Any (First Match) to exist
+    t =   142.64s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   142.64s         Checking existence of `Any (First Match)`
+    t =   151.93s         Capturing element debug description
+    t =   151.94s     Checking existence of `Any (First Match)`
+    t =   157.05s Waiting 20.0s for Any (First Match) to exist
+    t =   158.06s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   158.06s         Checking existence of `Any (First Match)`
+    t =   160.21s Tap Any (First Match)
+    t =   160.21s     Wait for io.orbitd.swipeprobe to idle
+    t =   160.21s     Find the Any (First Match)
+    t =   160.69s     Check for interrupting elements affecting "Open-only probe project, 21m ago, 0/2, Nothing completed yet." Button
+    t =   160.89s     Synthesize event
+    t =   161.20s     Wait for io.orbitd.swipeprobe to idle
+    t =   162.59s Added attachment named 'p2-first-arrival'
+    t =   162.59s Checking existence of `Any (First Match)`
+    t =   163.13s Find the Any (First Match)
+    t =   163.25s Checking existence of `"No sessions" StaticText`
+    t =   163.61s Added attachment named 'p2-first-first-count'
+    t =   163.81s Checking existence of `Any (First Match)`
+    t =   163.96s Find the Any (First Match)
+    t =   164.10s Checking existence of `"No sessions" StaticText`
+    t =   164.43s Added attachment named 'p2-first-arrival+1s'
+    t =   164.61s Added attachment named 'p2-first-final'
+    t =   164.61s Checking existence of `"BackButton" Button`
+    t =   164.73s Tap "BackButton" Button
+    t =   164.73s     Wait for io.orbitd.swipeprobe to idle
+    t =   164.73s     Find the "BackButton" Button
+    t =   164.85s     Check for interrupting elements affecting "BackButton" Button
+    t =   165.05s     Synthesize event
+    t =   165.39s     Wait for io.orbitd.swipeprobe to idle
+    t =   166.58s Waiting 10.0s for Any (First Match) to exist
+    t =   167.63s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   167.64s         Checking existence of `Any (First Match)`
+    t =   170.32s Waiting 20.0s for Any (First Match) to exist
+    t =   171.34s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   171.34s         Checking existence of `Any (First Match)`
+    t =   172.27s Tap Any (First Match)
+    t =   172.27s     Wait for io.orbitd.swipeprobe to idle
+    t =   172.28s     Find the Any (First Match)
+    t =   172.91s     Check for interrupting elements affecting "Google 账号登录与开放注册, 16m ago, 2/4, Watching the members." Button
+    t =   173.41s     Synthesize event
+    t =   174.11s     Wait for io.orbitd.swipeprobe to idle
+    t =   177.79s Added attachment named 'p1-again-arrival'
+    t =   177.79s Checking existence of `Any (First Match)`
+    t =   177.91s Find the Any (First Match)
+    t =   178.06s Checking existence of `"No sessions" StaticText`
+    t =   178.50s Added attachment named 'p1-again-first-count'
+    t =   178.68s Added attachment named 'p1-again-arrival+1s'
+    t =   178.89s Added attachment named 'p1-again-final'
+    t =   178.90s Tear Down
+Test Case '-[SwipeProbeUITests.ProjectPageOpenTimingTests testOpeningTheProjectPage]' passed (181.198 seconds).
+Test Suite 'ProjectPageOpenTimingTests' passed at 2026-10-06 14:07:50.906.
+	 Executed 1 test, with 0 failures (0 unexpected) in 181.198 (181.200) seconds
+Test Suite 'SwipeProbeUITests.xctest' passed at 2026-10-06 14:07:50.907.
+	 Executed 1 test, with 0 failures (0 unexpected) in 181.198 (181.202) seconds
+Test Suite 'All tests' passed at 2026-10-06 14:07:50.907.
+	 Executed 1 test, with 0 failures (0 unexpected) in 181.198 (181.203) seconds
+2026-10-06 14:09:03.662 xcodebuild[3809:16854] [MT] IDETestOperationsObserverDebug: 302.829 elapsed -- Testing started completed.
+2026-10-06 14:09:03.664 xcodebuild[3809:16854] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-06 14:09:03.664 xcodebuild[3809:16854] [MT] IDETestOperationsObserverDebug: 302.829 sec, +302.829 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/_temp/tree/.open-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

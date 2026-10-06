@@ -1,0 +1,6 @@
+Test Case '-[SwipeProbeUITests.ProjectPageOpenTimingTests testOpeningTheProjectPage]' started.
+Test Case '-[SwipeProbeUITests.ProjectPageOpenTimingTests testOpeningTheProjectPage]' passed (181.198 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 181.198 (181.200) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 181.198 (181.202) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 181.198 (181.203) seconds
+** TEST SUCCEEDED **

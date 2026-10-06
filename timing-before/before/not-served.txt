@@ -1,0 +1,10 @@
+   4 "GET /api/projects/P1/promotions/merged HTTP/1.1" 404 -
+   4 "GET /api/projects/P1/promotions/current HTTP/1.1" 404 -
+   4 "GET /api/projects/P1/integration HTTP/1.1" 404 -
+   1 "GET /api/wiki/spaces HTTP/1.1" 404 -
+   1 "GET /api/users/me HTTP/1.1" 404 -
+   1 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 404 -
+   1 "GET /api/projects/P2/promotions/merged HTTP/1.1" 404 -
+   1 "GET /api/projects/P2/promotions/current HTTP/1.1" 404 -
+   1 "GET /api/projects/P2/integration HTTP/1.1" 404 -
+   1 "GET /api/events HTTP/1.1" 404 -

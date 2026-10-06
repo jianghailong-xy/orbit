@@ -1,0 +1,33 @@
+==> stub ready after 2s
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B (iPhone 17 Pro com.apple.CoreSimulator.SimRuntime.iOS-26-5)
+Test Case '-[SwipeProbeUITests.ProjectPageOpenTimingTests testOpeningTheProjectPage]' started.
+Test Case '-[SwipeProbeUITests.ProjectPageOpenTimingTests testOpeningTheProjectPage]' passed (181.198 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 181.198 (181.200) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 181.198 (181.202) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 181.198 (181.203) seconds
+** TEST SUCCEEDED **
+/Users/runner/work/_temp/tree/.open-probe/run.sh: line 46:  1900 Terminated: 15          python3 -u stub.py 8765 "$OUT/requests.log" > "$OUT/stub.out" 2>&1
+total 4704
+drwxr-xr-x  23 runner  staff     736 Oct  6 14:09 .
+drwxr-xr-x  13 runner  staff     416 Oct  6 13:55 ..
+-rw-r--r--   1 runner  staff  161487 Oct  6 14:06 00-list.png
+drwxr-xr-x  18 runner  staff     576 Oct  6 14:09 attachments
+-rw-r--r--   1 runner  staff     567 Oct  6 14:09 not-served.txt
+-rw-r--r--   1 runner  staff  187259 Oct  6 14:07 p1-again-arrival.png
+-rw-r--r--   1 runner  staff  187259 Oct  6 14:07 p1-again-arrival+1s.png
+-rw-r--r--   1 runner  staff  187259 Oct  6 14:07 p1-again-final.png
+-rw-r--r--   1 runner  staff  187259 Oct  6 14:07 p1-again-first-count.png
+-rw-r--r--   1 runner  staff  187172 Oct  6 14:07 p1-first-after-polls.png
+-rw-r--r--   1 runner  staff  178348 Oct  6 14:06 p1-first-arrival.png
+-rw-r--r--   1 runner  staff  165779 Oct  6 14:06 p1-first-arrival+1s.png
+-rw-r--r--   1 runner  staff  187658 Oct  6 14:06 p1-first-final.png
+-rw-r--r--   1 runner  staff  169696 Oct  6 14:06 p1-first-first-count.png
+-rw-r--r--   1 runner  staff  142067 Oct  6 14:07 p2-first-arrival.png
+-rw-r--r--   1 runner  staff  138755 Oct  6 14:07 p2-first-arrival+1s.png
+-rw-r--r--   1 runner  staff  138755 Oct  6 14:07 p2-first-final.png
+-rw-r--r--   1 runner  staff  138755 Oct  6 14:07 p2-first-first-count.png
+-rw-r--r--   1 runner  staff    8688 Oct  6 14:07 requests.log
+-rw-r--r--   1 runner  staff      58 Oct  6 13:52 simulator.txt
+-rw-r--r--   1 runner  staff    1841 Oct  6 14:07 stub.out
+-rw-r--r--@  1 runner  staff    1201 Oct  6 14:07 timeline.txt
+-rw-r--r--   1 runner  staff      41 Oct  6 13:52 tree-sha.txt
