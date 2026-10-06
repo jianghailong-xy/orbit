@@ -666,36 +666,24 @@ public struct TranscriptReducer: Sendable, Codable {
                 // The server's kind, so a reopened console can still tell the message waiting for
                 // its turn from the one being written into the turn in progress.
                 bubble.steer = SteerDelivery.isSteerKind(turn.kind)
-                // The card the projection carried, when this row IS an exception item's delivery:
-                // the console draws it for a delivery the moment it is queued, and without this the
-                // tail would draw the paragraph written for the agent as a message the reader sent
-                // (web parity: the queue tail reads `q.openItemDelivery`).
-                bubble.itemCard = turn.itemCard
-                // And the card a project start is, on the same terms (web parity: `q.projectStarted`).
-                bubble.startedCard = turn.startedCard
-                // And who sent it, when it is another session's message: drawn "From [that session]"
-                // while it waits, and never handed back to the composer (web parity: `q.sessionMessage`).
-                bubble.sessionMessage = turn.senderCard
-                // And the outcomes a reply turn hands back, as the reply cards its echo will be
-                // (web parity: `q.sessionReplies`).
-                bubble.sessionReplies = turn.replyCards
-                // And a confirmation review's two turns, as the cards their echoes will be.
-                bubble.reviewRequest = turn.reviewRequestCard
-                bubble.reviewReturn = turn.reviewReturnCard
+                // Every card the projection carried — an exception item's delivery, a run's brief, a
+                // project's start, another session's message, the outcomes a reply hands back, a
+                // confirmation review's two turns: the console draws the card the moment the turn is
+                // queued, the one its echo will be drawn as, where without it the tail would draw
+                // words written for the agent as a message the reader sent (web parity: the queue
+                // tail reads `q.openItemDelivery`, `q.sessionMessage` …). One value for both rows
+                // here, so a card cannot reach one and miss the other.
+                bubble.cards = turn.cards
                 bubble.authoredByOrbit = turn.authoredByOrbit == true
                 reconciled.append(bubble)
             } else {
-                reconciled.append(UserBubble(id: "server-\(turn.turnId)", text: turn.content,
-                                             attachments: incomingAttachments ?? [], turnId: turn.turnId,
-                                             pending: true, queued: true,
-                                             steer: SteerDelivery.isSteerKind(turn.kind),
-                                             itemCard: turn.itemCard,
-                                             startedCard: turn.startedCard,
-                                             sessionMessage: turn.senderCard,
-                                             sessionReplies: turn.replyCards,
-                                             authoredByOrbit: turn.authoredByOrbit == true,
-                                             reviewRequest: turn.reviewRequestCard,
-                                             reviewReturn: turn.reviewReturnCard))
+                var bubble = UserBubble(id: "server-\(turn.turnId)", text: turn.content,
+                                        attachments: incomingAttachments ?? [], turnId: turn.turnId,
+                                        pending: true, queued: true,
+                                        steer: SteerDelivery.isSteerKind(turn.kind),
+                                        authoredByOrbit: turn.authoredByOrbit == true)
+                bubble.cards = turn.cards
+                reconciled.append(bubble)
             }
         }
 

@@ -831,9 +831,9 @@ final class AppModel {
         }
         #endif
         #if os(macOS)
-        // Frozen-runner upkeep: a Sparkle app update ships a newer bundled runner than the installed
-        // ~/.orbit/bin copy (its network self-update is off), so re-sync it once at launch.
-        Task { await runnerControl?.syncBundledRunner() }
+        // A Mac an older app enrolled runs a LaunchAgent that keeps its runner from updating
+        // itself; rewrite it once, at launch.
+        Task { await runnerControl?.migrateLaunchAgent() }
         #endif
     }
 

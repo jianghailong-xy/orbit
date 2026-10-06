@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { PutShareLinkDto, TurnOffShareLinksDto } from './dto';
@@ -23,6 +24,7 @@ import { ShareLinksService } from './share-links.service';
  * account's object, or link, is not found. The public side is SharedController.
  */
 @UseGuards(JwtAuthGuard)
+@PatForbidden('SHARE_LINK')
 @Controller()
 export class ShareLinksController {
   constructor(private readonly links: ShareLinksService) {}

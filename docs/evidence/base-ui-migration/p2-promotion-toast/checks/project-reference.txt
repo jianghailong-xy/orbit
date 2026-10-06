@@ -1,0 +1,47 @@
+[WebServer] (node:370367) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 24 tests using 1 worker
+
+(node:370451) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Dialog with unchanged appearance (1.6s)
+  ✓   2 [chromium-light-desktop] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Drawer with unchanged appearance (1.1s)
+  ✓   3 [chromium-light-desktop] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance (1.1s)
+(node:370633) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   4 [chromium-light-phone] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Dialog with unchanged appearance (1.0s)
+  ✓   5 [chromium-light-phone] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Drawer with unchanged appearance (1.0s)
+  ✓   6 [chromium-light-phone] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance (997ms)
+(node:370802) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   7 [chromium-dark-desktop] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Dialog with unchanged appearance (1.2s)
+  ✓   8 [chromium-dark-desktop] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Drawer with unchanged appearance (1.1s)
+  ✓   9 [chromium-dark-desktop] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance (1.1s)
+(node:371682) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  10 [chromium-dark-phone] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Dialog with unchanged appearance (1.1s)
+  ✓  11 [chromium-dark-phone] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Drawer with unchanged appearance (1.1s)
+  ✓  12 [chromium-dark-phone] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance (1.0s)
+(node:372524) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  13 [webkit-light-desktop] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Dialog with unchanged appearance (958ms)
+  ✓  14 [webkit-light-desktop] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Drawer with unchanged appearance (905ms)
+  ✓  15 [webkit-light-desktop] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance (841ms)
+(node:373351) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  16 [webkit-light-phone] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Dialog with unchanged appearance (884ms)
+  ✓  17 [webkit-light-phone] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Drawer with unchanged appearance (833ms)
+  ✓  18 [webkit-light-phone] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance (810ms)
+(node:373979) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  19 [webkit-dark-desktop] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Dialog with unchanged appearance (903ms)
+  ✓  20 [webkit-dark-desktop] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Drawer with unchanged appearance (854ms)
+  ✓  21 [webkit-dark-desktop] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance (868ms)
+(node:374396) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  22 [webkit-dark-phone] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Dialog with unchanged appearance (853ms)
+  ✓  23 [webkit-dark-phone] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Drawer with unchanged appearance (835ms)
+  ✓  24 [webkit-dark-phone] › ../../../../tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.browser.mjs:43:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance (808ms)
+
+  24 passed (27.2s)

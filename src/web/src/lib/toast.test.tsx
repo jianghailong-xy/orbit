@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastViewport } from '../components/ToastViewport';
 import { useToast } from './toast';
-import { clearToasts, showToast } from './toastStore';
+import { clearToasts, closeToast, showToast } from './toastStore';
 
 /**
  * Every toast says what happened to what, and what it asks of you decides its shape
@@ -22,6 +22,8 @@ let root: Root;
 
 beforeEach(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  // Layout is covered in real browsers; jsdom has no ResizeObserver.
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -45,6 +47,7 @@ afterEach(async () => {
   });
   container.remove();
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 const viewport = (): HTMLElement | null => document.querySelector('.toast-viewport');
@@ -137,6 +140,36 @@ describe('a toast says what happened to what', () => {
 });
 
 describe('a session result', () => {
+  it('keeps failures from different events and entities independently dismissible', async () => {
+    await act(async () => {
+      for (const [sessionId, event, headline] of [
+        [SESSION, 'merge', 'First merge failed'],
+        ['0196b000-0000-7000-8000-000000000002', 'merge', 'Second merge failed'],
+        [SESSION, 'commit', 'Commit failed'],
+      ]) toast.sessionNotice({ sessionId, sessionTitle: 'Workspace', event, headline, tone: 'error' });
+    });
+    await act(async () => { document.querySelector<HTMLButtonElement>('.toast-more')!.click(); });
+    expect(toasts().map((one) => one.querySelector('.toast-head')?.textContent)).toEqual([
+      'Commit failed', 'Second merge failed', 'First merge failed',
+    ]);
+    await act(async () => { toasts()[1].querySelector<HTMLButtonElement>('button[aria-label="Dismiss"]')!.click(); });
+    expect(toasts().map((one) => one.querySelector('.toast-head')?.textContent)).toEqual(['Commit failed', 'First merge failed']);
+  });
+
+  it('does not turn selecting diagnostic text into a session navigation', async () => {
+    await act(async () => {
+      toast.sessionNotice({ sessionId: SESSION, sessionTitle: 'Workspace', event: 'commit', headline: 'Changes committed', detail: '1 file changed' });
+    });
+    const detail = document.querySelector('.toast-detail')!;
+    const range = document.createRange();
+    range.selectNodeContents(detail);
+    window.getSelection()!.addRange(range);
+    await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label="Open Workspace"]')!.click(); });
+    expect(document.querySelector('.where')?.textContent).toBe('home');
+    expect(detail.textContent).toBe('1 file changed');
+    window.getSelection()!.removeAllRanges();
+  });
+
   it('carries Undo as a card, and opens its session from the copy', async () => {
     const onUndo = vi.fn();
     await act(async () => {
@@ -209,6 +242,25 @@ describe('a session result', () => {
 });
 
 describe('a toast leaving', () => {
+  it('releases a dismissed hovered result even when no mouse boundary event arrives', async () => {
+    vi.useFakeTimers();
+    let id: string | null = null;
+    await act(async () => {
+      id = showToast({ message: 'Result', tone: 'success', detail: 'Details', sessionId: SESSION });
+    });
+    const card = toasts()[0];
+    card.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    await act(async () => { vi.advanceTimersByTime(10000); });
+    expect(toasts()).toHaveLength(1);
+    await act(async () => { closeToast(id!); });
+    expect(card.parentElement!.hasAttribute('inert')).toBe(true);
+    await act(async () => { toast.success('Unhovered successor'); });
+    await act(async () => { vi.advanceTimersByTime(2999); });
+    expect(toasts().map((one) => one.textContent)).toEqual(['Unhovered successor']);
+    await act(async () => { vi.advanceTimersByTime(1); });
+    expect(toasts()).toHaveLength(0);
+  });
+
   it('keeps a dismissed card for the 250ms exit, with its actions inert, then removes it', async () => {
     vi.useFakeTimers();
     await act(async () => { toast.error("Couldn't save the schedule", 'revision 12 is stale'); });

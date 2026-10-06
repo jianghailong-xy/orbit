@@ -1,0 +1,17 @@
+[WebServer] (node:2569697) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 8 tests using 1 worker
+
+(node:2570512) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.3/revision-2/raster.browser.mjs:13:2 › original (3.4s)
+  ✓  2 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.3/revision-2/raster.browser.mjs:13:2 › cardWillChange (2.2s)
+  ✓  3 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.3/revision-2/raster.browser.mjs:13:2 › cardTransform (2.1s)
+  ✓  4 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.3/revision-2/raster.browser.mjs:13:2 › viewportTransform (1.4s)
+  ✓  5 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.3/revision-2/raster.browser.mjs:13:2 › hostWillChange (1.6s)
+  ✓  6 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.3/revision-2/raster.browser.mjs:13:2 › backface (1.3s)
+  ✓  7 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.3/revision-2/raster.browser.mjs:13:2 › isolate (1.4s)
+  ✓  8 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.3/revision-2/raster.browser.mjs:13:2 › opacityGroup (1.5s)
+
+  8 passed (17.6s)

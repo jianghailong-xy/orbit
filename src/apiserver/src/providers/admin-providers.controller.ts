@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AdminRoleGuard } from '../users/admin-role.guard';
 import { CreateModelProviderDto, UpdateModelProviderDto } from './dto';
 import { ProvidersService } from './providers.service';
@@ -11,6 +12,7 @@ import { ProvidersService } from './providers.service';
  * /providers/mine; they never appear here. Gated like the user-management area.
  */
 @UseGuards(JwtAuthGuard, AdminRoleGuard)
+@PatForbidden('ADMIN')
 @Controller('admin/providers')
 export class AdminProvidersController {
   constructor(private readonly providers: ProvidersService) {}

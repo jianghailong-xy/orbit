@@ -33,6 +33,9 @@ type releaseManifest struct {
 	ContractDigest            string `json:"contractDigest"`
 	// Keyed by platform, as the runner's platformKey names it: "linux-x64", "darwin-arm64", ….
 	Assets map[string]releaseAsset `json:"assets"`
+	// A runner built from this tree runs the release its control plane assigns it, so this release
+	// can be rolled back to (runner-go Manifest.RunsAssignedRelease).
+	RunsAssignedRelease bool `json:"runsAssignedRelease"`
 }
 
 func main() {
@@ -80,6 +83,7 @@ func main() {
 		MinimumSchemaRevision:     contract.MinimumSchemaRevision,
 		ContractDigest:            hex.EncodeToString(digest[:]),
 		Assets:                    assets,
+		RunsAssignedRelease:       true,
 	})
 	if err != nil {
 		fatalf("encode release manifest: %v", err)

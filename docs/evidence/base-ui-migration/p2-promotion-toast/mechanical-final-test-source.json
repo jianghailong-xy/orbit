@@ -1,0 +1,6 @@
+{
+  "production": "mechanical-reference-source.json",
+  "test": "mechanical-merge/verified-regression-2a.browser.mjs",
+  "testSha256": "786cf08f347905c92caeca9400b7bdb2925f27a93e5e832c97769e2581bef27c",
+  "matchesFinalTest": true
+}

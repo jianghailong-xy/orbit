@@ -1,0 +1,22 @@
+[WebServer] (node:881812) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 5 tests using 1 worker
+
+(node:881896) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-7/entry-original.browser.mjs:6:1 › observe original legacy confirmation entry without synchronization (2.0s)
+(node:882140) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-7/entry-original.browser.mjs:6:1 › observe original legacy confirmation entry without synchronization (1.5s)
+(node:882310) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  3 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-7/entry-original.browser.mjs:6:1 › observe original legacy confirmation entry without synchronization (1.5s)
+(node:882513) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  4 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-7/entry-original.browser.mjs:6:1 › observe original legacy confirmation entry without synchronization (1.5s)
+(node:882694) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  5 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-7/entry-original.browser.mjs:6:1 › observe original legacy confirmation entry without synchronization (1.5s)
+
+  5 passed (10.5s)

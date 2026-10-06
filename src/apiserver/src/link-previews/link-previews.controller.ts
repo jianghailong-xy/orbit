@@ -1,10 +1,12 @@
 import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { LinkPreviewsDto } from './dto';
 import { LinkPreviewsService } from './link-previews.service';
 
 @UseGuards(JwtAuthGuard)
+@PatForbidden('NO_SCOPE')
 @Controller('link-previews')
 export class LinkPreviewsController {
   constructor(private readonly previews: LinkPreviewsService) {}

@@ -1,0 +1,16 @@
+
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2 src/lib/toast.test.tsx src/lib/toastFeed.test.ts src/lib/theme.test.tsx src/components/ui/boundary.test.ts
+
+
+ RUN  v5.0.2 /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web
+
+
+ Test Files  4 passed (4)
+      Tests  30 passed (30)
+   Start at  15:23:07
+   Duration  2.40s (environment 28%, transform 27%, import 24%, tests 21%)
+
+    Isolate  4 workers spawned · ~400ms startup each (spawn + environment, per file)
+             at least ~400ms faster with isolate: false — reuses workers across files instead of one per file
+

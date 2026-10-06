@@ -1,0 +1,372 @@
+{
+  "runs": [
+    {
+      "name": "choices-entry",
+      "stats": {
+        "startTime": "2026-10-04T13:22:12.906Z",
+        "duration": 69166.13200000001,
+        "expected": 32,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "artifacts": 88
+    },
+    {
+      "name": "notification-combinations",
+      "stats": {
+        "startTime": "2026-10-04T13:23:22.672Z",
+        "duration": 149570.851,
+        "expected": 87,
+        "skipped": 0,
+        "unexpected": 1,
+        "flaky": 0
+      },
+      "artifacts": 233
+    },
+    {
+      "name": "production-notifications",
+      "stats": {
+        "startTime": "2026-10-04T13:26:48.623Z",
+        "duration": 23780.535,
+        "expected": 8,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "artifacts": 24
+    }
+  ],
+  "scroll": [
+    {
+      "project": "chromium-light-desktop",
+      "kind": "unlock",
+      "motion": "no-preference",
+      "closedAfterMs": 250.69999998807907,
+      "readyAfterCloseMs": 0,
+      "firstReadLocked": false
+    },
+    {
+      "project": "chromium-light-desktop",
+      "kind": "actual-scroll",
+      "motion": "no-preference",
+      "input": "wheel",
+      "trusted": true,
+      "movedAfterMs": 17.599999994039536
+    },
+    {
+      "project": "chromium-light-desktop",
+      "kind": "unlock",
+      "motion": "reduce",
+      "closedAfterMs": 51.30000001192093,
+      "readyAfterCloseMs": 12.199999988079071,
+      "firstReadLocked": false
+    },
+    {
+      "project": "chromium-light-desktop",
+      "kind": "actual-scroll",
+      "motion": "reduce",
+      "input": "wheel",
+      "trusted": true,
+      "movedAfterMs": 30
+    },
+    {
+      "project": "chromium-light-phone",
+      "kind": "unlock",
+      "motion": "no-preference",
+      "closedAfterMs": 268.69999998807907,
+      "readyAfterCloseMs": 0,
+      "firstReadLocked": false
+    },
+    {
+      "project": "chromium-light-phone",
+      "kind": "actual-scroll",
+      "motion": "no-preference",
+      "input": "PageDown",
+      "trusted": true,
+      "movedAfterMs": 21
+    },
+    {
+      "project": "chromium-light-phone",
+      "kind": "unlock",
+      "motion": "reduce",
+      "closedAfterMs": 48.89999997615814,
+      "readyAfterCloseMs": 9.5,
+      "firstReadLocked": false
+    },
+    {
+      "project": "chromium-light-phone",
+      "kind": "actual-scroll",
+      "motion": "reduce",
+      "input": "PageDown",
+      "trusted": true,
+      "movedAfterMs": 30.099999994039536
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "kind": "unlock",
+      "motion": "no-preference",
+      "closedAfterMs": 257.19999998807907,
+      "readyAfterCloseMs": 0,
+      "firstReadLocked": false
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "kind": "actual-scroll",
+      "motion": "no-preference",
+      "input": "wheel",
+      "trusted": true,
+      "movedAfterMs": 21.799999982118607
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "kind": "unlock",
+      "motion": "reduce",
+      "closedAfterMs": 49.900000005960464,
+      "readyAfterCloseMs": 10.699999988079071,
+      "firstReadLocked": false
+    },
+    {
+      "project": "chromium-dark-desktop",
+      "kind": "actual-scroll",
+      "motion": "reduce",
+      "input": "wheel",
+      "trusted": true,
+      "movedAfterMs": 30.700000017881393
+    },
+    {
+      "project": "chromium-dark-phone",
+      "kind": "unlock",
+      "motion": "no-preference",
+      "closedAfterMs": 246.09999999403954,
+      "readyAfterCloseMs": 0,
+      "firstReadLocked": false
+    },
+    {
+      "project": "chromium-dark-phone",
+      "kind": "actual-scroll",
+      "motion": "no-preference",
+      "input": "PageDown",
+      "trusted": true,
+      "movedAfterMs": 5.299999982118607
+    },
+    {
+      "project": "chromium-dark-phone",
+      "kind": "unlock",
+      "motion": "reduce",
+      "closedAfterMs": 58.20000001788139,
+      "readyAfterCloseMs": 1.2999999821186066,
+      "firstReadLocked": false
+    },
+    {
+      "project": "chromium-dark-phone",
+      "kind": "actual-scroll",
+      "motion": "reduce",
+      "input": "PageDown",
+      "trusted": true,
+      "movedAfterMs": 33.79999998211861
+    },
+    {
+      "project": "webkit-light-desktop",
+      "kind": "unlock",
+      "motion": "no-preference",
+      "closedAfterMs": 233,
+      "readyAfterCloseMs": 0,
+      "firstReadLocked": false
+    },
+    {
+      "project": "webkit-light-desktop",
+      "kind": "actual-scroll",
+      "motion": "no-preference",
+      "input": "wheel",
+      "trusted": true,
+      "movedAfterMs": 29
+    },
+    {
+      "project": "webkit-light-desktop",
+      "kind": "unlock",
+      "motion": "reduce",
+      "closedAfterMs": 30,
+      "readyAfterCloseMs": 4,
+      "firstReadLocked": false
+    },
+    {
+      "project": "webkit-light-desktop",
+      "kind": "actual-scroll",
+      "motion": "reduce",
+      "input": "wheel",
+      "trusted": true,
+      "movedAfterMs": 24
+    },
+    {
+      "project": "webkit-light-phone",
+      "kind": "unlock",
+      "motion": "no-preference",
+      "closedAfterMs": 238,
+      "readyAfterCloseMs": 0,
+      "firstReadLocked": false
+    },
+    {
+      "project": "webkit-light-phone",
+      "kind": "actual-scroll",
+      "motion": "no-preference",
+      "input": "PageDown",
+      "trusted": true,
+      "movedAfterMs": 5
+    },
+    {
+      "project": "webkit-light-phone",
+      "kind": "unlock",
+      "motion": "reduce",
+      "closedAfterMs": 30,
+      "readyAfterCloseMs": 2,
+      "firstReadLocked": false
+    },
+    {
+      "project": "webkit-light-phone",
+      "kind": "actual-scroll",
+      "motion": "reduce",
+      "input": "PageDown",
+      "trusted": true,
+      "movedAfterMs": 6
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "kind": "unlock",
+      "motion": "no-preference",
+      "closedAfterMs": 244,
+      "readyAfterCloseMs": 0,
+      "firstReadLocked": false
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "kind": "actual-scroll",
+      "motion": "no-preference",
+      "input": "wheel",
+      "trusted": true,
+      "movedAfterMs": 30
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "kind": "unlock",
+      "motion": "reduce",
+      "closedAfterMs": 33,
+      "readyAfterCloseMs": 0,
+      "firstReadLocked": false
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "kind": "actual-scroll",
+      "motion": "reduce",
+      "input": "wheel",
+      "trusted": true,
+      "movedAfterMs": 30
+    },
+    {
+      "project": "webkit-dark-phone",
+      "kind": "unlock",
+      "motion": "no-preference",
+      "closedAfterMs": 254,
+      "readyAfterCloseMs": 0,
+      "firstReadLocked": false
+    },
+    {
+      "project": "webkit-dark-phone",
+      "kind": "actual-scroll",
+      "motion": "no-preference",
+      "input": "PageDown",
+      "trusted": true,
+      "movedAfterMs": 11
+    },
+    {
+      "project": "webkit-dark-phone",
+      "kind": "unlock",
+      "motion": "reduce",
+      "closedAfterMs": 47,
+      "readyAfterCloseMs": 19,
+      "firstReadLocked": false
+    },
+    {
+      "project": "webkit-dark-phone",
+      "kind": "actual-scroll",
+      "motion": "reduce",
+      "input": "PageDown",
+      "trusted": true,
+      "movedAfterMs": 18
+    }
+  ],
+  "checks": [
+    {
+      "name": "web-build",
+      "command": [
+        "npm",
+        "run",
+        "build",
+        "-w",
+        "@orbit/web"
+      ],
+      "exitCode": 0,
+      "seconds": 2.1057512760162354
+    },
+    {
+      "name": "web-tests",
+      "command": [
+        "npm",
+        "run",
+        "test",
+        "-w",
+        "@orbit/web"
+      ],
+      "exitCode": 0,
+      "seconds": 199.2037057876587
+    },
+    {
+      "name": "choices-types",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "src/web/ui-migration/choices.tsconfig.json",
+        "--noEmit"
+      ],
+      "exitCode": 0,
+      "seconds": 0.35648083686828613
+    },
+    {
+      "name": "overlays-types",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "src/web/ui-migration/overlays.tsconfig.json",
+        "--noEmit"
+      ],
+      "exitCode": 0,
+      "seconds": 0.2905850410461426
+    },
+    {
+      "name": "toasts-types",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "src/web/ui-migration/toasts.tsconfig.json",
+        "--noEmit"
+      ],
+      "exitCode": 0,
+      "seconds": 0.31532812118530273
+    },
+    {
+      "name": "toasts-tests-types",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "src/web/ui-migration/toasts-tests.tsconfig.json",
+        "--noEmit"
+      ],
+      "exitCode": 0,
+      "seconds": 0.45482492446899414
+    }
+  ]
+}

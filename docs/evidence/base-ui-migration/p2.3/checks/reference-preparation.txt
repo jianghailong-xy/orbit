@@ -1,0 +1,13 @@
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+error TS5083: Cannot read file '/tmp/orbit-p23-repro-check/tsconfig.base.json'.
+Traceback (most recent call last):
+  File "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/docs/evidence/base-ui-migration/p2.3/prepare-reference.py", line 26, in <module>
+    subprocess.run(['npm','--prefix',str(dest/'src/shared'),'run','build'],check=True,cwd=root)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['npm', '--prefix', '/tmp/orbit-p23-repro-check/src/shared', 'run', 'build']' returned non-zero exit status 2.

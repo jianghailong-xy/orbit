@@ -139,12 +139,66 @@ Besides the version and the runner-write contract, it carries one entry per plat
 - Anything that installs a runner from `/dl` checks the digest, and on a mismatch installs nothing and keeps the
   current binary. The runner's self-update and `orbit upgrade` do this. A manifest without `assets` comes from a
   control plane older than the field: the runner then installs as before, unverified, and logs a warning.
+- The macOS app bundles no runner. Enrolling a Mac downloads `orbit-darwin-<arm64|x64>.gz` from the signed-in
+  server's `/dl` and installs it to `~/.orbit/bin/orbit` only if it matches its digest. A manifest without one
+  installs nothing there, since an enrollment has no current binary to fall back on: update the server first.
 - The digest ties a download to the manifest that announces it. It is not a signature: whoever can rewrite
   `version.json` can rewrite the digests too.
 
 Check a build against its manifest with
 `(cd dist-bin && jq -r '.assets[] | "\(.sha256)  \(.file)"' version.json | sha256sum -c)`
 (`shasum -a 256 -c` on macOS).
+
+### Runner rollout and rollback
+
+`/dl` publishes two runner releases, each with its own `version.json` and asset digests:
+
+- `/dl/version.json` and `/dl/orbit-<platform>.gz`: the latest release, built from the deployed source.
+- `/dl/previous/version.json` and `/dl/previous/orbit-<platform>.gz`: the release before it. The web image
+  build carries it over from the image it replaces (`scripts/retain-runner-release.sh`). The upgrade skill
+  passes the running `orbit-web` image as `PREVIOUS_RELEASE_IMAGE`. A build without it, such as a plain
+  `docker compose build`, keeps no previous release. Until the next deploy, runners then can be neither held
+  at one nor rolled back to one.
+
+A registered runner asks `GET /api/runner/release` with its runner token at startup and at every update check
+(every 10 minutes), naming both versions. The apiserver answers with the release that runner is to run,
+following the release pointer, `runner-release.json` at the repository root:
+
+```json
+{ "rolloutPercent": 100, "rollback": null }
+```
+
+- `rolloutPercent` (0–100): the share of runners the latest release goes to. A runner's place is fixed by its
+  id: the first four bytes of the SHA-256 of the runner id, mod 100. A runner whose place is below the
+  percentage gets the latest release. Every other runner is assigned the previous release and reports
+  `heldByRollout` as its reason for not updating. Raising the percentage only adds runners.
+- `rollback`: `null`, or a release version. Naming the latest release points the release pointer back at the
+  previous one: every runner is assigned the previous release, marked as a rollback. Naming the previous
+  release withdraws it: every runner gets the latest, and none is held on the withdrawn one. Any other
+  version is ignored.
+
+A runner installs a newer assigned release as it always did. It installs an older one only when the answer is
+marked as a rollback, and only if that release's `version.json` carries `runsAssignedRelease`. A release
+without it would read `/dl/version.json` at its next check and reinstall the release it was rolled back from.
+Without a rollback mark it never downgrades. The apiserver image ships the pointer, so every change to it is
+a commit and a deploy: `git log -p runner-release.json` is the record of who moved it, when and why. The
+apiserver logs what the pointer does whenever that changes, for example
+`runner release 0.1.216 to 10% of runners; the rest are held at 0.1.215`.
+
+- **Staged rollout:** set `rolloutPercent` (for example `10`) in the same change as the version bump, deploy, and
+  raise it in later commits. Bumping again while the percentage is below 100 makes the canary the previous
+  release, so the runners outside the rollout move up to it.
+- **Rollback:** set `"rollback": "<the latest version>"`, commit, and deploy with the upgrade skill. Each runner
+  installs the previous release at its next update check, after its turns in flight end. A rollback with no
+  previous release published moves no runner at all.
+- **Fix forward:** ship the fix as a new version and leave `rollback` naming the withdrawn release. While that
+  release is the previous one, no runner is held on it. Reset `rollback` to `null` once a later release has
+  replaced it at `/dl/previous`.
+
+Check what is published with `curl -fsS "$ORBIT_VERIFY_ORIGIN/dl/version.json"` and
+`curl -fsS "$ORBIT_VERIFY_ORIGIN/dl/previous/version.json"`. `install.sh`, the macOS app's first download,
+`sudo orbit upgrade` from an account that is not the runner's, and runners released before assignment
+existed all read `/dl/version.json` directly, so they always get the latest release.
 
 ### Native hand-off (platform-specific)
 

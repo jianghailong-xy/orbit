@@ -1,6 +1,7 @@
 import { Body, Controller, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { RetryIntegrationDto } from './dto';
@@ -20,6 +21,7 @@ export class ProjectIntegrationRetryController {
   constructor(private readonly openItems: ProjectOpenItemService) {}
 
   /** Rerun the next LAND_TASK generation for a failed task landing. */
+  @PatScope('projects:write', { workspaceConfinable: false })
   @Post(':id/tasks/:taskId/integration/retry')
   @HttpCode(200)
   retryIntegration(
@@ -32,6 +34,7 @@ export class ProjectIntegrationRetryController {
   }
 
   /** Rerun a blocked candidate's failed check, leaving its merge decision untouched. */
+  @PatScope('projects:write', { workspaceConfinable: false })
   @Post(':id/promotions/:promotionId/integration/retry')
   @HttpCode(200)
   retryPromotionCheck(
