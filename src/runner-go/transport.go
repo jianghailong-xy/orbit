@@ -86,6 +86,8 @@ func init() {
 		claudeAccountLoginCapabilityV1,
 		claudeAccountRemoveCapabilityV1,
 		claudeAccountMoveCapabilityV1,
+		antigravityAccountLoginCapabilityV1,
+		antigravityAccountRemoveCapabilityV1,
 		sessionMoveCapabilityV1,
 		wikiMaintenanceRunV1,
 	}, declaredSteerCapabilities()...), ",")

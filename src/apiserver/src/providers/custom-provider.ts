@@ -13,8 +13,8 @@ import {
 } from '@orbit/shared';
 import { Prisma } from '@prisma/client';
 import { BadRequestException } from '@nestjs/common';
-import { accountDir } from '@orbit/shared';
-import { accountEnvVar, accountOnRunner } from './account';
+import { accountDir, isAccountEngine } from '@orbit/shared';
+import { ACCOUNT_CHOICE, accountEnvVar, accountOnRunner } from './account';
 import { catalogModels } from './model-catalog';
 import { decryptSecret } from './provider-crypto';
 import { followsRuntimeCatalog, presetDefaultModel } from './preset-overlay';
@@ -422,6 +422,10 @@ export function resolveProviderExec(args: {
   /** The Claude account slot this session runs on (Workspace.claudeAccount today), the sibling of
    *  codexAccount and read the same way: resolved into the CLAUDE_CONFIG_DIR injected below. */
   claudeAccount?: string | null;
+  /** The Antigravity Google account slot this session runs on (Session.antigravityAccount ??
+   *  Workspace.antigravityAccount), read the same way: resolved into the ORBIT_ANTIGRAVITY_GOOGLE_DIR
+   *  injected below, which the runner reads to pick the sign-in the session's agy runs on. */
+  antigravityAccount?: string | null;
   /** Runner.engines of the assigned runner: where each account's directory is reported. */
   runnerEngines?: unknown;
   /** The owner's configured keys (openCodeKeyRows), for an OpenCode session whose model names one
@@ -476,11 +480,10 @@ export function resolveProviderExec(args: {
   // the sign-in card (RunnerSignIn) rather than the control plane holding a credential for it.
   const provider = execRuntime(args);
   // A session on an account other than Default runs in that account's own directory — a Codex
-  // CODEX_HOME, a Claude Code CLAUDE_CONFIG_DIR. Built-in only: a configured provider brings its
-  // own key, so no sign-in on the machine is spent. The chosen account replaces any such variable
-  // typed into the workspace's env.
-  const accountId =
-    provider === AgentProvider.CLAUDE ? args.claudeAccount : args.codexAccount;
+  // CODEX_HOME, a Claude Code CLAUDE_CONFIG_DIR, an Antigravity Google sign-in's Gemini directory.
+  // Built-in only: a configured provider brings its own key, so no sign-in on the machine is spent.
+  // The chosen account replaces any such variable typed into the workspace's env.
+  const accountId = isAccountEngine(provider) ? args[ACCOUNT_CHOICE[provider]] : undefined;
   const account = accountOnRunner(provider, accountId, args.runnerEngines);
   const dirVar = accountEnvVar(provider);
   const env =

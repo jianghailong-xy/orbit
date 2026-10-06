@@ -496,24 +496,46 @@ public enum RunnerAttention {
         }
     }
 
+    /// Antigravity's buckets by the label `PlanUsageSnapshot.rows` gives the window agy names for each.
+    private static let antigravityWindows: [String: String] = [
+        "5-hour": RunnerPageCopy.RUNNER_QUOTA_FIVE_HOUR,
+        "Weekly": RunnerPageCopy.RUNNER_QUOTA_WEEKLY,
+    ]
+
     private static func quotaWindow(_ row: PlanUsageRow) -> String {
         if let claude = claudeWindows[row.key] { return claude }
+        // An Antigravity bucket, by the window agy names for it.
+        if row.remaining { return antigravityWindows[row.label] ?? RunnerPageCopy.RUNNER_QUOTA_OTHER }
         return codexWindows.first { row.label.hasSuffix($0.label) }?.window ?? RunnerPageCopy.RUNNER_QUOTA_OTHER
     }
 
+    /// How much of a window is used, whichever way its row counts it, as a quota sentence says it ("at
+    /// 96%"): an Antigravity bucket's row says what is left (`PlanUsageRow.remaining`), which read as
+    /// used would rank the window with the most room fullest.
+    private static func usedPercent(_ row: PlanUsageRow) -> Int {
+        row.remaining ? 100 - row.percent : row.percent
+    }
+
     /// Warn only when every candidate account is near its limit. Show the fullest window of the
-    /// account with the most room; an unread account cannot establish an engine-wide shortage.
+    /// account with the most room; an unread account cannot establish an engine-wide shortage — and
+    /// neither can an Antigravity Default that runs on the machine's Gemini key
+    /// (`RunnerPageFormat.runsOnEnvKey`), which has no quota to run out of.
     private static func quotaItems(_ runner: RunnerAttentionRunner,
                                    _ workspaces: [RunnerAttentionWorkspace], nowMs: Int64) -> [RunnerAttentionItem] {
         LoginEngine.allCases.compactMap { engine in
             let users = workspacesOn(workspaces, engine)
             guard !users.isEmpty else { return nil }
-            let usage = runner.planUsage?.snapshot(for: engine.rawValue)
-            let accounts = runner.engines?.first(where: { $0.engine == engine.rawValue })?.accounts
+            // Antigravity's quota travels with its engine's health, not in the runner's plan usage.
+            let usage = CodexAccounts.usage(engine.rawValue, planUsage: runner.planUsage, engines: runner.engines)
+            let health = runner.engines?.first(where: { $0.engine == engine.rawValue })
             let snapshots: [PlanUsageSnapshot?]
-            if RunnerPageFormat.keepsAccounts(engine.rawValue), let accounts, !accounts.isEmpty {
-                snapshots = accounts.filter { $0.auth != "no" }.map {
-                    CodexAccounts.snapshot(usage, account: $0.id)
+            if RunnerPageFormat.keepsAccounts(engine.rawValue), let health, let accounts = health.accounts,
+               !accounts.isEmpty {
+                let onKey = { (account: RunnerEngineAccount) in
+                    RunnerPageFormat.runsOnEnvKey(health, account: account.id, auth: account.auth)
+                }
+                snapshots = accounts.filter { $0.auth != "no" || onKey($0) }.map {
+                    onKey($0) ? nil : CodexAccounts.snapshot(usage, account: $0.id)
                 }
             } else {
                 snapshots = [usage]
@@ -525,16 +547,17 @@ public enum RunnerAttention {
                 } ?? []
                 // The first of the fullest, as the web's reduce keeps it.
                 guard var accountFullest = near.first else { return nil }
-                for row in near.dropFirst() where row.percent > accountFullest.percent { accountFullest = row }
-                if fullest.map({ accountFullest.percent < $0.percent }) ?? true { fullest = accountFullest }
+                for row in near.dropFirst() where usedPercent(row) > usedPercent(accountFullest) { accountFullest = row }
+                if fullest.map({ usedPercent(accountFullest) < usedPercent($0) }) ?? true { fullest = accountFullest }
             }
             guard let fullest else { return nil }
             let name = loginName(engine)
             let window = quotaWindow(fullest)
+            let percent = usedPercent(fullest)
             return RunnerAttentionItem(
                 kind: .quotaNearLimit, tone: .warn,
-                short: RunnerPageCopy.attentionQuotaShort(engine: name, window: window, percent: fullest.percent),
-                title: RunnerPageCopy.attentionQuotaTitle(engine: name, window: window, percent: fullest.percent),
+                short: RunnerPageCopy.attentionQuotaShort(engine: name, window: window, percent: percent),
+                title: RunnerPageCopy.attentionQuotaTitle(engine: name, window: window, percent: percent),
                 detail: users.count == 1
                     ? RunnerPageCopy.attentionQuotaDetail(workspace: users[0], engine: name)
                     : RunnerPageCopy.attentionQuotaDetailMany(workspaces: namesPhrase(users), engine: name),
@@ -542,7 +565,7 @@ public enum RunnerAttention {
                 params: [
                     "engine": .string(engine.rawValue),
                     "window": .string(window),
-                    "percent": .int(fullest.percent),
+                    "percent": .int(percent),
                     "resetsAt": fullest.window.resetsAt.map(JSONValue.string) ?? .null,
                     "workspaces": .array(users.map(JSONValue.string)),
                 ])
