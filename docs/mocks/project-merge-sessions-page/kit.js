@@ -56,7 +56,9 @@ const cardAsk = ({ asked = '2m' } = {}) => `<div class="mc ask"><div class="mh">
 <div class="cr">8 of 10 met on this branch — merging does not close the project</div>
 <div class="acts"><span class="btn pri grow">Merge to main</span><span class="btn sec">Not now</span></div>
 <div class="foot"><span>asked ${asked} ago</span><span class="lnk">Details ${ic('chevr', 11, 'var(--tint)', 2.8)}</span></div></div>`;
-const cardMerging = () => `<div class="mc run"><div class="mh">${spinner('var(--tint)', 16)}<b>Re-checking before merging…</b><span class="clk">3m 50s</span></div>
+/* 头部与 asking 同一套：有色方块 + 静态合入图标，不是转圈（owner 10-07 决定；这张卡只有一个动的
+   标记，就是下面落地行里的那个环）。改法见 05-spinner-options.html。 */
+const cardMerging = () => `<div class="mc run"><div class="mh"><span class="tile" style="background:rgba(62,105,246,.16);color:var(--tint)">${ic('merge', 17, 'var(--tint)', 2.3)}</span><b>Re-checking before merging…</b><span class="clk">3m 50s</span></div>
 <div class="st">main moved 2 commits since the check — re-checking the combined tree</div>
 <div class="bud"><i style="width:21%"></i><u style="left:30%"></u></div>
 <div class="ln"><span>Merge check <b>3m 50s</b> of 60m</span><span class="u">usually ~18m</span></div>

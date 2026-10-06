@@ -86,8 +86,8 @@ final class AntigravityAccountsTests: XCTestCase {
 
     // MARK: the runner page's row (01-ios-runner-row.png)
 
-    /// ① One Google account reads like Codex: "Signed in", its own windows on the row, and nothing
-    /// in place of Sign In.
+    /// ① One Google account reads like Codex: "Signed in", its window closest to its limit on the row,
+    /// and nothing in place of Sign In.
     func testOneGoogleAccountIsSignedInWithItsWindowsOnTheRow() throws {
         let hpc = try runner(engine(accounts: [("default", nil, "yes")], defaultBuckets: defaultBuckets))
         let health = try agy(hpc)
@@ -95,21 +95,28 @@ final class AntigravityAccountsTests: XCTestCase {
                        RunnerPageFormat.Status(text: "Signed in", tone: .ok))
         XCTAssertFalse(RunnerPageFormat.needsSignIn(health))
         XCTAssertNil(RunnerPageFormat.signInHint(hpc, engine: "antigravity"))
-        let rows = RunnerPageFormat.engineWindows(hpc, engine: "antigravity")
+        // The row carries the one closest to its limit — 3p-weekly, at 98% left — and the engine page
+        // all four (accountWindows).
+        XCTAssertEqual(RunnerPageFormat.engineWindows(hpc, engine: "antigravity").map(\.groupLabel), ["3p-weekly"])
+        let rows = RunnerPageFormat.accountWindows(hpc, engine: "antigravity", account: "default")
         XCTAssertEqual(rows.map(\.groupLabel), ["gemini-weekly", "gemini-5h", "3p-weekly", "3p-5h"])
         XCTAssertEqual(rows.map(\.label), ["Weekly", "5-hour", "Weekly", "5-hour"])
         XCTAssertEqual(rows.map(\.percent), [100, 100, 98, 100])
         XCTAssertTrue(rows.allSatisfy(\.remaining), "still what is left, as agy says it")
     }
 
-    /// ③ Several read like Claude Code: "2 accounts signed in", no windows on the row — each account's
-    /// quota is its own, read from the engine health, and lives on the engine page.
+    /// ③ Several read like Claude Code: "2 accounts signed in", and on the row the window closest to its
+    /// limit of the account a new session starts on, named — each account's quota is its own, read from
+    /// the engine health, and all of it lives on the engine page.
     func testSeveralGoogleAccountsAreCountedAndEachOnesQuotaIsItsOwn() throws {
         let hpc = try runner(engine(accounts: [("default", nil, "yes"), (work, "Work", "yes")],
                                     defaultBuckets: defaultBuckets, others: [work: workBuckets]))
         XCTAssertEqual(RunnerPageFormat.engineStatus(try agy(hpc), runner: hpc),
                        RunnerPageFormat.Status(text: "2 accounts signed in", tone: .ok))
-        XCTAssertEqual(RunnerPageFormat.engineWindows(hpc, engine: "antigravity"), [])
+        // Work's 5 hours are down to 4%, nearly spent: a new session starts on Default.
+        XCTAssertEqual(RunnerPageFormat.engineNextAccount(hpc, engine: "antigravity", now: now), "Default")
+        XCTAssertEqual(RunnerPageFormat.engineWindows(hpc, engine: "antigravity", now: now).map(\.groupLabel),
+                       ["3p-weekly"])
         XCTAssertEqual(RunnerPageFormat.accountWindows(hpc, engine: "antigravity", account: "default").map(\.percent),
                        [100, 100, 98, 100])
         XCTAssertEqual(RunnerPageFormat.accountWindows(hpc, engine: "antigravity", account: work).map(\.percent),
@@ -126,6 +133,10 @@ final class AntigravityAccountsTests: XCTestCase {
         XCTAssertTrue(RunnerPageFormat.needsSignIn(try agy(hpc)))
         XCTAssertEqual(RunnerPageFormat.accountWindows(hpc, engine: "antigravity", account: work), [],
                        "a signed-out account has no quota")
+        XCTAssertEqual(RunnerPageFormat.engineNextAccount(hpc, engine: "antigravity", now: now), "Default",
+                       "a new session still starts on the one that is in, as web's row says")
+        XCTAssertEqual(RunnerPageFormat.engineWindows(hpc, engine: "antigravity", now: now).map(\.groupLabel),
+                       ["3p-weekly"])
 
         // Default signed out takes its buckets with it, and the rest are still each one's own.
         let defaultOut = try runner(engine(auth: "no", accounts: [("default", nil, "no"), (work, "Work", "yes")],
@@ -134,6 +145,8 @@ final class AntigravityAccountsTests: XCTestCase {
         XCTAssertEqual(RunnerPageFormat.accountWindows(defaultOut, engine: "antigravity", account: "default"), [])
         XCTAssertEqual(RunnerPageFormat.accountWindows(defaultOut, engine: "antigravity", account: work).map(\.percent),
                        [61, 4, 100, 100])
+        XCTAssertEqual(RunnerPageFormat.engineNextAccount(defaultOut, engine: "antigravity", now: now), "Work")
+        XCTAssertEqual(RunnerPageFormat.engineWindows(defaultOut, engine: "antigravity", now: now).map(\.percent), [4])
     }
 
     /// A runner that runs agy on its own GEMINI_API_KEY keeps saying "env key": its Default — the
@@ -167,6 +180,10 @@ final class AntigravityAccountsTests: XCTestCase {
         XCTAssertFalse(RunnerPageFormat.needsSignIn(try agy(both)))
         XCTAssertEqual(RunnerPageFormat.accountLines(try agy(both)).map(\.envKey), [true, false])
         XCTAssertEqual(RunnerPageFormat.accountLines(try agy(both)).map(\.auth), [nil, "yes"])
+        // The key has no quota to spend first: a new session starts on Work, and the row says so.
+        XCTAssertEqual(RunnerPageFormat.engineNextAccount(both, engine: "antigravity", now: now), "Work")
+        XCTAssertEqual(RunnerPageFormat.engineWindows(both, engine: "antigravity", now: now).map(\.groupLabel),
+                       ["gemini-5h"])
         let workOut = try runner(engine(authSource: "env_key", accounts: [("default", nil, "no"), (work, "Work", "no")]))
         XCTAssertEqual(RunnerPageFormat.engineStatus(try agy(workOut), runner: workOut)?.text, "Signed out")
         XCTAssertTrue(RunnerPageFormat.needsSignIn(try agy(workOut)), "Work is out, and needs signing in")

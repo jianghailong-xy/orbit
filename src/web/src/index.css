@@ -5150,6 +5150,12 @@ html[data-theme='dark'] .session-tag-chip {
   background: color-mix(in srgb, var(--warning-solid) 16%, transparent);
   color: var(--warning-solid);
 }
+/* The merging head wears the same mark as the asking one, in the merging card's own colour: the
+   card's single moving mark is the landing row's ring (owner decision 2026-10-07). */
+.session-project-merge.is-merging .session-project-merge-tile {
+  background: color-mix(in srgb, var(--brand) 16%, transparent);
+  color: var(--brand);
+}
 .session-project-merge-rule {
   height: 1px;
   margin: 2px 0;

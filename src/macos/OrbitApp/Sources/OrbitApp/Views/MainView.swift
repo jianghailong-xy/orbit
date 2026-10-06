@@ -274,7 +274,7 @@ struct SectionContent: View {
         case .tasks:
             TasksListView()
         case .wiki:
-            WikiHomeView()
+            WikiContentsColumn()
         case .following:
             FollowingListView()
         case .agents:
