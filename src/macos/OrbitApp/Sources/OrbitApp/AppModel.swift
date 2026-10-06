@@ -713,6 +713,8 @@ final class AppModel {
         }
         configure(url)
 
+        email = LoginFailure.submittedEmail(email)
+
         busy = true
         defer { busy = false }
         do {
@@ -723,12 +725,8 @@ final class AppModel {
             user = try? await api!.me()
             password = ""
             signedIn = true
-        } catch APIError.unauthorized {
-            errorText = "Invalid email or password"
-        } catch is TokenNotStoredError {
-            errorText = "Signed in, but this device couldn't save the session to the Keychain."
         } catch {
-            errorText = "Sign-in failed — check the instance URL and that the server is reachable."
+            errorText = LoginFailure.message(for: error)
         }
     }
 
