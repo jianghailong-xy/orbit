@@ -19,6 +19,7 @@ import {
   getSessionDiff,
   getSessionRequest,
   listShareLinks,
+  listAccessTokens,
   type SessionFolder,
   type SessionListItem,
   type WorkspacePermissionRuleInfo,
@@ -906,6 +907,13 @@ export const shareLinksQuery = () =>
   queryOptions({
     queryKey: ['share-links'] as const,
     queryFn: listShareLinks,
+  });
+
+/** The account's personal access tokens (Settings → Access tokens) — never the tokens themselves. */
+export const accessTokensQuery = () =>
+  queryOptions({
+    queryKey: ['access-tokens'] as const,
+    queryFn: listAccessTokens,
   });
 
 /**

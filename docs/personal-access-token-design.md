@@ -116,6 +116,9 @@ orbit_pat_<43 字符 base64url>        # randomBytes(32)，256 bit
   `MethodDecorator`，挂到 controller 上编译不过。
   controller 级的 scope 会让以后加进来的路由静默继承授权，普查就逼不出决定。`@PatForbidden(reason)`
   可挂 handler 也可挂 controller —— controller 级的拒绝是失败安全的；两者同时出现时拒绝优先。
+- `@PatSelf()`（2026-10-06 协调者新增）：任何有效令牌都可调用，不看 scope、不做 workspace 判定，只挂 handler。
+  全仓只有一条路由用它 —— 令牌自省 `GET /pat/self`（第 6.5 节）；普查双向钉住这一条，挂在第二条路由上或挂到
+  controller 上都会变红。优先级在拒绝与 scope 之后：同一 handler 上若也有 `@PatForbidden` 或 `@PatScope`，以它们为准。
 - PAT 被拒时的 403 body：
 
   | 情形 | body |
@@ -132,8 +135,8 @@ orbit_pat_<43 字符 base64url>        # randomBytes(32)，256 bit
   | reason | 路由 |
   |---|---|
   | `AUTH` | `auth/*` 里挂 `JwtAuthGuard` 的（`POST auth/change-password`；登录、刷新、登出本来就不经 guard） |
-  | `ADMIN` | `admin/*`：用户与 provider 管理 |
-  | `TOKEN_MANAGEMENT` | PAT 自身的签发、列表、吊销（`/access-tokens*`，第 6.5 节）。路由尚未存在，普查已按前缀等着它 |
+  | `ADMIN` | `admin/*`：用户与 provider 管理，含管理员列出、吊销某用户的访问令牌（第 11 节第 4 条） |
+  | `TOKEN_MANAGEMENT` | PAT 自身的签发、列表、吊销（`/access-tokens*`，第 6.5 节），挂在 controller 上，以后加的路由也拒绝 |
   | `RUNNER_CREDENTIALS` | runner 准入与 token 轮换：`runners/device/:userCode`（查询与 approve）、`runners/enrollment-tokens`（签发与列表）、`runners/:id/rotate-token` |
   | `SHARE_LINK` | 分享链接整个 controller，含读取 |
   | `OWNER_INTERACTIVE` | 第 5 节所有者通道 |
@@ -142,7 +145,8 @@ orbit_pat_<43 字符 base64url>        # randomBytes(32)，256 bit
   | `SECRET_REVEAL` | 明文取回已存的密钥（`GET providers/mine/:id/key`） |
   | `NO_SCOPE` | v1 scope 集合没有对应 scope 的：watches、link-previews、metrics（v1 不加 scope）、outcomes/inbox |
 
-- 每条挂 `JwtAuthGuard` 的路由都必须声明其一，普查 spec `auth/pat-route-coverage.spec.ts` 逐条核对（第 6.2 节）。
+- 每条挂 `JwtAuthGuard` 的路由都必须声明 `@PatScope`、`@PatForbidden` 之一（唯一的例外是那一条 `@PatSelf`），
+  普查 spec `auth/pat-route-coverage.spec.ts` 逐条核对（第 6.2 节）。
 
 ## 5. 与所有者通道动作的关系
 
@@ -350,11 +354,38 @@ v1 的落地。最初设想由各 service 的读写入口过滤；实际做法�
 
 ```
 POST   /api/access-tokens          {name, scopes[], workspaceIds?, expiresInDays}  → {id, token, ...}   仅 LOGIN 凭证
-GET    /api/access-tokens          → 列表（不含明文）
+GET    /api/access-tokens          → {tokens: [...]}（不含明文）
 DELETE /api/access-tokens/:id      → 吊销，幂等
 ```
 
-三条都 `@PatForbidden('TOKEN_MANAGEMENT')`。
+三条都 `@PatForbidden('TOKEN_MANAGEMENT')`，挂在 controller 上（`auth/access-tokens.controller.ts`）。落地时的细节：
+
+- `expiresInDays` 取 30、90、365 或 `null`（永不过期）；不传为 90（第 11 节第 1 条），其他值 400。`created_via = WEB`。
+- 明文只在 `POST` 的应答里出现；列表每项是除哈希外的整行，外加 `state`（`ACTIVE` | `EXPIRED` | `REVOKED`，
+  过了到期时间还没结算的也算 `EXPIRED`）和 `workspaces`（限定的 workspace 的名字，管理员查不到别人的
+  workspace，所以由服务端给；已删除的不在其中）。新的在前，已吊销、已过期的也列出，设置页分两个标签显示。
+- 管理员（第 11 节第 4 条）：`GET /api/admin/users/:id/access-tokens` 与上面同样的列表，
+  `DELETE /api/admin/users/:id/access-tokens/:tokenId` 吊销并记 `revoked_reason = ADMIN`，幂等，令牌不属于该用户时 404。
+  两条随 admin controller 是 `ADMIN`。
+- 改密码（第 11 节第 3 条）：`POST /api/auth/change-password` 多一个可选 `revokeAccessTokens`，应答多一个
+  `revokedAccessTokens`（本次吊销的个数）。勾选时先把已过期的结算为 `EXPIRED`，再把其余未吊销的记
+  `PASSWORD_CHANGED`，然后才改密码：两步之间失败，令牌已按要求吊销、密码未变，重试即可完成；反过来则会留下
+  新密码和本该吊销却仍有效的令牌。
+
+令牌自省（2026-10-06 协调者新增，供 CLI `whoami` / `login --with-token`；`GET /users/me` 对 PAT 是 `ACCOUNT` 拒绝）：
+
+```
+GET    /api/pat/self               → {userId, email, token: {id, name, scopes, workspaceIds, expiresAt}}
+```
+
+- `@PatSelf`：任何有效令牌都可调用，不需要 scope；限定了 workspace 的令牌也可以（它只读令牌自己那一行）。
+- 登录凭证调用返回 400 `NOT_A_PERSONAL_ACCESS_TOKEN`；已吊销、已过期、不存在的令牌照常 401。
+- 路径不在 `/access-tokens*` 与 `auth/*` 之下：这两个前缀对 PAT 都是 Forbidden。
+- 请求级审计（第 6.4 节）对它与其余路由用同一条判定：guard 在判定声明之前就把请求交给审计，审计只看方法。
+  `GET /pat/self` 是读，不记；以后若加写方法的 `@PatSelf` 路由（如下面的 `DELETE /pat/self`），照常记 `pat.request`。
+
+待定（交 CLI 任务与协调者）：第 7.3 节 `orbit logout` 默认同时吊销服务端令牌，但令牌调不了 `/access-tokens*`。
+要让令牌吊销自己，需要再开一条 `@PatSelf` 路由（如 `DELETE /pat/self`），普查对 `@PatSelf` 的单条钉住要随之放宽。
 
 ## 7. CLI
 
@@ -429,6 +460,10 @@ orbit api [-X METHOD] PATH [--data JSON | --data-file -] [--paginate] [--json]  
   新建对话框：名字、预设/自定义 scope、workspace 多选、到期（30/90/365 天 / 永不过期，默认 90 天；选永不过期时
   对话框写明「泄露后在吊销前一直有效」，列表里该行显示 `Never expires` 标记）；签发后只展示一次明文 + 复制按钮 +
   「离开后无法再查看」提示。设备流确认页 `/cli-login?code=` 与 `/enroll` 同构。
+  落地时：列表分「Active」与「Revoked & expired」两个标签，后者写明结束原因（被管理员吊销、随改密码吊销、过期）；
+  自定义 scope 里勾「写」会连带勾「读」，取消「读」会连带取消「写」。明文只存在于签发请求的应答里（不进查询缓存，
+  离开页面即释放），显示在列表上方，点 Done 或离开页面后不再可见。改密码在个人资料页（Profile）的
+  Change password 卡片里，勾选框默认不勾。管理员的 Users 页每个用户有 Access tokens 按钮，打开该用户的令牌列表并可吊销。
 - **iOS / macOS**：v1 只做列表与吊销（丢手机/电脑时能远程吊销），不做签发。
 
 ## 10. 落地顺序（建议拆成的任务）

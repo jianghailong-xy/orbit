@@ -18280,6 +18280,107 @@ button.chat-jump-start:hover {
     justify-content: flex-start;
   }
 }
+/* Settings → Access tokens (docs/personal-access-token-design.md §9). */
+.access-tokens-page {
+  max-width: 1100px;
+}
+.access-tokens-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.access-token-title {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.access-token-sub {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.access-token-hint {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.access-token-ended td {
+  color: var(--text-3);
+}
+.access-token-issued {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--success-border);
+  border-radius: 10px;
+  background: var(--success-bg);
+}
+.access-token-issued-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-1);
+}
+.access-token-issued-icon {
+  color: var(--success);
+}
+.access-token-issued-note {
+  margin: 0;
+  color: var(--text-2);
+}
+.access-token-secret-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.access-token-secret {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  word-break: break-all;
+  user-select: all;
+}
+.access-token-form {
+  display: grid;
+  gap: 18px;
+}
+.access-token-field {
+  display: grid;
+  gap: 6px;
+  justify-items: stretch;
+}
+.access-token-field .ant-radio-group {
+  justify-self: start;
+}
+.access-token-label {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.access-token-help {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.access-token-scopes {
+  display: grid;
+  gap: 4px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.access-token-scope-row {
+  display: grid;
+  grid-template-columns: 120px 90px 90px;
+  align-items: center;
+}
+.access-token-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
 .watch-card {
   overflow: hidden;
   border: 1px solid var(--border);
