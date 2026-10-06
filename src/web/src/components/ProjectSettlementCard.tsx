@@ -28,7 +28,9 @@ import {
   doneProvenance,
   formatDoneDate,
   formatDoneDateTime,
+  doneRequestWaiting,
   landingReasonLabel,
+  orbitCheckedOpenItemCount,
   projectDoneCardTally,
   projectDoneReceiptTally,
   projectWhyNotDoneTally,
@@ -154,6 +156,8 @@ export interface SettlementProjectDocument {
   doneBy?: 'OWNER' | 'DERIVED' | null;
   doneAt?: string | null;
   acceptedGaps?: readonly Record<string, unknown>[] | null;
+  /** Null while nobody has started the project; absent from a server that predates starts. */
+  startedAt?: string | null;
 }
 
 /** The card's heading: the question a reader actually has, since the server settles the project
@@ -268,7 +272,7 @@ export function settlementHeldOnProject(
   // The unified read model is authoritative for the current card.  Unlike the legacy projection
   // below, it already partitions in-flight work and landing reasons, so the card is useful while
   // work is moving too (the grouped Why-not-done view tells the reader who has it).
-  if (projection.counts) return projection.done === false;
+  if (projection.counts) return asksWhyNotDone(project);
   if (!projection.criteria.every((criterion) => criterion.satisfied)) return false;
   // Not while something is running: this is a question about a project that has stopped, and
   // asking it mid-sweep would put it up and take it down again for no reader's benefit.
@@ -608,6 +612,17 @@ export function ProjectSettlementCard({
 const CONFIRMATION_CLAUSE = 'STANDARD_SET_UNCONFIRMED';
 
 /**
+ * Whether the conversation asks "Why is this project not done?": only of an OPEN project somebody
+ * has started, with criteria to be done against, whose unified read says it is not done.
+ */
+export function asksWhyNotDone(project: SettlementProjectDocument | null | undefined): boolean {
+  if (!project || project.status !== 'OPEN' || project.startedAt === null) return false;
+  const projection = project.derivedDone;
+  if (!projection || !('counts' in projection) || projection.done) return false;
+  return projection.criteria.length > 0;
+}
+
+/**
  * The wired card for one conversation: drawn from the project document, which carries the
  * projection, and re-derived on every render.
  *
@@ -764,8 +779,7 @@ export function SessionProjectSettlementCard({
   // A current server's non-settled projection is the grouped Why-not-done read.  It stays a
   // separate card until a DONE_REQUEST arrives; the owner card below is only for an actual request
   // (or the receipt left by answering one).
-  if (!doneDelivered && document !== null && document.derivedDone && 'counts' in document.derivedDone
-    && !document.derivedDone.done) {
+  if (!doneDelivered && document !== null && asksWhyNotDone(document)) {
     return (
       <ProjectWhyNotDoneCard
         project={document as unknown as ProjectDoneDocument}
@@ -779,7 +793,10 @@ export function SessionProjectSettlementCard({
     );
   }
 
-  if (doneDelivered && document !== null) {
+  // The owner's DONE is a durable record on the project document, so its receipt is drawn from
+  // that read too — a refresh loses the local receipt and the answered request, not the record.
+  const ownerRecordedDone = document?.status === 'DONE' && document.doneBy === 'OWNER';
+  if ((doneDelivered || ownerRecordedDone) && document !== null) {
     const doneProject = document as unknown as ProjectDoneDocument;
     return (
       <ProjectDoneCard
@@ -787,13 +804,14 @@ export function SessionProjectSettlementCard({
         project={doneProject}
         doneRequest={doneRequest}
         requestId={doneRequestRow?.itemId ?? null}
+        requestWaitingSince={doneRequestRow?.waitingSince ?? null}
         standing={standing}
         receipt={doneReceipt}
         keys={keys}
         busy={done.isPending || !(doneRequest?.criteriaDigest ?? standing?.currentVersion.digest)}
         error={done.error ?? decline.error}
         notYetBusy={decline.isPending}
-        openItemsCount={(openItemsRead.data?.needsYou?.length ?? 0) + (openItemsRead.data?.withCoordinator?.length ?? 0) + (doneRequestRow ? 1 : 0)}
+        openItemsCount={orbitCheckedOpenItemCount(openItemsRead.data)}
         runningCount={doneProject.derivedDone?.counts?.byReason?.IN_FLIGHT ?? 0}
         onRecordDone={() => done.mutate()}
         onNotYet={(note) => {
@@ -835,6 +853,10 @@ export interface ProjectDoneCardProps {
   project: ProjectDoneDocument;
   doneRequest?: DoneRequest | null;
   requestId?: string | null;
+  /** The DONE_REQUEST row's `waitingSince`: since when the coordinator has been asking. */
+  requestWaitingSince?: string | null;
+  /** The clock the request's wait is read against. */
+  now?: number;
   /** The server's acceptance read, used for the criteria digest and confirmation date. */
   standing?: StandardSetConfirmationStanding | null;
   receipt?: ProjectDoneRecord | null;
@@ -1015,6 +1037,8 @@ export function ProjectDoneCard({
   project,
   doneRequest = null,
   requestId = null,
+  requestWaitingSince = null,
+  now = Date.now(),
   standing = null,
   receipt = null,
   busy = false,
@@ -1035,7 +1059,9 @@ export function ProjectDoneCard({
   const receiptDate = formatDoneDate(receipt?.doneAt ?? project.doneAt);
   const accepted = receipt?.acceptedGaps ?? project.acceptedGaps ?? [];
   const receiptDateTime = formatDoneDateTime(receipt?.doneAt ?? project.doneAt);
-  const ownerRecorded = receipt != null || project.doneBy === 'OWNER';
+  // `doneBy` outlives a reopen on the document, so it is the owner's record only while the
+  // project is DONE; the receipt is the answer this card's own press just got.
+  const ownerRecorded = receipt != null || (project.status === 'DONE' && project.doneBy === 'OWNER');
   // A derived DONE is still a durable read-model state, even when this card was reached through
   // a stale OPEN project document during a refresh.  Keep the provenance line honest instead of
   // reopening the question while the server is already saying DONE.
@@ -1084,7 +1110,9 @@ export function ProjectDoneCard({
       </div>
       <div className="approval-body is-questions project-settlement-body">
         <div className="project-settlement-meta">
-          {project.title} · {doneRequest ? `${PROJECT_DONE_COPY.askedByCoordinator} · just now` : PROJECT_DONE_COPY.noRequestMeta}
+          {project.title} · {doneRequest
+            ? [PROJECT_DONE_COPY.askedByCoordinator, doneRequestWaiting(requestWaitingSince, now)].filter(Boolean).join(' · ')
+            : PROJECT_DONE_COPY.noRequestMeta}
         </div>
         {doneRequest ? (
           <div className="project-done-call">
@@ -1223,7 +1251,7 @@ export function ProjectDoneDialog({
   const standing = standingRead.data ?? null;
   const criteriaDigest = request?.criteriaDigest ?? standing?.currentVersion.digest;
   const runningCount = project?.derivedDone?.counts.byReason.IN_FLIGHT ?? 0;
-  const openItemsCount = (openItemsRead.data?.needsYou?.length ?? 0) + (openItemsRead.data?.withCoordinator?.length ?? 0) + (row ? 1 : 0);
+  const openItemsCount = orbitCheckedOpenItemCount(openItemsRead.data);
   const submit = (): void => {
     if (!project || !criteriaDigest || record.isPending) return;
     record.mutate({ requestId: row?.itemId ?? null, criteriaDigest, acceptedGaps: (request?.gaps ?? syntheticDoneGaps(project)) as Record<string, unknown>[] });
@@ -1238,6 +1266,7 @@ export function ProjectDoneDialog({
           project={project}
           doneRequest={request}
           requestId={row?.itemId ?? null}
+          requestWaitingSince={row?.waitingSince ?? null}
           standing={standing}
           receipt={receipt}
           busy={record.isPending || !criteriaDigest}
@@ -1260,6 +1289,8 @@ export interface ProjectWhyNotDoneCardProps {
   openItems?: { withCoordinator?: readonly ProjectOpenItemRow[]; doneRequest?: ProjectOpenItemRow | null };
   onReview?: () => void;
   onAskCoordinator?: () => void;
+  /** The clock the request's wait is read against. */
+  now?: number;
 }
 
 /**
@@ -1272,6 +1303,7 @@ export function ProjectWhyNotDoneCard({
   openItems,
   onReview,
   onAskCoordinator,
+  now = Date.now(),
 }: ProjectWhyNotDoneCardProps): JSX.Element {
   const criteria = project.derivedDone?.criteria ?? [];
   const byKey = new Map((project.acceptanceCriteriaItems ?? []).map((item) => [item.id, item]));
@@ -1309,7 +1341,11 @@ export function ProjectWhyNotDoneCard({
       <div className="project-why-group-head">
         <span>{title}</span>
         {waitingGroup && coordinatorOnIt ? <span className="project-why-who">● {PROJECT_DONE_COPY.coordinatorIsOnIt}</span> : null}
-        {!waitingGroup && openItems?.doneRequest ? <span className="project-why-who">{PROJECT_DONE_COPY.openItemsDoneRequest.toLowerCase()} · just now</span> : null}
+        {!waitingGroup && openItems?.doneRequest ? (
+          <span className="project-why-who">
+            {[PROJECT_DONE_COPY.openItemsDoneRequest.toLowerCase(), doneRequestWaiting(openItems.doneRequest.waitingSince, now)].filter(Boolean).join(' · ')}
+          </span>
+        ) : null}
       </div>
       <ul className="project-why-list">
         {rows.map((criterion) => {
@@ -1319,9 +1355,15 @@ export function ProjectWhyNotDoneCard({
               <span className="project-done-gap-number">{item?.ordinal ?? '•'}</span>
               <div>
                 <div className="project-why-item-title">{item?.text ?? criterion.definitionId}</div>
-                <div className="project-why-item-state">{landingReasonLabel(criterion.landingReason)}</div>
+                {/* An unmet criterion is work still to do: its landing lane (no receipt, no code)
+                    describes work that has not happened yet, not work that finished elsewhere. */}
+                <div className="project-why-item-state">
+                  {criterion.satisfied ? landingReasonLabel(criterion.landingReason) : PROJECT_DONE_COPY.notMetYet}
+                </div>
                 <div className="project-why-item-detail">
-                  {waitingGroup ? PROJECT_DONE_COPY.waitingDetail : PROJECT_DONE_COPY.needsCallDetail}
+                  {!criterion.satisfied
+                    ? PROJECT_DONE_COPY.notMetDetail
+                    : waitingGroup ? PROJECT_DONE_COPY.waitingDetail : PROJECT_DONE_COPY.needsCallDetail}
                 </div>
               </div>
             </li>
