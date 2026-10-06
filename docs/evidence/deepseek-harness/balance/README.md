@@ -86,4 +86,83 @@ in the light pass only); a page that did not render its state fails the run.
 
 ### iPhone — the app on the simulator, light and dark (`ios/`)
 
-FILLED IN BELOW
+The iPhone app's own `CompactShell` and Settings sheet, built from this branch's shared sources into a
+throwaway app (`probe-harness/`, pushed as the never-merged branch `probe/ds-balance-shots`) on GitHub's
+macOS runner, against `probe-harness/stub.py` — the fixture API's DeepSeek keys answer the balance route in
+every state. Each launch lands on Settings; `BalanceShotTests` taps its Providers row and each DeepSeek row,
+presses Refresh and Retry, and fails on any state that does not render, on a row of another vendor that opens
+anything, and on a failure or loading page that shows any amount (`¥`, `$` or `0.00`). Pictures are stored
+at half size.
+
+Run **37444789565** on probe commit `1d226459d` (= `b6879ca74` + `.dsb-probe/` + a push-triggered workflow), newest
+iPhone simulator on `macos-26`: `BalanceShotTests` 2/2 passed, 0 failures (`ios/summary.txt`, notes in
+`ios/*-notes.txt`); every page's accessibility tree is on the results branch `probe/ds-balance-shots-results`.
+The app's own requests are in `ios/balance-requests.txt` — including the two presses, `GET
+/api/providers/mine/p-ds/balance?refresh=1` (Refresh) and `…/p-old/balance?refresh=1` (Retry).
+
+| Mock (ios-01) | Screenshot (`-light` / `-dark`) | What it shows |
+|---|---|---|
+| Providers 列表 | `ios-01-providers` | "Your API keys": DeepSeek and DeepSeek Harness end with the same ¥110.00 and open a page; Anthropic and Kimi are unchanged and open nothing |
+| — | `ios-04-providers-states` | ¥0.42 in red (too low), "Unavailable" in orange (rejected key, unreachable), "¥110.00 · $5.00", nothing while loading |
+| DeepSeek 详情 · 正常 | `ios-02-deepseek`, `ios-03-deepseek-harness` | the balance section first: total, granted/topped-up bar, Updated, Refresh, Top up on DeepSeek; the whole-account footnote and "Same DeepSeek account as …"; then Runs on / Default model / Endpoint, "Adding or changing a key happens on the web." |
+| — | `ios-02b-deepseek-refreshed-light` | after Refresh: "Updated Just now" |
+| DeepSeek 详情 · 无法获取（Key 无效） | `ios-06-key-rejected`, `ios-07-network` | the orange block with the reason ("Change the key on the web, then retry." for a rejected key), Balance Unknown, Last tried, Retry — no amount |
+| DeepSeek 详情 · 余额不足 | `ios-05-low` | the red alert first, the real ¥0.42, and the prominent "Top up on DeepSeek ↗" (Safari) |
+| — | `ios-08-multi-currency`, `ios-09-loading` | two currencies, each with its own bar; "Checking balance…" with no number |
+
+Earlier runs of the same probe are not evidence: 37440215512 never drew a page (the probe app put the model
+in the environment inside the sheet modifier, so the sheet had none — a harness bug, fixed in
+`probe-harness/ios/DsbProbe.swift`), and 37442347703 passed but opened Providers programmatically while the
+sheet was still presenting, which left the large title over the list's first section in its list frames;
+the run above taps the Settings row instead.
+
+## Merge check and client gates
+
+- **Merge check** on `4a5d8289177fb6aefc46e782fe076e1110677c99` — this branch with the latest `origin/main`
+  (`162774e52`) merged in — each step run on its own (`merge-check-4a5d82891.txt`, Orbit job
+  `bgj_c996beaf69bf`): `npm run build` **0**; `npm test -w @orbit/shared` **0** (393); `npm test -w
+  @orbit/apiserver` **0** (4518 tests, 4518 pass, 0 skipped); `npm test -w @orbit/web` **0** (325 files,
+  4097 tests); `(cd src/runner-go && go test ./...)` **0**.
+- **Client compile gates** (client.yml's own jobs, pushed as `probe/ds-balance-clients`):
+  run **37441771692** on `b6879ca74` (this branch + main `5a8edfd62`; nothing under `src/macos`, `src/ios`,
+  `.github` or `scripts/ci` differs from `4a5d82891`) — font tokens, navigation gate, macOS (OrbitKit `swift
+  test`: 3127 executed, 5 skipped, 0 failures, `DeepSeekBalanceTests` and `DeepSeekBalanceCopyParityTests`
+  passed; OrbitApp `swift build` succeeded) and the iOS simulator build, all success. Earlier run
+  37439559983 on the feature commit `936ebbd3c`: the same, 3113 executed, 0 failures.
+- **OrbitKit on Linux** (`swift:6.1` image, Orbit job `bgj_e876126c4cda`): 3113 executed, 5 skipped, 0
+  failures.
+- **pg** (`scripts/run-pg-spec.sh`, Orbit jobs `bgj_ba5ebdab740a` on the branch and `bgj_5b1753765479` on its
+  clean base `ca7fdc3ff`, compared by `bgj_ce3bb589205e` into `pg-branch-vs-base.txt`): the four specs that
+  build `ProvidersController` fail exactly as on the clean base — pre-existing pool/dispatch reds on main.
+  On the branch the credential sweep that now asks the balance route passes, and the route census's only
+  unswept route is the pre-existing `POST providers/pools/:id/members/:memberId/pause`, on both.
+
+## Reproduce
+
+- Server, Web, OrbitKit: `cd src/apiserver && npx tsc -p tsconfig.test.json && node --test
+  build/providers/deepseek-balance.spec.js`; `cd src/web && npx vitest run src/components/DeepSeekBalance.test.tsx
+  src/lib/deepseekBalance.test.ts`; OrbitKit in the `swift:6.1` image: `swift test --filter DeepSeekBalance`.
+- pg: `scripts/run-pg-spec.sh src/apiserver/src/providers/{pool-security-boundary,codex-login-scope,pool-admission-closure,provider-pool-usage}.pg.spec.ts`.
+- Web pictures: `node web-rig/server.mjs`, then from `src/web` `../../node_modules/.bin/vite --config
+  ../../docs/evidence/deepseek-harness/balance/web-rig/vite.config.mjs`, then `FONTCONFIG_FILE=<a fonts.conf
+  aliasing -apple-system/system-ui to Inter and PingFang SC to Noto Sans SC> node web-rig/drive.mjs <out> light|dark`.
+- iPhone pictures: push `probe-harness/` as `.dsb-probe/` and `probe-harness/client-shots.yml` as
+  `.github/workflows/client.yml` on top of the commit under test to a `probe/…` branch; the report job pushes
+  the pictures to `probe/ds-balance-shots-results`. Gates: `probe-harness/client-gates.yml` the same way.
+
+## Not established here
+
+- No real DeepSeek account or key was used: every balance and failure in the pictures comes from fixtures,
+  shaped after DeepSeek's documented `/user/balance` answer and error codes. What a live 401 or a live
+  outage looks like on the wire was not observed.
+- macOS has no Providers page (Settings → Providers is iOS only, as in the mocks, which show only the
+  iPhone), so there is no macOS row to open; the shared OrbitKit/OrbitApp code compiles for macOS (gates).
+- Two deliberate differences from the mocks: the iPhone failure footnote says "No amount is shown until
+  DeepSeek answers." without the mock's "…never drawn as ¥0.00" (no ¥0.00 may appear on a failure screen),
+  and the web multi-currency section keeps the whole-account note above the currency sentence.
+- `src/macos/OrbitApp/Sources/OrbitApp/AgentsModel.swift` and `Views/SettingsSheet.swift` are outside the
+  task's original path list (the app's API client lives only in its models, and Settings' navigation
+  destinations are registered in the sheet); the coordinator added both to the scope in project
+  34b7qmu7w992fd5pVBHYW's instructions.
+- The four pg specs touched fail on this branch exactly as on its clean base (pre-existing pool/dispatch
+  reds, see `pg-branch-vs-base.txt`); the new route's own checks inside them pass.

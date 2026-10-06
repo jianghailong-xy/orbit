@@ -1,14 +1,14 @@
 import XCTest
 
 // TEMPORARY evidence probe (never merged): Settings → Providers and a DeepSeek key's page on the iPhone
-// app, against .dsb-probe/stub.py. Each launch lands on Settings → Providers; a DeepSeek row is opened
-// with the app's own tap, and Refresh / Retry are the app's own presses. Every state the stub serves has
+// app, against .dsb-probe/stub.py. Each launch lands on Settings; its Providers row and then a DeepSeek
+// row are opened with the app's own taps, and Refresh / Retry are the app's own presses. Every state the stub serves has
 // to render — one that doesn't is a failure, not a note — and no page without DeepSeek's own answer may
 // show an amount.
 final class BalanceShotTests: ProbeCase {
     private func scheme(_ dark: Bool) -> String { dark ? "dark" : "light" }
 
-    /// Launch onto Settings → Providers with the stub serving `scenario`, and wait for `words`.
+    /// Launch onto Settings with the stub serving `scenario`, open its Providers row, and wait for `words`.
     private func open(_ scenario: String, dark: Bool, until words: String, _ name: String) -> XCUIApplication {
         resetStub()
         setStub(#"{"scenario": "\#(scenario)"}"#)
@@ -16,6 +16,15 @@ final class BalanceShotTests: ProbeCase {
         app.launchArguments = ["-orbit.instance", "http://127.0.0.1:8765", "-ApplePersistenceIgnoreState", "YES",
                                "-probe.fresh"] + (dark ? ["-dark"] : [])
         app.launch()
+        let providers = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Providers'")).firstMatch
+        if providers.waitForExistence(timeout: 45) {
+            settle(1)
+            note("\(name): Settings row \(describe(providers))")
+            providers.tap()
+        } else {
+            write(app.debugDescription, "missing-settings-\(name).txt")
+            XCTFail("\(name): Settings showed no Providers row")
+        }
         if !appears(app, words, timeout: 45) {
             write(app.debugDescription, "missing-\(name).txt")
             XCTFail("\(name): \(words) never showed — the app did not render the stub's state")

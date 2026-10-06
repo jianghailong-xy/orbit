@@ -1,8 +1,8 @@
 import SwiftUI
 import OrbitKit
 
-// TEMPORARY evidence probe: where one launch opens — Settings → Providers, as the drawer's gear and its
-// Providers row would leave it.
+// TEMPORARY evidence probe: where one launch opens — Settings, as the drawer's gear leaves it. The test
+// taps its Providers row, as a user does.
 enum ProbeArgs {
     static var dark: Bool { ProcessInfo.processInfo.arguments.contains("-dark") }
 
@@ -19,6 +19,5 @@ enum ProbeArgs {
     static func land(_ model: AppModel) async {
         await model.agents?.load()
         model.settingsPresented = true
-        model.nav.settingsPath = [.settingsPage(.providers)]
     }
 }
