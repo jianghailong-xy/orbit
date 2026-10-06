@@ -178,8 +178,8 @@ model OAuthLoginFlow {               // oauth_login_flow：短命，兑换即删
 - 身份永远按 `(provider, sub)` 认，邮箱只在**第一次**把 Google 账号连到已有 Orbit 账号时用。Google 那边改了邮箱，
   `sub` 不变，照样登录；`User.email` 不跟着改。
 - 另有一张配置表 `sign_in_provider`，见 7.1。
-- 迁移号在实现时取 main 上的下一个空号。三张新表会碰到 apiserver 的四个普查（迁移台账、db-write inventory、
-  `@db.Uuid` 命名分类、NOT NULL 清单），一并更新。
+- 迁移号在实现时取 main 上的下一个空号。三张新表会碰到 apiserver 的五个普查（迁移台账、db-write inventory、
+  生成的 trigger 清单 `scripts/sync-db-trigger-inventory.mjs --write`、`@db.Uuid` 命名分类、NOT NULL 清单），一并更新。
 
 ### 5.2 登录时怎么找到 Orbit 账号
 
