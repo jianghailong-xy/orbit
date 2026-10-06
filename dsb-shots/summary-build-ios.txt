@@ -1,0 +1,8 @@
+Test Case '-[DsbProbeUITests.BalanceShotTests test1OneKeyTwoProviders]' started.
+Test Case '-[DsbProbeUITests.BalanceShotTests test1OneKeyTwoProviders]' passed (116.970 seconds).
+Test Case '-[DsbProbeUITests.BalanceShotTests test2EveryState]' started.
+Test Case '-[DsbProbeUITests.BalanceShotTests test2EveryState]' passed (217.778 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 334.748 (334.770) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 334.748 (334.775) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 334.748 (334.777) seconds
+** TEST SUCCEEDED **

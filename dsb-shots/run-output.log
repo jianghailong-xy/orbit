@@ -1,0 +1,57 @@
+==> stub ready after 2s
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+Test Case '-[DsbProbeUITests.BalanceShotTests test1OneKeyTwoProviders]' started.
+Test Case '-[DsbProbeUITests.BalanceShotTests test1OneKeyTwoProviders]' passed (116.970 seconds).
+Test Case '-[DsbProbeUITests.BalanceShotTests test2EveryState]' started.
+Test Case '-[DsbProbeUITests.BalanceShotTests test2EveryState]' passed (217.778 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 334.748 (334.770) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 334.748 (334.775) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 334.748 (334.777) seconds
+** TEST SUCCEEDED **
+.dsb-probe/run.sh: line 53:  4222 Terminated: 15          python3 -u stub.py 8765 "$OUT/ios/requests.log" > "$OUT/ios/stub.out" 2>&1
+total 10152
+drwxr-xr-x  45 runner  staff    1440 Oct  6 10:04 .
+drwxr-xr-x   3 runner  staff      96 Oct  6 09:47 ..
+drwxr-xr-x  24 runner  staff     768 Oct  6 10:04 attachments
+-rw-r--r--   1 runner  staff    4045 Oct  6 10:04 balance-requests.txt
+-rw-r--r--@  1 runner  staff    1085 Oct  6 10:00 BalanceShotTeststest1OneKeyTwoProviders-notes.txt
+-rw-r--r--@  1 runner  staff    1954 Oct  6 10:03 BalanceShotTeststest2EveryState-notes.txt
+-rw-r--r--   1 runner  staff  194037 Oct  6 09:59 ios-01-providers-dark.png
+-rw-r--r--   1 runner  staff  202932 Oct  6 09:58 ios-01-providers-light.png
+-rw-r--r--   1 runner  staff  228371 Oct  6 09:59 ios-02-deepseek-dark.png
+-rw-r--r--   1 runner  staff  237781 Oct  6 09:58 ios-02-deepseek-light.png
+-rw-r--r--   1 runner  staff  237903 Oct  6 09:59 ios-02b-deepseek-refreshed-light.png
+-rw-r--r--   1 runner  staff  218977 Oct  6 10:00 ios-03-deepseek-harness-dark.png
+-rw-r--r--   1 runner  staff  228983 Oct  6 09:59 ios-03-deepseek-harness-light.png
+-rw-r--r--   1 runner  staff  216384 Oct  6 10:02 ios-04-providers-states-dark.png
+-rw-r--r--   1 runner  staff  225865 Oct  6 10:00 ios-04-providers-states-light.png
+-rw-r--r--   1 runner  staff  241138 Oct  6 10:02 ios-05-low-dark.png
+-rw-r--r--   1 runner  staff  253571 Oct  6 10:00 ios-05-low-light.png
+-rw-r--r--   1 runner  staff  206176 Oct  6 10:03 ios-06-key-rejected-dark.png
+-rw-r--r--   1 runner  staff  218661 Oct  6 10:01 ios-06-key-rejected-light.png
+-rw-r--r--   1 runner  staff  204294 Oct  6 10:03 ios-07-network-dark.png
+-rw-r--r--   1 runner  staff  216414 Oct  6 10:01 ios-07-network-light.png
+-rw-r--r--   1 runner  staff  224404 Oct  6 10:03 ios-08-multi-currency-dark.png
+-rw-r--r--   1 runner  staff  233386 Oct  6 10:01 ios-08-multi-currency-light.png
+-rw-r--r--   1 runner  staff  145583 Oct  6 10:02 ios-09-loading-dark.png
+-rw-r--r--   1 runner  staff  158659 Oct  6 10:00 ios-09-loading-light.png
+-rw-r--r--   1 runner  staff     259 Oct  6 10:04 not-served.txt
+-rw-r--r--   1 runner  staff   24965 Oct  6 10:03 requests.log
+-rw-r--r--   1 runner  staff      49 Oct  6 09:47 stub.out
+-rw-r--r--@  1 runner  staff   20940 Oct  6 09:59 tree-deepseek-dark.txt
+-rw-r--r--@  1 runner  staff   20940 Oct  6 09:59 tree-deepseek-light.txt
+-rw-r--r--@  1 runner  staff   20118 Oct  6 10:00 tree-harness-dark.txt
+-rw-r--r--@  1 runner  staff   20117 Oct  6 09:59 tree-harness-light.txt
+-rw-r--r--@  1 runner  staff   20258 Oct  6 10:03 tree-key-rejected-dark.txt
+-rw-r--r--@  1 runner  staff   20258 Oct  6 10:01 tree-key-rejected-light.txt
+-rw-r--r--@  1 runner  staff   20340 Oct  6 10:02 tree-low-dark.txt
+-rw-r--r--@  1 runner  staff   20340 Oct  6 10:00 tree-low-light.txt
+-rw-r--r--@  1 runner  staff   21643 Oct  6 10:03 tree-multi-dark.txt
+-rw-r--r--@  1 runner  staff   21643 Oct  6 10:01 tree-multi-light.txt
+-rw-r--r--@  1 runner  staff   20261 Oct  6 10:03 tree-network-dark.txt
+-rw-r--r--@  1 runner  staff   20261 Oct  6 10:01 tree-network-light.txt
+-rw-r--r--@  1 runner  staff   19215 Oct  6 09:59 tree-providers-dark.txt
+-rw-r--r--@  1 runner  staff   19219 Oct  6 09:58 tree-providers-light.txt
+-rw-r--r--@  1 runner  staff   21076 Oct  6 10:02 tree-providers-states-dark.txt
+-rw-r--r--@  1 runner  staff   21080 Oct  6 10:00 tree-providers-states-light.txt
+-rw-r--r--   1 runner  staff  668465 Oct  6 10:04 xcodebuild-ios.log

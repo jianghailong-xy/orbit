@@ -1,0 +1,248 @@
+Attributes: Application, 0x118bd5e00, pid: 28947, label: 'DsbProbe'
+Element subtree:
+ →Application, 0x118bd5e00, pid: 28947, label: 'DsbProbe'
+    Window (Main), 0x118bd5f40, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x118bd6080, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x118bd6f80, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x118bd70c0, {{-402.0, -874.0}, {1206.0, 2622.0}}
+          Other, 0x118bd7200, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x118bd7340, {{0.0, 0.0}, {402.0, 874.0}}
+              StaticText, 0x118bd7480, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x118bd75c0, {{251.7, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              CollectionView, 0x118bd7700, {{0.0, 128.0}, {305.7, 746.0}}
+                Other, 0x118bd7840, {{0.0, -1364.0}, {305.7, 3206.0}}
+                Cell, 0x118bd7980, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x118bd7ac0, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x118bd7c00, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x118bd7d40, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x118bd7e80, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x118bd61c0, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x118bd6300, {{0.0, 128.0}, {305.3, 44.3}}
+                        Button, 0x118bd6440, {{0.0, 128.0}, {305.3, 44.3}}, label: 'Projects'
+                          Image, 0x118bd6580, {{26.3, 142.3}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x118bd66c0, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                Cell, 0x118bd6800, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x118bd6940, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x118bd6a80, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x118bd6bc0, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x118bd6d00, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x118bd6e40, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x118bd5400, {{0.0, 172.3}, {305.3, 44.3}}
+                        Button, 0x118bd5540, {{0.0, 172.3}, {305.3, 44.3}}, label: 'Tasks'
+                          Image, 0x118bd5680, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x118bd57c0, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x118bd5900, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x118bd5a40, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x118bd5b80, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x118bd5cc0, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x1188fc000, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x1188fc140, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x1188fc280, {{0.0, 216.7}, {305.3, 44.3}}
+                        Button, 0x1188fc3c0, {{0.0, 216.7}, {305.3, 44.3}}, label: 'Wiki'
+                          Image, 0x1188fc500, {{27.0, 230.0}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x1188fc640, {{58.0, 228.7}, {32.7, 20.3}}, label: 'Wiki'
+                Cell, 0x1188fc780, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x1188fc8c0, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x1188fca00, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x1188fcb40, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x1188fcc80, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x1188fcdc0, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x1188fcf00, {{0.0, 261.0}, {305.3, 44.7}}
+                        StaticText, 0x1188fd040, {{0.0, 261.0}, {305.3, 44.7}}, label: 'Workspaces'
+                Cell, 0x1188fd180, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x1188fd2c0, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x1188fd400, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x1188fd540, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x1188fd680, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x1188fd7c0, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x1188fd900, {{0.0, 305.7}, {305.3, 44.3}}
+                        Button, 0x1188fda40, {{0.0, 305.7}, {305.3, 44.3}}, label: 'orbit,  · HPC'
+                          Other, 0x1188fdb80, {{24.7, 320.0}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x1188fdcc0, {{24.7, 320.0}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x1188fde00, {{58.0, 317.7}, {35.3, 20.3}}, label: 'orbit'
+                          StaticText, 0x1188fdf40, {{93.3, 317.7}, {47.7, 20.3}}, label: ' · HPC'
+                Other, 0x1188fe080, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x1188fe1c0, {{299.3, 605.3}, {3.0, 265.7}}
+                Other, 0x1188fe300, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x1188fe440, {{299.3, 605.3}, {3.0, 265.7}}
+              Button, 0x1188fe580, {{10.0, 788.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x1188fe6c0, {{31.0, 801.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x1188fe800, {{57.0, 799.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x1188fe940, {{251.7, 788.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x1188fea80, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x1188febc0, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI29PresentationHosting'
+                  Other, 0x1188fed00, {{20.0, 66.0}, {36.0, 36.0}}, identifier: 'line.3.horizontal', label: 'Open navigation'
+                    Other, 0x1188fee40, {{20.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x1188fef80, {{22.3, 66.0}, {31.3, 36.0}}, identifier: 'line.3.horizontal', label: 'Open navigation'
+                  Other, 0x1188ff0c0, {{76.0, 73.7}, {37.7, 20.7}}, label: 'Workspace: orbit'
+                    Other, 0x1188ff200, {{76.0, 73.7}, {37.7, 20.7}}
+                      StaticText, 0x1188ff340, {{76.0, 74.0}, {37.7, 20.3}}, label: 'Workspace: orbit'
+                  Other, 0x1188ff480, {{283.7, 66.0}, {41.7, 36.0}}, label: 'Session scope, Open'
+                    Other, 0x1188ff5c0, {{283.7, 66.0}, {41.7, 36.0}}
+                      Button, 0x1188ff700, {{283.7, 66.0}, {41.7, 36.0}}, label: 'Session scope, Open'
+                        Button, 0x1188ff840, {{283.7, 66.0}, {41.7, 36.0}}
+                          Image, 0x1188ff980, {{293.3, 77.7}, {22.0, 13.0}}, identifier: 'line.3.horizontal.decrease', label: 'Filter'
+                  Button, 0x1188ffac0, {{341.3, 66.0}, {40.7, 36.0}}, label: 'Start a new session with orbit'
+                Other, 0x1188ffc00, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x1188ffd40, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x1188ffe80, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x118bd0000, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x118bd0140, {{0.0, 116.0}, {402.0, 672.0}}
+                        CollectionView, 0x118bd0280, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x118bd03c0, {{0.0, 0.0}, {402.0, 874.0}}
+                            Other, 0x118bd0500, {{0.0, 0.0}, {402.0, 170.8}}
+                            Other, 0x118bd0640, {{0.0, 733.2}, {402.0, 140.8}}
+                          Other, 0x118bd0780, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x118bd08c0, {{369.0, 116.0}, {30.0, 672.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x118bd0a00, {{396.0, 778.0}, {3.0, 7.0}}
+                          Other, 0x118bd0b40, {{369.0, 116.0}, {30.0, 672.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x118bd0c80, {{396.0, 778.0}, {3.0, 7.0}}
+                        Image, 0x118bd0dc0, {{167.3, 403.0}, {67.3, 53.7}}, identifier: 'bubble.left.and.bubble.right', label: 'Conversation'
+                        StaticText, 0x118bd0f00, {{111.0, 403.0}, {180.0, 98.3}}, label: 'No open sessions'
+                Other, 0x118bd1040, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x118bd1180, {{0.0, 0.0}, {402.0, 874.0}}
+                    Toolbar, 0x118bd12c0, {{0.0, 788.0}, {402.0, 86.0}}, identifier: 'Toolbar', label: 'Toolbar'
+                      Other, 0x118bd1400, {{28.0, 798.0}, {346.0, 48.0}}
+                        Other, 0x118bd1540, {{28.0, 798.0}, {346.0, 48.0}}
+                          Other, 0x118bd1680, {{28.0, 798.0}, {0.0, 0.0}}
+                            Other, 0x118bd17c0, {{28.0, 798.0}, {346.0, 48.0}}
+                              Other, 0x118bd1900, {{28.0, 798.0}, {346.0, 48.0}}
+                                Other, 0x118bd1a40, {{33.0, 803.0}, {336.0, 38.0}}
+                                  SearchField, 0x118bd1b80, {{33.0, 803.0}, {336.0, 38.0}}, label: 'Search sessions', placeholderValue: 'Search sessions'
+                                    Image, 0x118bd1cc0, {{46.0, 812.3}, {20.3, 18.7}}, identifier: 'magnifyingglass', label: 'Search'
+      Other, 0x118bd1e00, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x118bd1f40, {{-402.0, -874.0}, {1206.0, 2622.0}}
+        Other, 0x118bd2080, {{0.0, 62.0}, {402.0, 812.0}}
+          Other, 0x118bd21c0, {{0.0, 62.0}, {402.0, 812.0}}
+            Other, 0x118bd2300, {{0.0, 62.0}, {402.0, 812.0}}
+              Other, 0x118bd2440, {{0.0, 62.0}, {402.0, 812.0}}
+                Other, 0x118bd2580, {{0.0, 62.0}, {402.0, 812.0}}
+                  Other, 0x118bd26c0, {{0.0, 62.0}, {402.0, 812.0}}
+                    NavigationBar, 0x118bd2800, {{0.0, 78.0}, {402.0, 54.0}}, identifier: 'DeepSeek Intl'
+                      Button, 0x118bd2940, {{16.0, 78.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Providers'
+                      StaticText, 0x118bd2a80, {{145.7, 89.7}, {110.7, 20.7}}, label: 'DeepSeek Intl'
+                      Other, 0x118bd2bc0, {{346.0, 82.0}, {36.0, 36.0}}, identifier: 'xmark', label: 'Close'
+                        Other, 0x118bd2d00, {{346.0, 82.0}, {36.0, 36.0}}
+                          Button, 0x118bd2e40, {{350.7, 82.0}, {26.7, 36.0}}, identifier: 'xmark', label: 'Close'
+                    Other, 0x118bd2f80, {{0.0, 62.0}, {402.0, 812.0}}
+                      Other, 0x118bd30c0, {{0.0, 62.0}, {402.0, 812.0}}
+                        Other, 0x118bd3200, {{0.0, 62.0}, {402.0, 812.0}}
+                          Other, 0x118bd3340, {{0.0, 62.0}, {402.0, 812.0}}
+                            CollectionView, 0x118bd3480, {{0.0, 62.0}, {402.0, 812.0}}
+                              Other, 0x118bd35c0, {{-16.0, -1492.0}, {434.0, 2204.0}}
+                              Other, 0x118bd3700, {{0.0, 62.0}, {402.0, 812.0}}
+                              Other, 0x118bd3840, {{0.0, 62.0}, {402.0, 812.0}}
+                              Cell, 0x118bd3980, {{16.0, 132.0}, {370.0, 40.3}}
+                                Other, 0x118bd3ac0, {{16.0, 132.0}, {370.0, 40.3}}
+                                Other, 0x118bd3c00, {{16.0, 132.0}, {370.0, 40.3}}
+                                  Other, 0x118bd3d40, {{16.0, 132.0}, {370.0, 40.3}}
+                                    Other, 0x118bd3e80, {{16.0, 132.0}, {370.0, 40.3}}
+                                      StaticText, 0x118428000, {{16.0, 132.0}, {370.0, 40.3}}, label: 'DeepSeek account balance'
+                              Cell, 0x118428140, {{16.0, 172.3}, {370.0, 144.7}}
+                                Other, 0x118428280, {{16.0, 172.3}, {370.0, 144.7}}
+                                  Other, 0x1184283c0, {{16.0, 172.3}, {370.0, 144.7}}
+                                Other, 0x118428500, {{16.0, 172.3}, {370.0, 144.7}}
+                                  Other, 0x118428640, {{16.0, 172.3}, {370.0, 144.7}}
+                                    Other, 0x118428780, {{16.0, 172.3}, {370.0, 144.7}}
+                                      StaticText, 0x1184288c0, {{32.0, 193.3}, {33.3, 18.0}}, label: 'Total'
+                                      StaticText, 0x118428a00, {{32.0, 211.3}, {139.7, 40.7}}, label: '¥110.00'
+                                      StaticText, 0x118428b40, {{177.7, 229.3}, {31.0, 18.0}}, label: 'CNY'
+                                      StaticText, 0x118428c80, {{46.0, 278.0}, {55.7, 18.0}}, label: 'Granted'
+                                      StaticText, 0x118428dc0, {{107.7, 278.0}, {53.0, 18.0}}, label: '¥10.00'
+                                      StaticText, 0x118428f00, {{228.0, 278.0}, {73.3, 18.0}}, label: 'Topped up'
+                                      StaticText, 0x118429040, {{307.3, 278.0}, {62.7, 18.0}}, label: '¥100.00'
+                              Cell, 0x118429180, {{16.0, 317.0}, {370.0, 119.7}}
+                                Other, 0x1184292c0, {{16.0, 317.0}, {370.0, 119.7}}
+                                  Other, 0x118429400, {{16.0, 317.0}, {370.0, 119.7}}
+                                Other, 0x118429540, {{16.0, 317.0}, {370.0, 119.7}}
+                                  Other, 0x118429680, {{16.0, 317.0}, {370.0, 119.7}}
+                                    Other, 0x1184297c0, {{16.0, 317.0}, {370.0, 119.7}}
+                                      StaticText, 0x118429900, {{32.0, 338.0}, {79.3, 33.7}}, label: '$5.00'
+                                      StaticText, 0x118429a40, {{117.3, 350.3}, {31.0, 18.0}}, label: 'USD'
+                                      StaticText, 0x118429b80, {{46.0, 397.7}, {55.7, 18.0}}, label: 'Granted'
+                                      StaticText, 0x118429cc0, {{107.7, 397.7}, {43.3, 18.0}}, label: '$0.00'
+                                      StaticText, 0x118429e00, {{247.3, 397.7}, {73.3, 18.0}}, label: 'Topped up'
+                                      StaticText, 0x118429f40, {{326.7, 397.7}, {43.3, 18.0}}, label: '$5.00'
+                              Other, 0x11842a080, {{32.0, 316.0}, {338.0, 1.0}}
+                              Cell, 0x11842a1c0, {{16.0, 436.7}, {370.0, 52.0}}
+                                Other, 0x11842a300, {{16.0, 436.7}, {370.0, 52.0}}
+                                  Other, 0x11842a440, {{16.0, 436.7}, {370.0, 52.0}}
+                                Other, 0x11842a580, {{16.0, 436.7}, {370.0, 52.0}}
+                                  Other, 0x11842a6c0, {{16.0, 436.7}, {370.0, 52.0}}
+                                    Other, 0x11842a800, {{16.0, 436.7}, {370.0, 52.0}}
+                                      StaticText, 0x11842a940, {{32.0, 452.5}, {66.0, 20.3}}, label: 'Updated'
+                                      StaticText, 0x11842aa80, {{16.0, 436.7}, {370.0, 52.0}}, label: 'Updated, 1 min ago'
+                              Other, 0x11842abc0, {{32.0, 435.7}, {338.0, 1.0}}
+                              Cell, 0x11842ad00, {{16.0, 488.7}, {370.0, 52.0}}
+                                Other, 0x11842ae40, {{16.0, 488.7}, {370.0, 52.0}}
+                                  Other, 0x11842af80, {{16.0, 488.7}, {370.0, 52.0}}
+                                Other, 0x11842b0c0, {{16.0, 488.7}, {370.0, 52.0}}
+                                  Other, 0x11842b200, {{16.0, 488.7}, {370.0, 52.0}}
+                                    Other, 0x11842b340, {{16.0, 488.7}, {370.0, 52.0}}
+                                      Button, 0x11842b480, {{16.0, 488.7}, {370.0, 52.0}}, label: 'Refresh'
+                                        Image, 0x11842b5c0, {{34.7, 503.3}, {19.0, 23.0}}, identifier: 'arrow.clockwise', label: 'Refresh'
+                                        StaticText, 0x11842b700, {{34.7, 503.3}, {96.0, 23.0}}, label: 'Refresh'
+                              Other, 0x11842b840, {{32.0, 487.7}, {338.0, 1.0}}
+                              Cell, 0x11842b980, {{16.0, 540.7}, {370.0, 52.0}}
+                                Other, 0x11842bac0, {{16.0, 540.7}, {370.0, 52.0}}
+                                  Other, 0x11842bc00, {{16.0, 540.7}, {370.0, 52.0}}
+                                Other, 0x11842bd40, {{16.0, 540.7}, {370.0, 52.0}}
+                                  Other, 0x11842be80, {{16.0, 540.7}, {370.0, 52.0}}
+                                    Other, 0x1188e0000, {{16.0, 540.7}, {370.0, 52.0}}
+                                      Button, 0x1188e0140, {{16.0, 540.7}, {370.0, 52.0}}, label: 'Top up on DeepSeek'
+                                        Image, 0x1188e0280, {{34.0, 557.0}, {19.7, 19.7}}, identifier: 'arrow.up.right.square', label: 'arrow.up.right.square'
+                                        StaticText, 0x1188e03c0, {{34.0, 556.5}, {196.3, 20.3}}, label: 'Top up on DeepSeek'
+                              Other, 0x1188e0500, {{72.0, 539.7}, {298.0, 1.0}}
+                              Cell, 0x1188e0640, {{16.0, 592.7}, {370.0, 119.3}}
+                                Other, 0x1188e0780, {{16.0, 592.7}, {370.0, 119.3}}
+                                Other, 0x1188e08c0, {{16.0, 592.7}, {370.0, 119.3}}
+                                  Other, 0x1188e0a00, {{16.0, 592.7}, {370.0, 119.3}}
+                                    Other, 0x1188e0b40, {{16.0, 592.7}, {370.0, 119.3}}
+                                      StaticText, 0x1188e0c80, {{32.0, 600.7}, {338.0, 63.7}}, label: 'The balance of the whole DeepSeek account this key belongs to — everything using that account draws on it, so it isn't what Orbit or a session spent. Granted credit is spent first.'
+                                      StaticText, 0x1188e0dc0, {{32.0, 674.3}, {338.0, 31.7}}, label: 'Each currency is a separate balance; DeepSeek doesn't convert between them.'
+                              Other, 0x1188e0f00, {{-16.0, 712.0}, {434.0, 1838.0}}
+                              Cell, 0x1188e1040, {{16.0, 712.0}, {370.0, 40.3}}
+                                Other, 0x1188e1180, {{16.0, 712.0}, {370.0, 40.3}}
+                                Other, 0x1188e12c0, {{16.0, 712.0}, {370.0, 40.3}}
+                                  Other, 0x1188e1400, {{16.0, 712.0}, {370.0, 40.3}}
+                                    Other, 0x1188e1540, {{16.0, 712.0}, {370.0, 40.3}}
+                                      StaticText, 0x1188e1680, {{16.0, 712.0}, {370.0, 40.3}}, label: 'Provider'
+                              Cell, 0x1188e17c0, {{16.0, 752.3}, {370.0, 52.0}}
+                                Other, 0x1188e1900, {{16.0, 752.3}, {370.0, 52.0}}
+                                  Other, 0x1188e1a40, {{16.0, 752.3}, {370.0, 52.0}}
+                                Other, 0x1188e1b80, {{16.0, 752.3}, {370.0, 52.0}}
+                                  Other, 0x1188e1cc0, {{16.0, 752.3}, {370.0, 52.0}}
+                                    Other, 0x1188e1e00, {{16.0, 752.3}, {370.0, 52.0}}
+                                      StaticText, 0x1188e1f40, {{32.0, 768.2}, {61.7, 20.3}}, label: 'Runs on'
+                                      StaticText, 0x1188e2080, {{16.0, 752.3}, {370.0, 52.0}}, label: 'Runs on, Claude Code'
+                              Cell, 0x1188e21c0, {{16.0, 804.3}, {370.0, 52.0}}
+                                Other, 0x1188e2300, {{16.0, 804.3}, {370.0, 52.0}}
+                                  Other, 0x1188e2440, {{16.0, 804.3}, {370.0, 52.0}}
+                                Other, 0x1188e2580, {{16.0, 804.3}, {370.0, 52.0}}
+                                  Other, 0x1188e26c0, {{16.0, 804.3}, {370.0, 52.0}}
+                                    Other, 0x1188e2800, {{16.0, 804.3}, {370.0, 52.0}}
+                                      StaticText, 0x1188e2940, {{32.0, 820.2}, {106.3, 20.3}}, label: 'Default model'
+                                      StaticText, 0x1188e2a80, {{16.0, 804.3}, {370.0, 52.0}}, label: 'Default model, deepseek-v4-pro'
+                              Other, 0x1188e2bc0, {{32.0, 803.3}, {338.0, 1.0}}
+                              Cell, 0x1188e2d00, {{16.0, 856.3}, {370.0, 52.0}}
+                                Other, 0x1188e2e40, {{16.0, 856.3}, {370.0, 52.0}}
+                                  Other, 0x1188e2f80, {{16.0, 856.3}, {370.0, 52.0}}
+                                Other, 0x1188e30c0, {{16.0, 856.3}, {370.0, 52.0}}
+                                  Other, 0x1188e3200, {{16.0, 856.3}, {370.0, 52.0}}
+                                    Other, 0x1188e3340, {{16.0, 856.3}, {370.0, 52.0}}
+                                      StaticText, 0x1188e3480, {{32.0, 872.2}, {68.0, 20.3}}, label: 'Endpoint'
+                                      StaticText, 0x1188e35c0, {{16.0, 856.3}, {370.0, 52.0}}, label: 'Endpoint, api.deepseek.com'
+                              Other, 0x1188e3700, {{32.0, 855.3}, {338.0, 1.0}}
+                              Other, 0x1188e3840, {{369.0, 132.0}, {30.0, 680.0}}, label: 'Vertical scroll bar, 2 pages', value: 0%
+                                Other, 0x1188e3980, {{396.0, 808.0}, {3.0, 7.0}}
+                              Other, 0x1188e3ac0, {{369.0, 132.0}, {30.0, 680.0}}, label: 'Vertical scroll bar, 2 pages', value: 0%
+                                Other, 0x1188e3c00, {{396.0, 808.0}, {3.0, 7.0}}
+                    Other, 0x1188e3d40, {{0.0, 62.0}, {402.0, 812.0}}
+                      Other, 0x1188e3e80, {{0.0, 62.0}, {402.0, 812.0}}
+Path to element:
+ →Application, 0x118bd5e00, pid: 28947, label: 'DsbProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.dsbprobe'
+  Output: {
+    Application, 0x118bd5180, pid: 28947, label: 'DsbProbe'
+  }
