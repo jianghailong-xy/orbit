@@ -114,6 +114,13 @@ final class RunnersModel {
         await press { _ = try await self.api.refreshRunnerModels(id) }
     }
 
+    /// The machine checks for its own release now rather than at its next 10-minute check — by the
+    /// same rules, so a turn in flight still holds the install.
+    @discardableResult
+    func updateRunner(_ id: String) async -> String? {
+        await press { _ = try await self.api.requestRunnerSelfUpdate(id) }
+    }
+
     /// A stuck checkout rescued to a branch and put back on its last commit.
     @discardableResult
     func repair(_ workspaceId: String) async -> String? {

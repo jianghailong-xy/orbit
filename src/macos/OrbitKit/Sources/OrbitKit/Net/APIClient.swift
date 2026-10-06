@@ -1322,6 +1322,13 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("runners/\(id)/refresh-models")
     }
 
+    /// Update Runner Now: the runner runs its release check at once rather than at its next periodic
+    /// one. Refused for a runner that is offline or too old to report its updates.
+    @discardableResult
+    public func requestRunnerSelfUpdate(_ id: String) async throws -> RunnerSelfUpdateRequest {
+        try await postEmpty("runners/\(id)/self-update")
+    }
+
     // MARK: engine sign-in relay
 
     /// Sign an engine CLI back in on the runner's own machine, without a terminal on that box: the
