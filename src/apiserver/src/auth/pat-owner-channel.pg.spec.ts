@@ -11,12 +11,15 @@
  *       answered 403 PAT_FORBIDDEN with the family's reason, and a login reaches the same door;
  *   (3) on routes a token reaches with its scope, the fields that are the account owner's own
  *       decision — PATCH /projects/:id `status` (DONE, CANCELLED and OPEN), `integration` and
- *       `acceptanceCriteriaItems`; POST /projects `integration`; POST /wiki/spaces `maintenance`;
+ *       `acceptanceCriteriaItems`; POST /projects `integration`; on both of those, the project's
+ *       authorization set and coordinator (`automatic`, `coordinatorEnabled`, `maxConcurrentTasks`,
+ *       `sessionBudgetPerDay`, `coordinatorAgentId`); POST /wiki/spaces `maintenance`;
  *       PATCH /wiki/spaces/:id `reviewMode`, `maintenance` and `automaticSpotChecks`;
- *       PATCH /sessions/:id/config and POST /sessions/:id/resume `permissionMode`, to any value —
- *       refuse a token the whole request, 403 OWNER_INTERACTIVE_CREDENTIAL_REQUIRED naming them, and
- *       write nothing it carried; every other field is written for the token; and a login writes the
- *       owner's fields as before.
+ *       PATCH /sessions/:id/config, POST /sessions/:id/resume and POST /sessions `permissionMode`, to
+ *       any value — refuse a token the whole request, 403 OWNER_INTERACTIVE_CREDENTIAL_REQUIRED naming
+ *       them, and write nothing it carried; every other field is written for the token, and a session
+ *       it opens without a mode opens in the account's default one; and a login writes the owner's
+ *       fields as before.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/auth/pat-owner-channel.pg.spec.ts
  *
@@ -433,6 +436,93 @@ test('the owner channel refuses a personal access token door by door and field b
     assert.equal((await projectRow(toUuid(chosen.json.id))).exceptionEscalationSeconds, 1200);
   });
 
+  /** How far a project's coordinator may act, and who it is: what a token is refused on both project doors. */
+  const authorizationOf = async (projectId: string) => {
+    const row = await projectRow(projectId);
+    const coordinators = await db.projectMember.findMany({ where: { projectId, role: 'COORDINATOR' }, select: { agentId: true } });
+    return {
+      coordinatorEnabled: row.coordinatorEnabled,
+      maxConcurrentTasks: row.maxConcurrentTasks,
+      sessionBudgetPerDay: row.sessionBudgetPerDay,
+      configRevision: row.configRevision,
+      coordinators: coordinators.map((member) => member.agentId),
+    };
+  };
+
+  await t.test("PATCH /projects/:id: a token's authorization set and coordinator are refused whole, to any value; its other fields are written; a login writes them", async () => {
+    const id = await project('authorization');
+    const read = async () => {
+      const { title, goal } = await projectRow(id);
+      return { title, goal, ...(await authorizationOf(id)) };
+    };
+    const original = await read();
+    const owners: Array<[Record<string, unknown>, string[]]> = [
+      [{ automatic: true }, ['automatic']],
+      [{ automatic: false }, ['automatic']],
+      [{ coordinatorEnabled: true }, ['coordinatorEnabled']],
+      [{ maxConcurrentTasks: 7 }, ['maxConcurrentTasks']],
+      [{ sessionBudgetPerDay: 5 }, ['sessionBudgetPerDay']],
+      [{ sessionBudgetPerDay: null }, ['sessionBudgetPerDay']],
+      [{ coordinatorAgentId: workspaceId }, ['coordinatorAgentId']],
+      [{ coordinatorAgentId: null }, ['coordinatorAgentId']],
+      [
+        { automatic: true, maxConcurrentTasks: 7, sessionBudgetPerDay: 5, coordinatorAgentId: workspaceId },
+        ['automatic', 'maxConcurrentTasks', 'sessionBudgetPerDay', 'coordinatorAgentId'],
+      ],
+      [{ status: 'CANCELLED', coordinatorEnabled: true }, ['status', 'coordinatorEnabled']],
+    ];
+    for (const [fields, named] of owners) {
+      refusedFields(await api('PATCH', `/projects/${id}`, token, { title: 'renamed by a token', goal: 'a goal', ...fields }), named);
+      assert.deepEqual(await read(), original, `${JSON.stringify(fields)}: nothing the request carried was written`);
+    }
+
+    ok(await api('PATCH', `/projects/${id}`, token, { title: 'renamed by a token', goal: 'a goal' }), 'the ordinary fields');
+    assert.deepEqual(await read(), { ...original, title: 'renamed by a token', goal: 'a goal' });
+
+    ok(
+      await api('PATCH', `/projects/${id}`, login, { automatic: true, maxConcurrentTasks: 7, sessionBudgetPerDay: 5, coordinatorAgentId: workspaceId }),
+      'a login writing the authorization set and the coordinator',
+    );
+    assert.deepEqual(await authorizationOf(id), {
+      coordinatorEnabled: true,
+      maxConcurrentTasks: 7,
+      sessionBudgetPerDay: 5,
+      configRevision: original.configRevision + 1n,
+      coordinators: [workspaceId],
+    });
+    ok(await api('PATCH', `/projects/${id}`, login, { coordinatorEnabled: false, sessionBudgetPerDay: null }), 'a login turning Automatic off and clearing the budget');
+    const after = await authorizationOf(id);
+    assert.deepEqual([after.coordinatorEnabled, after.sessionBudgetPerDay], [false, null]);
+  });
+
+  await t.test("POST /projects: a token's authorization set and coordinator are refused whole and make no project; without them its project takes the defaults; a login sets them", async () => {
+    const titled = (title: string) => db.project.count({ where: { ownerId: userId, title } });
+    const owners: Array<[Record<string, unknown>, string[]]> = [
+      [{ coordinatorEnabled: true }, ['coordinatorEnabled']],
+      [{ automatic: true }, ['automatic']],
+      [{ maxConcurrentTasks: 7 }, ['maxConcurrentTasks']],
+      [{ sessionBudgetPerDay: 5 }, ['sessionBudgetPerDay']],
+      [{ coordinatorAgentId: workspaceId }, ['coordinatorAgentId']],
+      [{ workspaceId, coordinatorEnabled: false, maxConcurrentTasks: 7 }, ['coordinatorEnabled', 'maxConcurrentTasks']],
+      [{ integration: { exceptionEscalationSeconds: 1200 }, sessionBudgetPerDay: 5 }, ['integration', 'sessionBudgetPerDay']],
+    ];
+    for (const [fields, named] of owners) {
+      const title = `${named.join(' and ')} by a token ${RUN}`;
+      refusedFields(await api('POST', '/projects', token, { title, ...fields }), named);
+      assert.equal(await titled(title), 0, `${JSON.stringify(fields)}: no project was made`);
+    }
+
+    const byLogin = ok(await api('POST', '/projects', login, { title: `defaults by a login ${RUN}` }), 'a login creating a project without them');
+    const byToken = ok(await api('POST', '/projects', token, { title: `defaults by a token ${RUN}` }), 'a token creating a project without them');
+    assert.deepEqual(await authorizationOf(toUuid(byToken.json.id)), await authorizationOf(toUuid(byLogin.json.id)));
+    const governed = ok(
+      await api('POST', '/projects', login, { title: `governed by a login ${RUN}`, coordinatorEnabled: true, maxConcurrentTasks: 7, sessionBudgetPerDay: 5 }),
+      'a login setting them',
+    );
+    const set = await authorizationOf(toUuid(governed.json.id));
+    assert.deepEqual([set.coordinatorEnabled, set.maxConcurrentTasks, set.sessionBudgetPerDay], [true, 7, 5]);
+  });
+
   /** A space's settings, as the owner reads them. */
   const settingsOf = async (id: string) => ok(await api('GET', `/wiki/spaces/${id}`, login), 'reading a space').json;
 
@@ -518,5 +608,33 @@ test('the owner channel refuses a personal access token door by door and field b
     assert.deepEqual((await sessionRow()).status, 'SUCCEEDED', 'the token revived nothing');
     ok(await api('POST', `/sessions/${sessionId}/resume`, login, { clientTurnId: randomUUID(), content: 'from a login', permissionMode: 'acceptEdits' }), 'a login reviving it');
     assert.equal((await sessionRow()).permissionMode, 'acceptEdits');
+  });
+
+  await t.test("POST /sessions: a token's permission mode is refused whole, to any value, and opens no session; without it the token's session opens in the account's default mode; a login opens one in the mode it names", async () => {
+    const titled = (title: string) => db.session.count({ where: { ownerId: userId, title } });
+    const modeOf = async (reply: Reply) =>
+      (await db.session.findUniqueOrThrow({ where: { id: toUuid(reply.json.id) }, select: { permissionMode: true } })).permissionMode;
+    // The default is the owner's, set signed in; a token cannot move it (users/* is closed to tokens).
+    ok(await api('PATCH', '/users/me/preferences', login, { defaultPermissionMode: 'plan' }), 'the owner choosing a default mode');
+    const moved = await api('PATCH', '/users/me/preferences', token, { defaultPermissionMode: 'bypassPermissions' });
+    assert.equal(moved.status, 403, moved.text);
+    assert.deepEqual(moved.json, REFUSED('ACCOUNT'));
+
+    for (const mode of ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk', 'bypassPermissions']) {
+      const title = `${mode} by a token ${RUN}`;
+      refusedFields(await api('POST', '/sessions', token, { title, prompt: 'from a token', workspaceId, permissionMode: mode }), ['permissionMode']);
+      assert.equal(await titled(title), 0, `${mode}: no session was opened`);
+    }
+
+    const byToken = ok(
+      await api('POST', '/sessions', token, { title: `default mode by a token ${RUN}`, prompt: 'from a token', workspaceId }),
+      'a token opening a session without a mode',
+    );
+    assert.equal(await modeOf(byToken), 'plan');
+    const byLogin = ok(
+      await api('POST', '/sessions', login, { title: `chosen mode by a login ${RUN}`, prompt: 'from a login', workspaceId, permissionMode: 'bypassPermissions' }),
+      'a login choosing the mode',
+    );
+    assert.equal(await modeOf(byLogin), 'bypassPermissions');
   });
 });
