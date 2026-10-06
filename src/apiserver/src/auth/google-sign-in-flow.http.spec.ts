@@ -140,6 +140,19 @@ function memoryPrisma(db: Tables) {
     // exchanges are as exclusive here as the DELETE makes them in PostgreSQL.
     $queryRaw: async (...args: unknown[]) => {
       const { text, values } = renderRawQuery(args);
+      if (/^\s*SELECT/.test(text)) {
+        // §5.2's accounts with the email in any letter case, whose spec is google-account-resolution.http.spec.ts.
+        const [provider, email] = values as string[];
+        return db.users
+          .filter((user) => user.email.toLowerCase() === email.toLowerCase())
+          .slice(0, 2)
+          .map((user) => ({
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            linked: db.identities.some((identity) => identity.userId === user.id && identity.provider === provider),
+          }));
+      }
       assert.equal(
         text.replace(/\s+/g, ' ').trim(),
         'DELETE FROM "oauth_login_flow" WHERE "ticket_hash" = ? AND "status" = \'AUTHENTICATED\' '
@@ -801,7 +814,7 @@ test('the exchange: a ticket is spent at its first presentation; expired, anothe
   assert.equal((await exchange(kept.ticket, kept.verifier)).status, 201);
 });
 
-test('the exchange of a Google account no Orbit account is linked to: 403 GOOGLE_ACCOUNT_NOT_FOUND for now, and the ticket is spent', async (t) => {
+test('the exchange of a Google account no Orbit account is linked to or has the email of, under EXISTING_ACCOUNTS: 403 GOOGLE_ACCOUNT_NOT_FOUND, and the ticket is spent', async (t) => {
   const { db, startAtGoogle, exchange } = await boot(t);
   seedAda(db, false);
   const flow = await startAtGoogle();

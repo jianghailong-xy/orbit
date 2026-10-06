@@ -284,7 +284,9 @@ model User {
   id                    String    @id @default(uuid(7)) @db.Uuid
   email                 String    @unique
   name                  String
-  passwordHash          String    @map("password_hash")
+  // Null: no password — the account signs in with Google only (docs/google-sign-in-design.md
+  // §5.1, migration 0392), and the password login answers it as it answers a wrong password.
+  passwordHash          String?   @map("password_hash")
   createdAt             DateTime  @default(now()) @map("created_at")
   // Per-account UI preferences (theme, new-agent defaults). Shape: UserPreferences
   // (@orbit/shared). JSON so new keys need no migration; missing keys fall back.

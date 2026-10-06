@@ -473,7 +473,7 @@ test('Google sign-in on PostgreSQL: the 0391 tables, the flow end to end, a tick
     assert.equal((await exchange(link.ticket, link.verifier)).json?.code, 'GOOGLE_FLOW_MISMATCH', 'a LINK ticket is not a sign-in');
     assert.deepEqual(await flows(), [], 'every presented ticket was spent');
 
-    // A Google account no Orbit account is linked to, for now (S3 completes §5.2).
+    // A Google account no Orbit account is linked to or has the email of, under EXISTING_ACCOUNTS (§5.2 case 6).
     const stranger = await startAtGoogle({ account: { sub: `stranger-${RUN}`, email: `stranger-${RUN}@gmail.com` } });
     const strangerTicket = ticketOf(await call('GET', stranger.callback, { cookie: stranger.cookie }))!;
     const refused = await exchange(strangerTicket, stranger.verifier);
