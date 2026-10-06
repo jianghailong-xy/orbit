@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RequestMethod } from '@nestjs/common';
 import { GUARDS_METADATA, METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
+import { Reflector } from '@nestjs/core';
 import { Prisma } from '@prisma/client';
 import { RUNNER_SELF_UPDATE_STATES, RunnerStatus, type RunnerSelfUpdate } from '@orbit/shared';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { patDeclaration } from '../auth/pat-scope.decorator';
 import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { RealtimeService } from '../realtime/realtime.service';
@@ -235,4 +237,15 @@ test('the detail and Update Runner Now are routes of the owner-authenticated run
   };
   assert.deepEqual(route('get'), [RequestMethod.GET, ':id']);
   assert.deepEqual(route('requestSelfUpdate'), [RequestMethod.POST, ':id/self-update']);
+});
+
+test('a personal access token may read the detail, as it reads the list, but never press Update Runner Now', () => {
+  // Read the way JwtAuthGuard decides (pat-scope.decorator.ts): runners:read is the only runner
+  // scope, and a runner is driven only from the app.
+  const declared = (name: keyof RunnersController) =>
+    patDeclaration(new Reflector(), RunnersController.prototype[name], RunnersController);
+  assert.deepEqual(declared('list'), { kind: 'SCOPE', scope: 'runners:read', workspaceConfinable: false });
+  assert.deepEqual(declared('get'), declared('list'));
+  assert.deepEqual(declared('requestSelfUpdate'), { kind: 'FORBIDDEN', reason: 'RUNNER_CONTROL' });
+  assert.deepEqual(declared('requestSelfUpdate'), declared('refreshModels'));
 });
