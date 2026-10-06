@@ -208,6 +208,11 @@ v1 的落地。最初设想由各 service 的读写入口过滤；实际做法�
 - 额外记录**通道**：`Activity` 增加可空列 `credential_kind`（`LOGIN` | `PAT`）与 `credential_id`
   （PAT 的 id）。经 PAT 的写请求在现有 activity 写入点带上这两列。
   需要确认 `Activity` 覆盖了哪些写；没覆盖的写不在 v1 补，先在本文列出缺口。
+  落地时确认（迁移 0384）：`activity` 在此之前**没有任何写入点**。所以 v1 新建了唯一一个写入点：
+  用户通道建任务，即 `POST /tasks`（含带 `verification` 的成对创建）与 `POST /tasks/batch-create`。
+  在写 task 行的同一事务里，每个新任务写一行：`type = 'task.created'`、`payload = {taskId}`、
+  `actor_id = userId`。runner 通道建任务不记。其余用户写路由都不产生 activity，v1 不补。
+  落地时共 186 条：PAT 可达 111 条，PAT 一律 403 的 75 条；逐条清单在落地任务的评论里。
 - 设置页的令牌详情显示「最近使用」与最近 N 条经该令牌的 activity。
 
 ### 6.5 签发接口
