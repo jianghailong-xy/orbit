@@ -313,7 +313,7 @@ final class BackgroundJobsCopyParityTests: XCTestCase {
     func testAWakeTurnDrawsNoBubbleForABlockNobodyTyped() throws {
         let web = try flat(Self.webTranscript)
         let branch = try section(web, from: "const background = parseBackgroundWake(node.note);",
-                                 to: "return <UserBubble node={node} />;", Self.webTranscript)
+                                 to: "return <UserBubble node={node} queued={queued} />;", Self.webTranscript)
 
         assertBuilt(branch, "attached={", "the leftover block riding in the card", Self.webTranscript)
         assertBuilt(branch, "<ControlPlaneNote kind={describeNote(background.rest)} text={background.rest} />",

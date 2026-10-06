@@ -19414,6 +19414,24 @@ button.chat-jump-start:hover {
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* A resumed run's brief still waiting behind the running turn: dashed, with the queue's line at its
+   foot, as the delivery card above waits. */
+.tsc.is-queued {
+  border-style: dashed;
+}
+.tsc-queued {
+  margin-top: 6px;
+}
+.tsc-queued .chat-queued-meta {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  row-gap: 2px;
+}
+.tsc-queued .chat-queued-why {
+  order: 1;
+  flex-basis: 100%;
+  white-space: normal;
+}
 
 /* Another Orbit session's message (components/SessionMessageCard.tsx): on the side every turn this
    conversation is handed sits, but a raised card rather than the owner's own tinted bubble — the
