@@ -1,0 +1,63 @@
+==> stubs ready after 2s
+iPhone iPhone 17 Pro com.apple.CoreSimulator.SimRuntime.iOS-26-5
+iPad iPad Air 11-inch (M4) com.apple.CoreSimulator.SimRuntime.iOS-26-5
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B, iPad CD273885-3D56-471B-AD88-07FFF01EA675
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testPrinciplesThenANewSpace]' started.
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testPrinciplesThenANewSpace]' passed (196.610 seconds).
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testTheHeadComesFirstThenTheDocuments]' started.
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiPhoneShotsTests.swift:94: error: -[WikiProbeUITests.WikiPhoneShotsTests testTheHeadComesFirstThenTheDocuments] : XCTAssertTrue failed - the line is a grey bar while its read is out
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testTheHeadComesFirstThenTheDocuments]' failed (98.187 seconds).
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testTheHomeIsTheDocuments]' started.
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testTheHomeIsTheDocuments]' passed (146.538 seconds).
+	 Executed 3 tests, with 1 failure (0 unexpected) in 441.336 (441.350) seconds
+	 Executed 3 tests, with 1 failure (0 unexpected) in 441.336 (441.355) seconds
+	 Executed 3 tests, with 1 failure (0 unexpected) in 441.336 (441.370) seconds
+** TEST FAILED **
+Test Case '-[WikiProbeUITests.WikiPadShotsTests testTheDirectoryBesideTheContent]' started.
+Test Case '-[WikiProbeUITests.WikiPadShotsTests testTheDirectoryBesideTheContent]' passed (278.830 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 278.830 (278.834) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 278.830 (278.838) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 278.830 (278.840) seconds
+** TEST SUCCEEDED **
+.wiki-probe/run.sh: line 70:  1919 Terminated: 15          python3 -u stub.py 8765 "$OUT/requests-one.log" one > "$OUT/stub-one.out" 2>&1
+.wiki-probe/run.sh: line 70:  1920 Terminated: 15          python3 -u stub.py 8766 "$OUT/requests-three.log" three > "$OUT/stub-three.out" 2>&1
+.wiki-probe/run.sh: line 70:  1921 Terminated: 15          SLOW=25 python3 -u stub.py 8767 "$OUT/requests-slow.log" slow > "$OUT/stub-slow.out" 2>&1
+total 11088
+drwxr-xr-x  38 runner  staff    1216 Oct  6 20:49 .
+drwxr-xr-x  14 runner  staff     448 Oct  6 20:36 ..
+-rw-r--r--   1 runner  staff  562790 Oct  6 20:32 01-phone-drawer.png
+-rw-r--r--   1 runner  staff  286725 Oct  6 20:33 02-phone-home.png
+-rw-r--r--   1 runner  staff  280095 Oct  6 20:33 03-phone-home-unfolded.png
+-rw-r--r--   1 runner  staff  310307 Oct  6 20:34 04-phone-home-foot.png
+-rw-r--r--   1 runner  staff  562353 Oct  6 20:28 11-phone-drawer-three.png
+-rw-r--r--   1 runner  staff  293064 Oct  6 20:29 12-phone-principles.png
+-rw-r--r--   1 runner  staff  151807 Oct  6 20:30 13-phone-new-space.png
+-rw-r--r--   1 runner  staff  562382 Oct  6 20:31 21-phone-drawer-slow.png
+-rw-r--r--   1 runner  staff  119513 Oct  6 20:31 22-phone-loading.png
+-rw-r--r--   1 runner  staff  286742 Oct  6 20:31 23-phone-loaded.png
+-rw-r--r--   1 runner  staff  438477 Oct  6 20:45 31-pad-wiki.png
+-rw-r--r--   1 runner  staff  503831 Oct  6 20:45 32-pad-doc.png
+-rw-r--r--   1 runner  staff  464865 Oct  6 20:47 33-pad-activity.png
+-rw-r--r--   1 runner  staff  466087 Oct  6 20:47 34-pad-settings.png
+drwxr-xr-x   8 runner  staff     256 Oct  6 20:49 attachments-pad
+drwxr-xr-x  28 runner  staff     896 Oct  6 20:49 attachments-phone
+-rw-r--r--   1 runner  staff     168 Oct  6 20:49 not-served.txt
+-rw-r--r--   1 runner  staff   15704 Oct  6 20:47 requests-one.log
+-rw-r--r--   1 runner  staff    3858 Oct  6 20:31 requests-slow.log
+-rw-r--r--   1 runner  staff    6333 Oct  6 20:30 requests-three.log
+-rw-r--r--   1 runner  staff      55 Oct  6 20:07 stub-one.out
+-rw-r--r--   1 runner  staff      56 Oct  6 20:07 stub-slow.out
+-rw-r--r--   1 runner  staff      57 Oct  6 20:07 stub-three.out
+-rw-r--r--@  1 runner  staff   42909 Oct  6 20:47 tree-pad-activity.txt
+-rw-r--r--@  1 runner  staff   38779 Oct  6 20:45 tree-pad-doc.txt
+-rw-r--r--@  1 runner  staff   38370 Oct  6 20:47 tree-pad-settings.txt
+-rw-r--r--@  1 runner  staff   42522 Oct  6 20:45 tree-pad-wiki.txt
+-rw-r--r--@  1 runner  staff   25448 Oct  6 20:34 tree-phone-home-foot.txt
+-rw-r--r--@  1 runner  staff   21766 Oct  6 20:33 tree-phone-home.txt
+-rw-r--r--@  1 runner  staff   17412 Oct  6 20:31 tree-phone-loading.txt
+-rw-r--r--@  1 runner  staff   13268 Oct  6 20:30 tree-phone-new-space.txt
+-rw-r--r--@  1 runner  staff   23056 Oct  6 20:29 tree-phone-principles.txt
+-rw-r--r--@  1 runner  staff    1941 Oct  6 20:47 WikiPadShotsTeststestTheDirectoryBesideTheContent-notes.txt
+-rw-r--r--@  1 runner  staff    1230 Oct  6 20:30 WikiPhoneShotsTeststestPrinciplesThenANewSpace-notes.txt
+-rw-r--r--@  1 runner  staff     631 Oct  6 20:31 WikiPhoneShotsTeststestTheHeadComesFirstThenTheDocuments-notes.txt
+-rw-r--r--@  1 runner  staff    1981 Oct  6 20:34 WikiPhoneShotsTeststestTheHomeIsTheDocuments-notes.txt

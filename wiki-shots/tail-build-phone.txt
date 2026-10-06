@@ -1,0 +1,300 @@
+    t =     0.14s Set Up
+    t =     0.15s Open io.orbitd.wikiprobe
+    t =     0.15s     Launch io.orbitd.wikiprobe
+    t =     0.15s         Terminate io.orbitd.wikiprobe:26967
+2026-10-06 20:30:26.417 xcodebuild[5246:27331] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 20:30:26.461 xcodebuild[5246:27331] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    13.91s         Setting up automation session
+    t =    18.37s         Wait for io.orbitd.wikiprobe to idle
+    t =    21.72s Waiting 60.0s for "Open navigation" Button to exist
+    t =    22.79s     Checking `Expect predicate `existsNoRetry == 1` for object "Open navigation" Button`
+    t =    22.79s         Checking existence of `"Open navigation" Button`
+    t =    29.19s Tap "Open navigation" Button
+    t =    29.19s     Wait for io.orbitd.wikiprobe to idle
+    t =    29.20s     Find the "Open navigation" Button
+    t =    29.50s     Check for interrupting elements affecting "line.3.horizontal" Button
+    t =    29.66s     Synthesize event
+    t =    30.00s     Wait for io.orbitd.wikiprobe to idle
+    t =    30.86s Waiting 20.0s for Button (First Match) to exist
+    t =    31.92s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    31.92s         Checking existence of `Button (First Match)`
+    t =    32.20s Checking existence of `Button (First Match)`
+    t =    32.53s Find the Button (First Match)
+    t =    33.17s Find the "Wiki, 1 waiting on you" Button
+    t =    34.12s Find the "Wiki, 1 waiting on you" Button
+    t =    37.73s Find the "Wiki, 1 waiting on you" Button
+    t =    41.40s Find the "Wiki, 1 waiting on you" Button
+    t =    47.25s Added attachment named '21-phone-drawer-slow'
+    t =    47.91s Tap "Wiki, 1 waiting on you" Button
+    t =    47.91s     Wait for io.orbitd.wikiprobe to idle
+    t =    47.96s     Find the "Wiki, 1 waiting on you" Button
+    t =    50.59s     Check for interrupting elements affecting "Wiki, 1 waiting on you" Button
+    t =    50.73s     Synthesize event
+    t =    51.05s     Wait for io.orbitd.wikiprobe to idle
+    t =    51.83s Waiting 10.0s for "The codebase this wiki describes" StaticText to exist
+    t =    52.90s     Checking `Expect predicate `existsNoRetry == 1` for object "The codebase this wiki describes" StaticText`
+    t =    52.92s         Checking existence of `"The codebase this wiki describes" StaticText`
+    t =    53.23s Checking existence of `Any (First Match)`
+    t =    53.92s Checking existence of `Any (First Match)`
+    t =    54.70s Find the Any (First Match)
+    t =    55.40s Find the "35 documents · 5 written" StaticText
+    t =    56.13s Find the "35 documents · 5 written" StaticText
+    t =    56.74s Find the "35 documents · 5 written" StaticText
+    t =    58.18s Find the "35 documents · 5 written" StaticText
+    t =    59.28s Checking existence of `"35 documents · 5 written" StaticText`
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiPhoneShotsTests.swift:94: error: -[WikiProbeUITests.WikiPhoneShotsTests testTheHeadComesFirstThenTheDocuments] : XCTAssertTrue failed - the line is a grey bar while its read is out
+    t =    60.79s Checking existence of `Any (First Match)`
+    t =    61.39s Checking existence of `Any (First Match)`
+    t =    61.94s Checking existence of `Any (First Match)`
+    t =    62.80s Added attachment named '22-phone-loading'
+    t =    62.81s Requesting snapshot of accessibility hierarchy for app with pid 30650
+    t =    63.65s Requesting snapshot of accessibility hierarchy for app with pid 30650
+    t =    63.89s Waiting 60.0s for Any (First Match) to exist
+    t =    64.95s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    64.95s         Checking existence of `Any (First Match)`
+    t =    65.49s Checking existence of `Any (First Match)`
+    t =    65.82s Find the Any (First Match)
+    t =    66.26s Find the "35 documents · 5 written" StaticText
+    t =    66.79s Find the "35 documents · 5 written" StaticText
+    t =    67.21s Find the "35 documents · 5 written" StaticText
+    t =    67.65s Find the "35 documents · 5 written" StaticText
+    t =    68.10s Waiting 20.0s for Any (First Match) to exist
+    t =    69.11s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    69.12s         Checking existence of `Any (First Match)`
+    t =    69.64s         Capturing element debug description
+    t =    70.15s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    70.16s         Checking existence of `Any (First Match)`
+    t =    70.84s         Capturing element debug description
+    t =    71.15s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    71.15s         Checking existence of `Any (First Match)`
+    t =    71.73s         Capturing element debug description
+    t =    72.13s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    72.14s         Checking existence of `Any (First Match)`
+    t =    72.96s         Capturing element debug description
+    t =    73.17s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    73.17s         Checking existence of `Any (First Match)`
+    t =    73.71s         Capturing element debug description
+    t =    74.12s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    74.12s         Checking existence of `Any (First Match)`
+    t =    74.65s         Capturing element debug description
+    t =    75.17s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    75.17s         Checking existence of `Any (First Match)`
+    t =    75.78s         Capturing element debug description
+    t =    76.15s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    76.15s         Checking existence of `Any (First Match)`
+    t =    76.75s         Capturing element debug description
+    t =    77.15s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    77.15s         Checking existence of `Any (First Match)`
+    t =    78.64s         Capturing element debug description
+    t =    79.16s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    79.16s         Checking existence of `Any (First Match)`
+    t =    86.88s Checking existence of `Any (First Match)`
+    t =    90.03s Find the Any (First Match)
+    t =    91.51s Find the "产品概览与架构" StaticText
+    t =    92.59s Find the "产品概览与架构" StaticText
+    t =    93.40s Find the "产品概览与架构" StaticText
+    t =    94.76s Find the "产品概览与架构" StaticText
+    t =    97.74s Added attachment named '23-phone-loaded'
+    t =    97.74s Tear Down
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testTheHeadComesFirstThenTheDocuments]' failed (98.187 seconds).
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testTheHomeIsTheDocuments]' started.
+    t =     0.00s Start Test at 2026-10-06 20:31:55.447
+    t =     0.09s Set Up
+    t =     0.09s Open io.orbitd.wikiprobe
+    t =     0.09s     Launch io.orbitd.wikiprobe
+    t =     0.09s         Terminate io.orbitd.wikiprobe:30650
+2026-10-06 20:32:02.731 xcodebuild[5246:27331] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 20:32:02.732 xcodebuild[5246:27331] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    18.56s         Setting up automation session
+    t =    21.74s         Wait for io.orbitd.wikiprobe to idle
+    t =    25.48s Waiting 60.0s for "Open navigation" Button to exist
+    t =    26.55s     Checking `Expect predicate `existsNoRetry == 1` for object "Open navigation" Button`
+    t =    26.55s         Checking existence of `"Open navigation" Button`
+    t =    32.33s Tap "Open navigation" Button
+    t =    32.34s     Wait for io.orbitd.wikiprobe to idle
+    t =    32.35s     Find the "Open navigation" Button
+    t =    32.89s     Check for interrupting elements affecting "line.3.horizontal" Button
+    t =    34.24s     Synthesize event
+    t =    34.70s     Wait for io.orbitd.wikiprobe to idle
+    t =    35.54s Waiting 20.0s for Button (First Match) to exist
+    t =    36.59s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    36.59s         Checking existence of `Button (First Match)`
+    t =    36.81s Checking existence of `Button (First Match)`
+    t =    37.41s Find the Button (First Match)
+    t =    37.93s Find the "Wiki, 1 waiting on you" Button
+    t =    38.11s Find the "Wiki, 1 waiting on you" Button
+    t =    38.29s Find the "Wiki, 1 waiting on you" Button
+    t =    38.50s Find the "Wiki, 1 waiting on you" Button
+    t =    40.03s Added attachment named '01-phone-drawer'
+    t =    40.05s Tap "Wiki, 1 waiting on you" Button
+    t =    40.05s     Wait for io.orbitd.wikiprobe to idle
+    t =    40.05s     Find the "Wiki, 1 waiting on you" Button
+    t =    40.30s     Check for interrupting elements affecting "Wiki, 1 waiting on you" Button
+    t =    40.40s     Synthesize event
+    t =    40.72s     Wait for io.orbitd.wikiprobe to idle
+    t =    58.09s Waiting 20.0s for Any (First Match) to exist
+    t =    59.27s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    59.32s         Checking existence of `Any (First Match)`
+    t =    64.39s Checking existence of `Any (First Match)`
+    t =    68.63s Find the Any (First Match)
+    t =    69.02s Find the "35 documents · 5 written" StaticText
+    t =    69.34s Find the "35 documents · 5 written" StaticText
+    t =    69.65s Find the "35 documents · 5 written" StaticText
+    t =    69.99s Find the "35 documents · 5 written" StaticText
+    t =    70.37s Waiting 10.0s for "The codebase this wiki describes" StaticText to exist
+    t =    71.39s     Checking `Expect predicate `existsNoRetry == 1` for object "The codebase this wiki describes" StaticText`
+    t =    71.40s         Checking existence of `"The codebase this wiki describes" StaticText`
+    t =    72.61s Find the "The codebase this wiki describes" StaticText
+    t =    72.84s Waiting 20.0s for Any (First Match) to exist
+    t =    73.89s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    73.89s         Checking existence of `Any (First Match)`
+    t =    74.26s Checking existence of `Any (First Match)`
+    t =    74.80s Find the Any (First Match)
+    t =    75.33s Find the "产品概览与架构" StaticText
+    t =    75.79s Find the "产品概览与架构" StaticText
+    t =    76.30s Find the "产品概览与架构" StaticText
+    t =    76.79s Find the "产品概览与架构" StaticText
+    t =    77.21s Waiting 20.0s for Any (First Match) to exist
+    t =    78.24s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    78.24s         Checking existence of `Any (First Match)`
+    t =    78.64s Checking existence of `Any (First Match)`
+    t =    78.95s Find the Any (First Match)
+    t =    79.28s Find the "1.1, 产品定位与核心能力, Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上，计划、历史和控制都留在一个自托管的地方。" Button
+    t =    79.59s Find the "1.1, 产品定位与核心能力, Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上，计划、历史和控制都留在一个自托管的地方。" Button
+    t =    79.91s Find the "1.1, 产品定位与核心能力, Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上，计划、历史和控制都留在一个自托管的地方。" Button
+    t =    80.34s Find the "1.1, 产品定位与核心能力, Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上，计划、历史和控制都留在一个自托管的地方。" Button
+    t =    80.71s Waiting 20.0s for Any (First Match) to exist
+    t =    81.76s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    81.76s         Checking existence of `Any (First Match)`
+    t =    82.08s Checking existence of `Any (First Match)`
+    t =    82.40s Find the Any (First Match)
+    t =    82.86s Find the "1.1, 产品定位与核心能力, Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上，计划、历史和控制都留在一个自托管的地方。" Button
+    t =    83.21s Find the "1.1, 产品定位与核心能力, Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上，计划、历史和控制都留在一个自托管的地方。" Button
+    t =    83.52s Find the "1.1, 产品定位与核心能力, Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上，计划、历史和控制都留在一个自托管的地方。" Button
+    t =    83.88s Find the "1.1, 产品定位与核心能力, Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上，计划、历史和控制都留在一个自托管的地方。" Button
+    t =    84.20s Waiting 20.0s for Any (First Match) to exist
+    t =    85.25s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    85.25s         Checking existence of `Any (First Match)`
+    t =    89.86s Checking existence of `Any (First Match)`
+    t =    90.27s Find the Any (First Match)
+    t =    90.66s Find the "+1 not written yet" Button
+    t =    91.00s Find the "+1 not written yet" Button
+    t =    91.37s Find the "+1 not written yet" Button
+    t =    91.70s Find the "+1 not written yet" Button
+    t =    92.07s Checking existence of `Any (First Match)`
+    t =    92.35s Checking existence of `Any (First Match)`
+    t =    92.61s Checking existence of `Any (First Match)`
+    t =    92.98s Checking existence of `Any (First Match)`
+    t =    93.50s Checking existence of `Any (First Match)`
+    t =    93.94s Checking existence of `Any (First Match)`
+    t =    94.35s Checking existence of `Any (First Match)`
+    t =    94.77s Checking existence of `Any (First Match)`
+    t =    95.36s Checking existence of `Any (First Match)`
+    t =    95.64s Checking existence of `Any (First Match)`
+    t =    95.92s Checking existence of `Any (First Match)`
+    t =    96.17s Checking existence of `Any (First Match)`
+    t =    96.50s Checking existence of `Any (First Match)`
+    t =    96.96s Checking existence of `Any (First Match)`
+    t =    97.23s Checking existence of `Any (First Match)`
+    t =    97.48s Checking existence of `Any (First Match)`
+    t =    97.94s Checking existence of `Any (First Match)`
+    t =    98.39s Checking existence of `Any (First Match)`
+    t =    98.76s Find the "Activity" Button
+    t =   101.29s Added attachment named '02-phone-home'
+    t =   101.31s Requesting snapshot of accessibility hierarchy for app with pid 32939
+    t =   103.44s Requesting snapshot of accessibility hierarchy for app with pid 32939
+    t =   103.66s Get all elements bound by index for: Elements matching predicate 'label CONTAINS "+1 not written yet"'
+    t =   103.84s Checking existence of `Button (Element at index 0)`
+    t =   103.99s Find the Button (Element at index 0)
+    t =   104.16s Tap "+1 not written yet" Button
+    t =   104.16s     Wait for io.orbitd.wikiprobe to idle
+    t =   104.17s     Find the "+1 not written yet" Button
+    t =   104.34s     Check for interrupting elements affecting "+1 not written yet" Button
+    t =   104.62s     Synthesize event
+    t =   105.28s     Wait for io.orbitd.wikiprobe to idle
+    t =   105.54s Waiting 20.0s for Any (First Match) to exist
+    t =   106.59s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   106.60s         Checking existence of `Any (First Match)`
+    t =   107.06s Checking existence of `Any (First Match)`
+    t =   107.55s Find the Any (First Match)
+    t =   107.91s Find the "1.3, 自部署与首次运行, Not written yet" Button
+    t =   108.32s Find the "1.3, 自部署与首次运行, Not written yet" Button
+    t =   108.77s Find the "1.3, 自部署与首次运行, Not written yet" Button
+    t =   109.40s Find the "1.3, 自部署与首次运行, Not written yet" Button
+    t =   111.59s Added attachment named '03-phone-home-unfolded'
+    t =   111.59s Tap "+1 not written yet" Button
+    t =   111.59s     Wait for io.orbitd.wikiprobe to idle
+    t =   111.59s     Find the "+1 not written yet" Button
+    t =   111.74s     Check for interrupting elements affecting "+1 not written yet" Button
+    t =   111.86s     Synthesize event
+    t =   112.20s     Wait for io.orbitd.wikiprobe to idle
+    t =   113.21s Find the Any (First Match)
+    t =   114.62s     Find the Any (First Match) (retry 1)
+    t =   116.40s     Find the Any (First Match) (retry 2)
+    t =   116.82s Swipe up Target Application 'io.orbitd.wikiprobe'
+    t =   116.82s     Wait for io.orbitd.wikiprobe to idle
+    t =   116.83s     Find the Target Application 'io.orbitd.wikiprobe'
+    t =   116.95s     Check for interrupting elements affecting "WikiProbe" Application
+    t =   117.05s     Synthesize event
+    t =   117.55s     Wait for io.orbitd.wikiprobe to idle
+    t =   120.47s Find the Any (First Match)
+    t =   121.93s     Find the Any (First Match) (retry 1)
+    t =   123.48s     Find the Any (First Match) (retry 2)
+    t =   123.79s Swipe up Target Application 'io.orbitd.wikiprobe'
+    t =   123.79s     Wait for io.orbitd.wikiprobe to idle
+    t =   123.80s     Find the Target Application 'io.orbitd.wikiprobe'
+    t =   123.95s     Check for interrupting elements affecting "WikiProbe" Application
+    t =   124.10s     Synthesize event
+    t =   124.71s     Wait for io.orbitd.wikiprobe to idle
+    t =   126.36s Find the Any (First Match)
+    t =   126.95s Waiting 20.0s for Any (First Match) to exist
+    t =   128.00s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   128.00s         Checking existence of `Any (First Match)`
+    t =   128.64s Checking existence of `Any (First Match)`
+    t =   129.25s Find the Any (First Match)
+    t =   129.67s Find the "Browse by category" Button
+    t =   130.21s Find the "Browse by category" Button
+    t =   130.67s Find the "Browse by category" Button
+    t =   131.18s Find the "Browse by category" Button
+    t =   131.67s Waiting 20.0s for Any (First Match) to exist
+    t =   132.72s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   132.72s         Checking existence of `Any (First Match)`
+    t =   133.17s Checking existence of `Any (First Match)`
+    t =   133.72s Find the Any (First Match)
+    t =   134.23s Find the "A–Z index" Button
+    t =   134.85s Find the "A–Z index" Button
+    t =   135.39s Find the "A–Z index" Button
+    t =   136.39s Find the "A–Z index" Button
+    t =   136.96s Waiting 20.0s for Any (First Match) to exist
+    t =   138.01s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   138.01s         Checking existence of `Any (First Match)`
+    t =   138.76s Checking existence of `Any (First Match)`
+    t =   139.62s Find the Any (First Match)
+    t =   140.49s Find the "2 documents · Not written yet" Button
+    t =   141.25s Find the "2 documents · Not written yet" Button
+    t =   142.09s Find the "2 documents · Not written yet" Button
+    t =   142.83s Find the "2 documents · Not written yet" Button
+    t =   145.20s Added attachment named '04-phone-home-foot'
+    t =   145.21s Requesting snapshot of accessibility hierarchy for app with pid 32939
+    t =   146.02s Requesting snapshot of accessibility hierarchy for app with pid 32939
+    t =   146.21s Tear Down
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testTheHomeIsTheDocuments]' passed (146.538 seconds).
+Test Suite 'WikiPhoneShotsTests' failed at 2026-10-06 20:34:21.991.
+	 Executed 3 tests, with 1 failure (0 unexpected) in 441.336 (441.350) seconds
+Test Suite 'WikiProbeUITests.xctest' failed at 2026-10-06 20:34:21.995.
+	 Executed 3 tests, with 1 failure (0 unexpected) in 441.336 (441.355) seconds
+Test Suite 'Selected tests' failed at 2026-10-06 20:34:21.995.
+	 Executed 3 tests, with 1 failure (0 unexpected) in 441.336 (441.370) seconds
+2026-10-06 20:35:58.104 xcodebuild[5246:27331] [MT] IDETestOperationsObserverDebug: 647.585 elapsed -- Testing started completed.
+2026-10-06 20:35:58.105 xcodebuild[5246:27331] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-06 20:35:58.105 xcodebuild[5246:27331] [MT] IDETestOperationsObserverDebug: 647.617 sec, +647.617 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.wiki-probe/results/phone.xcresult
+
+Failing tests:
+	WikiPhoneShotsTests.testTheHeadComesFirstThenTheDocuments()
+
+** TEST FAILED **
+
+Testing started

@@ -1,0 +1,52 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "CD273885-3D56-471B-AD88-07FFF01EA675",
+        "deviceName" : "iPad Air 11-inch (M4)",
+        "exportedFileName" : "52F252B0-3DDC-49B8-B21D-0C6317EA60CA.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "34-pad-settings_0_3D328CC1-721C-4ECB-96CC-002B26D38C4A.png",
+        "timestamp" : 1791319658.263
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "CD273885-3D56-471B-AD88-07FFF01EA675",
+        "deviceName" : "iPad Air 11-inch (M4)",
+        "exportedFileName" : "C04C5AA4-BFC0-4261-BA22-43617F99EFC3.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "33-pad-activity_0_46CE316E-4EC2-4CD7-BC6A-FC62A8D971E1.png",
+        "timestamp" : 1791319635.181
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "CD273885-3D56-471B-AD88-07FFF01EA675",
+        "deviceName" : "iPad Air 11-inch (M4)",
+        "exportedFileName" : "F3A0E9B4-DFC0-4113-AF82-EE1CD01E61BB.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "32-pad-doc_0_225F70D2-8A39-4C67-BBF5-F7FEE6589F7B.png",
+        "timestamp" : 1791319548.04
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "CD273885-3D56-471B-AD88-07FFF01EA675",
+        "deviceName" : "iPad Air 11-inch (M4)",
+        "exportedFileName" : "BC3E7C63-1255-4969-8B48-43B8C76BC9EC.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "31-pad-wiki_0_6783D316-1166-47BD-83CE-7556AD6C0A08.png",
+        "timestamp" : 1791319520.778
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "CD273885-3D56-471B-AD88-07FFF01EA675",
+        "deviceName" : "iPad Air 11-inch (M4)",
+        "exportedFileName" : "EEEF96A8-77BE-458A-BBEC-2175357465F3.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "WikiPadShotsTests/testTheDirectoryBesideTheContent()",
+    "testIdentifierURL" : "test://com.apple.xcode/WikiProbe/WikiProbeUITests/WikiPadShotsTests/testTheDirectoryBesideTheContent"
+  }
+]

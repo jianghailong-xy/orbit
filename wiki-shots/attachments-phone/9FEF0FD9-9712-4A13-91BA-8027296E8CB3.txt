@@ -1,0 +1,5 @@
+Query chain:
+ →Find: Target Application 'io.orbitd.wikiprobe'
+  ↪︎Find: Descendants matching type Any
+    ↪︎Find: Elements matching predicate 'label == "产品概览与架构"'
+      ↪︎Find: First Match

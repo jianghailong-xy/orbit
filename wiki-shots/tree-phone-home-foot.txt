@@ -1,0 +1,286 @@
+Attributes: Application, 0x118ac1f40, pid: 32939, label: 'WikiProbe'
+Element subtree:
+ →Application, 0x118ac1f40, pid: 32939, label: 'WikiProbe'
+    Window (Main), 0x118ac1e00, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x118ac1cc0, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x118ac1b80, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x118ac1a40, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x118ac12c0, {{0.0, 0.0}, {402.0, 874.0}}
+              StaticText, 0x118ac2a80, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x118ac2580, {{251.7, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              CollectionView, 0x118ac26c0, {{0.0, 128.0}, {305.7, 746.0}}
+                Other, 0x118ac2440, {{0.0, -1364.0}, {305.7, 3250.3}}
+                Cell, 0x118ac2080, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x118ac21c0, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x118ac1180, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x118ac1540, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x118ac1680, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x118ac17c0, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x118ac1900, {{0.0, 128.0}, {305.3, 44.3}}
+                        Button, 0x118ac0140, {{0.0, 128.0}, {305.3, 44.3}}, label: 'Projects'
+                          Image, 0x118ac0280, {{26.3, 142.3}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x118ac0500, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                Cell, 0x118ac03c0, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x118ac2800, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x118ac2940, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x118ac1400, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x118ac08c0, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x118ac0b40, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x118ac0c80, {{0.0, 172.3}, {305.3, 44.3}}
+                        Button, 0x118ac0dc0, {{0.0, 172.3}, {305.3, 44.3}}, label: 'Tasks'
+                          Image, 0x118ac1040, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x118ac0f00, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x118ac0a00, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x118ac0780, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x118ac0640, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x118ac0000, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x118ac2bc0, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x118ac2d00, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x118ac2e40, {{0.0, 216.7}, {305.3, 44.3}}
+                        Button, 0x118ac2f80, {{0.0, 216.7}, {305.3, 44.3}}, label: 'Wiki, 1 waiting on you'
+                          Image, 0x118ac30c0, {{27.0, 230.0}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x118ac3200, {{58.0, 228.7}, {34.3, 20.3}}, label: 'Wiki'
+                          StaticText, 0x118ac3340, {{277.7, 232.2}, {5.7, 13.3}}, label: '1 waiting on you'
+                Cell, 0x118ac3480, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x118ac35c0, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x118ac3700, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x118ac3840, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x118ac3980, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x118ac3ac0, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x118ac3c00, {{0.0, 261.0}, {305.3, 44.7}}
+                        StaticText, 0x118ac3d40, {{0.0, 261.0}, {305.3, 44.7}}, label: 'Workspaces'
+                Cell, 0x118ac3e80, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x118a3fe80, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x118a3df40, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x118a3e580, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x118a3e6c0, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x118a3e1c0, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x118a3ea80, {{0.0, 305.7}, {305.3, 44.3}}
+                        Button, 0x118a3ee40, {{0.0, 305.7}, {305.3, 44.3}}, label: 'orbit-develop,  · hpc'
+                          Other, 0x118a3e440, {{24.7, 320.0}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x118a3fc00, {{24.7, 320.0}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x118a3f200, {{58.0, 317.7}, {103.0, 20.3}}, label: 'orbit-develop'
+                          StaticText, 0x118a3f480, {{161.0, 317.7}, {42.0, 20.3}}, label: ' · hpc'
+                Cell, 0x118a3ef80, {{0.0, 350.0}, {305.3, 44.3}}
+                  Other, 0x118a3ed00, {{0.0, 350.0}, {305.3, 44.3}}
+                    Other, 0x118a3ebc0, {{0.0, 350.0}, {305.3, 44.3}}
+                      Other, 0x118a54000, {{0.0, 350.0}, {305.3, 44.3}}
+                  Other, 0x118a54140, {{0.0, 350.0}, {305.3, 44.3}}
+                    Other, 0x118a54280, {{0.0, 350.0}, {305.3, 44.3}}
+                      Other, 0x118a543c0, {{0.0, 350.0}, {305.3, 44.3}}
+                        Button, 0x118a54500, {{0.0, 350.0}, {305.3, 44.3}}, label: 'orbit-macos,  · mac-mini'
+                          Other, 0x118a54640, {{24.7, 364.3}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x118a54780, {{24.7, 364.3}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x118a548c0, {{58.0, 362.0}, {93.0, 20.3}}, label: 'orbit-macos'
+                          StaticText, 0x118a54a00, {{151.0, 362.0}, {85.0, 20.3}}, label: ' · mac-mini'
+                Other, 0x118a54b40, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x118a54c80, {{299.3, 516.7}, {3.0, 354.3}}
+                Other, 0x118a54dc0, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x118a54f00, {{299.3, 516.7}, {3.0, 354.3}}
+              Button, 0x118a55040, {{10.0, 788.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x118a55180, {{31.0, 801.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x118a552c0, {{57.0, 799.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x118a55400, {{251.7, 788.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x118a55540, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x118a55680, {{0.0, 62.0}, {402.0, 54.0}}, identifier: 'Wiki'
+                  Other, 0x118a557c0, {{20.0, 66.0}, {36.0, 36.0}}, identifier: 'line.3.horizontal', label: 'Open navigation'
+                    Other, 0x118a55900, {{20.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x118a55a40, {{22.3, 66.0}, {31.3, 36.0}}, identifier: 'line.3.horizontal', label: 'Open navigation'
+                  StaticText, 0x118a55b80, {{72.0, 73.7}, {34.3, 20.7}}, label: 'Wiki'
+                  Other, 0x118a55cc0, {{227.0, 66.0}, {41.7, 36.0}}, identifier: 'list.bullet', label: 'Contents'
+                    Other, 0x118a55e00, {{227.0, 66.0}, {41.7, 36.0}}
+                      Button, 0x118a55f40, {{227.0, 66.0}, {41.7, 36.0}}, identifier: 'list.bullet', label: 'Contents'
+                  Other, 0x118a56080, {{284.7, 66.0}, {40.0, 36.0}}, label: 'Activity', value: 1 waiting on you
+                    Other, 0x118a561c0, {{284.7, 66.0}, {40.0, 36.0}}
+                      Button, 0x118a56300, {{284.7, 66.0}, {40.0, 36.0}}, label: 'Activity', value: 1 waiting on you
+                        Image, 0x118a56440, {{291.3, 73.0}, {24.3, 22.0}}, identifier: 'clock.arrow.circlepath', label: 'clock.arrow.circlepath'
+                        StaticText, 0x118a56580, {{314.0, 65.3}, {7.3, 13.3}}, label: '1'
+                  Other, 0x118a566c0, {{340.7, 66.0}, {41.3, 36.0}}, identifier: 'gearshape', label: 'Settings'
+                    Other, 0x118a56800, {{340.7, 66.0}, {41.3, 36.0}}
+                      Button, 0x118a56940, {{340.7, 66.0}, {41.3, 36.0}}, identifier: 'gearshape', label: 'Settings'
+                Other, 0x118a56a80, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x118a56bc0, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x118a56d00, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x118a56e40, {{0.0, 0.0}, {402.0, 874.0}}
+                        CollectionView, 0x118a56f80, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x118a570c0, {{-16.0, -188.7}, {434.0, 278.7}}
+                          Cell, 0x118a57200, {{16.0, -59.3}, {370.0, 91.3}}
+                            Other, 0x118a57340, {{16.0, -59.3}, {370.0, 91.3}}
+                              Other, 0x118a57480, {{16.0, -59.3}, {370.0, 91.3}}
+                            Other, 0x118a575c0, {{16.0, -59.3}, {370.0, 91.3}}
+                              Other, 0x118a57700, {{16.0, -59.3}, {370.0, 91.3}}
+                                Other, 0x118a57840, {{16.0, -59.3}, {370.0, 91.3}}
+                                  Button, 0x118a57980, {{16.0, -59.3}, {370.0, 91.3}}, label: '3.2, 实时流与推送, 客户端从每个会话的 SSE 流拿转录事件；用户级控制面流把各处的变化推给所有在线的客户端。'
+                                    StaticText, 0x118a57ac0, {{32.0, -42.3}, {24.0, 18.0}}, label: '3.2'
+                                    StaticText, 0x118a57c00, {{76.0, -38.3}, {10.3, 13.3}}, label: '●'
+                                    StaticText, 0x118a57d40, {{91.3, -44.3}, {101.3, 20.3}}, label: '实时流与推送'
+                                    StaticText, 0x118a57e80, {{76.0, -21.0}, {253.3, 38.0}}, label: '客户端从每个会话的 SSE 流拿转录事件；用户级控制面流把各处的变化推给所有在线的客户端。'
+                                    Image, 0x118ab4000, {{363.7, -36.7}, {5.7, 9.7}}, identifier: 'chevron.forward', label: 'Forward'
+                          Other, 0x118ab4140, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x118ab4280, {{0.0, 0.0}, {402.0, 874.0}}
+                            Other, 0x118ab43c0, {{0.0, 0.0}, {402.0, 170.8}}
+                              Image, 0x118ab4500, {{-120.0, -166.0}, {642.0, 332.0}}, identifier: 'AdditionalDimmingOverlay'
+                              Other, 0x118ab4640, {{0.0, 0.0}, {402.0, 106.0}}
+                              Other, 0x118ab4780, {{0.0, 0.0}, {402.0, 170.8}}
+                                Other, 0x118ab48c0, {{0.0, 0.0}, {402.0, 170.8}}
+                              Other, 0x118ab4a00, {{0.0, 0.0}, {402.0, 170.8}}
+                                Other, 0x118ab4b40, {{0.0, 0.0}, {402.0, 170.8}}
+                              Other, 0x118ab4c80, {{0.0, 0.0}, {402.0, 170.8}}
+                                Other, 0x118ab4dc0, {{0.0, 0.0}, {402.0, 170.8}}
+                                Other, 0x118ab4f00, {{0.0, 0.0}, {402.0, 170.8}}
+                          Cell, 0x118ab5040, {{16.0, 32.0}, {370.0, 52.0}}
+                            Other, 0x118ab5180, {{16.0, 32.0}, {370.0, 52.0}}
+                              Other, 0x118ab52c0, {{16.0, 32.0}, {370.0, 52.0}}
+                            Other, 0x118ab5400, {{16.0, 32.0}, {370.0, 52.0}}
+                              Other, 0x118ab5540, {{16.0, 32.0}, {370.0, 52.0}}
+                                Other, 0x118ab5680, {{16.0, 32.0}, {370.0, 52.0}}
+                                  Button, 0x118ab57c0, {{16.0, 32.0}, {370.0, 52.0}}, label: '+1 not written yet', value: Collapsed
+                                    StaticText, 0x118ab5900, {{76.0, 49.0}, {119.0, 18.0}}, label: '+1 not written yet'
+                                    Image, 0x118ab5a40, {{363.7, 54.7}, {5.7, 9.7}}, identifier: 'chevron.forward', label: 'Forward'
+                          Other, 0x118ab5b80, {{32.0, 31.0}, {338.0, 1.0}}
+                          Other, 0x118ab5cc0, {{-16.0, 90.0}, {434.0, 96.0}}
+                          Cell, 0x118ab5e00, {{16.0, 90.0}, {370.0, 38.0}}
+                            Other, 0x118ab5f40, {{16.0, 90.0}, {370.0, 38.0}}
+                            Other, 0x118ab6080, {{16.0, 90.0}, {370.0, 38.0}}
+                              Other, 0x118ab61c0, {{16.0, 90.0}, {370.0, 38.0}}
+                                Other, 0x118ab6300, {{16.0, 90.0}, {370.0, 38.0}}
+                                  StaticText, 0x118ab6440, {{32.0, 100.0}, {9.3, 18.0}}, label: '4'
+                                  StaticText, 0x118ab6580, {{49.3, 100.0}, {114.7, 18.0}}, label: 'Runner 与运行时'
+                          Cell, 0x118ab66c0, {{16.0, 128.0}, {370.0, 52.0}}
+                            Other, 0x118ab6800, {{16.0, 128.0}, {370.0, 52.0}}
+                              Other, 0x118ab6940, {{16.0, 128.0}, {370.0, 52.0}}
+                            Other, 0x118ab6a80, {{16.0, 128.0}, {370.0, 52.0}}
+                              Other, 0x118ab6bc0, {{16.0, 128.0}, {370.0, 52.0}}
+                                Other, 0x118ab6d00, {{16.0, 128.0}, {370.0, 52.0}}
+                                  Button, 0x118ab6e40, {{16.0, 128.0}, {370.0, 52.0}}, label: '3 documents · Not written yet', value: Collapsed
+                                    StaticText, 0x118ab6f80, {{76.0, 145.0}, {203.7, 18.0}}, label: '3 documents · Not written yet'
+                                    Image, 0x118ab70c0, {{363.7, 150.7}, {5.7, 9.7}}, identifier: 'chevron.forward', label: 'Forward'
+                          Other, 0x118ab7200, {{-16.0, 186.0}, {434.0, 96.0}}
+                          Cell, 0x118ab7340, {{16.0, 186.0}, {370.0, 38.0}}
+                            Other, 0x118ab7480, {{16.0, 186.0}, {370.0, 38.0}}
+                            Other, 0x118ab75c0, {{16.0, 186.0}, {370.0, 38.0}}
+                              Other, 0x118ab7700, {{16.0, 186.0}, {370.0, 38.0}}
+                                Other, 0x118ab7840, {{16.0, 186.0}, {370.0, 38.0}}
+                                  StaticText, 0x118ab7980, {{32.0, 196.0}, {9.3, 18.0}}, label: '5'
+                                  StaticText, 0x118ab7ac0, {{49.3, 196.0}, {123.7, 18.0}}, label: 'Watch 与后台作业'
+                          Cell, 0x118ab7c00, {{16.0, 224.0}, {370.0, 52.0}}
+                            Other, 0x118ab7d40, {{16.0, 224.0}, {370.0, 52.0}}
+                              Other, 0x118ab7e80, {{16.0, 224.0}, {370.0, 52.0}}
+                            Other, 0x118ab8000, {{16.0, 224.0}, {370.0, 52.0}}
+                              Other, 0x118ab8140, {{16.0, 224.0}, {370.0, 52.0}}
+                                Other, 0x118ab8280, {{16.0, 224.0}, {370.0, 52.0}}
+                                  Button, 0x118ab83c0, {{16.0, 224.0}, {370.0, 52.0}}, label: '3 documents · Not written yet', value: Collapsed
+                                    StaticText, 0x118ab8500, {{76.0, 241.0}, {203.7, 18.0}}, label: '3 documents · Not written yet'
+                                    Image, 0x118ab8640, {{363.7, 246.7}, {5.7, 9.7}}, identifier: 'chevron.forward', label: 'Forward'
+                          Other, 0x118ab8780, {{-16.0, 282.0}, {434.0, 96.0}}
+                          Cell, 0x118ab88c0, {{16.0, 282.0}, {370.0, 38.0}}
+                            Other, 0x118ab8a00, {{16.0, 282.0}, {370.0, 38.0}}
+                            Other, 0x118ab8b40, {{16.0, 282.0}, {370.0, 38.0}}
+                              Other, 0x118ab8c80, {{16.0, 282.0}, {370.0, 38.0}}
+                                Other, 0x118ab8dc0, {{16.0, 282.0}, {370.0, 38.0}}
+                                  StaticText, 0x118ab8f00, {{32.0, 292.0}, {9.3, 18.0}}, label: '6'
+                                  StaticText, 0x118ab9040, {{49.3, 292.0}, {104.3, 18.0}}, label: '数据库与可靠性'
+                          Cell, 0x118ab9180, {{16.0, 320.0}, {370.0, 52.0}}
+                            Other, 0x118ab92c0, {{16.0, 320.0}, {370.0, 52.0}}
+                              Other, 0x118ab9400, {{16.0, 320.0}, {370.0, 52.0}}
+                            Other, 0x118ab9540, {{16.0, 320.0}, {370.0, 52.0}}
+                              Other, 0x118ab9680, {{16.0, 320.0}, {370.0, 52.0}}
+                                Other, 0x118ab97c0, {{16.0, 320.0}, {370.0, 52.0}}
+                                  Button, 0x118ab9900, {{16.0, 320.0}, {370.0, 52.0}}, label: '3 documents · Not written yet', value: Collapsed
+                                    StaticText, 0x118ab9a40, {{76.0, 337.0}, {203.7, 18.0}}, label: '3 documents · Not written yet'
+                                    Image, 0x118ab9b80, {{363.7, 342.7}, {5.7, 9.7}}, identifier: 'chevron.forward', label: 'Forward'
+                          Other, 0x118ab9cc0, {{-16.0, 378.0}, {434.0, 96.0}}
+                          Cell, 0x118ab9e00, {{16.0, 378.0}, {370.0, 38.0}}
+                            Other, 0x118ab9f40, {{16.0, 378.0}, {370.0, 38.0}}
+                            Other, 0x118aba080, {{16.0, 378.0}, {370.0, 38.0}}
+                              Other, 0x118aba1c0, {{16.0, 378.0}, {370.0, 38.0}}
+                                Other, 0x118aba300, {{16.0, 378.0}, {370.0, 38.0}}
+                                  StaticText, 0x118aba440, {{32.0, 388.0}, {9.3, 18.0}}, label: '7'
+                                  StaticText, 0x118aba580, {{49.3, 388.0}, {175.3, 18.0}}, label: 'Wiki（Orbit 内置知识库）'
+                          Cell, 0x118aba6c0, {{16.0, 416.0}, {370.0, 52.0}}
+                            Other, 0x118aba800, {{16.0, 416.0}, {370.0, 52.0}}
+                              Other, 0x118aba940, {{16.0, 416.0}, {370.0, 52.0}}
+                            Other, 0x118abaa80, {{16.0, 416.0}, {370.0, 52.0}}
+                              Other, 0x118ababc0, {{16.0, 416.0}, {370.0, 52.0}}
+                                Other, 0x118abad00, {{16.0, 416.0}, {370.0, 52.0}}
+                                  Button, 0x118abae40, {{16.0, 416.0}, {370.0, 52.0}}, label: '3 documents · Not written yet', value: Collapsed
+                                    StaticText, 0x118abaf80, {{76.0, 433.0}, {203.7, 18.0}}, label: '3 documents · Not written yet'
+                                    Image, 0x118abb0c0, {{363.7, 438.7}, {5.7, 9.7}}, identifier: 'chevron.forward', label: 'Forward'
+                          Other, 0x118abb200, {{-16.0, 474.0}, {434.0, 96.0}}
+                          Cell, 0x118abb340, {{16.0, 474.0}, {370.0, 38.0}}
+                            Other, 0x118abb480, {{16.0, 474.0}, {370.0, 38.0}}
+                            Other, 0x118abb5c0, {{16.0, 474.0}, {370.0, 38.0}}
+                              Other, 0x118abb700, {{16.0, 474.0}, {370.0, 38.0}}
+                                Other, 0x118abb840, {{16.0, 474.0}, {370.0, 38.0}}
+                                  StaticText, 0x118abb980, {{32.0, 484.0}, {9.3, 18.0}}, label: '8'
+                                  StaticText, 0x118abbac0, {{49.3, 484.0}, {74.7, 18.0}}, label: '安全与信任'
+                          Cell, 0x118abbc00, {{16.0, 512.0}, {370.0, 52.0}}
+                            Other, 0x118abbd40, {{16.0, 512.0}, {370.0, 52.0}}
+                              Other, 0x118abbe80, {{16.0, 512.0}, {370.0, 52.0}}
+                            Other, 0x118abc000, {{16.0, 512.0}, {370.0, 52.0}}
+                              Other, 0x118abc140, {{16.0, 512.0}, {370.0, 52.0}}
+                                Other, 0x118abc280, {{16.0, 512.0}, {370.0, 52.0}}
+                                  Button, 0x118abc3c0, {{16.0, 512.0}, {370.0, 52.0}}, label: '3 documents · Not written yet', value: Collapsed
+                                    StaticText, 0x118abc500, {{76.0, 529.0}, {203.7, 18.0}}, label: '3 documents · Not written yet'
+                                    Image, 0x118abc640, {{363.7, 534.7}, {5.7, 9.7}}, identifier: 'chevron.forward', label: 'Forward'
+                          Other, 0x118abc780, {{-16.0, 570.0}, {434.0, 96.0}}
+                          Cell, 0x118abc8c0, {{16.0, 570.0}, {370.0, 38.0}}
+                            Other, 0x118abca00, {{16.0, 570.0}, {370.0, 38.0}}
+                            Other, 0x118abcb40, {{16.0, 570.0}, {370.0, 38.0}}
+                              Other, 0x118abcc80, {{16.0, 570.0}, {370.0, 38.0}}
+                                Other, 0x118abcdc0, {{16.0, 570.0}, {370.0, 38.0}}
+                                  StaticText, 0x118abcf00, {{32.0, 580.0}, {9.3, 18.0}}, label: '9'
+                                  StaticText, 0x118abd040, {{49.3, 580.0}, {74.7, 18.0}}, label: '原生客户端'
+                          Cell, 0x118abd180, {{16.0, 608.0}, {370.0, 52.0}}
+                            Other, 0x118abd2c0, {{16.0, 608.0}, {370.0, 52.0}}
+                              Other, 0x118abd400, {{16.0, 608.0}, {370.0, 52.0}}
+                            Other, 0x118abd540, {{16.0, 608.0}, {370.0, 52.0}}
+                              Other, 0x118abd680, {{16.0, 608.0}, {370.0, 52.0}}
+                                Other, 0x118abd7c0, {{16.0, 608.0}, {370.0, 52.0}}
+                                  Button, 0x118abd900, {{16.0, 608.0}, {370.0, 52.0}}, label: '3 documents · Not written yet', value: Collapsed
+                                    StaticText, 0x118abda40, {{76.0, 625.0}, {203.7, 18.0}}, label: '3 documents · Not written yet'
+                                    Image, 0x118abdb80, {{363.7, 630.7}, {5.7, 9.7}}, identifier: 'chevron.forward', label: 'Forward'
+                          Other, 0x118abdcc0, {{-16.0, 666.0}, {434.0, 96.0}}
+                          Cell, 0x118abde00, {{16.0, 666.0}, {370.0, 38.0}}
+                            Other, 0x118abdf40, {{16.0, 666.0}, {370.0, 38.0}}
+                            Other, 0x118abe080, {{16.0, 666.0}, {370.0, 38.0}}
+                              Other, 0x118abe1c0, {{16.0, 666.0}, {370.0, 38.0}}
+                                Other, 0x118abe300, {{16.0, 666.0}, {370.0, 38.0}}
+                                  StaticText, 0x118abe440, {{32.0, 676.0}, {18.7, 18.0}}, label: '10'
+                                  StaticText, 0x118abe580, {{58.7, 676.0}, {104.3, 18.0}}, label: '配置与运维参考'
+                          Cell, 0x118abe6c0, {{16.0, 704.0}, {370.0, 52.0}}
+                            Other, 0x118abe800, {{16.0, 704.0}, {370.0, 52.0}}
+                              Other, 0x118abe940, {{16.0, 704.0}, {370.0, 52.0}}
+                            Other, 0x118abea80, {{16.0, 704.0}, {370.0, 52.0}}
+                              Other, 0x118abebc0, {{16.0, 704.0}, {370.0, 52.0}}
+                                Other, 0x118abed00, {{16.0, 704.0}, {370.0, 52.0}}
+                                  Button, 0x118abee40, {{16.0, 704.0}, {370.0, 52.0}}, label: '2 documents · Not written yet', value: Collapsed
+                                    StaticText, 0x118abef80, {{76.0, 721.0}, {203.3, 18.0}}, label: '2 documents · Not written yet'
+                                    Image, 0x118abf0c0, {{363.7, 726.7}, {5.7, 9.7}}, identifier: 'chevron.forward', label: 'Forward'
+                          Other, 0x118abf200, {{-16.0, 762.0}, {434.0, 1826.0}}
+                          Cell, 0x118abf340, {{16.0, 768.0}, {370.0, 52.0}}
+                            Other, 0x118abf480, {{16.0, 768.0}, {370.0, 52.0}}
+                              Other, 0x118abf5c0, {{16.0, 768.0}, {370.0, 52.0}}
+                                Other, 0x118abf700, {{16.0, 768.0}, {370.0, 52.0}}
+                            Other, 0x118abf840, {{16.0, 768.0}, {370.0, 52.0}}
+                              Other, 0x118abf980, {{16.0, 768.0}, {370.0, 52.0}}
+                                Other, 0x118abfac0, {{16.0, 768.0}, {370.0, 52.0}}
+                                  Button, 0x118abfc00, {{16.0, 785.0}, {175.7, 18.0}}, label: 'Browse by category'
+                                    Image, 0x118abfd40, {{19.3, 785.3}, {17.3, 17.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                                    StaticText, 0x118abfe80, {{16.0, 785.0}, {175.7, 18.0}}, label: 'Browse by category'
+                                  Button, 0x118a40000, {{209.7, 785.0}, {109.0, 18.0}}, label: 'A–Z index'
+                                    Image, 0x118a40140, {{206.0, 787.0}, {31.7, 14.3}}, identifier: 'textformat.abc', label: 'Abc'
+                                    StaticText, 0x118a40280, {{209.7, 785.0}, {109.0, 18.0}}, label: 'A–Z index'
+                          Other, 0x118a403c0, {{369.0, 116.0}, {30.0, 696.0}}, label: 'Vertical scroll bar, 3 pages', value: 100%
+                            Other, 0x118a40500, {{396.0, 481.7}, {3.0, 327.3}}
+                          Other, 0x118a40640, {{369.0, 116.0}, {30.0, 696.0}}, label: 'Vertical scroll bar, 3 pages', value: 100%
+                            Other, 0x118a40780, {{396.0, 481.7}, {3.0, 327.3}}
+                Other, 0x118a408c0, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x118a40a00, {{0.0, 0.0}, {402.0, 874.0}}
+Path to element:
+ →Application, 0x118ac1f40, pid: 32939, label: 'WikiProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.wikiprobe'
+  Output: {
+    Application, 0x118a40b40, pid: 32939, label: 'WikiProbe'
+  }

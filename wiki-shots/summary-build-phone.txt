@@ -1,0 +1,14 @@
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testPrinciplesThenANewSpace]' started.
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testPrinciplesThenANewSpace]' passed (196.610 seconds).
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testTheHeadComesFirstThenTheDocuments]' started.
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiPhoneShotsTests.swift:94: error: -[WikiProbeUITests.WikiPhoneShotsTests testTheHeadComesFirstThenTheDocuments] : XCTAssertTrue failed - the line is a grey bar while its read is out
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testTheHeadComesFirstThenTheDocuments]' failed (98.187 seconds).
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testTheHomeIsTheDocuments]' started.
+Test Case '-[WikiProbeUITests.WikiPhoneShotsTests testTheHomeIsTheDocuments]' passed (146.538 seconds).
+Test Suite 'WikiPhoneShotsTests' failed at 2026-10-06 20:34:21.991.
+	 Executed 3 tests, with 1 failure (0 unexpected) in 441.336 (441.350) seconds
+Test Suite 'WikiProbeUITests.xctest' failed at 2026-10-06 20:34:21.995.
+	 Executed 3 tests, with 1 failure (0 unexpected) in 441.336 (441.355) seconds
+Test Suite 'Selected tests' failed at 2026-10-06 20:34:21.995.
+	 Executed 3 tests, with 1 failure (0 unexpected) in 441.336 (441.370) seconds
+** TEST FAILED **
