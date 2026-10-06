@@ -174,9 +174,9 @@ async function logIn(): Promise<void> {
     type(password!, PASSWORD);
   });
   const submit = [...container.querySelectorAll('button')].find(
-    (button) => (button.textContent ?? '').trim() === 'Login',
+    (button) => (button.textContent ?? '').trim() === 'Sign In',
   );
-  expect(submit, 'the Login button').toBeTruthy();
+  expect(submit, 'the Sign In button').toBeTruthy();
   await act(async () => {
     submit!.click();
   });
