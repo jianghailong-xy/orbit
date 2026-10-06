@@ -1786,9 +1786,10 @@ final class AppModel {
     /// selected, and the one whose tap only closes the drawer.
     var drawerDestination: DrawerDestination { nav.drawerDestination(agentID: selectedAgentID) }
 
-    /// iOS compact: the page on top is its drawer destination's own — a section's list or a
-    /// project's sessions page — so the left screen edge opens the drawer; over any page pushed above
-    /// it the edge is the system back-swipe's.
+    /// iOS compact: the page on top is its drawer destination's own — a section's list, or a
+    /// project's sessions page put up as the project's own rather than pushed by a list row — so the
+    /// left screen edge opens the drawer; over any page pushed above one the edge is the system
+    /// back-swipe's.
     var atDestinationRoot: Bool { nav.atDestinationRoot }
 
     /// True when the current section's navigation stack is at its root (nothing pushed) — the
@@ -2248,7 +2249,8 @@ final class AppModel {
     }
 
     /// A project's sessions page over its coordinator's workspace (or the one already showing).
-    /// Without any workspace it opens the project's page.
+    /// Without any workspace it opens the project's page. On a phone it is the stack's whole content,
+    /// the project's own page, rather than a page pushed over that workspace's list.
     private func openProjectSessions(_ projectID: String, inColumn: Bool) {
         let key = PublicID.storageKey(projectID)
         let coordinator = (sessions + (agents?.allSessions ?? [])).first {
@@ -2266,7 +2268,7 @@ final class AppModel {
         if inColumn {
             nav.enterProjectSessions(address)
         } else {
-            nav.path = [.sessionProject(address)]
+            nav.path = [.sessionProject(address, asDestination: true)]
         }
     }
 

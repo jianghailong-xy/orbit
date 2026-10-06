@@ -156,7 +156,8 @@ final class SessionProjectPageWiringTests: XCTestCase {
     func testTheTwoShellsOpenTheProjectSessionsPageTheirOwnWay() throws {
         let compact = code(try appSource("Views/CompactShell.swift"))
         let frames = try slice(compact, from: "case .compose(let agentID, let folderID):", to: "default:")
-        XCTAssertTrue(frames.contains("case .sessionProject(let address):"))
+        XCTAssertTrue(frames.contains("case .sessionProject(let address, asDestination: false):"))
+        XCTAssertTrue(frames.contains("case .sessionProject(let address, asDestination: true):"))
         XCTAssertTrue(frames.contains("SessionProjectPage(address: address)"))
 
         let agents = code(try appSource("Views/AgentsView.swift"))
