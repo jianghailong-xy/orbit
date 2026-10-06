@@ -50,13 +50,17 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
     /// its row, so a session can start on another account than its workspace's. Codex and Claude —
     /// the engines whose CLI keeps a login per directory (`Session.codexAccount`, `.claudeAccount`).
     public let accounts: [AccountChoice]?
+    /// Not a provider at all: the offer to connect one (DeepSeek Harness with no key yet). Always
+    /// `unavailable`, never a session's provider, so no runtime's menu lists it.
+    public let setup: Bool
     public var id: String { slug }
 
     public init(slug: String, label: String, kind: Kind, brandKey: String?, modelLabel: String,
                 unavailable: String? = nil, fixEngine: String? = nil, poolSize: Int? = nil,
                 poolUnit: String? = nil, inPool: Bool = false, note: String? = nil,
-                accounts: [AccountChoice]? = nil, labelDetail: String? = nil) {
+                accounts: [AccountChoice]? = nil, labelDetail: String? = nil, setup: Bool = false) {
         self.slug = slug
+        self.setup = setup
         self.label = label
         self.labelDetail = labelDetail
         self.kind = kind
@@ -115,7 +119,9 @@ public struct EngineChoice: Equatable, Sendable, Identifiable {
     /// How the hero says which provider it runs on: nothing extra for the engine's own sign-in (bar
     /// how it signs in, for Antigravity), "via DeepSeek" for anything else (web `engineProviderDetail`).
     public var providerDetail: String? {
-        provider.slug == slug ? provider.labelDetail : "via \(provider.label)"
+        if provider.slug == slug { return provider.labelDetail }
+        // A key named for its engine (DeepSeek Harness) would only repeat it.
+        return provider.label == label || provider.setup ? nil : "via \(provider.label)"
     }
 }
 
@@ -221,7 +227,8 @@ public enum SessionProviderChoices {
                                planUsage: PlanUsage? = nil,
                                now: Date = Date(),
                                antigravity: RunnerAntigravityState? = nil,
-                               antigravityKeyAvailable: Bool? = nil) -> [ProviderChoice] {
+                               antigravityKeyAvailable: Bool? = nil,
+                               dshState: DshRuntime.RunnerState? = nil) -> [ProviderChoice] {
         let health = { (engine: String) in engines?.first { $0.engine == engine } }
         let keyAvailable = antigravityKeyAvailable ?? antigravity?.envKeyAvailable ?? false
         let googleAccount = antigravity?.authSource == "google"
@@ -272,7 +279,9 @@ public enum SessionProviderChoices {
             .map { provider -> ProviderChoice in
                 // Judged through the engine it borrows, since that CLI is what actually runs it.
                 let runtime = executingRuntime(provider.slug, configured: configured)
-                let blocker = runtime == "antigravity" ? antigravityBlocker(antigravity, health: health(runtime)) : byokBlocker(health(runtime))
+                let blocker = runtime == "antigravity" ? antigravityBlocker(antigravity, health: health(runtime))
+                    : runtime == "dsh" ? dshState?.label
+                    : byokBlocker(health(runtime))
                 return ProviderChoice(
                     slug: provider.slug,
                     label: provider.label,
@@ -282,9 +291,21 @@ public enum SessionProviderChoices {
                     unavailable: blocker,
                     fixEngine: blocker == nil ? nil : runtime,
                     inPool: pooled.contains(provider.slug),
-                    labelDetail: runtime == "antigravity" ? "Antigravity CLI" : nil)
+                    // DeepSeek's key runs on either agent; say which one this row is.
+                    labelDetail: runtime == "antigravity" ? "Antigravity CLI"
+                        : runtime == "dsh" ? "Harness"
+                        : provider.presetSlug == "deepseek" ? "Claude Code" : nil)
             }
-        return engineChoices + poolChoices + byok
+        // No Harness key yet, on a runner that could run one: offer the connection rather than
+        // nothing, so "where is DeepSeek Harness?" has an answer in the picker itself.
+        let dshSetup: [ProviderChoice] =
+            dshState != nil && dshState != .updateRunner
+                && !configured.contains(where: { $0.runtime == "dsh" })
+            ? [ProviderChoice(slug: "\(DshRuntime.presetSlug):connect", label: "DeepSeek Harness", kind: .byok,
+                              brandKey: DshRuntime.presetSlug, modelLabel: "", unavailable: "Add API key",
+                              fixEngine: DshRuntime.connectFix, setup: true)]
+            : []
+        return engineChoices + poolChoices + byok + dshSetup
     }
 
     /// The providers a session that already exists may be moved to: the ones that borrow the same
@@ -313,7 +334,7 @@ public enum SessionProviderChoices {
                                    antigravity: RunnerAntigravityState? = nil) -> [ProviderChoice] {
         let runtime = executingRuntime(provider, configured: configured)
         let sameRuntime = choices.filter {
-            executingRuntime($0.slug, configured: configured) == runtime
+            !$0.setup && executingRuntime($0.slug, configured: configured) == runtime
         }
         if sameRuntime.contains(where: { $0.slug == provider }) { return sameRuntime }
         return [current(provider, in: choices, configured: configured, catalog: catalog,
@@ -325,12 +346,12 @@ public enum SessionProviderChoices {
     /// the OpenCode slug — harmless where it is used for model defaults, but here it would offer
     /// an OpenCode session every Claude provider on the account. A Gemini key borrows Antigravity,
     /// so it executes on the same CLI as the engine's own slug.
-    static func executingRuntime(_ provider: String, configured: [ConfiguredProvider]) -> String {
+    public static func executingRuntime(_ provider: String, configured: [ConfiguredProvider]) -> String {
         if let custom = configured.first(where: { $0.slug == provider }) {
             let borrowed = custom.runtime ?? ""
-            return ["codex", "kimi", "antigravity"].contains(borrowed) ? borrowed : "claude"
+            return ["codex", "kimi", "antigravity", "dsh"].contains(borrowed) ? borrowed : "claude"
         }
-        return ["codex", "kimi", "opencode", "antigravity"].contains(provider) ? provider : "claude"
+        return ["codex", "kimi", "opencode", "antigravity", "dsh"].contains(provider) ? provider : "claude"
     }
 
     /// The entry to show as current. An agent set to `opencode`, or pointing at a provider that has
@@ -357,9 +378,11 @@ public enum SessionProviderChoices {
     /// The engine row for `provider`, landing on it. Also how the hero names a pick that is in no
     /// group (`opencode`, a removed provider): its runtime, on the synthesized current choice.
     public static func engine(for provider: ProviderChoice, configured: [ConfiguredProvider]) -> EngineChoice {
-        let slug = executingRuntime(provider.slug, configured: configured)
-        return EngineChoice(slug: slug, label: AgentDefaults.providerName(slug, configured: nil),
-                            brandKey: enginePreset[slug], provider: provider)
+        let slug = provider.setup ? "dsh" : executingRuntime(provider.slug, configured: configured)
+        // Harness is not a built-in provider option (its key is a configured row), so name it here.
+        return EngineChoice(slug: slug,
+                            label: slug == "dsh" ? "DeepSeek Harness" : AgentDefaults.providerName(slug, configured: nil),
+                            brandKey: slug == "dsh" ? DshRuntime.presetSlug : enginePreset[slug], provider: provider)
     }
 
     /// `choices` grouped by the engine that runs them, in the order the engines first appear there
@@ -372,7 +395,7 @@ public enum SessionProviderChoices {
         var order: [String] = []
         var groups: [String: [ProviderChoice]] = [:]
         for choice in choices {
-            let runtime = executingRuntime(choice.slug, configured: configured)
+            let runtime = choice.setup ? "dsh" : executingRuntime(choice.slug, configured: configured)
             if groups[runtime] == nil { order.append(runtime) }
             groups[runtime, default: []].append(choice)
         }

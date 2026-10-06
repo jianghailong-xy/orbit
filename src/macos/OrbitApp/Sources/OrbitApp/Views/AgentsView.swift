@@ -1290,8 +1290,7 @@ struct NewSessionView: View {
                            currentProviderChoice.fixEngine != nil {
                             Button {
                                 if let rid = agent.runnerId {
-                                    if currentProviderChoice.fixEngine == "antigravity",
-                                       let url = draft.providersURL(engine: "antigravity", runnerID: rid) { openURL(url) }
+                                    if let url = draft.webFixURL(engine: currentProviderChoice.fixEngine ?? "", runnerID: rid) { openURL(url) }
                                     else { app.route(to: .runner(rid)) }
                                 }
                             } label: {
@@ -1410,7 +1409,7 @@ struct NewSessionView: View {
                 engines: engines, current: currentEngine, agentName: agent.name,
                 onSelect: { slug in draft.pickDraftProvider(slug) },
                 onFixRunner: agent.runnerId.map { rid in { engine in
-                    if engine == "antigravity", let url = draft.providersURL(engine: engine, runnerID: rid) { openURL(url) }
+                    if let url = draft.webFixURL(engine: engine, runnerID: rid) { openURL(url) }
                     else { app.route(to: .runner(rid)) }
                 } })
         }
@@ -1433,7 +1432,8 @@ struct NewSessionView: View {
                                        pools: draft.allPools,
                                        planUsage: draft.runnerPlanUsage,
                                        antigravity: draft.runnerAntigravity,
-                                       antigravityKeyAvailable: agent.antigravityKeyAvailableByRunner?[draft.runnerID ?? agent.runnerId ?? ""] == true)
+                                       antigravityKeyAvailable: agent.antigravityKeyAvailableByRunner?[draft.runnerID ?? agent.runnerId ?? ""] == true,
+                                       dshState: draft.dshRunnerState)
     }
 
     /// The engines the hero offers, each landing on the draft's pick when it holds it, else on what

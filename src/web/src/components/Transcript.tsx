@@ -109,6 +109,7 @@ import Markdown from 'react-markdown';
 import { orbitLinkRemarkPlugin } from '../lib/orbitLink';
 import { OrbitLinkCardsCtx, orbitLinkCardComponents } from './OrbitLinkCard';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
+import { dshRepair, type DshRepair } from '../lib/dshRuntime';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
@@ -189,6 +190,10 @@ export interface AuthErrorHelp {
   onOpenProviders?: () => void;
   onInstall?: () => void;
   installDisabled?: boolean;
+  /** DeepSeek Harness: open this session's own key (its provider's edit page). */
+  onEditDshKey?: () => void;
+  /** DeepSeek Harness: install the pinned CLI on this session's runner. */
+  onInstallDsh?: () => void;
   /** Re-send the last user message, once the user has signed back in. */
   onRetry?: () => void;
   /** A re-send is already in flight, so the button offers none: one failure, one attempt. */
@@ -202,6 +207,62 @@ export interface AuthErrorHelp {
 export const AuthErrorCtx = createContext<AuthErrorHelp | null>(null);
 
 export type AntigravityRepair = 'needsKey' | 'updateRunner' | 'notInstalled';
+
+/**
+ * A DeepSeek Harness session that could not run, as the remedy rather than the runner's sentence.
+ * Its credential is a configured key, never a sign-in on the runner, so every key problem is fixed
+ * on that provider's own page; everything else is about the machine (dshRepair says which).
+ */
+export function DshRepairCard({ repair, help, seq }: { repair: DshRepair; help: AuthErrorHelp; seq?: number }) {
+  const machine = help.runnerName || 'this runner';
+  const keyProblem = repair === 'needsKey' || repair === 'invalidKey';
+  return (
+    <div className="chat-authfix" data-seq={seq} data-dsh-repair={repair}>
+      <div className="chat-authfix-head">
+        <WarningFilled className="chat-authfix-icon" />
+        <div className="chat-authfix-title">
+          {repair === 'needsKey'
+            ? 'DeepSeek Harness needs an API key'
+            : repair === 'invalidKey'
+              ? 'DeepSeek rejected this API key'
+              : repair === 'updateRunner'
+                ? 'Waiting for a newer runner'
+                : repair === 'notInstalled'
+                  ? `DeepSeek Harness isn't installed on ${machine}`
+                  : `DeepSeek Harness can't run on ${machine}`}
+        </div>
+      </div>
+      <div className="chat-authfix-desc">
+        {repair === 'needsKey'
+          ? 'This session has no DeepSeek Harness key to run on. Add or re-enable the key in Providers, then send your message again.'
+          : repair === 'invalidKey'
+            ? 'Update the key in Providers, then send your message again. Connecting a key does not check it — the first request does.'
+            : repair === 'updateRunner'
+              ? `${machine} runs Orbit runner ${help.runnerVersion || 'an unknown version'}, which predates DeepSeek Harness. The runner updates itself when no session is running on it.`
+              : repair === 'notInstalled'
+                ? 'Install it from Providers, then send your message again.'
+                : 'DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only. Move this work to a runner that can.'}
+      </div>
+      <div className="chat-authfix-actions">
+        {keyProblem && help.onEditDshKey && (
+          <button className="chat-authfix-go" type="button" onClick={help.onEditDshKey}>
+            Update the API key
+          </button>
+        )}
+        {repair === 'notInstalled' && help.onInstallDsh && (
+          <button className="chat-authfix-go" type="button" onClick={help.onInstallDsh} disabled={help.installDisabled}>
+            Install
+          </button>
+        )}
+        {keyProblem && help.onRetry && (
+          <button className="chat-authfix-retry" type="button" onClick={help.onRetry} disabled={help.retryDisabled}>
+            Retry — re-send my last message
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function antigravityRepair(message: string): AntigravityRepair | null {
   if (message.startsWith('Failed to authenticate: Antigravity runs on an API key (GEMINI_API_KEY), and neither this session nor the runner has one')) return 'needsKey';
@@ -1676,6 +1737,8 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
       );
     }
     case 'error': {
+      const dsh = authHelp?.runtime === 'dsh' ? dshRepair(node.message) : null;
+      if (dsh && authHelp) return <DshRepairCard repair={dsh} help={authHelp} seq={node.seq} />;
       const repair = antigravityRepair(node.message);
       if (repair && authHelp && (authHelp.runtime ?? authHelp.provider) === 'antigravity') {
         return <AntigravityRepairCard repair={repair} help={authHelp} seq={node.seq} />;

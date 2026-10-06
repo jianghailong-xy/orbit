@@ -177,7 +177,10 @@ struct ToolApprovalCard: View {
     @State private var criteriaOpen = false
 
     private var rememberRules: [PermissionRule] {
-        approval.input.map { Approvals.rememberRules(toolName: approval.toolName ?? "", input: $0) } ?? []
+        // A runtime that drops remember rules (Harness) gets Allow / Deny only.
+        guard Approvals.rememberOffered(runtime: SessionProviderChoices.executingRuntime(
+            console.provider, configured: console.configuredProviders)) else { return [] }
+        return approval.input.map { Approvals.rememberRules(toolName: approval.toolName ?? "", input: $0) } ?? []
     }
     /// A shell line is shown as the command itself — never the model's prose `description`, since
     /// what runs is what you are agreeing to — in the transcript's own `$` block, so the tool row

@@ -149,6 +149,58 @@ final class ConsoleModel {
         return EngineAuth.antigravityRepair(sessionError)
     }
 
+    /// A DeepSeek Harness key: a configured row whose runtime is `dsh` (its runtime can never change).
+    var executesDsh: Bool {
+        SessionProviderChoices.executingRuntime(provider, configured: configuredProviders) == "dsh"
+    }
+
+    /// Whether this console's runner can start Harness — nil before any runner snapshot is read,
+    /// which claims nothing (`DshRuntime.state`).
+    var dshRunnerState: DshRuntime.RunnerState? {
+        guard runnerEngines != nil || runnerCapabilities != nil else { return nil }
+        return DshRuntime.state(capabilities: runnerCapabilities, engines: runnerEngines)
+    }
+
+    var queuedDshRepair: DshRuntime.Repair? {
+        guard executesDsh, sessionStatus == .pending else { return nil }
+        return DshRuntime.repair(sessionError)
+    }
+
+    var canInstallDsh: Bool {
+        runnerID != nil && runnerOnline == true && runnerCapabilities?.contains(DshRuntime.runnerCapability) == true
+            && !antigravityInstalling && runnerInstall?.inFlight != true
+    }
+
+    /// Where a Harness key is fixed: the session's own key row in the web app's Providers, or the
+    /// connect form when the account has none. These clients do not edit keys themselves.
+    func dshKeyURL() async -> URL {
+        let keys = try? await api.personalProviders()
+        if let key = keys?.first(where: { $0.slug == provider && $0.runtime == "dsh" }) ?? keys?.first(where: { $0.runtime == "dsh" }),
+           let id = key.providerID {
+            return api.baseURL.appendingPathComponent("providers/\(id)")
+        }
+        return api.baseURL.appendingPathComponent("providers/new/\(DshRuntime.presetSlug)")
+    }
+
+    /// The web page a picker row's `fixEngine` is fixed on, or nil when the fix is this runner's
+    /// own Engines section: Antigravity's and Harness's rows are fixed in Providers.
+    func webFixURL(engine: String, runnerID: String) -> URL? {
+        if engine == DshRuntime.connectFix {
+            return api.baseURL.appendingPathComponent("providers/new/\(DshRuntime.presetSlug)")
+        }
+        return engine == "antigravity" || engine == "dsh" ? providersURL(engine: engine, runnerID: runnerID) : nil
+    }
+
+    func installDsh() async {
+        guard let runnerID, canInstallDsh else { return }
+        antigravityInstalling = true
+        defer { antigravityInstalling = false }
+        do {
+            runnerInstall = try await api.installDsh(runnerID)
+            showTransientStatus("Installing DeepSeek Harness…")
+        } catch { statusMessage = "Couldn't install DeepSeek Harness — \(APIClient.failureReason(error))." }
+    }
+
     var executesAntigravity: Bool {
         provider == "antigravity" || configuredProviders.first { $0.slug == provider }?.runtime == "antigravity"
     }
@@ -1824,7 +1876,8 @@ final class ConsoleModel {
                                                catalog: modelCatalog, engines: runnerEngines,
                                                pools: allPools,
                                                antigravity: runnerAntigravity,
-                                               antigravityKeyAvailable: antigravityKeyAvailable),
+                                               antigravityKeyAvailable: antigravityKeyAvailable,
+                                               dshState: dshRunnerState),
             configured: configuredProviders,
             catalog: modelCatalog,
             antigravity: runnerAntigravity)
@@ -2076,7 +2129,8 @@ final class ConsoleModel {
     /// The catalog this session's provider can actually invoke. Derived, not filtered at load
     /// time, because the provider is known later than the runner catalog.
     var composerSlashItems: [SlashCommandInfo] {
-        ComposerSlash.forProvider(items: slashItems, provider: provider)
+        // A Harness key's slug names its runtime, which has no runner slash registry.
+        ComposerSlash.forProvider(items: slashItems, provider: executesDsh ? "dsh" : provider)
     }
     var hasCommands: Bool { composerSlashItems.contains { $0.type == "command" } }
     var hasSkills: Bool { composerSlashItems.contains { $0.type == "skill" } }
@@ -2110,8 +2164,11 @@ final class ConsoleModel {
     /// `+` menu → Shell: prefix the draft with `!` so send() routes the rest as a raw shell command
     /// run on the runner, bypassing claude. The user types the command after. Mirrors web's insertShell.
     func insertShell() {
+        if executesDsh { statusMessage = Self.dshShellRefusal; return }
         if !composerText.hasPrefix("!") { composerText = "!" + composerText }
     }
+
+    static let dshShellRefusal = "DeepSeek Harness sessions don't run ! shell commands — ask the agent to run it instead."
 
     /// `authoritative` is the session's live control-plane run status
     /// (`app.session(id:)?.effectiveRunStatus`), read
@@ -2146,6 +2203,12 @@ final class ConsoleModel {
         // A leading `!` runs the remainder as a raw shell command on the runner, bypassing claude
         // (mirrors the web composer). A bare `!` with nothing after it is a no-op.
         let (text, shell) = ComposerLogic.parseShell(overrideText ?? composerText)
+        // DeepSeek Harness has no shell bridge (the runner settles such a turn as a refusal), so the
+        // command stays in the composer rather than going out to fail (web parity).
+        if shell, executesDsh {
+            statusMessage = Self.dshShellRefusal
+            return
+        }
         // Empty text still sends when something is staged to carry the message (see
         // `canSendAttachmentsAlone`) — but never as a shell turn: a bare `!` is a no-op that only
         // clears itself, and attachments mean nothing to a raw command (web ignores them there too).
@@ -2636,6 +2699,10 @@ final class ConsoleModel {
     private func createDraftSession() async {
         guard let agent = draftAgent else { return }
         let (text, shell) = ComposerLogic.parseShell(composerText)
+        if shell, executesDsh {
+            statusMessage = Self.dshShellRefusal
+            return
+        }
         guard !text.isEmpty || (!shell && canSendAttachmentsAlone) else {
             if shell { composerText = "" }
             return
@@ -3167,7 +3234,7 @@ final class ConsoleModel {
     func decide(_ approval: PendingApproval, behavior: ApprovalBehavior,
                 answers: [String: [String]]? = nil, remember: Bool = false) async {
         var rules: [PermissionRule]?
-        if remember, behavior == .allow, let input = approval.input {
+        if remember, behavior == .allow, !executesDsh, let input = approval.input {
             rules = Approvals.rememberRules(toolName: approval.toolName ?? "", input: input)
         }
         // Optimistic: drop the card now (the SSE `approval_resolved` echoes this). On failure,

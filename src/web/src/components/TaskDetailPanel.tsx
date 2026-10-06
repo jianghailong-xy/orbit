@@ -783,6 +783,7 @@ export function TaskDetailPanel({
     assigneeWorkspace
       ? assigneeWorkspace.antigravityKeyAvailableByRunner?.[assigneeRunner?.id] === true
       : assigneeRunner?.antigravity?.envKeyAvailable === true,
+    assigneeRunner,
   );
   // Task pins already offer OpenCode; preserve it while applying Gemini's admission state.
   runProviderChoices.splice(3, 0, currentProviderChoice('opencode', runProviderChoices, assigneeRunner?.modelCatalog, configuredProviders));
@@ -1536,7 +1537,7 @@ export function TaskDetailPanel({
                 onChange={(val) => {
                   const choice = runProviderChoices.find((row) => row.slug === val);
                   if (choice?.unavailable) {
-                    navigate(`/providers?runner=${encodeId(assigneeRunner?.id ?? '')}&engine=${choice.fixEngine ?? choice.slug}`);
+                    navigate(choice.fixHref ?? `/providers?runner=${encodeId(assigneeRunner?.id ?? '')}&engine=${choice.fixEngine ?? choice.slug}`);
                     return;
                   }
                   updateRunTarget.mutate({ provider: val ?? null, model: null });

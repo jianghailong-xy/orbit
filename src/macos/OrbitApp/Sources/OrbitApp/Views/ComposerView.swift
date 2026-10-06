@@ -151,8 +151,16 @@ struct ComposerView: View {
     /// hold here: a session cannot move machines. Bypass on a root runner is not awaiting its moment,
     /// it is a session claude refuses to start. Shown but not selectable (web parity: the option
     /// carries `disabled` rather than being filtered out), so the reason stays visible.
+    ///
+    /// A mode the RUNTIME refuses outright is disabled for the same reason: DeepSeek Harness runs only
+    /// Default, Auto and Don't Ask, and the server rejects a session configured with any other.
     private func modeRunnable(_ mode: PermissionMode) -> Bool {
         AgentDefaults.isRunnable(mode, runsAsRoot: console.runnerRunsAsRoot)
+            && modeSupported(mode)
+    }
+
+    private func modeSupported(_ mode: PermissionMode) -> Bool {
+        AgentDefaults.isSupported(mode, provider: console.provider, configured: console.configuredProviders)
     }
 
     /// Keep a stored project-defined OpenCode variant visible until a catalog explicitly says it
@@ -545,7 +553,9 @@ struct ComposerView: View {
                     console.permissionModeWasEdited = true
                     Task { await console.applyConfig(permissionMode: mode.rawValue) }
                 } label: {
-                    menuItemLabel(AgentDefaults.label(mode), selected: mode == console.permissionMode)
+                    menuItemLabel(modeSupported(mode) ? AgentDefaults.label(mode)
+                                      : "\(AgentDefaults.label(mode)) — not on DeepSeek Harness",
+                                  selected: mode == console.permissionMode)
                 }
                 .disabled(!modeRunnable(mode))
             }
@@ -614,7 +624,7 @@ struct ComposerView: View {
                         // that, so it is greyed out with its reason instead.
                         let fixable = blocked && choice.fixEngine != nil
                         let reason = choice.unavailable ?? ""
-                        let fix = fixable ? (choice.fixEngine == "antigravity" ? " →" : ", sign in →") : ""
+                        let fix = fixable ? (["antigravity", "dsh", DshRuntime.connectFix].contains(choice.fixEngine ?? "") ? " →" : ", sign in →") : ""
                         // On iOS the engine names a section of its accounts instead of a row above
                         // them (`accountsUnderHeader`).
                         let headsSection = Self.accountsUnderHeader && listsAccounts
@@ -624,7 +634,7 @@ struct ComposerView: View {
                                 // sign-in that would make it one, so go to that runner's Engines
                                 // section rather than doing nothing.
                                 if fixable {
-                                    if choice.fixEngine == "antigravity", let url = console.antigravityProvidersURL { openURL(url) }
+                                    if let rid = console.runnerID, let url = console.webFixURL(engine: choice.fixEngine ?? "", runnerID: rid) { openURL(url) }
                                     else if let rid = console.runnerID { app.route(to: .runner(rid)) }
                                 } else if !blocked {
                                     Task { await console.selectProvider(choice.slug) }
@@ -1034,13 +1044,17 @@ struct ComposerView: View {
         Text(Self.menuBreakable(text))
         if selected { Text("Current") }
         #else
+        // A macOS menu turns this row into a title and an image and draws the image in the menu's
+        // own colour — a clear checkmark rendered as a tick on every row (seen in the P5 Mac shots:
+        // both DeepSeek models and every mode ticked). So the image exists only on the selected row.
         HStack(spacing: 8) {
             Text(text).lineLimit(1)
             Spacer(minLength: 8)
-            Image(systemName: "checkmark")
-                .foregroundStyle(selected ? Color.accentColor : Color.clear)
-                .frame(width: 20, alignment: .trailing)
-                .accessibilityHidden(!selected)
+            if selected {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 20, alignment: .trailing)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         #endif
