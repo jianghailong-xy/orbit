@@ -1,0 +1,62 @@
+# TEMPORARY (probe branch, never merged). macOS smoke of the ~/.orbit/bin install layout for task
+# 34al3VPASPhgbwJVoVXkR, from a host that can neither dispatch a workflow nor read a run's logs (no gh,
+# no token). A push to this branch runs .probe-install-layout/macos-smoke.sh on a macOS runner, and a
+# last job pushes its transcript to probe/install-layout-macos-results, which a clone reads.
+name: Probe install layout (macOS)
+
+on:
+  push:
+    branches: ["probe/install-layout-macos"]
+
+jobs:
+  macos:
+    name: macOS install layout smoke
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.x'
+          cache-dependency-path: src/runner-go/go.sum
+      - name: Smoke
+        run: |
+          mkdir -p out
+          bash .probe-install-layout/macos-smoke.sh 2>&1 | tee out/macos-smoke.log
+          echo "exit: ${PIPESTATUS[0]}" | tee -a out/macos-smoke.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-out
+          path: out
+
+  report:
+    name: Push the results where a clone can read them
+    needs: [macos]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Push to probe/install-layout-macos-results
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          {
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "macos: ${{ needs.macos.result }}"
+          } > RESULTS.txt
+          cat RESULTS.txt
+          git init -q
+          git config user.name "orbit-probe"
+          git config user.email "probe@orbit.invalid"
+          git checkout -q -b results
+          git add -A
+          git commit -q -m "probe results for ${{ github.sha }} (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
+            results:refs/heads/probe/install-layout-macos-results
