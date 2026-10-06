@@ -1,0 +1,176 @@
+<!doctype html>
+<!-- Design mock: what a runner's page and an engine's page show when an engine has several accounts,
+     after the one-window-per-row change (06). ①–③ and the cuts are drawn with kit.js in the owner's
+     dark appearance; ④ and ⑤ are screenshots of the real web console (vite dev on this branch, synthetic
+     runner data, 2026-10-07 6:07 AM Asia/Shanghai). ③ is an option, not built. Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Several accounts per engine · runner page and engine page</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="kit.css">
+<style>
+  .m-sheet { width: 1900px; }
+  .row4 { display: grid; grid-template-columns: repeat(4, 431px); gap: 34px; align-items: start; }
+  .roww { display: grid; grid-template-columns: 606px 560px minmax(0, 1fr); gap: 40px; align-items: start; margin-top: 36px; }
+  .m-cap { font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 6px 4px 0; }
+  .m-cap b { color: var(--text-1); }
+  .cuts { display: flex; flex-direction: column; gap: 14px; margin: 10px; }
+  .cut-l { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin: 0 0 6px 4px; }
+  .nx { font-size: 13px; line-height: 17px; color: #9e9ea5; padding-top: 8px; }
+  .nx + .ws { padding-top: 6px; }
+  .web { position: relative; border: 1px solid #dde0e6; border-radius: 10px; overflow: hidden; background: #fff; }
+  .web img { display: block; width: 100%; }
+  .rules { border-collapse: collapse; font-size: 12.5px; line-height: 1.6; margin-top: 10px; width: 100%; }
+  .rules th, .rules td { border: 1px solid #dde0e6; padding: 8px 10px; text-align: left; vertical-align: top; }
+  .rules th { background: #f5f6f8; font-weight: 600; color: var(--text-1); }
+  .rules td.chg { background: #fff8e6; }
+  .rules td.opt { background: #f3f0ff; }
+  .ring.violet { border-color: #7c5cff; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">多个账号时 · 运行器页和引擎页怎么显示</h1>
+  <p class="m-sub zh">一个引擎登录了两个以上账号时：运行器页的行只说「N accounts signed in」，每个账号的额度都在点进去的引擎页里各列各的。web 运行器页的行多写一句「Next: 某账号」——新会话会自动用的那个账号（Providers 页标 NEXT 的那个）——并挂<b>这个账号的一条</b>额度（这次从全部窗口改成一条，规则同单账号行）。示例机器 NUC：Claude Code 3 个账号、Codex 1 个、Antigravity 2 个，iOS 和 web 用同一份数据。</p>
+
+  <div class="m-stage">
+    <div class="row4">
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k">不变</span>iOS 运行器页</div>
+        <div id="p1"></div>
+        <p class="m-cap zh"><b>①</b> 多账号的行只写「3 accounts signed in」「2 accounts signed in」，不挂额度：三个账号的额度各是各的，挂哪一个都会被读成整台机器的。Codex 只有一个账号，按这次的规则挂一条（周额度已用完）。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k">不变</span>点 Antigravity 进去：引擎页</div>
+        <div id="p2"></div>
+        <p class="m-cap zh"><b>②</b> 每个账号一行，各自全部额度：Default 四条都还满（3p-weekly 剩 98%），Work 的 gemini-5h 只剩 4%，条变橙。Claude Code、Codex 的引擎页是同一个样子。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k state">可选</span>iOS 多账号行也挂一条（同 web）</div>
+        <div id="p3"></div>
+        <p class="m-cap zh"><b>③</b> 没做，等你定：多账号的行和 web 一样写「Next: 某账号」，挂这个账号最接近上限的那一条。这样 iOS 和 web 一致，每个登录了的引擎行都正好一条额度。Claude Code 的 Next 是 jianghailong.rd@gmail.com（周额度 51%）；Antigravity 的 Next 是 Default（3p-weekly 剩 98%）。</p>
+      </div>
+      <div>
+        <div class="ph-l zh" style="margin:0 0 8px 10px"><span class="m-k state">边界</span>多账号的行</div>
+        <div class="cuts" id="cuts"></div>
+        <p class="m-cap zh" style="margin-left:14px; width:400px"><b>a</b> 有一个账号掉线：写 Signed out，下面一个 Sign In，点进去就是掉线的那个账号（现在就是这样，不变）。<b>b</b> 选了 ③ 之后，三个账号都用完时：Next 是最早恢复的那个，挂它用完的那条，橙色并写明几点恢复。</p>
+      </div>
+    </div>
+
+    <div class="roww">
+      <div>
+        <div class="ph-l zh" style="margin-bottom:8px"><span class="m-k new">改后</span>web 运行器页（真实页面截图）</div>
+        <div class="web" id="w1"><img src="07a-web-runner-page.png" alt=""></div>
+        <p class="m-cap zh"><b>④</b> 多账号的行：「Next: jianghailong.rd@gmail.com」下面原来挂这个账号的两条（5-hour、Weekly），现在只挂最接近上限的 Weekly · all models 51%；Antigravity 原来挂 Default 的四条，现在只挂 3p-weekly 98% remaining。</p>
+      </div>
+      <div>
+        <div class="ph-l zh" style="margin-bottom:8px"><span class="m-k">不变</span>web Providers 页（真实页面截图）</div>
+        <div class="web"><img src="07b-web-providers.png" alt=""></div>
+        <p class="m-cap zh"><b>⑤</b> 管账号的地方：每个账号一行、全部额度，新会话会用的那个标 NEXT。</p>
+      </div>
+      <div>
+        <div class="ph-l zh" style="margin-bottom:6px"><span class="m-k new">规则</span>多个账号时，每个地方显示什么</div>
+        <table class="rules zh">
+          <tr><th style="width:24%">位置</th><th>显示</th><th style="width:24%">这次</th></tr>
+          <tr><td>iOS / macOS 运行器页的行</td><td>「N accounts signed in」，不挂额度</td><td>不变（③ 可选）</td></tr>
+          <tr><td>iOS / macOS 引擎页</td><td>每个账号一行，各自全部额度</td><td>不变</td></tr>
+          <tr><td>web 运行器页的行</td><td>「N accounts signed in」+「Next: 账号」+ 这个账号的一条</td><td class="chg">全部窗口 → 一条</td></tr>
+          <tr><td>web Providers 页</td><td>每个账号全部额度，下一个用的标 NEXT</td><td>不变</td></tr>
+          <tr><td>有账号掉线</td><td>行上写「Signed out」，iOS 多一个 Sign In</td><td>不变</td></tr>
+        </table>
+        <ul class="m-notes zh">
+          <li><span class="m-n">1</span><span><b>Next 怎么选</b>：和新会话自动选账号是同一个规则——快到上限的排后面，其余先用额度最快过期的，再比谁剩得多。掉线的不选；暂停或用完的排到最后，全都用完时选最早恢复的那个（b）。</span></li>
+          <li><span class="m-n">2</span><span><b>③ 要做的话</b>：只改 iOS / macOS 运行器页的行，用 OrbitKit 里已有的 <code>CodexAccounts.toStartOn</code> 选 Next，和 web 同一个规则；引擎页不动。</span></li>
+          <li><span class="m-n">3</span><span>macOS 和 iOS 是同一套页面，①–③ 两边一样。</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="glyphs.js"></script>
+<script src="kit.js"></script>
+<script>
+  const STATUS = { time: '6:07', net: '5G', batt: '15' };
+  const footer = '<p>Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends that subscription, nothing to paste.</p>';
+  const nx = (name) => `<div class="nx">Next: ${name}</div>`;
+  const codex = engineRow({ id: 'cx', engine: 'codex', name: 'Codex', version: '0.160.1', status: { text: 'Signed in', tone: 'ok' },
+    windows: [{ label: 'Weekly limit', pct: 100, resets: 'Resets Sun, Oct 11 at 9:11 PM', warn: true }] });
+  const missing = [
+    engineRow({ engine: 'kimi', name: 'Kimi Code', status: { text: 'Not installed', tone: 'muted' }, chevron: false }),
+    engineRow({ engine: 'opencode', name: 'OpenCode', status: { text: 'Not installed', tone: 'muted' }, chevron: false }),
+  ];
+  const claudeRow = (o = {}) => engineRow({ id: o.id ?? 'cl', engine: 'claude', name: 'Claude Code', version: '2.1.292',
+    status: o.status ?? { text: '3 accounts signed in', tone: 'ok' }, capsule: o.capsule, extra: o.extra, windows: o.windows });
+  const agRow = (o = {}) => engineRow({ id: 'ag', engine: 'antigravity', name: 'Antigravity', version: '1.3.0',
+    status: { text: '2 accounts signed in', tone: 'ok' }, extra: o.extra, windows: o.windows });
+  const page = (rows) => section({ header: 'Engines', trailing: 'Checked 4m ago', rows: [...rows,
+    btnRow('Update Engines Now'), btnRow('Refresh Model Lists')], footer });
+
+  // ① as it stays: several accounts, no quota on the row.
+  document.getElementById('p1').outerHTML = phone({ title: 'NUC', cls: 'dark', status: STATUS, height: 960,
+    body: page([claudeRow(), codex, ...missing, agRow()]) });
+
+  // ② Antigravity's engine page: each account and every bucket of its own.
+  const head = `<div class="hd">${mark('antigravity', 30)}<div><div class="n">Antigravity</div><div class="s">1.3.0 · checked 4m ago</div></div></div>`;
+  const enginePage = head + section({ header: 'Accounts', rows: [
+    accountRow({ id: 'def', name: 'Default', sub: '~/.orbit/antigravity/google', status: { text: 'Signed in', tone: 'ok' },
+      windows: [
+        { group: 'gemini-weekly', label: 'Weekly', pct: 100, remaining: true, resets: 'Resets Sun, Oct 11 at 1:31 AM' },
+        { group: 'gemini-5h', label: '5-hour', pct: 100, remaining: true, resets: 'Resets 11:03 AM' },
+        { group: '3p-weekly', label: 'Weekly', pct: 98, remaining: true, resets: 'Resets Mon, Oct 12 at 5:01 PM' },
+        { group: '3p-5h', label: '5-hour', pct: 100, remaining: true, resets: 'Resets 11:03 AM' },
+      ], buttons: [BTN.again, BTN.pause] }),
+    accountRow({ id: 'work', name: 'Work', sub: '~/.orbit/antigravity-accounts/5c2e91a0', status: { text: 'Signed in', tone: 'ok' },
+      windows: [
+        { group: 'gemini-weekly', label: 'Weekly', pct: 61, remaining: true, resets: 'Resets Sat, Oct 10 at 8:05 AM' },
+        { group: 'gemini-5h', label: '5-hour', pct: 4, remaining: true, resets: 'Resets 7:40 AM', warn: true },
+        { group: '3p-weekly', label: 'Weekly', pct: 100, remaining: true, resets: 'Resets Sat, Oct 10 at 8:05 AM' },
+        { group: '3p-5h', label: '5-hour', pct: 100, remaining: true, resets: 'Resets 7:40 AM' },
+      ], buttons: [BTN.again, BTN.pause] }),
+    btnRow('Add Account'),
+  ], footer: GOOGLE_TERMS });
+  document.getElementById('p2').outerHTML = phone({ title: 'Antigravity', body: enginePage, cls: 'dark tall', status: STATUS, height: 1190 });
+
+  // ③ the option: the account a new session starts on, named, and its one window.
+  document.getElementById('p3').outerHTML = phone({ title: 'NUC', cls: 'dark', status: STATUS, height: 960, body: page([
+    claudeRow({ extra: nx('jianghailong.rd@gmail.com'),
+      windows: [{ label: 'Weekly · all models', pct: 51, resets: 'Resets Sat, Oct 10 at 4:00 PM' }] }),
+    codex, ...missing,
+    agRow({ extra: nx('Default'),
+      windows: [{ group: '3p-weekly', label: 'Weekly', pct: 98, remaining: true, resets: 'Resets Mon, Oct 12 at 5:01 PM' }] }),
+  ]) });
+
+  const cut = (label, row) => `<div><div class="cut-l zh">${label}</div><div class="cut dark">${section({ rows: [row] }).replace('<div class="s-gap"></div>', '')}</div></div>`;
+  document.getElementById('cuts').innerHTML = [
+    cut('a 一个账号掉线', claudeRow({ id: '', status: { text: 'Signed out', tone: 'warn' }, capsule: 'Sign In' })),
+    cut('b（选 ③ 后）三个账号都用完', claudeRow({ id: '', extra: nx('Max 2'),
+      windows: [{ label: '5-hour limit', pct: 100, resets: 'Resets 8:10 AM', warn: true }] })),
+  ].join('');
+
+  window.drawMarks = () => {
+    const [p1, p2, p3] = document.querySelectorAll('.ph');
+    const grey = (html) => html.replace(/class="mk-n" style="([^"]*)"/g, 'class="mk-n" style="$1;background:#5b6270"');
+    for (const id of ['cl', 'ag']) {
+      const r = at(p1, `#${id} .e-s`);
+      p1.insertAdjacentHTML('beforeend', grey(marks([{ x: r.x - 5, y: r.y - 3, w: r.w + 10, h: r.h + 6 }])));
+    }
+    const s = at(p1, '#cl .e-s');
+    p1.insertAdjacentHTML('beforeend', grey(marks([{ n: '1', x: s.x + s.w - 2, y: s.y - 15 }])));
+    ringMark(p2, '#def .ws', '2', 4);
+    ringMark(p2, '#work .ws', '', 4);
+    for (const id of ['cl', 'ag']) {
+      const a = at(p3, `#${id} .nx`), b = at(p3, `#${id} .ws`);
+      p3.insertAdjacentHTML('beforeend', marks([{ x: a.x - 5, y: a.y - 3, w: Math.max(a.w, b.w) + 10, h: b.y + b.h - a.y + 8, cls: 'violet' }]));
+    }
+    const n3 = at(p3, '#cl .nx');
+    p3.insertAdjacentHTML('beforeend', marks([{ n: '3', x: n3.x + 230, y: n3.y - 14 }]));
+    // ④ on the screenshot: Claude Code's and Antigravity's quota column (measured on the 606-px image).
+    const w1 = document.getElementById('w1');
+    w1.insertAdjacentHTML('beforeend', marks([{ x: 370, y: 44, w: 202, h: 78 }, { n: '4', x: 560, y: 34 }, { x: 370, y: 304, w: 202, h: 98 }]));
+  };
+</script>
+</body>
+</html>

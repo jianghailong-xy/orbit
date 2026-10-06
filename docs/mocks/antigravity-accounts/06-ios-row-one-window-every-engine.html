@@ -1,0 +1,99 @@
+<!doctype html>
+<!-- Design mock: every engine's row on a runner's page shows one quota window when the engine has one
+     account — the one closest to its limit (PlanUsageSnapshot.bindingRow) — so Claude Code, Codex and
+     Antigravity read alike. The runner here is an example with one account per engine; the
+     several-accounts row and the engine page are unchanged. Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Runner page · one window per engine row (iOS)</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="kit.css">
+<style>
+  .m-sheet { width: 1440px; }
+  .row3 { display: grid; grid-template-columns: 431px 431px minmax(0, 1fr); gap: 40px; align-items: start; }
+  .m-cap { font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 6px 4px 0; }
+  .m-cap b { color: var(--text-1); }
+  .rules { border-collapse: collapse; font-size: 12.5px; line-height: 1.6; margin-top: 10px; width: 100%; }
+  .rules th, .rules td { border: 1px solid #dde0e6; padding: 8px 10px; text-align: left; vertical-align: top; }
+  .rules th { background: #f5f6f8; font-weight: 600; color: var(--text-1); }
+  .rules td.chg { background: #fff8e6; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">运行器页 · 每个引擎只登录一个账号时，行上都只挂一条额度</h1>
+  <p class="m-sub zh">在方案 3 的基础上统一到所有引擎：Claude Code、Codex、Antigravity 只有一个账号时，引擎行上都只挂<b>最接近上限的那一条</b>（有用完的先挂用完的，否则挂剩得最少的——composer 额度小圆点选的同一条），完整的额度都在点进去的引擎页。两个以上账号的行、引擎页、web Providers 页都和现在一样。示例机器上每个引擎各一个账号，数据为示意。</p>
+
+  <div class="m-stage">
+    <div class="row3">
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k">现在</span>每个引擎各一个账号</div>
+        <div id="p1"></div>
+        <p class="m-cap zh"><b>A</b> Claude Code 挂两条，Codex 两条，Antigravity 四条：一个账号挂几条，取决于这个 CLI 报了几个窗口，三行高矮不一。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>每行一条</div>
+        <div id="p2"></div>
+        <p class="m-cap zh"><b>①</b> Claude Code：5 小时窗口用了 85%，比周额度（38%）更接近上限，挂它。<b>②</b> Codex：周额度已用完，用完的先挂，橙色并写明哪天恢复。<b>③</b> Antigravity：3p-weekly 剩 98%，是四条里最少的。三行差不多高，一眼看完。</p>
+      </div>
+      <div>
+        <div class="ph-l zh" style="margin-bottom:6px"><span class="m-k new">规则</span>改完后三个引擎一致</div>
+        <table class="rules zh">
+          <tr><th style="width:26%">情况</th><th>运行器页的引擎行</th><th style="width:30%">点进去：引擎页</th></tr>
+          <tr><td>一个账号</td><td class="chg"><b>只挂最接近上限的那一条</b>（这次的改动，三个引擎都一样）</td><td>这个账号的全部额度</td></tr>
+          <tr><td>两个以上账号</td><td>写「N accounts signed in」，不挂额度（三个引擎现在已经一致）</td><td>每个账号各自的全部额度</td></tr>
+          <tr><td>有账号掉线</td><td>写「Signed out」+ Sign In（已经一致）</td><td>掉线的账号行上有 Sign In</td></tr>
+        </table>
+        <ul class="m-notes zh">
+          <li><span class="m-n">1</span><span><b>百分比的意思不变</b>：Claude、Codex 照旧写用了多少（85%），Antigravity 照旧写还剩多少（98% remaining），和引擎页里同一条一字不差。</span></li>
+          <li><span class="m-n">2</span><span><b>web 运行器页同一规则</b>：每个引擎一行一条；多账号时「Next: 某账号」下面也只挂那个账号的一条。web Providers 页是管理账号的地方，照旧列全部。</span></li>
+          <li><span class="m-n">3</span><span><b>macOS 是同一套页面</b>，改法相同。</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="glyphs.js"></script>
+<script src="kit.js"></script>
+<script>
+  const STATUS = { time: '6:07', net: '5G', batt: '15' };
+  const footer = '<p>Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends that subscription, nothing to paste.</p>';
+  const claude = [
+    { label: '5-hour limit', pct: 85, resets: 'Resets 6:29 PM' },
+    { label: 'Weekly · all models', pct: 38, resets: 'Resets Fri, Oct 9 at 11:59 AM' },
+  ];
+  const codex = [
+    { label: '5h limit', pct: 22, resets: 'Resets 8:40 AM' },
+    { label: 'Weekly limit', pct: 100, resets: 'Resets Sun, Oct 11 at 9:11 PM', warn: true },
+  ];
+  const ag = [
+    { group: 'gemini-weekly', label: 'Weekly', pct: 100, remaining: true, resets: 'Resets Sun, Oct 11 at 1:31 AM' },
+    { group: 'gemini-5h', label: '5-hour', pct: 100, remaining: true, resets: 'Resets 11:03 AM' },
+    { group: '3p-weekly', label: 'Weekly', pct: 98, remaining: true, resets: 'Resets Mon, Oct 12 at 5:01 PM' },
+    { group: '3p-5h', label: '5-hour', pct: 100, remaining: true, resets: 'Resets 11:03 AM' },
+  ];
+  const page = (c, x, a) => section({ header: 'Engines', trailing: 'Checked 4m ago', rows: [
+    engineRow({ id: 'cl', engine: 'claude', name: 'Claude Code', version: '2.1.292', status: { text: 'Signed in', tone: 'ok' }, windows: c }),
+    engineRow({ id: 'cx', engine: 'codex', name: 'Codex', version: '0.160.1', status: { text: 'Signed in', tone: 'ok' }, windows: x }),
+    engineRow({ id: 'ag', engine: 'antigravity', name: 'Antigravity', version: '1.3.0', status: { text: 'Signed in', tone: 'ok' }, windows: a }),
+    btnRow('Update Engines Now'), btnRow('Refresh Model Lists'),
+  ], footer });
+  document.getElementById('p1').outerHTML = phone({ title: 'NUC', body: page(claude, codex, ag), scroll: 0, cls: 'dark', status: STATUS, height: 1180 });
+  document.getElementById('p2').outerHTML = phone({ title: 'NUC', body: page([claude[0]], [codex[1]], [ag[2]]), cls: 'dark', status: STATUS, height: 1180 });
+
+  window.drawMarks = () => {
+    const [p1, p2] = document.querySelectorAll('.ph');
+    const grey = (html) => html.replace(/class="mk-n" style="([^"]*)"/g, 'class="mk-n" style="$1;background:#5b6270"');
+    for (const id of ['cl', 'cx', 'ag']) {
+      const r = at(p1, `#${id} .ws`);
+      p1.insertAdjacentHTML('beforeend', grey(marks([{ x: r.x - 5, y: r.y + 3, w: r.w + 10, h: r.h + 2 }])));
+    }
+    p1.insertAdjacentHTML('beforeend', grey(marks([{ n: 'A', x: at(p1, '#cl .ws').x + at(p1, '#cl .ws').w - 4, y: at(p1, '#cl .ws').y - 6 }])));
+    [['cl', '1'], ['cx', '2'], ['ag', '3']].forEach(([id, n]) => ringMark(p2, p2.querySelector(`#${id} .ws .w`), n, 5));
+  };
+</script>
+</body>
+</html>

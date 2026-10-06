@@ -6,7 +6,7 @@ import { accountToStartOn, withEnginePlanUsage, type ReportedEngine, type Runner
 import { api } from '../api';
 import { accountNameOf, accountPlanUsage, engineKeepsAccounts, runsOnEnvKey } from '../lib/engineAccounts';
 import { encodeId } from '../lib/idCodec';
-import { currentPlanUsageRows, planUsageSnapshotForProvider } from '../lib/planUsage';
+import { bindingPlanUsageRow, currentPlanUsageRows, planUsageSnapshotForProvider } from '../lib/planUsage';
 import { formatResetTime } from '../lib/providerPools';
 import { runnersQuery } from '../lib/queries';
 import {
@@ -218,7 +218,7 @@ function EngineLine({ runner, health }: { runner: Runner; health: RunnerEngineHe
       ? null
       : rowKindOf(health, runner.install, health.engine);
   // With several accounts the engine's own snapshot is Default's alone, and one account's windows
-  // under "2 accounts signed in" would read as the machine's. The windows shown are those of the
+  // under "2 accounts signed in" would read as the machine's. The window shown is that of the
   // account a new session starts on, named — what an account pool's head shows for its next one.
   // Antigravity's quota comes with its engine's health, folded in beside the rest.
   const usage = withEnginePlanUsage(runner.planUsage, runner.engines);
@@ -233,7 +233,10 @@ function EngineLine({ runner, health }: { runner: Runner; health: RunnerEngineHe
     : engine && next
       ? accountPlanUsage(usage, engine, next.id)
       : planUsageSnapshotForProvider(usage, health.engine);
-  const quota = snapshot ? currentPlanUsageRows(snapshot) : [];
+  // One window per row, whether the CLI reports two or four: the one that stops this login, or will
+  // stop it first (bindingPlanUsageRow, the composer gauge's). Every window is the engine page's.
+  const binding = snapshot ? bindingPlanUsageRow(currentPlanUsageRows(snapshot)) : undefined;
+  const quota = binding ? [binding] : [];
   const name = ENGINE_CLI_NAME[health.engine] ?? health.engine;
   return (
     <Link className="rd-engine-row" to={engineSignInHref(runner.id, health.engine)}>

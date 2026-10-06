@@ -284,7 +284,9 @@ model User {
   id                    String    @id @default(uuid(7)) @db.Uuid
   email                 String    @unique
   name                  String
-  passwordHash          String    @map("password_hash")
+  // Null: no password — the account signs in with Google only (docs/google-sign-in-design.md
+  // §5.1, migration 0392), and the password login answers it as it answers a wrong password.
+  passwordHash          String?   @map("password_hash")
   createdAt             DateTime  @default(now()) @map("created_at")
   // Per-account UI preferences (theme, new-agent defaults). Shape: UserPreferences
   // (@orbit/shared). JSON so new keys need no migration; missing keys fall back.
@@ -320,6 +322,8 @@ model User {
   refreshTokens    RefreshToken[] // long-lived rotating refresh tokens (hashed at rest)
   personalAccessTokens PersonalAccessToken[] // the user's own API tokens (hashed at rest, 0383)
   patDeviceLogins  PatDeviceLogin[] // the `orbit login` requests this user approved or denied (0388)
+  identities       UserIdentity[] // the Google account this user signs in with (0391)
+  oauthLoginFlows  OAuthLoginFlow[] // Google sign-ins in flight that would link to this user (0391)
   clientVersions   ClientVersion[] // which build of each client this user is running
   mergeReceipts    SessionMergeReceipt[] // merges recorded against this user's session branches
   agents           Agent[] // Agent identities this user owns (tenant scope)
@@ -447,6 +451,104 @@ model PatDeviceLogin {
 
   @@index([decidedById])
   @@map("pat_device_login")
+}
+
+/// A way to sign in other than a password, as an administrator saved it in the admin area's
+/// Sign-in settings (docs/google-sign-in-design.md §7.1, migration 0390): one row per provider, and
+/// only `google` exists. No row is the same as a row that is off.
+///
+/// It is on only when `enabled` is true AND `clientId` and the secret are both present
+/// (auth/sign-in-providers.service.ts); the empty string in either is "none saved". The secret is
+/// kept encrypted as a model provider's API key is (providers/provider-crypto.ts), and no response
+/// carries it in either form. Two CHECKs carry the closed sets below and cannot be spelled here:
+/// `sign_in_provider_provider_chk` and `sign_in_provider_signup_policy_chk`.
+model SignInProvider {
+  /// `google`.
+  provider        String   @id
+  enabled         Boolean  @default(false)
+  /// The OAuth client ID.
+  clientId        String   @map("client_id")
+  /// AES-256-GCM ciphertext of the OAuth client secret ("iv:tag:ct", each base64).
+  clientSecretEnc String   @map("client_secret_enc")
+  /// `EXISTING_ACCOUNTS` (only an account that already exists may sign in) | `OPEN` (a Google
+  /// account with none gets one at its first sign-in, §5.6).
+  signupPolicy    String   @default("EXISTING_ACCOUNTS") @map("signup_policy")
+  /// The administrator who saved it last. An id rather than a relation, so deleting them writes nothing here.
+  updatedById     String?  @map("updated_by_id") @db.Uuid
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("sign_in_provider")
+}
+
+/// The Google account an Orbit account signs in with (docs/google-sign-in-design.md §5.1, migration
+/// 0391). Found by Google's `sub` — stable and never reused — and never by the email, which is kept
+/// only to show. One Orbit account per Google account, and in v1 one Google account per Orbit
+/// account; it goes with its user. `user_identity_provider_chk` and `user_identity_subject_chk`
+/// (not empty) live only in the migration.
+model UserIdentity {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// `google`.
+  provider     String
+  /// Google's `sub`.
+  subject      String
+  /// The email Google gave at the last sign-in.
+  email        String
+  /// The `hd` claim: the Workspace domain, when the Google account is a Workspace one.
+  hostedDomain String?   @map("hosted_domain")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSignInAt DateTime? @map("last_sign_in_at") @db.Timestamptz(3)
+
+  @@unique([provider, subject])
+  @@unique([userId, provider])
+  @@map("user_identity")
+}
+
+/// One Google sign-in in flight, from GET /auth/google/start to the exchange of its ticket
+/// (docs/google-sign-in-design.md §4, §5.1, migration 0391): ten minutes at most, then two for the
+/// ticket, and deleted when it ends (auth/google-login.service.ts). Of the secrets it hands out it
+/// keeps only the sha256: `stateHash` (the `state` sent to Google), `bindingHash` (the
+/// `orbit_oauth_flow` cookie that ties the flow to the browser that started it) and `ticketHash`.
+/// No Google token is ever kept.
+///
+/// Four CHECKs live only in the migration: `oauth_login_flow_provider_chk`,
+/// `oauth_login_flow_client_chk`, `oauth_login_flow_intent_chk` (a LINK flow, and only a LINK flow,
+/// names its user) and `oauth_login_flow_status_chk` (AUTHENTICATED ⇔ claims and a ticket).
+model OAuthLoginFlow {
+  id                   String    @id @default(uuid(7)) @db.Uuid
+  /// `google`.
+  provider             String
+  /// `LOGIN` | `LINK` (§5.3).
+  intent               String
+  /// `WEB` | `NATIVE`: which client started it, and so where the callback sends the browser (§4.2).
+  client               String
+  stateHash            String    @unique @map("state_hash")
+  bindingHash          String    @map("binding_hash")
+  /// Sent to Google, and compared with the one in the ID token.
+  nonce                String
+  /// Google's side of PKCE: the verifier sent with the code.
+  providerCodeVerifier String    @map("provider_code_verifier")
+  /// The client's side of PKCE: the S256 challenge its verifier must answer at the exchange.
+  clientChallenge      String    @map("client_challenge")
+  /// What a native client asked to be handed back.
+  clientState          String?   @map("client_state")
+  /// The signed-in user a LINK flow links to.
+  linkUserId           String?   @map("link_user_id") @db.Uuid
+  linkUser             User?     @relation(fields: [linkUserId], references: [id], onDelete: Cascade)
+  /// `PENDING` until Google's answer is verified, then `AUTHENTICATED`.
+  status               String    @default("PENDING")
+  /// The verified Google identity: `{sub, email, emailVerified, hd, name}`.
+  claims               Json?
+  ticketHash           String?   @unique @map("ticket_hash")
+  ticketExpiresAt      DateTime? @map("ticket_expires_at") @db.Timestamptz(3)
+  /// When the row ends: the state's ten minutes while PENDING, the ticket's two once AUTHENTICATED.
+  expiresAt            DateTime  @map("expires_at") @db.Timestamptz(3)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([expiresAt])
+  @@index([linkUserId])
+  @@map("oauth_login_flow")
 }
 
 /// Owner-scoped APNs/FCM registration. Token uniqueness is global; Android also replaces the

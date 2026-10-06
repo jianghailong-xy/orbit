@@ -1,0 +1,243 @@
+# TEMPORARY (probe branch probe/crossings-final, never merged). Task 34b99rROWy9XZs7gyAr8t, run by a push
+# because this host can neither dispatch a workflow nor open a pull request (no gh, no token).
+#
+#   • font-tokens, nav-push, macos, ios — client.yml's own jobs on the commit under test. Changed: the
+#     `on:` trigger, the two `if:` lines that keep macos and ios to pull requests and dispatches, and
+#     each Xcode step's output is also kept (tee) and uploaded. In macos the OrbitKit test step no
+#     longer stops the OrbitApp build (both outcomes are reported, and the job still fails as they did).
+#   • macos-main-baseline — the same OrbitKit test step on clean main (30cf89786), so a red step can be
+#     compared with main's.
+#   • shots — .xcross-probe/run.sh drives the real shared sources against .xcross-probe/stub.py on an
+#     iPhone simulator and on the Mac, and photographs project P1's crossings card.
+#   • report — pushes every job's result, summaries, logs and pictures to probe/crossings-final-results.
+name: Client CI (macOS + iOS)
+
+on:
+  push:
+    branches: ["probe/crossings-final"]
+
+concurrency:
+  group: client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  font-tokens:
+    name: Font tokens (bare system(size:) audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Audit bare system(size:) outside Typography.swift
+        run: |
+          hits=$(grep -rn "system(size" src/macos/OrbitApp/Sources src/ios/Sources --include='*.swift' \
+                 | grep -v "Views/Typography.swift" || true)
+          if [ -n "$hits" ]; then
+            echo "$hits"
+            count=$(echo "$hits" | wc -l)
+            echo "::error::$count bare system(size:) call site(s) outside Views/Typography.swift — use the Font.orbit* tokens (see the Typography.swift header)"
+            exit 1
+          else
+            echo "No bare system(size:) call sites outside Typography.swift."
+          fi
+
+  nav-push:
+    name: Navigation (one push mechanism per stack)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Gate a second push mechanism
+        run: bash scripts/ci/nav-push-gate.sh
+
+  macos:
+    name: macOS (build + test)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Toolchain
+        run: swift --version && xcodebuild -version
+      - name: Test OrbitKit (macOS)
+        id: kit
+        continue-on-error: true
+        working-directory: src/macos/OrbitKit
+        run: |
+          set -o pipefail
+          swift test 2>&1 | tee "$RUNNER_TEMP/orbitkit-macos.log"
+      - name: Build OrbitApp
+        id: app
+        if: always()
+        working-directory: src/macos/OrbitApp
+        run: |
+          set -o pipefail
+          swift build 2>&1 | tee "$RUNNER_TEMP/orbitapp-macos.log"
+      - name: Keep what each step said
+        if: always()
+        run: |
+          mkdir -p macos-out
+          { swift --version 2>&1 | head -2; xcodebuild -version; } > macos-out/toolchain.txt
+          echo "test-orbitkit: ${{ steps.kit.outcome }}" > macos-out/outcomes.txt
+          echo "build-orbitapp: ${{ steps.app.outcome }}" >> macos-out/outcomes.txt
+          grep -E "error:|failed \(|Executed [0-9]+ tests|Test Suite 'ProjectCrossings" "$RUNNER_TEMP/orbitkit-macos.log" | tail -300 > macos-out/orbitkit-summary.txt || true
+          grep -E "error:|warning:.*(ProjectCrossing|ProjectsView|ProjectsModel)|Build complete|Compiling OrbitApp" "$RUNNER_TEMP/orbitapp-macos.log" | tail -300 > macos-out/orbitapp-summary.txt || true
+          tail -80 "$RUNNER_TEMP/orbitapp-macos.log" > macos-out/orbitapp-tail.txt || true
+          gzip -9c "$RUNNER_TEMP/orbitkit-macos.log" > macos-out/orbitkit-macos.log.gz || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-out
+          path: macos-out
+      - name: Fail as the steps did
+        if: steps.kit.outcome != 'success' || steps.app.outcome != 'success'
+        run: exit 1
+
+  macos-main-baseline:
+    name: macOS OrbitKit test on clean main (baseline)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: 30cf8978649e37f6f59979975a52a3a12b3cea05
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Test OrbitKit (macOS) on clean main
+        id: kit
+        continue-on-error: true
+        working-directory: src/macos/OrbitKit
+        run: |
+          set -o pipefail
+          swift test 2>&1 | tee "$RUNNER_TEMP/orbitkit-main.log"
+      - name: Keep what the step said
+        if: always()
+        run: |
+          mkdir -p baseline-out
+          echo "sha: $(git rev-parse HEAD)" > baseline-out/outcomes.txt
+          echo "test-orbitkit-main: ${{ steps.kit.outcome }}" >> baseline-out/outcomes.txt
+          grep -E "error:|failed \(|Executed [0-9]+ tests" "$RUNNER_TEMP/orbitkit-main.log" | tail -300 > baseline-out/orbitkit-main-summary.txt || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: baseline-out
+          path: baseline-out
+
+  ios:
+    name: iOS (generate + build)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version
+      - name: Generate Xcode project
+        working-directory: src/ios
+        run: xcodegen generate
+      - name: Build for iOS Simulator
+        id: build
+        working-directory: src/ios
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Orbit.xcodeproj \
+            -scheme Orbit \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee "$RUNNER_TEMP/ios-build.log"
+      - name: Keep what the build said
+        if: always()
+        run: |
+          mkdir -p ios-out
+          echo "build-ios: ${{ steps.build.outcome }}" > ios-out/outcomes.txt
+          grep -E "error:|warning:.*(ProjectCrossing|ProjectsView|ProjectsModel)|\*\* BUILD" "$RUNNER_TEMP/ios-build.log" | tail -300 > ios-out/ios-build-summary.txt || true
+          tail -60 "$RUNNER_TEMP/ios-build.log" > ios-out/ios-build-tail.txt || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-out
+          path: ios-out
+
+  shots:
+    name: Crossings card probe (iPhone + Mac)
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Build, drive and capture
+        id: capture
+        continue-on-error: true
+        run: |
+          bash .xcross-probe/run.sh 2>&1 | tee run-output.log
+          exit "${PIPESTATUS[0]}"
+      - name: Keep the build's errors and the run's output beside the shots
+        if: always()
+        run: |
+          mkdir -p .xcross-probe/shots
+          cp run-output.log .xcross-probe/shots/run-output.log 2>/dev/null || true
+          for log in .xcross-probe/build-*.log; do
+            [ -f "$log" ] || continue
+            base=$(basename "$log" .log)
+            grep -E "error:|Test Case|Executed|\*\* TEST|\*\* BUILD" "$log" | head -400 > ".xcross-probe/shots/summary-$base.txt" || true
+            tail -300 "$log" > ".xcross-probe/shots/tail-$base.txt" || true
+          done
+          find .xcross-probe/shots -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;
+          echo "capture=${{ steps.capture.outcome }}" > .xcross-probe/shots/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shots
+          path: .xcross-probe/shots
+      - name: Fail as the capture did
+        if: steps.capture.outcome != 'success'
+        run: exit 1
+
+  report:
+    name: Push the results where a clone can read them
+    needs: [font-tokens, nav-push, macos, macos-main-baseline, ios, shots]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Push to probe/crossings-final-results
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          {
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "font-tokens: ${{ needs.font-tokens.result }}"
+            echo "nav-push: ${{ needs.nav-push.result }}"
+            echo "macos: ${{ needs.macos.result }}"
+            echo "macos-main-baseline: ${{ needs.macos-main-baseline.result }}"
+            echo "ios: ${{ needs.ios.result }}"
+            echo "shots: ${{ needs.shots.result }}"
+          } > RESULTS.txt
+          cat RESULTS.txt
+          git init -q
+          git config user.name "orbit-probe"
+          git config user.email "probe@orbit.invalid"
+          git checkout -q -b results
+          git add -A
+          git commit -q -m "probe results for ${{ github.sha }} (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
+            results:refs/heads/probe/crossings-final-results

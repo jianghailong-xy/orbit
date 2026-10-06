@@ -288,7 +288,7 @@ struct RunnerCapsule<Label: View>: View {
 
 /// One engine on the runner's page: its mark and name, its version and where its sign-ins stand, a
 /// failed update that has become its problem, Sign In when a login it needs is out, and — while it
-/// is signed in with one account — its quota windows.
+/// is signed in with one account — the quota window closest to its limit.
 struct RunnerEngineRow: View {
     let health: RunnerEngineHealth
     let runner: Runner
