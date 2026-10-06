@@ -70,6 +70,7 @@ import {
   type HandoffRequestIdentity,
   type HandoffStoredState,
 } from './project-handoff';
+import { SCOPE_RULES } from './project-scope-contract';
 import type { HandoffApproval } from './project-scope-decision';
 
 /** The columns every read below needs. Spelled once so no caller invents a narrower read. */
@@ -398,6 +399,25 @@ export class ProjectHandoffService {
   }
 
   /**
+   * Whether a task serves one of the acceptance criteria `projectId` states — its criterion
+   * declaration names one of them. The fact R8 and HP1 read about a move out of a settled project
+   * (`settledEndRule`), read from the rows by each door that decides one: the request, the question
+   * filed under `declare`'s locks, and the confirmation under its own.
+   */
+  async servesCriterionOf(
+    db: Pick<Prisma.TransactionClient, 'task'>,
+    ownerId: string,
+    taskId: string,
+    projectId: string,
+  ): Promise<boolean> {
+    const serving = await db.task.findFirst({
+      where: { id: taskId, ownerId, criterionDefinition: { projectId } },
+      select: { id: true },
+    });
+    return serving !== null;
+  }
+
+  /**
    * A task is not moved while its own landing is queued or running — refused when the move is
    * asked for, and again by whatever applies it.
    *
@@ -533,6 +553,24 @@ export class ProjectHandoffService {
       if (existing) return existing;
 
       const acceptance = await this.acceptanceUnderLock(tx, ownerId, declaration);
+      // A move nobody's answer could make is not asked about: confirming it would be refused, so a
+      // question filed for it would only be a card nobody can say yes to. HP1 under these locks is
+      // R8 as the caller's admission read it — a settled end, or a task its settled source counts —
+      // re-read here in case either moved since.
+      if (acceptance.acceptedBy === null) {
+        const rule = SCOPE_RULES.find((candidate) => candidate.code === acceptance.refusal);
+        throw new ForbiddenException({
+          code: acceptance.refusal,
+          rule: rule?.id ?? null,
+          requiredAction: rule?.requiredAction ?? null,
+          taskId: declaration.subjectTaskId,
+          message:
+            (acceptance.refusal === 'MOVE_TASK_SERVES_SETTLED_CRITERION'
+              ? 'this task serves an acceptance criterion of the settled project it would leave'
+              : 'a settled project takes no work until it is reopened')
+            + ' — nothing was written and no question was filed',
+        });
+      }
       // Asked rather than assumed, and it can only come back a person's answer: the one row that
       // used to say `POLICY` was the automatic acceptance, and the column it was read from is gone.
       // So a declaration its author is allowed to make files a QUESTION, and nothing here writes a
@@ -775,9 +813,19 @@ export class ProjectHandoffService {
     const from = ends.find((row) => row.id === declaration.fromProjectId);
     const to = ends.find((row) => row.id === declaration.toProjectId);
     if (!from || !to) throw new ForbiddenException('project not found');
+    // A move's subject is under this transaction's FOR SHARE, so what it serves cannot change
+    // before the insert.
+    const move = declaration.kind === 'MOVE_TASK' && declaration.subjectTaskId
+      ? {
+          servesSourceCriterion: await this.servesCriterionOf(
+            tx, ownerId, declaration.subjectTaskId, declaration.fromProjectId,
+          ),
+        }
+      : null;
     return decideHandoffAcceptance(
       { status: from.status as 'OPEN' | 'DONE' | 'CANCELLED' },
       { status: to.status as 'OPEN' | 'DONE' | 'CANCELLED' },
+      move,
     );
   }
 

@@ -1113,9 +1113,9 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     identity: 'The request id, and the request row it names — whose ends, subject and payload are frozen (0155, 0386). One request moves one task once: the transaction is a compare-and-set PENDING → APPROVED and then `spend`\'s APPROVED → APPLIED on this task, so a second confirmation, concurrent or later, finds APPLIED under the row lock and is refused with nothing written.',
     isolation: '',
     attempts: 4,
-    replay: 'Every fact it acts on is read inside the closure under those locks — the request\'s state and expiry, the task\'s project and hierarchy, both statuses, the landing jobs, the criterion\'s revision — so a re-run decides against the state the winner left. A refusal throws before the first write, so nothing of a refused confirmation survives, including the yes.',
+    replay: 'Every fact it acts on is read inside the closure under those locks — the request\'s state and expiry, the task\'s project and hierarchy, both statuses, whether the task serves a criterion of the project it leaves, the landing jobs, the criterion\'s revision — so a re-run decides against the state the winner left. A refusal throws before the first write, so nothing of a refused confirmation survives, including the yes.',
     effects: 'None inside. After commit: realtime rows for the task, and the same settled-project, criterion and exception deliveries the owner\'s own move makes, over both projects.',
-    answer: 'Typed 503 from the global boundary; a confirmation the move no longer admits is a 409 with its own code (MOVE_TASK_SUBJECT_MOVED, MOVE_TASK_LANDING_IN_FLIGHT, MOVE_TASK_HIERARCHY_CONFLICT, MOVE_TASK_CRITERION_GONE, PROJECT_REOPEN_REQUIRED, APPROVAL_EXPIRED, MOVE_TASK_BUSY) and the request stays as it was.',
+    answer: 'Typed 503 from the global boundary; a confirmation the move no longer admits is a 409 with its own code (MOVE_TASK_SUBJECT_MOVED, MOVE_TASK_LANDING_IN_FLIGHT, MOVE_TASK_HIERARCHY_CONFLICT, MOVE_TASK_CRITERION_GONE, PROJECT_REOPEN_REQUIRED, MOVE_TASK_SERVES_SETTLED_CRITERION, APPROVAL_EXPIRED, MOVE_TASK_BUSY) and the request stays as it was.',
   },
   {
     at: 'sessions/sessions.service.ts#armAutoRetry',
