@@ -833,8 +833,8 @@ struct AgentPanes: View {
 
     /// The whole grouping, from its inputs alone: static, so it cannot read a fact the memo's key
     /// does not carry.
-    private static func grouping(_ inputs: SessionListInputs) -> SessionListGrouping {
-        let projectListing = Self.projectListing(inputs)
+    private static func grouping(_ inputs: SessionListInputs, _ lines: SessionLineCache) -> SessionListGrouping {
+        let projectListing = Self.projectListing(inputs, lines)
         let folderListing = Self.folderListing(projectListing, inputs)
         let projectRows = Dictionary(uniqueKeysWithValues: projectListing.projects.map { ($0.id, $0) })
         return SessionListGrouping(projectListing: projectListing, folderListing: folderListing,
@@ -867,12 +867,15 @@ struct AgentPanes: View {
                                     sessions: projectListing.entries.map(\.timeGroupingSession))
     }
 
-    private static func projectListing(_ inputs: SessionListInputs) -> SessionProjectListing {
+    private static func projectListing(_ inputs: SessionListInputs, _ lines: SessionLineCache) -> SessionProjectListing {
         let shownSessions = inputs.shownSessions
-        let coordinators = inputs.allSessions + inputs.accountSessions
+        // The grouping reads only the coordinators out of these, so only they are copied out of the
+        // account's lists — not several hundred sessions each, concatenated whole on every pass.
+        let isCoordinator = { (session: Session) in session.projectMembership?.role == .coordinator }
+        let coordinators = inputs.allSessions.filter(isCoordinator) + inputs.accountSessions.filter(isCoordinator)
         // Only the sessions the grouping looks a watch up for — this list's own and the projects'
         // coordinators — not every session of the account, each a `PublicID` key conversion.
-        let watched = shownSessions + coordinators.filter { $0.projectMembership?.role == .coordinator }
+        let watched = shownSessions + coordinators
         return SessionProjectGrouping.listing(shownSessions,
                                       folders: inputs.workspaceFolders,
                                       projects: inputs.projects, view: inputs.view,
@@ -883,8 +886,7 @@ struct AgentPanes: View {
                                       watching: Dictionary(watched.compactMap { session in
                                           inputs.watch(for: session.id).map { (session.id, $0) }
                                       }, uniquingKeysWith: { _, latest in latest }),
-                                      line: { SessionLine.make(for: $0, live: true,
-                                                              watching: inputs.watch(for: $0.id)) })
+                                      line: { lines.line(for: $0, watching: inputs.watch(for: $0.id)) })
     }
 
     private func projectRow(_ row: SessionProjectRow) -> some View {

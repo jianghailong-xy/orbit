@@ -25,8 +25,8 @@ final class SessionListingMemoTests: XCTestCase {
     /// computed in all.
     private func computations(after inputs: SessionListInputs) -> Int {
         let memo = SessionListingMemo<Int>()
-        _ = memo.value(for: base) { _ in 1 }
-        _ = memo.value(for: inputs) { _ in 2 }
+        _ = memo.value(for: base) { _, _ in 1 }
+        _ = memo.value(for: inputs) { _, _ in 2 }
         return memo.computations
     }
 
@@ -38,9 +38,9 @@ final class SessionListingMemoTests: XCTestCase {
 
     func testNothingChangedHandsTheLastGroupingBack() {
         let memo = SessionListingMemo<String>()
-        XCTAssertEqual(memo.value(for: base) { _ in "first" }, "first")
-        XCTAssertEqual(memo.value(for: base) { _ in "second" }, "first")
-        XCTAssertEqual(memo.value(for: base) { _ in "third" }, "first")
+        XCTAssertEqual(memo.value(for: base) { _, _ in "first" }, "first")
+        XCTAssertEqual(memo.value(for: base) { _, _ in "second" }, "first")
+        XCTAssertEqual(memo.value(for: base) { _, _ in "third" }, "first")
         XCTAssertEqual(memo.computations, 1)
     }
 
@@ -85,10 +85,10 @@ final class SessionListingMemoTests: XCTestCase {
     func testItKeepsTheLatestGrouping() {
         let memo = SessionListingMemo<Int>()
         let other = changed { $0.searching = true }
-        XCTAssertEqual(memo.value(for: base) { _ in 1 }, 1)
-        XCTAssertEqual(memo.value(for: other) { _ in 2 }, 2)
-        XCTAssertEqual(memo.value(for: other) { _ in 3 }, 2)
-        XCTAssertEqual(memo.value(for: base) { _ in 4 }, 4)
+        XCTAssertEqual(memo.value(for: base) { _, _ in 1 }, 1)
+        XCTAssertEqual(memo.value(for: other) { _, _ in 2 }, 2)
+        XCTAssertEqual(memo.value(for: other) { _, _ in 3 }, 2)
+        XCTAssertEqual(memo.value(for: base) { _, _ in 4 }, 4)
         XCTAssertEqual(memo.computations, 3)
     }
 
@@ -112,5 +112,60 @@ final class SessionListingMemoTests: XCTestCase {
         inputs.watches = [PublicID.storageKey("S1"): watch]
         XCTAssertEqual(inputs.watch(for: "S1"), watch)
         XCTAssertNil(inputs.watch(for: "S2"))
+    }
+
+    // MARK: the rows' lines
+
+    private func running(_ id: String, reply: String) -> Session {
+        Session(id: id, title: id, status: .running, runState: .running, agentId: "w1", assignedRunnerId: nil,
+                pendingApprovals: nil, branch: nil, updatedAt: nil, lastAssistantText: reply,
+                createdAt: "2026-10-04T09:00:00Z", lastTurnAt: "2026-10-04T09:40:00Z")
+    }
+
+    /// A line is `SessionLine.make`'s, and is made again only for a session (or watch) that moved.
+    func testALineIsMadeAgainOnlyForASessionThatChanged() throws {
+        let cache = SessionLineCache()
+        let a = running("a", reply: "first **reply**"), b = running("b", reply: "other")
+        XCTAssertEqual(cache.line(for: a, watching: nil), SessionLine.make(for: a, live: true))
+        XCTAssertEqual(cache.line(for: b, watching: nil), SessionLine.make(for: b, live: true))
+        cache.endPass()
+        XCTAssertEqual(cache.made, 2)
+
+        _ = cache.line(for: a, watching: nil)
+        _ = cache.line(for: b, watching: nil)
+        cache.endPass()
+        XCTAssertEqual(cache.made, 2, "nothing changed")
+
+        let moved = running("a", reply: "second reply")
+        XCTAssertEqual(cache.line(for: moved, watching: nil), SessionLine.make(for: moved, live: true))
+        XCTAssertEqual(cache.made, 3, "a's preview moved")
+
+        let watch = try XCTUnwrap(WatchSessionSummary(sessionID: "b",
+                                                      watches: [WatchFixture.watch(id: "W1", observer: "b")]))
+        XCTAssertEqual(cache.line(for: b, watching: watch), SessionLine.make(for: b, live: true, watching: watch))
+        XCTAssertEqual(cache.made, 4, "b's watch moved")
+    }
+
+    /// A session no pass asked for any more is let go of, and made afresh if it comes back.
+    func testAPassForgetsTheSessionsItDidNotAskFor() {
+        let cache = SessionLineCache()
+        let a = running("a", reply: "x"), b = running("b", reply: "y")
+        _ = cache.line(for: a, watching: nil)
+        _ = cache.line(for: b, watching: nil)
+        cache.endPass()
+        _ = cache.line(for: a, watching: nil)
+        cache.endPass()
+        _ = cache.line(for: b, watching: nil)
+        XCTAssertEqual(cache.made, 3)
+    }
+
+    /// The memo hands its compute the one cache it keeps, regrouping after regrouping.
+    func testTheMemoKeepsItsLinesAcrossRegroupings() {
+        let memo = SessionListingMemo<SessionLine>()
+        let a = running("a", reply: "x")
+        _ = memo.value(for: base) { _, lines in lines.line(for: a, watching: nil) }
+        _ = memo.value(for: changed { $0.searching = true }) { _, lines in lines.line(for: a, watching: nil) }
+        XCTAssertEqual(memo.computations, 2)
+        XCTAssertEqual(memo.lines.made, 1)
     }
 }

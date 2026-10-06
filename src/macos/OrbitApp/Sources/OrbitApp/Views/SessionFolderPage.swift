@@ -134,8 +134,8 @@ struct SessionFolderPage: View {
                           runnerOffline: app.agents?.runnerIsOffline(agent?.runnerId) ?? false)
     }
     /// The whole grouping, from its inputs alone (see the workspace list's).
-    private static func grouping(_ inputs: SessionListInputs) -> SessionListGrouping {
-        let projectListing = Self.projectListing(inputs)
+    private static func grouping(_ inputs: SessionListInputs, _ lines: SessionLineCache) -> SessionListGrouping {
+        let projectListing = Self.projectListing(inputs, lines)
         let sessions = Self.sessions(projectListing, inputs)
         let projectRows = Dictionary(uniqueKeysWithValues: projectListing.projects.map { ($0.id, $0) })
         return SessionListGrouping(projectListing: projectListing,
@@ -150,11 +150,14 @@ struct SessionFolderPage: View {
         guard SessionProjectGrouping.listShowsProjects(view: inputs.view, byTag: false) else { return ungrouped }
         return projectListing.entries.map(\.timeGroupingSession)
     }
-    private static func projectListing(_ inputs: SessionListInputs) -> SessionProjectListing {
-        let coordinators = inputs.allSessions + inputs.accountSessions
+    private static func projectListing(_ inputs: SessionListInputs, _ lines: SessionLineCache) -> SessionProjectListing {
+        // The grouping reads only the coordinators out of these, so only they are copied out of the
+        // account's lists — not several hundred sessions each, concatenated whole on every pass.
+        let isCoordinator = { (session: Session) in session.projectMembership?.role == .coordinator }
+        let coordinators = inputs.allSessions.filter(isCoordinator) + inputs.accountSessions.filter(isCoordinator)
         // Only the sessions the grouping looks a watch up for — the folder's workspace list and the
         // projects' coordinators — not every session of the account (see the workspace list's).
-        let watched = inputs.sessions + coordinators.filter { $0.projectMembership?.role == .coordinator }
+        let watched = inputs.sessions + coordinators
         return SessionProjectGrouping.listing(inputs.sessions,
                                       folders: inputs.workspaceFolders,
                                       projects: inputs.projects, view: inputs.view,
@@ -165,8 +168,7 @@ struct SessionFolderPage: View {
                                       watching: Dictionary(watched.compactMap { session in
                                           inputs.watch(for: session.id).map { (session.id, $0) }
                                       }, uniquingKeysWith: { _, latest in latest }),
-                                      line: { SessionLine.make(for: $0, live: true,
-                                                              watching: inputs.watch(for: $0.id)) })
+                                      line: { lines.line(for: $0, watching: inputs.watch(for: $0.id)) })
     }
     private static func timeSections(_ sessions: [Session], _ inputs: SessionListInputs) -> [SessionTimeSection] {
         SessionTimeGrouping.sections(sessions, pinnedFirst: inputs.view == .open)

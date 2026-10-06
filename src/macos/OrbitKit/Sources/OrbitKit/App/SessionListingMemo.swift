@@ -82,16 +82,57 @@ public struct SessionListInputs: Equatable, Sendable {
 /// changes, because building the `SessionListInputs` reads every one of them from the models.
 public final class SessionListingMemo<Value> {
     private var last: (inputs: SessionListInputs, value: Value)?
+    /// The rows' lines, kept across regroupings: a session running in the list changes the inputs
+    /// every few seconds, and only its own line has to be worked out again.
+    public let lines = SessionLineCache()
     /// How many times `compute` has run — what the tests count.
     public private(set) var computations = 0
 
     public init() {}
 
-    public func value(for inputs: SessionListInputs, compute: (SessionListInputs) -> Value) -> Value {
+    public func value(for inputs: SessionListInputs,
+                      compute: (SessionListInputs, SessionLineCache) -> Value) -> Value {
         if let last, last.inputs == inputs { return last.value }
-        let value = compute(inputs)
+        let value = compute(inputs, lines)
+        lines.endPass()
         computations += 1
         last = (inputs, value)
         return value
+    }
+}
+
+/// `SessionLine.make(for:live: true, watching:)` per session, worked out again only for a session
+/// (or its watch) that changed since it was last asked for. A line is a pure function of the two,
+/// and the regular expressions behind a preview are most of what a regrouping costs.
+public final class SessionLineCache {
+    private var entries: [String: Entry] = [:]
+    private var asked: Set<String> = []
+    /// How many lines were actually made — what the tests count.
+    public private(set) var made = 0
+
+    private struct Entry {
+        let session: Session
+        let watching: WatchSessionSummary?
+        let line: SessionLine
+    }
+
+    public init() {}
+
+    public func line(for session: Session, watching: WatchSessionSummary?) -> SessionLine {
+        asked.insert(session.id)
+        if let entry = entries[session.id], entry.session == session, entry.watching == watching {
+            return entry.line
+        }
+        let line = SessionLine.make(for: session, live: true, watching: watching)
+        made += 1
+        entries[session.id] = Entry(session: session, watching: watching, line: line)
+        return line
+    }
+
+    /// Forgets the sessions this pass did not ask for, so the cache holds one list's rows and not
+    /// every session it has ever drawn.
+    public func endPass() {
+        entries = entries.filter { asked.contains($0.key) }
+        asked.removeAll(keepingCapacity: true)
     }
 }
