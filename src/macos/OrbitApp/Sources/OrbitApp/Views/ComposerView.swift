@@ -1044,13 +1044,17 @@ struct ComposerView: View {
         Text(Self.menuBreakable(text))
         if selected { Text("Current") }
         #else
+        // A macOS menu turns this row into a title and an image and draws the image in the menu's
+        // own colour — a clear checkmark rendered as a tick on every row (seen in the P5 Mac shots:
+        // both DeepSeek models and every mode ticked). So the image exists only on the selected row.
         HStack(spacing: 8) {
             Text(text).lineLimit(1)
             Spacer(minLength: 8)
-            Image(systemName: "checkmark")
-                .foregroundStyle(selected ? Color.accentColor : Color.clear)
-                .frame(width: 20, alignment: .trailing)
-                .accessibilityHidden(!selected)
+            if selected {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 20, alignment: .trailing)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         #endif
