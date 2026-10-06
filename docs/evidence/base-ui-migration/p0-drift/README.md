@@ -397,7 +397,7 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 | 只中和 B1 的临时树：`99ec58928` + E2 补丁（[patch](b-class/neutralized-final/patch.diff)，临时提交 `bbe3b275e`，不进交付分支） | 完整回归 101 通过（85 正常 + 16 预期失败）、11 跳过、**0 失败**、0 flaky，退出码 0 | [b-class/neutralized-final](b-class/neutralized-final/summary.json) |
 | 负对照 | 见上节 | negative-control/ |
 | getByText 稳定性 | settings/profile × 8 项目 × 25 次：修复后的定位 400/400 通过；原定位在同一构建上 61/400 失败，全部是读屏副本的严格模式违例 | [flake/stability-final.json](flake/stability-final.json) |
-| 项目合并检查 `npm run build -w @orbit/web && npm run test -w @orbit/web` | @@MERGE@@ | [checks/merge-check-final.json](checks/merge-check-final.json) |
+| 项目合并检查 `npm run build -w @orbit/web && npm run test -w @orbit/web` | 通过，退出码 0：`tsc -b && vite build` 成功（保留原有大 chunk 提示）；Vitest **323 个文件、4065 个用例全部通过**，用时 297 秒。运行于 `c2557f75d`，即包含全部代码和本目录其余证据的提交；[过滤后的输出](checks/merge-check-final.txt)保留完整构建输出和 Vitest 的结果、汇总行，去掉了用例运行中打印的控制台告警，完整输出由 Orbit 按任务行保存 | [checks/merge-check-final.json](checks/merge-check-final.json) |
 
 **两轮的 8 个失败**全部发生在截图断言上，没有定位失败，都是 B1。差异像素数取自 Playwright 报告，两轮相同：
 - settings-saved.png 对照 main 漂移参考：C-light-desktop 10、C-light-phone 135、C-dark-phone 95；
@@ -416,7 +416,7 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 ## 边界
 
 - **B1**：B1 修复前，P0 回归不会全绿。按协调者的决定，本任务的验收是「失败只限 B1 的 8 个用例、两轮一致、中和后 0 失败」；全绿由修复任务 [34bQk0jlytjFYyi4OgLMK](orbit-task:34bQk0jlytjFYyi4OgLMK) 在含参考层和修复的 tip 上确认。B1 修复后，Chromium 的 settings-saved 4 张应与 main 漂移参考一致，profile-validation 6 张应与 P0.2 一致；这需要修复任务实际重跑，本证据不能代替。
-- **运行时的提交**：正式回归、中和、负对照都在 `99ec58928` 上运行；之后的提交只在本目录增加证据文件，不改 `src/`、`reference/` 和 `accepted/`。核对办法：`git diff --stat 99ec58928..HEAD -- src docs/evidence/base-ui-migration/p0-drift/reference docs/evidence/base-ui-migration/p0-drift/accepted` 输出为空。合并检查在 @@MERGECOMMIT@@ 上运行。
+- **运行时的提交**：正式回归、中和、负对照都在 `99ec58928` 上运行；之后的提交只在本目录增加证据文件，不改 `src/`、`reference/` 和 `accepted/`。核对办法：`git diff --stat 99ec58928..HEAD -- src docs/evidence/base-ui-migration/p0-drift/reference docs/evidence/base-ui-migration/p0-drift/accepted` 输出为空。合并检查在 `c2557f75d`（全部代码和本目录其余证据；之后只加入合并检查记录） 上运行。
 - **已接受层的判定引用**：校验检查判定引用的形式和批次文档是否存在，不能离线查询 Orbit，所以判定是否真实存在由协调者复核时核对（规则第 4 条）。负对照里的登记用的是临时替身判定，只在临时树中存在。
 - **噪声包络**：归因判定依赖实测的噪声包络（Chromium 单通道差 ≤4 且 ≤200 像素）。A5 的差异（210 像素、单通道差 1）超过了像素数上限。在 8 次独立运行中（main 上 2 次、P2.2 线 2 次、项目线 4 次），这块区域的位置和每个像素值都完全相同，因此判为确定差异。
 - **只跑受影响场景的部分**：main 线和 P2.2 线只跑了受影响的场景，完整矩阵只在被归因提交和它的前驱上跑。P2.2 自身提交只检查了任务、设置和 Chromium 暗色桌面断点场景；它们对其余截图的净影响，已由项目线 `8ef6b60d1` 的完整矩阵覆盖，变化全部由 A4/A5 解释。
