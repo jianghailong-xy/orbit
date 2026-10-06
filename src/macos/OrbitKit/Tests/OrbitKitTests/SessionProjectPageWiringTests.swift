@@ -232,8 +232,10 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let title = try slice(page, from: "private var title: some View {", to: "\n    }")
         XCTAssertTrue(title.contains("Text(titleText)"))
         XCTAssertTrue(title.contains("SessionProjectCopy.pageSubtitle(sessions: sessions.count)"))
-        XCTAssertTrue(title.contains("app.projectSessionsLoading && sessions.isEmpty"),
-                      "no member count before the members have been read")
+        XCTAssertTrue(title.contains("loading && sessions.isEmpty"),
+                      "no member count while no member is known")
+        XCTAssertTrue(page.contains("private var loading: Bool { app.projectSessionsLoading || app.projectSessionsAddress != address }"),
+                      "nothing is known for the page before its own load has begun")
         XCTAssertTrue(title.contains("SessionProjectCopy.pageSubtitleLoading"))
         XCTAssertTrue(title.contains(".foregroundStyle(.secondary)"))
         XCTAssertTrue(page.contains("ToolbarItem(placement: .principal) { title }"))
@@ -303,17 +305,14 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(load.contains("api.listSessions(view: .open, projectId: address.projectID)"))
         XCTAssertTrue(load.contains("api.listSessions(view: .completed, projectId: address.projectID)"))
         XCTAssertTrue(load.contains("let rows = try await openRead.value + completedRead.value"))
-        XCTAssertTrue(load.contains("var seen = Set<String>()"))
-        XCTAssertTrue(load.contains("seen.insert($0.id).inserted"))
-        XCTAssertTrue(load.contains("$0.effectiveLifecycleState != .trash"))
-        XCTAssertTrue(load.contains(".sorted { ($0.lastTurnAt ?? $0.createdAt ?? \"\") > ($1.lastTurnAt ?? $1.createdAt ?? \"\") }"))
+        XCTAssertTrue(load.contains("projectSessions = SessionProjectMembers.members(of: address.projectID, in: rows)"),
+                      "one rule — this project's, never Trash, each once, newest first (SessionProjectMembersTests)")
         XCTAssertFalse(load.contains("view: address.view"))
         XCTAssertFalse(load.contains("view: .trash"))
         XCTAssertFalse(load.contains("agentID:"))
         XCTAssertFalse(load.contains("agentId:"))
         XCTAssertFalse(load.contains("runnerId:"))
         XCTAssertTrue(load.contains("projectSessionsAddress == address, !Task.isCancelled"), "an old request cannot replace another project's rows")
-        XCTAssertTrue(load.contains("$0.projectMembership?.projectId == address.projectID"))
         XCTAssertTrue(load.contains("sessionDetails.store(row)"))
         let open = try slice(app, from: "func openProjectMember(_ session: Session, push: Bool) {", to: "\n    }")
         XCTAssertTrue(open.contains("sessionDetails.store(session)"))
@@ -393,12 +392,18 @@ final class SessionProjectPageWiringTests: XCTestCase {
 
         let app = code(try appSource("AppModel.swift"))
         let load = try slice(app, from: "func loadProjectSessions(_ address: SessionProjectAddress) async {", to: "\n    }")
-        XCTAssertTrue(load.contains("let integrationRead = Task { try await api.projectIntegration(address.projectID) }"))
         XCTAssertTrue(load.contains("projectSessionsIntegration = nil"), "another project's landing never shows here")
-        let store = try XCTUnwrap(load.range(of: "projectSessionsIntegration = integration"))
-        let guardRange = try XCTUnwrap(load.range(of: "guard projectSessionsAddress == address, !Task.isCancelled else { return }\n        if let integration"))
+        XCTAssertFalse(load.contains("projectIntegration("), "the landing read does not wait behind the member lists")
+        let integration = try slice(app, from: "func loadProjectIntegration(_ address: SessionProjectAddress) async {",
+                                    to: "\n    }")
+        XCTAssertTrue(integration.contains("let integration = try? await api.projectIntegration(address.projectID)"))
+        let store = try XCTUnwrap(integration.range(of: "projectSessionsIntegration = integration"))
+        let guardRange = try XCTUnwrap(integration.range(of: "guard projectSessionsAddress == address, !Task.isCancelled else { return }\n        if let integration"))
         XCTAssertLessThan(guardRange.lowerBound, store.lowerBound)
-        XCTAssertTrue(load.contains("projectSessionsIntegrationReadFailed = true"))
+        XCTAssertTrue(integration.contains("projectSessionsIntegrationReadFailed = true"))
+        let task = try slice(page, from: ".task(id: address) {", to: "\n        }")
+        XCTAssertEqual(task.components(separatedBy: "await app.loadProjectIntegration(address)").count - 1, 2,
+                       "the landing is read on arrival and on every poll")
     }
 
     /// The merge into main lives on this page (owner decision 2026-10-06): its card under the
@@ -463,11 +468,93 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let source = code(try appSource("Views/SessionProjectPage.swift"))
         let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
         let overlay = try slice(page, from: ".overlay {", to: "\n        }")
-        let failed = try slice(overlay, from: "if sessions.isEmpty, let failure = app.projectSessionsError {",
+        let failed = try slice(overlay, from: "if sessions.isEmpty, app.projectSessionsAddress == address, let failure = app.projectSessionsError {",
                                to: "} else if")
         XCTAssertFalse(failed.contains("projectSessionsLoading"))
         XCTAssertTrue(failed.contains("Text(CodexSignIn.sentence(failure))"))
         XCTAssertTrue(failed.contains("Button(\"Retry\") { Task { await app.loadProjectSessions(address) } }"))
+    }
+
+    /// The page never opens on nothing while the app holds the project's members: a new address
+    /// opens on the Open list's members, a workspace list's rows and the Completed members its page
+    /// last read (`SessionProjectMembersTests`), before any read answers, and the read replaces them.
+    /// What the model holds for another address is never drawn, and nothing is counted before the
+    /// page's own load has begun.
+    func testThePageOpensOnWhatTheAppAlreadyHoldsRatherThanOnNone() throws {
+        let app = code(try appSource("AppModel.swift"))
+        let load = try slice(app, from: "func loadProjectSessions(_ address: SessionProjectAddress) async {", to: "\n    }")
+        let entering = try slice(load, from: "if projectSessionsAddress != address {", to: "\n        }")
+        XCTAssertTrue(entering.contains("projectSessions = SessionProjectMembers.members("))
+        XCTAssertTrue(entering.contains("in: sessions + (agents?.allSessions ?? []) + (projectCompletedSessions[key] ?? []))"))
+        XCTAssertFalse(load.contains("projectSessions = []"), "an address change no longer starts the page at 0")
+        let opened = try XCTUnwrap(load.range(of: "projectSessions = SessionProjectMembers.members("))
+        let read = try XCTUnwrap(load.range(of: "let rows = try await openRead.value + completedRead.value"))
+        XCTAssertLessThan(opened.lowerBound, read.lowerBound, "the members are in hand before any read answers")
+        XCTAssertTrue(load.contains("projectCompletedSessions[key] = projectSessions.filter { $0.effectiveLifecycleState != .open }"),
+                      "coming back to the project opens on its Completed members too")
+
+        let source = code(try appSource("Views/SessionProjectPage.swift"))
+        let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
+        XCTAssertTrue(page.contains("private var sessions: [Session] { app.projectSessionsAddress == address ? app.projectSessions : [] }"),
+                      "another address's rows are never drawn as this page's")
+        let title = try slice(page, from: "private var title: some View {", to: "\n    }")
+        XCTAssertFalse(title.contains("app.projectSessionsLoading"),
+                       "the first frame, before the page's load has begun, counts nothing")
+    }
+
+    /// The page's reads run side by side, each on its own 4-second poll, so nothing waits behind the
+    /// member lists; and a poll of the members asks for neither list again unless something moved —
+    /// the Open members are the app's Open list's, the Completed list is read again only for a member
+    /// that left Open or after `SessionProjectMembers.completedRefresh`.
+    func testThePagesReadsRunSideBySideAndAPollAsksForNoListThatDidNotMove() throws {
+        let source = code(try appSource("Views/SessionProjectPage.swift"))
+        let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
+        let task = try slice(page, from: ".task(id: address) {", to: "\n        }")
+        XCTAssertTrue(task.contains("await withTaskGroup(of: Void.self) { group in"))
+        XCTAssertFalse(task.contains("async let"), "project reads avoid async-let teardown")
+        XCTAssertEqual(task.components(separatedBy: "group.addTask { @MainActor in").count - 1, 4)
+        for reads in ["await app.loadProjectSessions(address)\n                    await Self.poll { await app.pollProjectSessions(address) }",
+                      "await app.loadProjectIntegration(address)\n                    await Self.poll { await app.loadProjectIntegration(address) }",
+                      "await app.loadProjectMerge(address)\n                    await Self.poll { await app.loadProjectMerge(address) }",
+                      "await app.projects?.load()\n                    await app.loadProjectStart(address)\n                    await Self.poll { await app.loadProjectStart(address) }"] {
+            XCTAssertTrue(task.contains(reads), "a read of its own: `\(reads)`")
+        }
+        let poll = try slice(page, from: "private static func poll(_ read: () async -> Void) async {", to: "\n    }")
+        XCTAssertTrue(poll.contains("try? await Task.sleep(for: .seconds(4))"))
+        XCTAssertTrue(poll.contains("if Task.isCancelled { break }"))
+        let refresh = try slice(page, from: ".refreshable {", to: "\n        }")
+        for part in ["await withTaskGroup(of: Void.self) { group in",
+                     "group.addTask { @MainActor in await app.loadProjectSessions(address) }",
+                     "group.addTask { @MainActor in await app.loadProjectIntegration(address) }",
+                     "group.addTask { @MainActor in await app.loadProjectMerge(address, force: true) }",
+                     "group.addTask { @MainActor in await app.loadProjectStart(address) }"] {
+            XCTAssertTrue(refresh.contains(part), "pull to refresh keeps `\(part)`")
+        }
+
+        let app = code(try appSource("AppModel.swift"))
+        let members = try slice(app, from: "func pollProjectSessions(_ address: SessionProjectAddress) async {", to: "\n    }")
+        XCTAssertTrue(members.contains("guard projectSessionsError == nil, let readAt = projectSessionsReadAt, openListAnswered else {\n"
+                                       + "            return await loadProjectSessions(address)\n        }"),
+                      "until a read has answered, or before the server answered the app's Open list, a poll is the read")
+        XCTAssertTrue(members.contains("SessionProjectMembers.poll(shown: projectSessions, projectID: address.projectID,"))
+        XCTAssertTrue(members.contains("openList: sessions"))
+        XCTAssertTrue(members.contains("if poll.members != projectSessions { projectSessions = poll.members }"),
+                      "a poll that changed nothing redraws nothing")
+        XCTAssertFalse(members.contains("view: .open"), "the Open members are the app's Open list's")
+        let due = try XCTUnwrap(members.range(of: "guard poll.moved || Date().timeIntervalSince(readAt) >= SessionProjectMembers.completedRefresh else { return }"))
+        let completed = try XCTUnwrap(members.range(of: "try await api.listSessions(view: .completed, projectId: address.projectID)"))
+        XCTAssertLessThan(due.lowerBound, completed.lowerBound, "the Completed list is asked for only when it may have moved")
+        XCTAssertFalse(members.contains("async let"))
+
+        let model = code(try appSource("ProjectMergeModel.swift"))
+        let merge = try slice(model, from: "func load(force: Bool = false) async {", to: "\n    }")
+        let started = try ["let mergedRead: Task<[ProjectPromotionView], Error>? = mergedDue",
+                           "let itemsRead: Task<ProjectOpenItemsView, Error>? = itemsDue",
+                           "let criteriaRead: Task<ProjectCriteriaDocument, Error>? = criteriaDue"].map {
+            try XCTUnwrap(merge.range(of: $0)?.lowerBound, "`\($0)`")
+        }
+        let firstWait = try XCTUnwrap(merge.range(of: "try? await mergedRead?.value")?.lowerBound)
+        XCTAssertTrue(started.allSatisfy { $0 < firstWait }, "the merge card's follow-up reads go side by side")
     }
 
     /// A project nobody has started says so on its progress line and offers its start under it
@@ -546,6 +633,8 @@ final class SessionProjectPageWiringTests: XCTestCase {
         for part in ["func openProjectSessions(_ address: SessionProjectAddress)",
                      "func leaveProjectSessions(_ projectID: String? = nil)",
                      "func loadProjectSessions(_ address: SessionProjectAddress)",
+                     "func pollProjectSessions(_ address: SessionProjectAddress)",
+                     "func loadProjectIntegration(_ address: SessionProjectAddress)",
                      "var projectSessionsColumn: SessionProjectAddress?"] {
             XCTAssertEqual(try branches(of: part, in: app), ["os(iOS)"])
         }

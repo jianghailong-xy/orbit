@@ -5,6 +5,7 @@ import {
   toUuid,
   WIKI_DOC_DISPOSITION_ACTIONS,
   WIKI_DOC_FOOTNOTE_KINDS,
+  WIKI_DOC_LEAD_RULES,
   WIKI_DOC_RECORD_KINDS,
   WIKI_DOC_REPO_KINDS,
   WIKI_DOC_RULES,
@@ -891,6 +892,22 @@ function redacted(text: string | null, literals: readonly string[]): string | nu
   return text === null ? null : redactSecrets(text, { literals }).text;
 }
 
+/** A sentence that ends at a full-width stop, closers after it: the next one follows with no space. */
+const FULL_STOP_END = /[。！？][」』"”’）)]*$/u;
+
+/**
+ * A written document's lead (contract `docs.lead`): the first sentences of its first section, withdrawn
+ * ones left out by the caller, joined as they read — a space after a Latin stop, none after a full-width
+ * one — and cut to `maxChars` characters with an ellipsis when longer. Null when there is none.
+ */
+export function docLead(sentences: readonly string[]): string | null {
+  const taken = sentences.slice(0, WIKI_DOC_LEAD_RULES.sentences);
+  if (taken.length === 0) return null;
+  const text = taken.reduce((lead, sentence) => (FULL_STOP_END.test(lead) ? `${lead}${sentence}` : `${lead} ${sentence}`));
+  const chars = Array.from(text);
+  return chars.length <= WIKI_DOC_LEAD_RULES.maxChars ? text : `${chars.slice(0, WIKI_DOC_LEAD_RULES.maxChars).join('').trimEnd()}…`;
+}
+
 @Injectable()
 export class WikiDocs {
   private readonly logger = new Logger(WikiDocs.name);
@@ -1455,9 +1472,24 @@ export class WikiDocs {
     if (!plan) return { spaceId, plan: null, docs: { total: 0, written: 0 }, categories: [] };
     const docs = await this.prisma.wikiDoc.findMany({
       where: { ownerId, spaceId, slug: { in: plan.docs.map((doc) => doc.slug) } },
-      select: { slug: true, status: true, updatedAt: true, planVersion: true, sections: { select: { key: true, staleAt: true } } },
+      select: { slug: true, status: true, updatedAt: true, planVersion: true, sections: { select: { id: true, key: true, staleAt: true } } },
     });
     const written = new Map(docs.map((doc) => [doc.slug, doc]));
+    // A written document's lead is read from its first section, as the plan orders them (contract `docs.lead`).
+    const firstOf = (doc: PlanDocRow) => written.get(doc.slug)?.sections.find((section) => section.key === doc.sections[0]?.key);
+    const firstIds = plan.docs.flatMap((doc) => firstOf(doc)?.id ?? []);
+    const leads = new Map(
+      (firstIds.length === 0
+        ? []
+        : await this.prisma.wikiDocSection.findMany({
+          where: { ownerId, id: { in: firstIds } },
+          select: {
+            id: true,
+            sentences: { where: { status: { not: 'withdrawn' } }, orderBy: { position: 'asc' }, take: WIKI_DOC_LEAD_RULES.sentences, select: { text: true } },
+          },
+        })
+      ).map((section) => [section.id, docLead(section.sentences.map((sentence) => sentence.text))]),
+    );
     const numbers = numbering(plan);
     const categories = (plan.categories as unknown as PlanCategory[]) ?? [];
     return {
@@ -1475,6 +1507,7 @@ export class WikiDocs {
           .map((doc) => {
             const stored = written.get(doc.slug);
             const sections = new Map((stored?.sections ?? []).map((section) => [section.key, section]));
+            const first = firstOf(doc);
             return {
               slug: doc.slug,
               number: numbers.get(doc.slug)!.number,
@@ -1484,6 +1517,7 @@ export class WikiDocs {
               status: (stored?.status as WikiDocStatus | undefined) ?? null,
               updatedAt: stored?.updatedAt.toISOString() ?? null,
               planVersion: stored?.planVersion ?? null,
+              lead: first ? (leads.get(first.id) ?? null) : null,
               sections: doc.sections.map((section, n) => ({
                 key: section.key,
                 number: n + 1,

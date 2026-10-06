@@ -2,6 +2,8 @@ import SwiftUI
 import OrbitKit
 #if os(iOS)
 import UIKit
+#elseif os(macOS)
+import AppKit
 #endif
 
 // The Wiki's three pages — the home page, one entry, and Review — drawn from what the server said and
@@ -30,17 +32,22 @@ struct WikiHomeActions {
     var openContents: () -> Void = {}
     /// A session, by id: the status line's View run opens the run that failed (mock 12 ④).
     var openSession: (String) -> Void = { _ in }
+    /// Activity, from the bar's history mark (design §12.3.2).
+    var openActivity: () -> Void = {}
     /// The plan's banner (mock 26 ③): into the plan page, or — held for want of a setting — Maintenance.
     var openPlan: (WikiPlanLogic.Banner.To) -> Void = { _ in }
 }
 
 /// One space's home: the large title with the space beside it, the status line, the search under
 /// them, the amber banner that leads to Review, then Principles, Recent decisions, Recently changed
-/// and Agents used the wiki. The topics are the Contents sheet the bar's list button opens.
+/// and Agents used the wiki. The topics are the Contents sheet the bar's list button opens, and what
+/// waits on the owner is counted on the bar's Activity button.
 struct WikiHomePage: View {
     let content: WikiHomeContent
     var now: Date = Date()
     var actions = WikiHomeActions()
+    /// What waits on the owner across every space — the drawer's number — on the bar's Activity button.
+    var waiting = 0
     /// What the plan has to say (owner's call 2026-09-29): the phone's second banner, under Review's.
     var planBanner: WikiPlanLogic.Banner? = nil
 
@@ -74,12 +81,18 @@ struct WikiHomePage: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
-            // The bar's actions, in the web head's order — Contents, then Settings; icons both.
+            // The bar's actions, in the web head's order — Contents, Activity, Settings; icons all
+            // (design §12.3.1). Activity wears the drawer's orange number: what waits on the owner.
             ToolbarItemGroup(placement: .primaryAction) {
                 Button(action: actions.openContents) {
                     Image(systemName: "list.bullet")
                 }
                 .accessibilityLabel(WikiArticleCopy.contents)
+                Button(action: actions.openActivity) {
+                    WikiActivityGlyph(waiting: waiting)
+                }
+                .accessibilityLabel(WikiCopy.activity)
+                .accessibilityValue(waiting > 0 ? WikiCopy.waitingOnYou(waiting) : "")
                 Button(action: actions.openSettings) {
                     Image(systemName: "gearshape")
                 }
@@ -133,34 +146,59 @@ struct WikiHomePage: View {
         .padding(.top, 4)
     }
 
-    /// The space as a capsule beside the title: a menu of every space, the current one ticked, each
-    /// with the repository it describes under its name.
-    private var spacePicker: some View {
-        Menu {
-            // A toggle per space, not a button: a menu draws a toggle's tick in its own column, and
-            // takes the label's second text as the line under the name — the repository.
-            ForEach(content.spaces) { space in
-                Toggle(isOn: Binding(get: { space.id == content.space.id },
-                                     set: { if $0 { actions.pickSpace(space.slug) } })) {
-                    Text(space.slug)
-                    if let repo = space.repoUrlNorm { Text(repo) }
+    /// The space beside the title, by the name a reader knows it by (design §12.3.4, mock 31 ④). With one
+    /// space it is a grey label and no control: no chevron, no menu. With several, a menu of every space,
+    /// the current one ticked — a toggle per space, whose tick a menu draws in its own column, its name the
+    /// title and the repository and documents the line under it — what waits in each in the row's icon
+    /// cell, and Manage spaces at the foot, into Wiki settings.
+    @ViewBuilder private var spacePicker: some View {
+        let names = WikiSpaceLogic.names(content.spaces)
+        let name = names[content.space.id] ?? content.space.title ?? content.space.slug
+        if content.spaces.count < 2 {
+            Text(name)
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.primary.opacity(0.07), in: Capsule())
+                .accessibilityLabel(WikiCopy.spacePickerHint)
+                .accessibilityValue(name)
+        } else {
+            Menu {
+                ForEach(WikiSpaceLogic.menuRows(content.spaces, names: names)) { row in
+                    Toggle(isOn: Binding(get: { row.id == content.space.id },
+                                         set: { if $0 { actions.pickSpace(row.slug) } })) {
+                        // The name with its icon cell, then the line under it: a menu takes the Text
+                        // after the Label as the row's subtitle (inside the Label it drops it).
+                        Label {
+                            Text(row.name)
+                        } icon: {
+                            if wikiMenuIconsDrawAmber, let symbol = row.waitingSymbol { wikiAmberSymbol(symbol) }
+                        }
+                        Text(row.subtitle(sayWaiting: !wikiMenuIconsDrawAmber))
+                    }
                 }
+                Divider()
+                Button(action: actions.openSettings) {
+                    Label(WikiCopy.manageSpaces, systemImage: "gearshape")
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(name)
+                        .font(.orbitLabel.weight(.semibold))
+                        .lineLimit(1)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.orbitMeta.weight(.semibold))
+                }
+                .foregroundStyle(Color.primary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.primary.opacity(0.07), in: Capsule())
             }
-        } label: {
-            HStack(spacing: 4) {
-                Text(content.space.slug)
-                    .font(.orbitLabel.weight(.semibold))
-                    .lineLimit(1)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.orbitMeta.weight(.semibold))
-            }
-            .foregroundStyle(Color.primary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(Color.primary.opacity(0.07), in: Capsule())
+            .accessibilityLabel(WikiCopy.spacePickerHint)
+            .accessibilityValue(name)
         }
-        .accessibilityLabel(WikiCopy.spacePickerHint)
-        .accessibilityValue(content.space.slug)
     }
 
     // MARK: the bands
@@ -186,10 +224,10 @@ struct WikiHomePage: View {
             }
         case .principles:
             Section {
-                bandHeader(WikiCopy.principles, count: content.principles.count,
-                           badge: content.principlesAllOwner ? WikiCopy.trustLabel(.owner) : nil)
+                rows.bandHeader(WikiCopy.principles, count: content.principles.count,
+                                badge: content.principlesAllOwner ? WikiCopy.trustLabel(.owner) : nil)
                 if content.principles.isEmpty {
-                    empty(WikiCopy.noEntries)
+                    rows.empty(WikiCopy.noPrinciples)
                 } else {
                     ForEach(content.principles) { entry in
                         entryRow(entry, detail: entry.summary, time: entry.validFrom)
@@ -198,36 +236,42 @@ struct WikiHomePage: View {
             }
         case .recentDecisions:
             Section {
-                bandHeader(WikiCopy.recentDecisions, count: content.recentDecisions.count)
+                rows.bandHeader(WikiCopy.recentDecisions, count: content.recentDecisions.count)
                 if content.recentDecisions.isEmpty {
-                    empty(WikiCopy.noDecisions)
+                    rows.empty(WikiCopy.noDecisions)
                 } else {
-                    ForEach(content.recentDecisions) { entry in decisionRow(entry) }
+                    ForEach(content.recentDecisions) { entry in rows.decisionRow(entry) }
                 }
             }
         case .recentlyChanged:
             Section {
-                bandHeader(WikiCopy.recentlyChanged)
+                rows.bandHeader(WikiCopy.recentlyChanged)
                 if content.recentlyChanged.isEmpty {
-                    empty(WikiCopy.noChanges)
+                    rows.empty(WikiCopy.noChanges)
                 } else {
                     // One run is one row: every item names the changeset it came in (`wikiRecentRows`).
                     ForEach(content.recentRows) { row in
                         switch row {
                         case .op(let item):
-                            changeRow(item)
+                            rows.changeRow(item)
                         case .run(let changesetId, let origin, let at, let items):
-                            runRow(changesetId, origin: origin, at: at, changes: items.count)
+                            rows.runRow(changesetId, origin: origin, at: at, changes: items.count)
                         }
                     }
                 }
             }
         case .agentsUsed:
             Section {
-                bandHeader(WikiCopy.agentsUsed, hint: WikiCopy.agentsUsedHint)
-                usage
+                rows.bandHeader(WikiCopy.agentsUsed, hint: WikiCopy.agentsUsedHint)
+                rows.usage
             }
         }
+    }
+
+    /// The management bands' rows, which Activity draws too.
+    private var rows: WikiBandRows {
+        WikiBandRows(content: content, now: now,
+                     actions: WikiBandActions(openEntry: actions.openEntry, openRun: actions.openRun))
     }
 
     /// The search under the title — the web phone's search line, and the owner's call for iOS
@@ -287,11 +331,54 @@ struct WikiHomePage: View {
 
     // MARK: rows
 
+    /// A row that opens an entry: its title and when, then one line under it.
+    private func entryRow(_ entry: WikiEntry, detail: String?, time: String?) -> some View {
+        Button { actions.openEntry(entry.id) } label: {
+            WikiRowLabel(title: entry.displayTitle, time: time.flatMap { RelativeTime.format($0, now: now) },
+                         detail: detail, struck: entry.isEnded)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: search
+
+    @ViewBuilder private var results: some View {
+        if hits.isEmpty && searched == query && !query.isEmpty {
+            ContentUnavailableView.search(text: query)
+                .listRowSeparator(.hidden)
+        } else {
+            ForEach(hits) { hit in
+                Button { actions.openEntry(hit.id) } label: {
+                    WikiRowLabel(title: hit.title ?? hit.id,
+                                 detail: [hit.kind.map(WikiCopy.kindLabel) ?? "", hit.summary ?? ""]
+                                    .filter { !$0.isEmpty }.joined(separator: " · "))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+/// Where a press on a management band's row goes: an entry's page, or a run's.
+struct WikiBandActions {
+    var openEntry: (String) -> Void = { _ in }
+    var openRun: (String) -> Void = { _ in }
+}
+
+/// The management bands' rows (design §12.3.2): a band's heading, a decision, a change or a run of
+/// Recently changed, and the week's use — the home's until its content takes their place, and
+/// Activity's, which marks with a blue dot what came after the reader last looked.
+struct WikiBandRows {
+    let content: WikiHomeContent
+    var now: Date = Date()
+    var actions = WikiBandActions()
+
     /// A band's heading, as the first row of its band rather than a section header: a plain list pins
     /// its section headers, and on iOS 26 a pinned header has no backing, so it drew over the rows
-    /// scrolling under it. The mock's headings scroll with their bands.
-    private func bandHeader(_ title: String, count: Int? = nil, badge: String? = nil,
-                            hint: String? = nil) -> some View {
+    /// scrolling under it. The mock's headings scroll with their bands. `new` is Activity's line beside
+    /// Recently changed — `4 new since you last looked` — in the blue of the dots it counts.
+    func bandHeader(_ title: String, count: Int? = nil, badge: String? = nil,
+                    hint: String? = nil, new: String? = nil) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(title)
                 .font(.orbitSubtext.weight(.bold))
@@ -305,29 +392,27 @@ struct WikiHomePage: View {
             if let hint {
                 Text(hint).font(.orbitLabel).foregroundStyle(Color.secondary)
             }
+            if let new {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text("●").font(.orbitMeta)
+                    Text(new).font(.orbitLabel.weight(.semibold))
+                }
+                .foregroundStyle(WikiPalette.color(.blue))
+            }
             Spacer(minLength: 0)
         }
         .padding(.top, 14)
         .listRowSeparator(.hidden)
     }
 
-    private func empty(_ text: String) -> some View {
+    func empty(_ text: String) -> some View {
         Text(text)
             .font(.orbitLabel)
             .foregroundStyle(.secondary)
     }
 
-    /// A row that opens an entry: its title and when, then one line under it.
-    private func entryRow(_ entry: WikiEntry, detail: String?, time: String?) -> some View {
-        Button { actions.openEntry(entry.id) } label: {
-            WikiRowLabel(title: entry.displayTitle, time: time.flatMap { RelativeTime.format($0, now: now) },
-                         detail: detail, struck: entry.isEnded)
-        }
-        .buttonStyle(.plain)
-    }
-
     /// A decision, ADR-style: its title and the day it was decided, then whether it is in force.
-    private func decisionRow(_ entry: WikiEntry) -> some View {
+    func decisionRow(_ entry: WikiEntry) -> some View {
         let status = entry.status.map(WikiCopy.statusLabel) ?? ""
         let line = [status, entry.summary ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")
         return Button { actions.openEntry(entry.id) } label: {
@@ -338,8 +423,9 @@ struct WikiHomePage: View {
     }
 
     /// One change: the entry, when, and what happened to it — the same verbs as an entry's History —
-    /// with the mark a review mode applied it with.
-    private func changeRow(_ item: WikiTimelineItem) -> some View {
+    /// with the mark a review mode applied it with. `new` is Activity's: whether it came after the reader
+    /// last looked, a blue dot or a grey one; the home draws none.
+    func changeRow(_ item: WikiTimelineItem, new: Bool? = nil) -> some View {
         let ended = item.status == .retired || item.status == .superseded || item.status == .rejected
         let kind = item.kind.map(WikiCopy.kindLabel) ?? ""
         let line = [WikiLogic.changeVerb(item), kind].filter { !$0.isEmpty }.joined(separator: " · ")
@@ -349,7 +435,7 @@ struct WikiHomePage: View {
         } label: {
             WikiRowLabel(title: item.title ?? "—", time: item.at.flatMap { RelativeTime.format($0, now: now) },
                          detail: line, note: WikiLogic.changeNote(item), struck: ended,
-                         mark: marked ? item.trust : nil)
+                         mark: marked ? item.trust : nil, dot: new.map(Self.newDot))
         }
         .buttonStyle(.plain)
         .disabled(item.entryId == nil)
@@ -358,7 +444,8 @@ struct WikiHomePage: View {
     /// One run: who it was and when, then what it applied and with which marks (mock 12 ②). The row
     /// is the way in; Revert run… is on the run's own page. What it counts is the run's own read, which
     /// the home reads for every run it folds; until that answers, the changes the feed holds of it.
-    private func runRow(_ changesetId: String, origin: WikiChangesetOrigin?, at: String?, changes: Int) -> some View {
+    func runRow(_ changesetId: String, origin: WikiChangesetOrigin?, at: String?, changes: Int,
+                new: Bool? = nil) -> some View {
         let summary = content.run(changesetId).map(WikiModeLogic.runSummary)
         let line = ([WikiModeCopy.appliedChanges(summary?.applied ?? changes)] + (summary.map(WikiModeLogic.runCounts) ?? []))
             .joined(separator: " · ")
@@ -366,14 +453,15 @@ struct WikiHomePage: View {
             actions.openRun(changesetId)
         } label: {
             WikiRowLabel(title: WikiModeCopy.originWord(origin),
-                         time: at.flatMap { RelativeTime.format($0, now: now) }, detail: line)
+                         time: at.flatMap { RelativeTime.format($0, now: now) }, detail: line,
+                         dot: new.map(Self.newDot))
         }
         .buttonStyle(.plain)
     }
 
     /// The week's use: how many sessions were handed the wiki and how many searches it answered,
     /// then the entries used most.
-    @ViewBuilder private var usage: some View {
+    @ViewBuilder var usage: some View {
         if content.usedThisWeek, let usage = content.space.usage {
             HStack(spacing: 18) {
                 stat(usage.sessionsPushed ?? 0, WikiCopy.sessionsReceived)
@@ -408,27 +496,15 @@ struct WikiHomePage: View {
         }
     }
 
-    // MARK: search
-
-    @ViewBuilder private var results: some View {
-        if hits.isEmpty && searched == query && !query.isEmpty {
-            ContentUnavailableView.search(text: query)
-                .listRowSeparator(.hidden)
-        } else {
-            ForEach(hits) { hit in
-                Button { actions.openEntry(hit.id) } label: {
-                    WikiRowLabel(title: hit.title ?? hit.id,
-                                 detail: [hit.kind.map(WikiCopy.kindLabel) ?? "", hit.summary ?? ""]
-                                    .filter { !$0.isEmpty }.joined(separator: " · "))
-                }
-                .buttonStyle(.plain)
-            }
-        }
+    /// Blue for what came after the reader last looked, grey for what came before.
+    private static func newDot(_ new: Bool) -> Color {
+        new ? WikiPalette.color(.blue) : Color.secondary.opacity(0.5)
     }
 }
 
-/// A home-page row: a title (struck through once agents no longer get it) with a time on its right,
-/// and a secondary line under it — the session list's compact row.
+/// A band's row: a title (struck through once agents no longer get it) with a time on its right,
+/// and a secondary line under it — the session list's compact row — with Activity's dot before the
+/// title when it has one.
 private struct WikiRowLabel: View {
     let title: String
     var time: String? = nil
@@ -437,10 +513,15 @@ private struct WikiRowLabel: View {
     var struck = false
     /// The mark a review mode applied it with: Auto or Unreviewed, in the lists' own badge.
     var mark: WikiTrust? = nil
+    /// Activity's dot: whether the row came after the reader last looked.
+    var dot: Color? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
+                if let dot {
+                    Text("●").font(.orbitMeta).foregroundStyle(dot)
+                }
                 Text(title)
                     .font(.orbitProse)
                     .strikethrough(struck)
@@ -1457,6 +1538,55 @@ let wikiAmberWash = Color(uiColor: UIColor { trait in
 })
 #else
 let wikiAmberWash = Color.orange.opacity(0.14)
+#endif
+
+/// The bar's way into Activity (design §12.3.2): the history mark, with the drawer's orange number in its
+/// corner — what waits on the owner across every space — and nothing at zero.
+struct WikiActivityGlyph: View {
+    let waiting: Int
+
+    var body: some View {
+        Image(systemName: "clock.arrow.circlepath")
+            .overlay(alignment: .topTrailing) {
+                if waiting > 0 {
+                    Text("\(waiting)")
+                        .font(.orbitMeta.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 4)
+                        .frame(minWidth: 16, minHeight: 16)
+                        .background(Color.orange, in: Capsule())
+                        .fixedSize()
+                        .offset(x: 8, y: -7)
+                }
+            }
+    }
+}
+
+/// Whether a system menu draws a row's icon in the icon's own colours: the space picker's amber number
+/// (design §12.3.4). Where it does not, the number is said at the end of the row's line instead, in the web
+/// option's words (`· 2 waiting`).
+let wikiMenuIconsDrawAmber = true
+
+/// A numbered circle in amber, as a menu row's icon — an image the menu keeps in its own colours.
+@ViewBuilder func wikiAmberSymbol(_ name: String) -> some View {
+    #if os(iOS)
+    if let image = UIImage(systemName: name)?.withTintColor(.systemOrange, renderingMode: .alwaysOriginal) {
+        Image(uiImage: image)
+    }
+    #else
+    if let image = wikiAmberImage(name) {
+        Image(nsImage: image)
+    }
+    #endif
+}
+
+#if os(macOS)
+private func wikiAmberImage(_ name: String) -> NSImage? {
+    guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+        .withSymbolConfiguration(NSImage.SymbolConfiguration(paletteColors: [.systemOrange])) else { return nil }
+    image.isTemplate = false
+    return image
+}
 #endif
 
 private extension View {

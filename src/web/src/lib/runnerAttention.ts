@@ -1,7 +1,7 @@
 import type { LoginEngine, ReportedEngine, RunnerRepoHealth } from '@orbit/shared';
-import { codexAccountSnapshot } from '@orbit/shared';
+import { codexAccountSnapshot, withEnginePlanUsage } from '@orbit/shared';
 import type { Runner } from '../components/TasksSidePanel';
-import { engineKeepsAccounts } from './engineAccounts';
+import { engineKeepsAccounts, runsOnEnvKey } from './engineAccounts';
 import { planUsageRows, planUsageSnapshotForProvider, type PlanUsageDisplayRow } from './planUsage';
 import { ago, ENGINE_CLI_NAME, updateNoteOf } from './runnerEngines';
 import {
@@ -203,6 +203,12 @@ const CLAUDE_WINDOW = new Map<string, string>([
   ['sevenDay', RUNNER_QUOTA_WEEKLY],
   ['sevenDayOpus', RUNNER_QUOTA_WEEKLY_OPUS],
   ['sevenDaySonnet', RUNNER_QUOTA_WEEKLY_SONNET],
+]);
+
+/** Antigravity's buckets by the label planUsageRows gives the window agy names for each. */
+const ANTIGRAVITY_WINDOW = new Map<string, string>([
+  ['5-hour', RUNNER_QUOTA_FIVE_HOUR],
+  ['Weekly', RUNNER_QUOTA_WEEKLY],
 ]);
 
 /** Codex-shaped windows by the label planUsageRows derives from their length (a bucket other than
@@ -434,11 +440,18 @@ function checkoutItems(workspaces: ReadonlyArray<AttentionWorkspace>): Attention
 function quotaWindow(row: PlanUsageDisplayRow): string {
   const claude = CLAUDE_WINDOW.get(row.key);
   if (claude) return claude;
+  // An Antigravity bucket, by the window agy names for it.
+  if (row.remaining) return ANTIGRAVITY_WINDOW.get(row.label) ?? RUNNER_QUOTA_OTHER;
   return CODEX_WINDOW.find(([label]) => row.label.endsWith(label))?.[1] ?? RUNNER_QUOTA_OTHER;
 }
 
+/** How much of a window is used, whichever way its row counts: Antigravity's say what is left. */
+const usedPercent = (row: PlanUsageDisplayRow): number => (row.remaining ? 100 - row.percent : row.percent);
+
 /** Warn only when every candidate account is near its limit. Show the fullest window of the
- *  account with the most room; an unread account cannot establish an engine-wide shortage. */
+ *  account with the most room; an unread account cannot establish an engine-wide shortage — and
+ *  neither can an Antigravity Default that runs on the machine's Gemini key (runsOnEnvKey), which
+ *  has no quota to run out of. */
 function quotaItems(
   runner: AttentionRunner,
   workspaces: ReadonlyArray<AttentionWorkspace>,
@@ -447,13 +460,15 @@ function quotaItems(
   return LOGIN_ENGINES.flatMap((engine): AttentionItem[] => {
     const users = workspacesOn(workspaces, engine);
     if (users.length === 0) return [];
-    const usage = planUsageSnapshotForProvider(runner.planUsage, engine);
-    const accounts = runner.engines?.find((e) => e.engine === engine)?.accounts;
+    // Antigravity's quota travels with its engine's health, not in the heartbeat's planUsage.
+    const usage = planUsageSnapshotForProvider(withEnginePlanUsage(runner.planUsage, runner.engines), engine);
+    const health = runner.engines?.find((e) => e.engine === engine);
+    const accounts = health?.accounts;
     const snapshots =
       engineKeepsAccounts(engine) && accounts?.length
         ? accounts
-            .filter((account) => account.auth !== 'no')
-            .map((account) => usage && codexAccountSnapshot(usage, account.id))
+            .filter((account) => account.auth !== 'no' || runsOnEnvKey(health, account))
+            .map((account) => (runsOnEnvKey(health, account) ? undefined : usage && codexAccountSnapshot(usage, account.id)))
         : [usage];
     let fullest: PlanUsageDisplayRow | undefined;
     for (const snapshot of snapshots) {
@@ -463,18 +478,19 @@ function quotaItems(
           )
         : [];
       if (near.length === 0) return [];
-      const accountFullest = near.reduce((top, row) => (row.percent > top.percent ? row : top));
-      if (!fullest || accountFullest.percent < fullest.percent) fullest = accountFullest;
+      const accountFullest = near.reduce((top, row) => (usedPercent(row) > usedPercent(top) ? row : top));
+      if (!fullest || usedPercent(accountFullest) < usedPercent(fullest)) fullest = accountFullest;
     }
     if (!fullest) return [];
     const name = LOGIN_NAME[engine];
     const window = quotaWindow(fullest);
+    const percent = usedPercent(fullest);
     return [
       {
         kind: 'quotaNearLimit',
         tone: 'warn',
-        short: attentionQuotaShort(name, window, fullest.percent),
-        title: attentionQuotaTitle(name, window, fullest.percent),
+        short: attentionQuotaShort(name, window, percent),
+        title: attentionQuotaTitle(name, window, percent),
         detail:
           users.length === 1
             ? attentionQuotaDetail(users[0], name)
@@ -482,7 +498,7 @@ function quotaItems(
         params: {
           engine,
           window,
-          percent: fullest.percent,
+          percent,
           resetsAt: fullest.window.resetsAt ?? null,
           workspaces: users,
         },

@@ -367,6 +367,7 @@ private struct CompactSections: View {
                         switch node {
                         case .wikiEntry(let entryID): WikiEntryView(entryID: entryID)
                         case .wikiReview:             WikiReviewView()
+                        case .wikiActivity:           WikiActivityView()
                         case .wikiSettings:           WikiSettingsView()
                         case .wikiRun(let changesetID): WikiRunView(changesetID: changesetID)
                         case .wikiArticle(let topic, let part):
@@ -740,7 +741,10 @@ struct NavigationDrawer: View {
                     if section == .projects {
                         projectsRow
                     } else if section == .wiki {
-                        wikiRow
+                        // No row at all for an account the server has not switched the wiki on for
+                        // (WIKI_DISABLED), as the web sidebar draws none: a row that led to a refusal
+                        // would be worse than none.
+                        if model.wiki?.shown == true { wikiRow }
                     } else {
                         sectionRow(section)
                     }
@@ -764,8 +768,8 @@ struct NavigationDrawer: View {
             // The rail's first row counts the projects waiting on you, and its last rows are the
             // open projects: fetch them with the drawer rather than waiting for the section.
             .task { await model.projects?.load() }
-            // The Wiki row counts the proposals waiting for review — the spaces list, fetched with
-            // the drawer for the same reason.
+            // The Wiki row counts what waits on the owner across the spaces — the spaces list, fetched
+            // with the drawer for the same reason.
             .task { await model.wiki?.loadSpaces() }
             // The action bar *floats over* the rail (ChatGPT-style) rather than being docked below a
             // divider, so the list keeps the full drawer height and rows slide under the buttons. The
@@ -976,14 +980,15 @@ struct NavigationDrawer: View {
 
     // MARK: Wiki
 
-    /// The Wiki: what the work learned, after the work itself. The amber number is the proposals
-    /// waiting for review, summed over every space — the web sidebar's count, the home page banner's
-    /// and Review's — written the way the Projects row writes its own, and nothing at all at zero.
-    /// Opening the Wiki never clears it: only deciding a proposal does. Selected whenever the Wiki is
-    /// what is showing, since the drawer has no rows below it for the Wiki's pages.
+    /// The Wiki: what the work learned, after the work itself. The amber number is what waits on the
+    /// owner across every space — the proposals in Review and what each plan waits for (design
+    /// §12.3.3) — the web sidebar's count and the Wiki bar's Activity badge, written and said the way the
+    /// Projects row writes and says its own, and nothing at all at zero. Opening the Wiki never clears
+    /// it: only answering what waits does. Selected whenever the Wiki is what is showing, since the
+    /// drawer has no rows below it for the Wiki's pages.
     private var wikiRow: some View {
         let selected = model.drawerDestination == .section(.wiki)
-        let waiting = model.wiki?.proposalsToReview ?? 0
+        let waiting = model.wiki?.waiting ?? 0
         return Button {
             open(.section(.wiki))
         } label: {
@@ -1000,7 +1005,7 @@ struct NavigationDrawer: View {
                         Text("\(waiting)")
                             .font(.orbitMeta.weight(.semibold))
                             .foregroundStyle(.orange)
-                            .accessibilityLabel(WikiCopy.proposalsToReview(waiting))
+                            .accessibilityLabel(WikiCopy.waitingOnYou(waiting))
                     }
                 }
             }

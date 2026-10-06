@@ -14,6 +14,7 @@ import { AdminUsersPage } from './pages/AdminUsersPage';
 import { ProvidersPage } from './pages/ProvidersPage';
 import { ProviderConnectPage, ProviderPickPage } from './pages/ProviderConnectPage';
 import { ProviderPoolPage } from './pages/ProviderPoolPage';
+import { CliLoginPage } from './pages/CliLoginPage';
 import { EnrollPage } from './pages/EnrollPage';
 import { LoginPage } from './pages/LoginPage';
 import { SetupPage } from './pages/SetupPage';
@@ -108,6 +109,21 @@ export function App() {
           ) : (
             <Navigate
               to={`/login?next=${encodeURIComponent('/enroll' + window.location.search)}`}
+              replace
+            />
+          )
+        }
+      />
+      {/* The browser half of `orbit login`, signed in like /enroll: approving issues the terminal a
+          personal access token for this account. */}
+      <Route
+        path="/cli-login"
+        element={
+          authed ? (
+            <CliLoginPage />
+          ) : (
+            <Navigate
+              to={`/login?next=${encodeURIComponent('/cli-login' + window.location.search)}`}
               replace
             />
           )
@@ -286,6 +302,14 @@ export function App() {
               element={
                 <DocView>
                   <WikiPage route="home" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/:space/activity"
+              element={
+                <DocView>
+                  <WikiPage route="activity" />
                 </DocView>
               }
             />

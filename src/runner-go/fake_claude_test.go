@@ -66,8 +66,9 @@ func TestMain(m *testing.M) {
 	}
 	// This binary as the `orbit` CLI itself, when a real Claude Code's Bash runs `orbit wiki …` from a
 	// maintenance run — bare, off a link named orbit on its PATH, or by this binary's own path, as the run's
-	// rules name the CLI (wiki_maintenance_session_test.go). `go test` never starts it with a subcommand.
-	if len(os.Args) > 1 && os.Args[1] == "wiki" {
+	// rules name the CLI (wiki_maintenance_session_test.go) — or a shell turn runs `orbit task …` or `orbit
+	// whoami` (runner_child_identity_test.go). `go test` never starts it with a subcommand.
+	if len(os.Args) > 1 && (os.Args[1] == "wiki" || os.Args[1] == "task" || os.Args[1] == "whoami") {
 		main()
 		os.Exit(0)
 	}
@@ -83,10 +84,13 @@ func TestMain(m *testing.M) {
 // (spawnClaude, bgJobEnvPairs): which session, agent and task, what it may orchestrate, and the
 // socket that hosts its background jobs. `go test` started from inside a session inherits all of
 // it, and the code under test reads it: a CLI create there raises its approval card and waits for
-// a human to answer it (askBeforeCreate), which against a stub control plane never happens.
+// a human to answer it (askBeforeCreate), which against a stub control plane never happens. So is
+// the mark of a process the runner started, which `go test` run as an acceptance command or from
+// a `!` shell inherits too, and which passes over the login the CLI tests save.
 var callingSessionEnv = []string{
 	"ORBIT_SESSION_ID", "ORBIT_AGENT_ID", "ORBIT_TASK_ID", envSpawnDepth, envMCPOrchestration,
 	envOrchestrationToken, envMCPPermissionPrompt, envWatches, envWiki, envBgSocket, envBgToken, envBgJobID,
+	envRunnerChild,
 }
 
 // suiteSessionClearedEnv marks a process tree the calling session was already cleared from. A test

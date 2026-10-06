@@ -1,0 +1,13 @@
+mac-page: no window after launch; pressing ⌘N
+mac-page: 1 window(s)
+mac-card: in view after 3 move(s) at (317.0, 136.5, 132.0, 14.0)
+mac-approve: in view after 0 move(s) at (317.0, 289.0, 73.0, 20.0)
+mac-question: in view after 0 move(s) at (327.0, 297.0, 604.0, 16.0)
+mac-yes: in view after 0 move(s) at (327.0, 378.0, 88.0, 20.0)
+mac-moved: in view after 1 move(s) at (317.0, 509.0, 303.0, 15.0)
+after the move: 4 tasks shown = true
+mac-card-again: in view after 1 move(s) at (317.0, 123.5, 132.0, 14.0)
+mac-yes-2: in view after 0 move(s) at (327.0, 400.0, 88.0, 20.0)
+mac-refused: in view after 0 move(s) at (327.0, 317.61376953125, 198.0, 15.0)
+mac-refuse: in view after 0 move(s) at (398.0, 311.0, 66.0, 20.0)
+mac-refuse-question: in view after 0 move(s) at (327.0, 319.0, 541.0, 16.0)

@@ -119,6 +119,15 @@ export const WIKI_DOC_RULES = {
 } as const;
 
 /**
+ * A written document's lead on the directory (contract `docs.lead`): the first sentences of its first
+ * section, withdrawn ones skipped, and cut to this many characters with an ellipsis when longer.
+ */
+export const WIKI_DOC_LEAD_RULES = {
+  sentences: 2,
+  maxChars: 200,
+} as const;
+
+/**
  * Every field a write may carry, at each level (contract `docs.schema`). Anything else is refused
  * WIKI_DOC_INVALID. A repository footnote and a record footnote are told apart by their kind.
  */
@@ -285,6 +294,11 @@ export interface WikiDocsDirectoryDoc {
   updatedAt: string | null;
   /** The plan version it was written from. */
   planVersion: number | null;
+  /**
+   * Its two lines on the home (`WIKI_DOC_LEAD_RULES`): null until it is written, and while its first section
+   * has no sentence that is not withdrawn. Absent from a server older than it.
+   */
+  lead?: string | null;
   sections: WikiDocsDirectorySection[];
 }
 

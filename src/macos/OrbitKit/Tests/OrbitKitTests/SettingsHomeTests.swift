@@ -21,7 +21,7 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(SettingsHome.rows(.machines, isAdmin: false), [.runners, .providers])
         XCTAssertEqual(SettingsHome.rows(.preferences, isAdmin: false), [.notifications, .appearance])
         XCTAssertEqual(SettingsHome.rows(.account, isAdmin: false),
-                       [.email, .instance, .sharedLinks, .changePassword])
+                       [.email, .instance, .sharedLinks, .accessTokens, .changePassword])
     }
 
     /// Admin is role-gated here as everywhere else, and comes last in Account.

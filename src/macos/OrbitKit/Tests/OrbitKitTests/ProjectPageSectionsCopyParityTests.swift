@@ -236,7 +236,8 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
         let order = ["<ProjectOpenItems", "<ProjectPanoramaHeader", "<ProjectCoordinatorSection",
                      "<ProjectRunSettings", "<ProjectGoalCard",
                      "<ProjectTasksGraph", "<ProjectBlockersCard", "<ProjectReadyToRun",
-                     "<ProjectAcceptanceCard", "<Field label=\"Instructions\"", "<ProjectTasks projectId"]
+                     "<ProjectAcceptanceCard", "<Field label=\"Instructions\"", "<ProjectTasks projectId",
+                     "<ProjectCrossingsCard projectId"]
         let positions = order.map { web.range(of: $0)?.lowerBound }
         XCTAssertFalse(positions.contains(nil), "the web page lost one of \(order)")
         XCTAssertEqual(positions.compactMap { $0 }, positions.compactMap { $0 }.sorted())

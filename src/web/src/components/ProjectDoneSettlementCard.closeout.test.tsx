@@ -16,9 +16,10 @@ import {
 /**
  * The closeout read model as the coordinator conversation and the project page draw it: the owner's
  * DONE receipt survives a refresh, a reopened project is not read as DONE off a leftover `doneBy`,
- * Why-not-done is asked only of a started OPEN project with criteria, the request's wait is its own
- * `waitingSince`, Orbit checked does not count the request it is reviewing, and an unmet criterion
- * is labelled as unmet work rather than by its landing lane.
+ * Why-not-done is asked only of a started OPEN project whose criteria are all met (the rest of that
+ * gate is `ProjectWhyNotDoneGate.test.tsx`'s), the request's wait is its own `waitingSince`, Orbit
+ * checked does not count the request it is reviewing, and an unmet criterion is labelled as unmet
+ * work rather than by its landing lane.
  */
 vi.mock('../api', () => ({ api: vi.fn() }));
 
@@ -260,7 +261,7 @@ describe('the coordinator conversation’s closeout card', () => {
     expect(view.textContent).not.toContain(PROJECT_DONE_COPY.whyHeading);
   });
 
-  it('asks Why-not-done of a started OPEN project with criteria', async () => {
+  it('asks Why-not-done of a started OPEN project whose criteria are all met', async () => {
     const view = await mount(doc(), { needsYou: [], withCoordinator: [], doneRequest: null });
     expect(view.textContent).toContain(PROJECT_DONE_COPY.whyHeading);
   });

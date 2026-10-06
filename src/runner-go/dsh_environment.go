@@ -382,10 +382,12 @@ func writeDshConfigFile(path string, data []byte) error {
 
 // Keep HOME's real semantics; provider config, user profiles, NODE_OPTIONS and unrelated
 // credentials are absent. A session's explicit key always wins, including an empty probe key.
+// The runner's mark is said outright: dsh's commands carry no session, and with the real HOME
+// the CLI there would otherwise act as a login saved under it (runnerChildEnv).
 func dshBaseEnv() []string {
 	keys := []string{"USER", "LOGNAME", "LANG", "LC_ALL", "TERM", "TMPDIR",
 		"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy", "SSL_CERT_FILE", "SSL_CERT_DIR"}
-	env := []string{"HOME=" + userHome(), "PATH=" + dshServicePath()}
+	env := []string{"HOME=" + userHome(), "PATH=" + dshServicePath(), envRunnerChild + "=1"}
 	for _, key := range keys {
 		if value, ok := os.LookupEnv(key); ok {
 			env = append(env, key+"="+value)

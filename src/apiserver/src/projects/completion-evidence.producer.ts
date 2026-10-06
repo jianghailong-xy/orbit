@@ -130,13 +130,19 @@ export class CompletionEvidenceProducer {
     const [latest] = task?.completionEvidence ?? [];
     if (!task || !latest || latest.decisions.length > 0) return null;
     // Compared by the fact's identity rather than by its `detail`: a revision a later one has
-    // already replaced is not a question anybody is asking, and that one routes its own fact.
-    const current = completionEvidenceWakeKey(task.id, {
+    // already replaced is not a question anybody is asking, and that one routes its own fact. The
+    // identity is the revision's own key, or — handed over by a confirmed move — the key it carries
+    // into the project it was moved to (`completionEvidenceRevisedFact`'s `movedFromProjectId`).
+    const revision = {
       revision: latest.revision.toString(),
       criterionRevision: latest.criterionRevision,
       evidenceDigest: latest.evidenceDigest,
-    });
-    if (current !== wakeIdempotencyKey(fact)) return null;
+    };
+    const key = wakeIdempotencyKey(fact);
+    if (
+      key !== completionEvidenceWakeKey(task.id, revision)
+      && key !== completionEvidenceWakeKey(task.id, revision, fact.projectId)
+    ) return null;
 
     if ((await criterionStandingRefusal(this.prisma, task, latest.evidence)) !== null) return null;
     const standing = project.coordinatorSession;

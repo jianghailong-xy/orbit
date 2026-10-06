@@ -20,6 +20,47 @@ public enum CodexAccounts {
     private static let claudeDecidingEnvKeys = [
         "CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_OAUTH_TOKEN",
     ]
+    /// Antigravity's: the Gemini directory of an account of its own (shared `ACCOUNT_DIR_VAR`, which
+    /// the runner reads to pick the sign-in a session runs on), or a Gemini key of its own.
+    private static let antigravityDecidingEnvKeys = ["ORBIT_ANTIGRAVITY_GOOGLE_DIR", "GEMINI_API_KEY"]
+
+    /// The snapshot `engine`'s accounts' quota is read from: the runner's own report for Codex and
+    /// Claude Code (`Runner.planUsage`). Antigravity's never rides there — it travels with the engine's
+    /// health, Default's buckets beside every other account's under `accounts` (shared
+    /// `withEnginePlanUsage`), and is read the same way from then on (`snapshot`).
+    public static func usage(_ engine: String, planUsage: PlanUsage?,
+                             engines: [RunnerEngineHealth]?) -> PlanUsageSnapshot? {
+        if engine == "antigravity" { return engines?.first { $0.engine == engine }?.planUsage }
+        return planUsage?.snapshot(for: engine)
+    }
+
+    /// The account a workspace picked for its sessions on `engine` (`Agent.codexAccount`,
+    /// `.claudeAccount`, `.antigravityAccount`); nil leaves it to Automatic.
+    public static func workspaceAccount(_ engine: String, of agent: Agent?) -> String? {
+        switch engine {
+        case "claude": return agent?.claudeAccount
+        case "antigravity": return agent?.antigravityAccount
+        default: return agent?.codexAccount
+        }
+    }
+
+    /// What a runner declares once it signs an Antigravity account Orbit names into that account's own
+    /// Gemini directory, rather than signing the runner's one Google sign-in in again.
+    public static let antigravityAccountLoginCapability = "antigravity-account-login/v1"
+
+    /// What a runner declares when a session there can move to another of its accounts of `engine`:
+    /// Codex and Claude Code carry the conversation from one account's directory to the other's
+    /// (`codex-account-move/v1`, `claude-account-move/v1`). An Antigravity conversation lives in the
+    /// session's own directory whichever account it runs on, so there is nothing to carry: a runner that
+    /// keeps Antigravity accounts at all — one that signs them in (`antigravityAccountLoginCapability`)
+    /// — moves a session between them.
+    public static func moveCapability(_ engine: String) -> String {
+        switch engine {
+        case "claude": return "claude-account-move/v1"
+        case "antigravity": return antigravityAccountLoginCapability
+        default: return "codex-account-move/v1"
+        }
+    }
 
     /// One account's own quota: Default's is the snapshot's own windows, any other account's is its
     /// entry under `accounts`. Nil when the runner reports none for that account.
@@ -48,14 +89,14 @@ public enum CodexAccounts {
         return wanted
     }
 
-    /// Whether a new session of `engine` (`codex` or `claude`) on `agent` starts on Automatic: its
-    /// workspace picked no account of that engine, its env selects no other config directory and no
-    /// key of its own, and the runner has more than one account to choose between (the server's
-    /// `automaticAccount`). The same answer says whether a session there is on Automatic unless an
-    /// account was picked for it by hand.
+    /// Whether a new session of `engine` (`codex`, `claude` or `antigravity`) on `agent` starts on
+    /// Automatic: its workspace picked no account of that engine, its env selects no other config
+    /// directory and no key of its own, and the runner has more than one account to choose between (the
+    /// server's `automaticAccount`). The same answer says whether a session there is on Automatic unless
+    /// an account was picked for it by hand.
     public static func automaticOffered(engine: String = "codex", agent: Agent?,
                                         accounts: [RunnerEngineAccount]?) -> Bool {
-        automaticOffered(engine: engine, pick: engine == "claude" ? agent?.claudeAccount : agent?.codexAccount,
+        automaticOffered(engine: engine, pick: workspaceAccount(engine, of: agent),
                          env: agent?.env, accounts: accounts)
     }
 
@@ -65,7 +106,9 @@ public enum CodexAccounts {
                                         accounts: [RunnerEngineAccount]?) -> Bool {
         guard (accounts?.count ?? 0) >= 2, pick?.isEmpty ?? true else { return false }
         let env = env ?? [:]
-        return !(engine == "claude" ? claudeDecidingEnvKeys : decidingEnvKeys).contains { key in
+        let deciding = engine == "claude" ? claudeDecidingEnvKeys
+            : engine == "antigravity" ? antigravityDecidingEnvKeys : decidingEnvKeys
+        return !deciding.contains { key in
             !(env[key]?.trimmingCharacters(in: .whitespaces).isEmpty ?? true)
         }
     }
@@ -155,23 +198,39 @@ public enum CodexAccounts {
     }
 
     /// Every window of one snapshot with its length in minutes (shared `windowsWithLength`): Claude's
-    /// named ones by their names, Codex's as it reports them — nil when one does not say.
+    /// named ones by their names, Codex's as it reports them — nil when one does not say — and
+    /// Antigravity's buckets as the windows they are (`bucketWindow`).
     static func withLength(_ s: PlanUsageSnapshot) -> [(window: PlanUsageWindow, mins: Int?)] {
         let week = 7 * 24 * 60
         let named: [(PlanUsageWindow?, Int)] = [(s.fiveHour, 5 * 60), (s.sevenDay, week), (s.sevenDayOpus, week),
                                                 (s.sevenDaySonnet, week)]
+        let buckets: [PlanUsageWindow?] = (s.buckets ?? []).map(bucketWindow)
         let reported = [s.primary, s.secondary] + (s.rateLimits ?? []).flatMap { [$0.primary, $0.secondary] }
+            + buckets
         let all: [(window: PlanUsageWindow, mins: Int?)] =
             named.compactMap { window, mins in window.map { ($0, $0.windowDurationMins ?? mins) } }
             + reported.compactMap { window in window.map { ($0, $0.windowDurationMins) } }
         return all
     }
 
-    /// Every window one snapshot reports: Claude's named ones, Codex's primary/secondary pair, and the
-    /// per-bucket windows Codex reports under `rateLimits`.
+    /// Every window one snapshot reports: Claude's named ones, Codex's primary/secondary pair, the
+    /// per-bucket windows Codex reports under `rateLimits`, and Antigravity's buckets (`bucketWindow`).
     static func windows(_ s: PlanUsageSnapshot) -> [PlanUsageWindow] {
         [s.fiveHour, s.sevenDay, s.sevenDayOpus, s.sevenDaySonnet, s.primary, s.secondary].compactMap { $0 }
             + (s.rateLimits ?? []).flatMap { [$0.primary, $0.secondary].compactMap { $0 } }
+            + (s.buckets ?? []).map(bucketWindow)
+    }
+
+    /// How long an Antigravity bucket's window is, from agy's own name for it (shared
+    /// `BUCKET_WINDOW_MINS`); nil for one it names otherwise.
+    static let bucketWindowMins: [String: Int] = ["5h": 5 * 60, "weekly": 7 * 24 * 60]
+
+    /// One Antigravity bucket as a window (shared `bucketWindow`): what agy says is left, turned into
+    /// the share consumed every other window speaks in, with its reset. Only for weighing quota
+    /// against quota — what a page shows stays agy's own remaining fraction (`PlanUsageSnapshot.rows`).
+    static func bucketWindow(_ bucket: PlanUsageBucket) -> PlanUsageWindow {
+        PlanUsageWindow(utilization: (1 - bucket.remainingFraction) * 100, resetsAt: bucket.resetTime,
+                        windowDurationMins: bucketWindowMins[bucket.window])
     }
 
     private static func resetTime(_ w: PlanUsageWindow) -> Double? {

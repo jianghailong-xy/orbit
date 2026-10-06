@@ -21,7 +21,7 @@ func userModeEnv(t *testing.T) string {
 		t.Fatal(err)
 	}
 	t.Setenv("ORBIT_HOME", home)
-	for _, key := range []string{"ORBIT_SESSION_ID", "ORBIT_AGENT_ID", "ORBIT_TASK_ID", envServiceToken, envUserToken, envUserServerURL, envMCPOrchestration, envOrchestrationToken} {
+	for _, key := range []string{"ORBIT_SESSION_ID", "ORBIT_AGENT_ID", "ORBIT_TASK_ID", envServiceToken, envUserToken, envUserServerURL, envMCPOrchestration, envOrchestrationToken, envRunnerChild} {
 		t.Setenv(key, "")
 	}
 	userTokenIgnoredOnce = sync.Once{}
@@ -30,12 +30,15 @@ func userModeEnv(t *testing.T) string {
 
 // The order of docs/personal-access-token-design.md §7.2, one row per combination that matters: each
 // credential wins over every one below it, and a session wins over all of them — including a
-// personal access token in the environment or saved by `orbit login`, which it ignores.
+// personal access token in the environment or saved by `orbit login`, which it ignores. In a process
+// the runner started (ORBIT_RUNNER_CHILD) the person is passed over whatever else is there, and
+// nothing else changes.
 func TestCLIIdentityFollowsTheOrderSessionServiceUserRunner(t *testing.T) {
 	type setup struct {
 		session, userToken, serverURL bool
 		service                       bool
 		savedLogin, runner            bool
+		runnerChild                   bool
 	}
 	cases := []struct {
 		name       string
@@ -80,6 +83,25 @@ func TestCLIIdentityFollowsTheOrderSessionServiceUserRunner(t *testing.T) {
 		{name: "nothing at all",
 			have: setup{serverURL: true},
 			kind: identityNone, reason: "no ORBIT_SESSION_ID"},
+
+		{name: "started by the runner: the saved login is passed over for the runner credential",
+			have: setup{runnerChild: true, savedLogin: true, runner: true, serverURL: true},
+			kind: identityRunner, reason: "the runner credential in", server: "runner", tokenFrom: "runner", patIgnored: true},
+		{name: "started by the runner: so is ORBIT_USER_TOKEN",
+			have: setup{runnerChild: true, userToken: true, serverURL: true, savedLogin: true, runner: true},
+			kind: identityRunner, reason: "the runner credential in", server: "runner", tokenFrom: "runner", patIgnored: true},
+		{name: "started by the runner with no login: the runner credential, nothing ignored",
+			have: setup{runnerChild: true, runner: true},
+			kind: identityRunner, reason: "the runner credential in", server: "runner", tokenFrom: "runner"},
+		{name: "started by the runner inside a session: the session",
+			have: setup{runnerChild: true, session: true, savedLogin: true, runner: true},
+			kind: identitySession, reason: "ORBIT_SESSION_ID is set", patIgnored: true},
+		{name: "started by the runner with a service token: the service token",
+			have: setup{runnerChild: true, service: true, savedLogin: true, runner: true},
+			kind: identityService, reason: "ORBIT_SERVICE_TOKEN is set", tokenFrom: "service"},
+		{name: "started by the runner with nothing but a saved login: nobody",
+			have: setup{runnerChild: true, savedLogin: true},
+			kind: identityNone, reason: "no ORBIT_SESSION_ID or ORBIT_SERVICE_TOKEN and no runner credential", patIgnored: true},
 	}
 	const (
 		envToken   = userTokenPrefix + "from-the-environment"
@@ -114,6 +136,9 @@ func TestCLIIdentityFollowsTheOrderSessionServiceUserRunner(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			if tc.have.runnerChild {
+				t.Setenv(envRunnerChild, "1")
+			}
 
 			identity := resolveCLIIdentity()
 			if identity.Kind != tc.kind {
@@ -121,6 +146,11 @@ func TestCLIIdentityFollowsTheOrderSessionServiceUserRunner(t *testing.T) {
 			}
 			if !strings.HasPrefix(identity.Reason, tc.reason) {
 				t.Errorf("reason = %q, want it to start %q", identity.Reason, tc.reason)
+			}
+			// Where the mark passed the person over, the reason says so (`orbit whoami`).
+			passedOver := tc.have.runnerChild && (tc.kind == identityRunner || tc.kind == identityNone)
+			if strings.Contains(identity.Reason, "ORBIT_RUNNER_CHILD") != passedOver || identity.runnerChild != passedOver {
+				t.Errorf("reason = %q, runnerChild = %v; want the mark named %v", identity.Reason, identity.runnerChild, passedOver)
 			}
 			if identity.UserTokenIgnored != tc.patIgnored {
 				t.Errorf("userTokenIgnored = %v, want %v", identity.UserTokenIgnored, tc.patIgnored)
