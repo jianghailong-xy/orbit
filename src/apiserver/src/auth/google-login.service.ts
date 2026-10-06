@@ -5,11 +5,12 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import type { User } from '@prisma/client';
+import { Prisma, type User } from '@prisma/client';
 import { timingSafeEqual } from 'node:crypto';
 import { generateToken, sha256 } from '../common/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { SharedRateLimiter } from '../shared/public-surface.guard';
+import { USER_NAME_MAX_CHARS } from '../users/dto';
 import { AuthService } from './auth.service';
 import type { GoogleClient } from './google-auth.controller';
 import {
@@ -111,10 +112,70 @@ const mismatch = () =>
   });
 
 /**
+ * Why a Google account that signed in has no Orbit account to sign in as (§5.2), each answered 403
+ * with its code (§4.3 step 3) and a sentence the person can act on.
+ */
+const RESOLUTION_REFUSALS = {
+  SETUP_REQUIRED: 'This Orbit server has no accounts yet — create its first administrator at /setup, with an email and a password',
+  GOOGLE_EMAIL_AMBIGUOUS: 'More than one Orbit account uses this email address, differing only in letter case — ask an administrator to correct them',
+  GOOGLE_ACCOUNT_MISMATCH: 'The Orbit account with this email address is connected to a different Google account — sign in with that one, or with your password',
+  GOOGLE_EMAIL_NOT_AUTHORITATIVE: "Google can't vouch that this email address is still yours — sign in with your password, then connect Google on your profile page",
+  GOOGLE_ACCOUNT_NOT_FOUND: 'No Orbit account signs in with this Google account — ask an administrator to create one for your email address',
+} as const;
+
+const refused = (code: keyof typeof RESOLUTION_REFUSALS) => new ForbiddenException({ code, message: RESOLUTION_REFUSALS[code] });
+
+/** The addresses Google itself hosts (§5.2). */
+const GMAIL_DOMAINS: readonly string[] = ['gmail.com', 'googlemail.com'];
+
+/**
+ * Whether Google is authoritative for the email it gave (§5.2), which is what lets a Google sign-in
+ * link itself to the Orbit account that has that email: the email is verified, and it is a Gmail
+ * address or the Google account is a Workspace one (`hd`). A personal Google account registered with
+ * any other address had it verified once, when it was registered; Google does not say the person
+ * still holds it.
+ */
+export function googleIsAuthoritative(identity: { email: string; emailVerified: boolean; hd: string | null }): boolean {
+  if (identity.emailVerified !== true) return false;
+  if (identity.hd !== null && identity.hd !== '') return true;
+  const at = identity.email.lastIndexOf('@');
+  return at > 0 && GMAIL_DOMAINS.includes(identity.email.slice(at + 1).toLowerCase());
+}
+
+/**
+ * The Activity row of a Google account linked to an Orbit account (§5.2, §5.3), written with the
+ * link: the payload names the provider, the Google email, and how — AUTO, by the authoritative email
+ * of an account that existed, or SIGNUP, together with the account opened for it.
+ */
+export const IDENTITY_LINKED_ACTIVITY = 'identity.linked';
+
+/**
+ * The name of an account a Google sign-in opens (§5.2 case 5): Google's `name`, cut to the longest
+ * name a person may give themselves, or else the email's local part.
+ */
+function signupName(identity: VerifiedGoogleIdentity): string {
+  const name = Array.from(identity.name?.trim() ?? '').slice(0, USER_NAME_MAX_CHARS).join('').trim();
+  return name || identity.email.split('@')[0];
+}
+
+/** An Orbit account a Google sign-in signs in as: what AuthService.completeLogin issues tokens for. */
+interface SignedInUser {
+  id: string;
+  email: string;
+  name: string;
+}
+
+/** An account whose email is the Google one in some letter case, and whether a Google account is linked to it. */
+interface EmailMatch extends SignedInUser {
+  linked: boolean;
+}
+
+/**
  * Signing in with Google (docs/google-sign-in-design.md §4): the start that sends a browser to Google,
  * the callback that verifies what Google sent back and hands the client a one-time ticket, and the
- * exchange of that ticket for an Orbit session. The callback settles nothing: the session is issued
- * only to whoever presents the ticket together with the verifier of the challenge the start was given.
+ * exchange of that ticket for a session on the Orbit account §5.2 finds, links or opens for it. The
+ * callback settles nothing: the session is issued only to whoever presents the ticket together with
+ * the verifier of the challenge the start was given.
  *
  * What holds the flow together, each a column of `oauth_login_flow` (migration 0391):
  *  - `state`: one use, ten minutes. A callback finds its flow by the state's hash; the first callback
@@ -270,13 +331,12 @@ export class GoogleLoginService {
   /**
    * §4.3: the ticket and the verifier for an Orbit session, the same answer POST /auth/login gives.
    * The ticket is taken out of the table before anything about it is checked, so it is spent by this
-   * presentation whatever follows; of two presentations at once only one finds it.
-   *
-   * Of §5.2 this answers the first case — the Google account is already linked to an Orbit account,
-   * which is signed in — and refuses every other with GOOGLE_ACCOUNT_NOT_FOUND for now.
+   * presentation whatever follows; of two presentations at once only one finds it. Which Orbit
+   * account it signs in as is §5.2's to say (`resolve`).
    */
   async exchange(input: { ticket: string; codeVerifier: string; visitor: string }) {
-    if (!(await this.signIn.methods()).google) {
+    const methods = await this.signIn.methods();
+    if (!methods.google) {
       throw new ForbiddenException({ code: 'GOOGLE_NOT_CONFIGURED', message: 'Google sign-in is not enabled on this server' });
     }
     this.exchangeLimiter.take(input.visitor);
@@ -289,14 +349,44 @@ export class GoogleLoginService {
     }
     const identity = identityOf(flow.claims);
     if (!identity) throw mismatch();
-    const user = await this.signInLinked(identity);
-    if (!user) {
-      throw new ForbiddenException({
-        code: 'GOOGLE_ACCOUNT_NOT_FOUND',
-        message: 'No Orbit account signs in with this Google account — ask an administrator to create one for your email address',
-      });
-    }
+    const user = await this.resolve(identity, methods.googleSignup).catch((error: unknown) => {
+      // Two first sign-ins of one Google account at once (§5.2): the unique keys — user_identity's
+      // (provider, subject) and (user_id, provider), and the user's email — let one of them link or
+      // open the account and fail the other's write, which then reads once more and finds the
+      // account the first one linked (case 1).
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw error;
+      return this.resolve(identity, methods.googleSignup);
+    });
     return this.auth.completeLogin(user);
+  }
+
+  /**
+   * §5.2, in its order: the Orbit account a verified Google identity signs in as — the one it is
+   * linked to, the one its authoritative email links it to now, or the one opened for it when
+   * `signup` (the OPEN policy) — or the refusal that says why there is none. The identity is always
+   * known by Google's `sub`; the email only finds the account a first sign-in links to, and an
+   * account opened for a Google account is linked to it by `sub` whatever its email.
+   */
+  private async resolve(identity: VerifiedGoogleIdentity, signup: boolean): Promise<SignedInUser> {
+    // Case 1: the Google account is linked.
+    const linked = await this.signInLinked(identity);
+    if (linked) return linked;
+    // Case 2: no account exists yet, and the first is the administrator /setup makes.
+    if ((await this.prisma.user.count()) === 0) throw refused('SETUP_REQUIRED');
+    // Cases 3 and 4: the accounts with this email.
+    const matches = await this.usersByEmail(identity.email);
+    if (matches.length > 1) throw refused('GOOGLE_EMAIL_AMBIGUOUS');
+    if (matches.length === 1) {
+      const [match] = matches;
+      // ACCOUNT_DISABLED, the first answer for a matched account, is X1's (§5.5): it goes here,
+      // before any other.
+      if (match.linked) throw refused('GOOGLE_ACCOUNT_MISMATCH');
+      if (!googleIsAuthoritative(identity)) throw refused('GOOGLE_EMAIL_NOT_AUTHORITATIVE');
+      return this.link(identity, match);
+    }
+    // Cases 5 and 6: no account has this email.
+    if (!signup) throw refused('GOOGLE_ACCOUNT_NOT_FOUND');
+    return this.link(identity, null);
   }
 
   /** The rows past their end, swept on every start (§7.4). */
@@ -341,10 +431,59 @@ export class GoogleLoginService {
       include: { user: true },
     });
     if (!linked) return null;
+    // ACCOUNT_DISABLED, case 1's other answer, is X1's (§5.5): a disabled account is refused here,
+    // before its identity is touched.
     await this.prisma.userIdentity.update({
       where: { id: linked.id },
       data: { email: identity.email, hostedDomain: identity.hd, lastSignInAt: new Date() },
     });
     return linked.user;
+  }
+
+  /**
+   * §5.2 cases 3 and 4: the accounts whose email is this one in any letter case, and whether each
+   * has a Google account linked. Matched on lower(email) because the email's unique index is on the
+   * address as written (migration 0392); two rows are enough to know there is more than one.
+   */
+  private usersByEmail(email: string): Promise<EmailMatch[]> {
+    return this.prisma.$queryRaw<EmailMatch[]>`
+      SELECT u."id", u."email", u."name",
+        EXISTS (SELECT 1 FROM "user_identity" i WHERE i."user_id" = u."id" AND i."provider" = ${GOOGLE}) AS "linked"
+      FROM "user" u WHERE lower(u."email") = lower(${email})
+      LIMIT 2`;
+  }
+
+  /**
+   * §5.2 cases 3 and 5: link the Google account to `user`, the account its authoritative email found
+   * (AUTO) — or, with none, to an account opened for it now (SIGNUP): a MEMBER with no password, which
+   * signs in with Google only — and record the link in Activity, all in one transaction, so that
+   * neither a link nor an opened account is ever left without the other or without its record. Of two
+   * first sign-ins at once, the unique keys fail the second's write (`exchange`).
+   */
+  private link(identity: VerifiedGoogleIdentity, user: SignedInUser | null): Promise<SignedInUser> {
+    return this.prisma.$transaction(async (tx) => {
+      const account = user ?? await tx.user.create({
+        data: { email: identity.email, name: signupName(identity), role: 'MEMBER', passwordHash: null },
+      });
+      await tx.userIdentity.create({
+        data: {
+          userId: account.id,
+          provider: GOOGLE,
+          subject: identity.sub,
+          email: identity.email,
+          hostedDomain: identity.hd,
+          lastSignInAt: new Date(),
+        },
+      });
+      await tx.activity.create({
+        data: {
+          actorId: account.id,
+          type: IDENTITY_LINKED_ACTIVITY,
+          payload: { provider: GOOGLE, email: identity.email, method: user ? 'AUTO' : 'SIGNUP' },
+          credentialKind: 'LOGIN',
+        },
+      });
+      return { id: account.id, email: account.email, name: account.name };
+    });
   }
 }

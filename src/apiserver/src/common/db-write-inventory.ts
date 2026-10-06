@@ -553,6 +553,18 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: "After commit: realtime.notifyInbox, which only wakes the runner's inbox poll and is re-derivable from the committed row.",
     answer: 'Typed 503 from the global boundary, which fails the claim that asked; the runner claims again.',
   },
+  // Signing in with Google (docs/google-sign-in-design.md §5.2): a first sign-in links its account.
+  {
+    at: 'auth/google-login.service.ts#link',
+    shape: 'TX_BARE',
+    locks: "Inserts only, nothing read or locked first. For a SIGNUP one `user` row, under its unique email index; then one user_identity row, under its two unique indexes, (provider, subject) and (user_id, provider), taking FOR KEY SHARE through its foreign key on the `user` row it names — the account the email matched, or the one just inserted; then one `activity` row, which has no foreign key and no trigger. None of the three tables has a trigger. It waits only on a concurrent insert of one of those unique keys, until that transaction ends.",
+    identity: "The Google account's (provider, subject); for a SIGNUP also the email the account is opened under, and for an AUTO link the (user_id, provider) of the account linked. Those are the keys a second first sign-in of the same Google account — or of another one with the same email — collides on.",
+    isolation: '',
+    attempts: 1,
+    replay: "Not retried: a unique violation is the answer, not a conflict to absorb. The loser rolls back whole — no account without its identity, no link without its Activity row — and GoogleLoginService.exchange reads once more (§5.2's last line), where the linked account is found by case 1, or the account with that email is answered by case 3. No deadlock with another first sign-in: each waits only on the unique keys of rows the other is inserting, and holds nothing the other waits on but rows only it inserted. A transaction that locks the `user` row FOR UPDATE waits behind the FOR KEY SHARE, never the other way round.",
+    effects: "None inside. After commit, the exchange issues the session through AuthService.completeLogin.",
+    answer: "A unique violation (P2002) is read again once by the exchange. Anything else — a second violation included — reaches the global boundary, a typed 503 for a transient conflict and a 500 otherwise, with nothing written; the ticket was spent at its first presentation, so the person signs in again.",
+  },
   {
     at: 'providers/pool-login-gateway.service.ts#rotate',
     shape: 'TX_BARE',
