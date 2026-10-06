@@ -26,7 +26,7 @@ export class ProjectPromotionController {
   constructor(private readonly promotions: ProjectPromotionService) {}
 
   /** What this project is currently asking its owner to merge, or null when it is asking nothing. */
-  @PatScope('projects:read')
+  @PatScope('projects:read', { workspaceConfinable: false })
   @Get('current')
   current(@CurrentUser() user: AuthUser, @Param('projectId', PublicIdPipe) projectId: string) {
     return this.promotions.readCurrent(user.userId, projectId);
@@ -40,7 +40,7 @@ export class ProjectPromotionController {
    * moves on to the next one, and a receipt drawn from it describes a different merge every time
    * the branch is offered again.
    */
-  @PatScope('projects:read')
+  @PatScope('projects:read', { workspaceConfinable: false })
   @Get('merged')
   merged(@CurrentUser() user: AuthUser, @Param('projectId', PublicIdPipe) projectId: string) {
     return this.promotions.readMerged(user.userId, projectId);

@@ -10,7 +10,7 @@ import { TaskModelRoutingReportService } from './task-model-routing-report.servi
 export class TaskModelRoutingReportController {
   constructor(private readonly report: TaskModelRoutingReportService) {}
 
-  @PatScope('tasks:read')
+  @PatScope('tasks:read', { workspaceConfinable: false })
   @Get('report')
   read(
     @CurrentUser() user: AuthUser,

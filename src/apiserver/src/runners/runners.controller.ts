@@ -32,7 +32,7 @@ import { RunnersService } from './runners.service';
 export class RunnersController {
   constructor(private readonly runners: RunnersService) {}
 
-  @PatScope('runners:read')
+  @PatScope('runners:read', { workspaceConfinable: false })
   @Get()
   list(@CurrentUser() user: AuthUser) {
     return this.runners.listRunners(user.userId);
@@ -166,7 +166,7 @@ export class RunnersController {
 
   // Engine-install relay for one runner, owner-scoped like the sign-in above: it runs an
   // installer on that machine, so only the owner may start one.
-  @PatScope('runners:read')
+  @PatScope('runners:read', { workspaceConfinable: false })
   @Get(':id/install')
   installState(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.runners.getInstallState(user.userId, id);

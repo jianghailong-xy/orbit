@@ -2,22 +2,27 @@ import assert from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { RequestMethod, type DynamicModule } from '@nestjs/common';
+import { Body, Param, Query, RequestMethod, type DynamicModule } from '@nestjs/common';
 import {
   CONTROLLER_WATERMARK,
   GUARDS_METADATA,
   METHOD_METADATA,
   MODULE_METADATA,
   PATH_METADATA,
+  ROUTE_ARGS_METADATA,
 } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
+import { PUBLIC_ID_FIELDS } from '@orbit/shared';
+import { getMetadataStorage } from 'class-validator';
 import { AppModule } from '../app.module';
+import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import {
   PAT_FORBIDDEN_REASONS,
   PAT_SCOPE,
   type PatDeclaration,
   type PatForbiddenReason,
+  type PatWorkspaceConfinable,
   patDeclaration,
 } from './pat-scope.decorator';
 import { PAT_SCOPES } from './pat.service';
@@ -26,6 +31,8 @@ import { PAT_SCOPES } from './pat.service';
 // on every route behind JwtAuthGuard, so each of those routes has to say what a token may do there:
 // @PatScope (the scope it needs) or @PatForbidden (no token, and why). One that says neither is closed
 // to tokens by the guard — fail-closed — and red here, which is where its author makes the decision.
+// @PatScope also says whether a token confined to workspaces reaches the route (§6.3, the census's
+// `workspaceConfinable` column), and what in its request the guard judges that on.
 //
 // The routes are read the way the app mounts them — AppModule's imports followed all the way down —
 // and every declaration through `patDeclaration`, the function JwtAuthGuard itself decides with, so
@@ -38,6 +45,8 @@ interface Route {
   route: string;
   path: string;
   at: string;
+  controller: Controller;
+  method: string;
   declared: PatDeclaration;
 }
 
@@ -93,7 +102,14 @@ function jwtRoutesOf(controller: Controller): Route[] {
     for (const prefix of prefixes) {
       for (const sub of [Reflect.getMetadata(PATH_METADATA, handler) ?? ''].flat() as string[]) {
         const routePath = join(prefix, sub);
-        routes.push({ route: `${method} ${routePath}`, path: routePath, at: `${controller.name}.${name}`, declared });
+        routes.push({
+          route: `${method} ${routePath}`,
+          path: routePath,
+          at: `${controller.name}.${name}`,
+          controller,
+          method: name,
+          declared,
+        });
       }
     }
   }
@@ -178,6 +194,80 @@ const OWNER_INTERACTIVE = [
   'POST /wiki/plan-proposals/:id/decide',
 ];
 
+// ── §6.3 v1: workspace confinement ─────────────────────────────────────────────────────────────
+// The lists a token confined to workspaces reads, narrowed by their handlers rather than judged by
+// the guard. Exact both ways: a route the guard waves through on its handler's word is listed here.
+const NARROWED_LISTS = ['GET /tasks', 'GET /sessions', 'GET /workspaces', 'GET /agents'];
+/** v1 tells tasks, sessions and workspaces by workspace; projects and the wiki come later (§6.3 step 2). */
+const CONFINABLE_SCOPE = /^(tasks|sessions|workspaces):/;
+
+/**
+ * The ids a confinable route's request carries that name no task, session or workspace of their own,
+ * so the guard rightly leaves them unjudged — each with why. Exact both ways.
+ */
+const UNJUDGED_IDS: Readonly<Record<string, string>> = {
+  triggerId: "Run Now's press: an idempotency key the caller makes up, not a thing it names",
+  commentId: 'a comment of the task :id names; the service finds it only under that task',
+  turnId: 'a queued turn of the session :id names; the service finds it only under that session',
+  ruleId: 'a permission rule of the workspace :id names; the service finds it only under that workspace',
+  around: 'a turn, event or tool call of the session :id names; the page is read only from that session',
+};
+
+const confinableOf = (r: Route): PatWorkspaceConfinable | undefined =>
+  r.declared.kind === 'SCOPE' ? r.declared.workspaceConfinable : false;
+
+// Nest records each decorated argument under `__routeArguments__`, keyed `paramtype:index`. The
+// paramtype numbers are not public API, so they are read off a probe, as public-id-coverage.spec does.
+class Probe {
+  probe(@Param('p') _p: string, @Query('q') _q: string, @Body() _b: unknown) {}
+}
+const [PARAM, QUERY, BODY] = (() => {
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, Probe, 'probe') as Record<string, { index: number }>;
+  const kindAt = (index: number) => Number(Object.entries(args).find(([, a]) => a.index === index)![0].split(':')[0]);
+  return [kindAt(0), kindAt(1), kindAt(2)];
+})();
+
+/** The fields a body DTO class decodes as ids (`@IsPublicId`, an IsUUID underneath), nested DTOs included. */
+function publicIdFieldsOf(dto: Function, seen = new Set<Function>()): string[] {
+  if (seen.has(dto)) return [];
+  seen.add(dto);
+  return getMetadataStorage().getTargetValidationMetadatas(dto, '', true, false).flatMap((m) => {
+    if (m.name === 'isUuid') return [m.propertyName];
+    if (m.type !== 'nestedValidation') return [];
+    const nested: unknown = Reflect.getMetadata('design:type', dto.prototype, m.propertyName);
+    return typeof nested === 'function' && nested !== Object && nested !== Array ? publicIdFieldsOf(nested, seen) : [];
+  });
+}
+
+/**
+ * Every id a route's request carries, as Nest decodes it: a path or query param through PublicIdPipe,
+ * a body field through `PublicIdPipe.forFields` or its DTO's `@IsPublicId`.
+ */
+function idsCarriedBy(r: Route): Array<{ name: string; where: 'path' | 'query' | 'body' }> {
+  const args = (Reflect.getMetadata(ROUTE_ARGS_METADATA, r.controller, r.method) ?? {}) as Record<
+    string,
+    { index: number; data?: unknown; pipes?: unknown[] }
+  >;
+  const types = (Reflect.getMetadata('design:paramtypes', r.controller.prototype as object, r.method) ?? []) as unknown[];
+  const decoders = (pipes: unknown[] = []) => pipes.filter((p) => p === PublicIdPipe || p instanceof PublicIdPipe);
+  const carried: Array<{ name: string; where: 'path' | 'query' | 'body' }> = [];
+  for (const [key, arg] of Object.entries(args)) {
+    const kind = Number(key.split(':')[0]);
+    if ((kind === PARAM || kind === QUERY) && typeof arg.data === 'string' && decoders(arg.pipes).length > 0) {
+      carried.push({ name: arg.data, where: kind === PARAM ? 'path' : 'query' });
+    }
+    if (kind !== BODY) continue;
+    for (const pipe of decoders(arg.pipes)) {
+      for (const name of (pipe as { fields?: readonly string[] }).fields ?? []) carried.push({ name, where: 'body' });
+    }
+    const dto = types[arg.index];
+    if (typeof dto === 'function' && dto !== Object) {
+      for (const name of publicIdFieldsOf(dto)) carried.push({ name, where: 'body' });
+    }
+  }
+  return carried;
+}
+
 test('the census reads every controller the production app mounts, and every one that uses JwtAuthGuard', async () => {
   const { controllers, routes } = await census;
   assert.ok(controllers.size > 50, `found ${controllers.size} controllers — the module walk broke, not the app`);
@@ -257,4 +347,69 @@ test('declarations name scopes and reasons that exist, a scope sits on a handler
   // A scope no route declares is a box in the settings page that grants nothing.
   const used = new Set(routes.flatMap((r) => (r.declared.kind === 'SCOPE' ? [r.declared.scope] : [])));
   assert.deepEqual(PAT_SCOPES.filter((scope) => !used.has(scope)), []);
+});
+
+test('§6.3: every route open to a token declares workspaceConfinable — a refused route refuses a confined token with the rest', async (t) => {
+  const { routes } = await census;
+  const undeclared = routes.filter((r) => confinableOf(r) === undefined).map((r) => `${r.route} (${r.at})`);
+  assert.deepEqual(
+    undeclared,
+    [],
+    "declare it in @PatScope(<scope>, { workspaceConfinable }): false, 'LIST', or the task, session or "
+      + 'workspace the route acts on (docs/personal-access-token-design.md §6.3)',
+  );
+  const confinable = routes.filter((r) => confinableOf(r) !== false);
+  t.diagnostic(
+    `${routes.length} JwtAuthGuard routes: ${confinable.length} reachable by a token confined to workspaces `
+      + `(${confinable.filter((r) => confinableOf(r) === 'LIST').length} of them lists), `
+      + `${routes.length - confinable.length} refused to it`,
+  );
+});
+
+test('§6.3 v1: only task, session and workspace routes are confinable, and every id one carries is judged', async () => {
+  const { routes } = await census;
+  const wrong: string[] = [];
+  const unjudgedUsed = new Set<string>();
+  for (const r of routes) {
+    const confinable = confinableOf(r);
+    if (!confinable) continue;
+    if (r.declared.kind === 'SCOPE' && !CONFINABLE_SCOPE.test(r.declared.scope)) {
+      wrong.push(`${r.route}: a ${r.declared.scope} route cannot be told by workspace in v1`);
+    }
+    if (confinable === 'LIST') continue;
+    const params = Object.keys(confinable.params ?? {});
+    const judged = Object.keys(confinable.body ?? {});
+    const requires = confinable.requires ?? [];
+    // What a request is judged on is what it names; a declaration naming nothing judges nothing.
+    if (params.length === 0 && requires.length === 0) wrong.push(`${r.route}: names neither a path param nor a required field`);
+    for (const path of requires) {
+      if (!judged.includes(path.split('.').pop()!)) wrong.push(`${r.route}: requires ${path} without judging it`);
+    }
+    const carried = idsCarriedBy(r);
+    const inPath = new Set([...r.path.matchAll(/:(\w+)/g)].map((m) => m[1]));
+    for (const param of params) if (!inPath.has(param)) wrong.push(`${r.route}: judges :${param}, which is not in its path`);
+    for (const field of judged) {
+      if (!carried.some((id) => id.where !== 'path' && id.name === field)) wrong.push(`${r.route}: judges ${field}, which it does not carry by id`);
+    }
+    // Every id the request carries is judged; or, in the body or query, refused when sent — the guard
+    // reads every field PUBLIC_ID_FIELDS lists; or it names nothing of its own (UNJUDGED_IDS).
+    for (const { name, where } of carried) {
+      if (where === 'path' ? params.includes(name) : judged.includes(name)) continue;
+      if (where !== 'path' && PUBLIC_ID_FIELDS.has(name)) continue;
+      if (name in UNJUDGED_IDS) {
+        unjudgedUsed.add(name);
+        continue;
+      }
+      wrong.push(`${r.route}: carries ${name} (${where}) by id, and nothing judges it`);
+    }
+  }
+  assert.deepEqual(wrong, []);
+  assert.deepEqual(Object.keys(UNJUDGED_IDS).filter((name) => !unjudgedUsed.has(name)), [], 'UNJUDGED_IDS entries no confinable route carries');
+
+  const lists = routes.filter((r) => confinableOf(r) === 'LIST').map((r) => r.route);
+  assert.deepEqual(
+    [...lists].sort(),
+    [...NARROWED_LISTS].sort(),
+    'a LIST route is trusted to narrow its own answer: list it in NARROWED_LISTS once its handler does',
+  );
 });

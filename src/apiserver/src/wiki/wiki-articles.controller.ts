@@ -25,28 +25,28 @@ export class WikiArticlesController {
   constructor(private readonly articles: WikiArticles) {}
 
   /** Categories in the contract's order, each with its topics and their articles. */
-  @PatScope('wiki:read')
+  @PatScope('wiki:read', { workspaceConfinable: false })
   @Get('spaces/:id/articles')
   directory(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.articles.directory(user.userId, id);
   }
 
   /** Every article of the space, A to Z by title. */
-  @PatScope('wiki:read')
+  @PatScope('wiki:read', { workspaceConfinable: false })
   @Get('spaces/:id/article-index')
   index(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.articles.index(user.userId, id);
   }
 
   /** A topic's article, or its overview. `slug` is the topic's, matched as text. */
-  @PatScope('wiki:read')
+  @PatScope('wiki:read', { workspaceConfinable: false })
   @Get('spaces/:id/articles/:slug')
   article(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Param('slug') slug: string) {
     return this.articles.article(user.userId, id, slug, 0);
   }
 
   /** One subtopic article of a split topic: `part` is its number, 1 or more. */
-  @PatScope('wiki:read')
+  @PatScope('wiki:read', { workspaceConfinable: false })
   @Get('spaces/:id/articles/:slug/:part')
   part(
     @CurrentUser() user: AuthUser,

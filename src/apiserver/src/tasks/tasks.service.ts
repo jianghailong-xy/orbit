@@ -6575,8 +6575,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
   }
 
-  async list(ownerId: string, query: Pick<ListTasksPageQuery, 'creatorSessionId'> = {}) {
+  /** `assignedTo`: the workspaces a token confined to them may see (`workspaceConfinement`). */
+  async list(
+    ownerId: string,
+    query: Pick<ListTasksPageQuery, 'creatorSessionId'> = {},
+    assignedTo?: readonly string[],
+  ) {
     const where: Prisma.TaskWhereInput = { ownerId };
+    if (assignedTo) where.assigneeId = { in: [...assignedTo] };
     // The paged list's scope of the same name, for the native task list, which reads this one.
     if (query.creatorSessionId) {
       if (!UUID_RE.test(query.creatorSessionId)) throw new BadRequestException('invalid creator session id');

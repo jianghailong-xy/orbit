@@ -55,14 +55,14 @@ export class CodexRateLimitResetController {
     return created;
   }
 
-  @PatScope('runners:read')
+  @PatScope('runners:read', { workspaceConfinable: false })
   @Get(':id/codex-rate-limit-reset')
   list(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string): Promise<CodexRateLimitResetOperations> {
     return this.resets.operationsFor(user.userId, id);
   }
 
   // Either spelling of the operation id: a view names it by public id, a refusal by the stored UUID.
-  @PatScope('runners:read')
+  @PatScope('runners:read', { workspaceConfinable: false })
   @Get(':id/codex-rate-limit-reset/:operationId')
   get(
     @CurrentUser() user: AuthUser,

@@ -19,7 +19,7 @@ import { SessionRequestService } from './session-request.service';
 export class SessionRequestsController {
   constructor(private readonly requests: SessionRequestService) {}
 
-  @PatScope('sessions:read')
+  @PatScope('sessions:read', { workspaceConfinable: false })
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.requests.view(user.userId, id);

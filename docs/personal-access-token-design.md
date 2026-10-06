@@ -169,11 +169,37 @@ Authorization: Bearer <jwt>        → 现状                → req.user = {use
 
 ### 6.3 Workspace 限定
 
-`workspace_ids` 非空时，在 scope 检查之后由各 service 的读写入口过滤。一次性改全太大，分两步：
+`workspace_ids` 非空时，在 scope 检查之后判定请求碰到的对象是否在令牌的 workspace 内。一次性改全太大，分两步：
 
 1. v1：带 `workspace_ids` 的令牌**只能**访问按 workspace 能直接判定的路由
    （任务、会话、workspace 本身），其余路由在普查表里标 `workspaceConfinable: false`，限定令牌打来返回 403。
 2. 之后按需补齐项目、wiki 的判定。
+
+v1 的落地。最初设想由各 service 的读写入口过滤；实际做法是单对象路由由 JwtAuthGuard 按声明统一判定，
+只有列表在 service 里收窄。理由见该任务的评论：几十个读写入口逐个过滤容易漏，统一判定之后漏声明会让普查变红。
+
+- **归属**：任务看 `assignee_id`，会话看 `workspace_id`，workspace 就是它自己。未分配的任务、不属于任何 workspace
+  的会话，不在任何令牌的范围内。
+- **声明**：`@PatScope(scope, { workspaceConfinable })` 的第二个参数必填，取值有三种：
+  - `false`：限定令牌一律返回 `403 PAT_ROUTE_NOT_WORKSPACE_CONFINABLE`。
+  - `'LIST'`：由 handler 用 `workspaceConfinement(user)` 把列表收窄到令牌的 workspace。v1 只有 `GET /tasks`、
+    `/sessions`、`/workspaces`（及别名 `/agents`）。
+  - `{ params, body, requires }`：JwtAuthGuard 在 handler 运行前判定路径参数和请求体里点名的任务、会话、workspace。
+    任何一个不在令牌的 workspace 内，就返回 `403 PAT_WORKSPACE_OUT_OF_SCOPE`，`fields` 列出越界的字段。
+    「不存在」和「不属于该用户」也按越界处理，以免限定令牌借此探测对象是否存在。
+- **按 id 点名的字段**：请求体或查询参数里按 id 点名其他对象、而该路由不判定的字段（`PUBLIC_ID_FIELDS`，例如
+  `projectId`、`listId`、`parentTaskId`）一律拒绝。
+- **创建类路由**：必须给出新对象落在哪个 workspace（`requires`）。`POST /tasks` 要 `assigneeId`，带 `verification`
+  时还要 `verification.assigneeId`；`POST /sessions` 要 `workspaceId`。
+- **普查 spec 的断言**：
+  - 每条令牌可达的路由都声明了 `workspaceConfinable`；
+  - 只有 tasks、sessions、workspaces 的路由可以 confinable；
+  - 每条 confinable 路由解码出的每个 id（DTO 的 `@IsPublicId`，`PublicIdPipe` 的参数、查询、`forFields`）只能是以下三种之一：被判定；
+    运行时会被拒；或者列在 `UNJUDGED_IDS` 里并写明理由，说明它不指向其他对象。
+- **v1 不处理**：
+  - 已放行对象的响应里嵌入的关联对象，例如任务详情里依赖任务的标题。
+  - 经对象已有关系产生的连带影响，例如给一个 subject 在别处的 verifier 写 verdict，或删除一个被别处任务依赖的任务。
+  - 分页任务列表、计数、搜索、事件流、附件、批量操作都是 `workspaceConfinable: false`。
 
 ### 6.4 归属与审计
 

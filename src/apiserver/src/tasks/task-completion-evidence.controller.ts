@@ -17,7 +17,7 @@ import { TaskCompletionEvidenceService } from './task-completion-evidence.servic
 export class TaskCompletionEvidenceController {
   constructor(private readonly evidence: TaskCompletionEvidenceService) {}
 
-  @PatScope('tasks:write')
+  @PatScope('tasks:write', { workspaceConfinable: { params: { taskId: 'task' }, body: { sourceSessionId: 'session' } } })
   @Post()
   submit(
     @CurrentUser() user: AuthUser,
@@ -32,7 +32,7 @@ export class TaskCompletionEvidenceController {
     );
   }
 
-  @PatScope('tasks:write')
+  @PatScope('tasks:write', { workspaceConfinable: false })
   @Post('legacy-import')
   importLegacyComment(
     @CurrentUser() user: AuthUser,
@@ -76,7 +76,7 @@ export class TaskCompletionEvidenceController {
     );
   }
 
-  @PatScope('tasks:read')
+  @PatScope('tasks:read', { workspaceConfinable: { params: { taskId: 'task' } } })
   @Get()
   list(@CurrentUser() user: AuthUser, @Param('taskId', PublicIdPipe) taskId: string) {
     return this.evidence.list(user.userId, taskId);
