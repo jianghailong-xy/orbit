@@ -85,19 +85,22 @@ public final class SessionListingMemo<Value> {
     /// How many times `compute` has run — what the tests count.
     public private(set) var computations = 0
 
-    public init() {}
+    private let memoID = UUID().uuidString.prefix(6)
+    public init() { print("MEMO-WHY init memo=\(memoID)") }
 
     public func value(for inputs: SessionListInputs, compute: (SessionListInputs) -> Value) -> Value {
         if let last, last.inputs == inputs { return last.value }
-        if let last { Self.logWhy(last.inputs, inputs) } else { print("MEMO-WHY first") }
+        if let last { Self.logWhy(last.inputs, inputs, memo: memoID) } else { print("MEMO-WHY first memo=\(memoID)") }
+        let started = Date()
         let value = compute(inputs)
+        print("MEMO-WHY computed memo=\(memoID) n=\(computations + 1) ms=\(Int(Date().timeIntervalSince(started) * 1000))")
         computations += 1
         last = (inputs, value)
         return value
     }
 
     // PROBE ONLY — never merge.
-    private static func logWhy(_ a: SessionListInputs, _ b: SessionListInputs) {
+    private static func logWhy(_ a: SessionListInputs, _ b: SessionListInputs, memo: Substring) {
         var why: [String] = []
         func sessions(_ name: String, _ x: [Session], _ y: [Session]) {
             guard x != y else { return }
@@ -125,6 +128,6 @@ public final class SessionListingMemo<Value> {
         if a.searching != b.searching { why.append("searching") }
         if a.runnerOffline != b.runnerOffline { why.append("runnerOffline") }
         if a.minute != b.minute { why.append("minute") }
-        print("MEMO-WHY \(Date().timeIntervalSince1970) \(why.joined(separator: " "))")
+        print("MEMO-WHY \(Date().timeIntervalSince1970) memo=\(memo) \(why.joined(separator: " "))")
     }
 }
