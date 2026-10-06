@@ -88,8 +88,8 @@ export class ProjectsController {
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateProjectDto) {
     const principal = { type: 'OWNER', id: user.userId } as const;
     return dto.workspaceId
-      ? this.projects.createInWorkspace(user.userId, dto, dto.workspaceId, principal)
-      : this.projects.create(user.userId, dto, undefined, principal);
+      ? this.projects.createInWorkspace(user.userId, dto, dto.workspaceId, principal, undefined, user.credential)
+      : this.projects.create(user.userId, dto, undefined, principal, user.credential);
   }
 
   /** The owner's projects, newest first. `?status=OPEN|DONE|CANCELLED` narrows; absent means all. */
@@ -661,8 +661,11 @@ export class ProjectsController {
    * The account owner choosing this project's integration line — main or a project branch — and the
    * check run before a landing (L5). Once the project started integrating, a change that would move
    * the line is 409 `INTEGRATION_LINE_LOCKED`; the merge check can still change.
+   *
+   * Closed to tokens whole: every field here is the one `PATCH :id` refuses a token as `integration`
+   * (docs/personal-access-token-design.md §5).
    */
-  @PatScope('projects:write', { workspaceConfinable: false })
+  @PatForbidden('OWNER_INTERACTIVE')
   @Patch(':id/integration')
   configureIntegration(
     @CurrentUser() user: AuthUser,
@@ -687,6 +690,9 @@ export class ProjectsController {
    * OWNER rather than to an AGENT — which is a record of who asked, not an exemption from the
    * fork, so a caller that reads its criteria back and finds them unmoved is looking at a hold
    * rather than at a lost write.
+   *
+   * A personal access token reaches this route with `projects:write`, but `status`, `integration`
+   * and `acceptanceCriteriaItems` are refused it whole — see `ProjectsService.update`.
    */
   @PatScope('projects:write', { workspaceConfinable: false })
   @Patch(':id')
@@ -695,7 +701,7 @@ export class ProjectsController {
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: UpdateProjectDto,
   ) {
-    return this.projects.update(user.userId, id, dto);
+    return this.projects.update(user.userId, id, dto, undefined, user.credential);
   }
 
   /** Removes an EMPTY project. One that still holds tasks is a 409 naming how many — a task's

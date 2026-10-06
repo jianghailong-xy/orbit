@@ -101,7 +101,7 @@ export class WikiController {
     @Body() dto: CreateWikiSpaceDto,
     @Req() request: { headers: Record<string, string | string[] | undefined> },
   ) {
-    return this.wiki.createSpace(user.userId, dto, actingSession(request.headers));
+    return this.wiki.createSpace(user.userId, dto, actingSession(request.headers), user.credential);
   }
 
   /**
@@ -124,7 +124,8 @@ export class WikiController {
   /**
    * What the space does on its own: whether it pushes, whether a reinforce applies at once, and its
    * review mode — the last the owner channel's alone, refused WIKI_OWNER_CHANNEL_ONLY to a request
-   * that carries a session header, as a decide is.
+   * that carries a session header, as a decide is, and refused to a personal access token with
+   * maintenance and spot checks (see `WikiService.updateSpace`).
    */
   @PatScope('wiki:write', { workspaceConfinable: false })
   @Patch('spaces/:id')
@@ -134,7 +135,7 @@ export class WikiController {
     @Body() dto: UpdateWikiSpaceDto,
     @Req() request: { headers: Record<string, string | string[] | undefined> },
   ) {
-    return this.wiki.updateSpace(user.userId, id, dto, actingSession(request.headers));
+    return this.wiki.updateSpace(user.userId, id, dto, actingSession(request.headers), user.credential);
   }
 
   /** Bind a workspace this space's sessions read and propose through (§2.1's manual binding). */

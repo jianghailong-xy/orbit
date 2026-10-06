@@ -1,6 +1,6 @@
-import { SetMetadata, applyDecorators } from '@nestjs/common';
+import { ForbiddenException, SetMetadata, applyDecorators } from '@nestjs/common';
 import type { Reflector } from '@nestjs/core';
-import type { AuthUser } from '../common/current-user.decorator';
+import type { AuthCredential, AuthUser } from '../common/current-user.decorator';
 import type { PatScopeName } from './pat.service';
 
 /**
@@ -138,4 +138,26 @@ export function patForbiddenBody(reason: PatForbiddenReason) {
     requiredAction: 'OPEN_ORBIT',
     message: PAT_FORBIDDEN_REASONS[reason],
   };
+}
+
+/**
+ * §5 field by field. A route a token reaches with its scope can still carry a field that is the
+ * account owner's own decision — a project's status, integration line or acceptance criteria, a wiki
+ * space's review mode or maintenance, a session's permission mode. The service that writes such a
+ * field calls this with the request's credential and those fields, before it writes anything: a token
+ * that sent any of them is refused the whole request, with the 403 an OWNER_INTERACTIVE route answers
+ * plus the fields it named. A login, and a caller with no credential (the runner door, the server's
+ * own callers), is never refused here.
+ */
+export function refuseOwnerFieldsToToken(credential: AuthCredential | undefined, fields: Record<string, unknown>): void {
+  if (credential?.kind !== 'PAT') return;
+  const sent = Object.keys(fields).filter((field) => fields[field] !== undefined);
+  if (sent.length === 0) return;
+  const one = sent.length === 1;
+  throw new ForbiddenException({
+    ...patForbiddenBody('OWNER_INTERACTIVE'),
+    message: `${sent.join(', ')} ${one ? 'is' : 'are'} the account owner's own decision, made signed in to Orbit; `
+      + `an access token cannot set ${one ? 'it' : 'them'}, and nothing this request carried was written`,
+    fields: sent,
+  });
 }

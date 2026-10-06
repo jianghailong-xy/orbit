@@ -17,6 +17,7 @@ import { getMetadataStorage } from 'class-validator';
 import { AppModule } from '../app.module';
 import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { OWNER_INTERACTIVE_ROUTES } from './pat-owner-channel-routes';
 import {
   PAT_FORBIDDEN_REASONS,
   PAT_SCOPE,
@@ -150,49 +151,9 @@ const NEVER_GRANTABLE: ReadonlyArray<{
 ];
 
 // ── §5: the owner channel ───────────────────────────────────────────────────────────────────────
-// Exact both ways: a route refused as the owner's own decision is listed here, and a route listed
-// here is refused. The next task holds each of them to a spec of its own.
-const OWNER_INTERACTIVE = [
-  // The design's list.
-  'POST /tasks/:taskId/owner-confirmation',
-  'POST /tasks/:taskId/evidence/decision',
-  'POST /sessions/:id/approvals/:approvalId/decision',
-  'POST /projects/:id/acceptance/confirmation',
-  'POST /projects/:id/acceptance/criteria-decisions/:intentId',
-  'POST /projects/:projectId/promotions/:promotionId/confirm',
-  'POST /projects/:projectId/promotions/:promotionId/decline',
-  'POST /projects/:projectId/promotions/:promotionId/cancel',
-  'POST /projects/:id/handoffs/:handoffId/decision',
-  // The same rule where the design names no door: the owner's own decisions the code already keeps
-  // from agents. These refuse a request that carries an agent session — starting a project seals its
-  // criteria, the standard-set confirmation by another door.
-  'POST /projects/:id/start',
-  'POST /projects/:id/done',
-  'POST /projects/:id/pause',
-  'POST /projects/:id/resume',
-  'POST /projects/:id/done-requests/:itemId/decline',
-  // These answer what was put to the owner, on a door no agent has: the commitToken that decides a
-  // held criteria change, the fuse that stopped a coordinator, the items escalated to the owner.
-  'GET /projects/:id/acceptance/criteria-decisions/pending',
-  'POST /projects/:id/fuse/:episodeId/resume',
-  'POST /projects/:id/open-items/:itemId/answer',
-  'POST /projects/:id/open-items/:itemId/return-to-coordinator',
-  'POST /projects/:id/open-items/:itemId/resolve',
-  // The wiki's owner channel: each refuses an agent session WIKI_OWNER_CHANNEL_ONLY.
-  'POST /wiki/entries/:id/reject',
-  'POST /wiki/entries/:id/confirm',
-  'POST /wiki/changesets/:id/decide',
-  'POST /wiki/changesets/:id/revert',
-  'POST /wiki/spaces/:id/verifications/reopen',
-  'GET /wiki/changesets/:id',
-  'GET /wiki/spaces/:id/plan',
-  'GET /wiki/spaces/:id/plan/versions',
-  'GET /wiki/spaces/:id/plan/versions/:version',
-  'POST /wiki/spaces/:id/plan/edits',
-  'POST /wiki/spaces/:id/plan/versions/:version/confirm',
-  'POST /wiki/spaces/:id/plan/redraft',
-  'POST /wiki/plan-proposals/:id/decide',
-];
+// Exact both ways: a route refused as the owner's own decision is listed in OWNER_INTERACTIVE_ROUTES
+// (`pat-owner-channel-routes.ts`), and a route listed there is refused. `pat-owner-channel.pg.spec.ts`
+// holds each of them to a case of its own.
 
 // ── §6.3 v1: workspace confinement ─────────────────────────────────────────────────────────────
 // The lists a token confined to workspaces reads, narrowed by their handlers rather than judged by
@@ -322,7 +283,7 @@ test('§4: auth/*, admin/*, the token routes, admitting a runner, rotating its t
 test("§5: the owner channel's doors are refused to every token, and are exactly the listed ones", async () => {
   const { routes } = await census;
   const byRoute = new Map(routes.map((r) => [r.route, r]));
-  const notRefused = OWNER_INTERACTIVE.filter((route) => {
+  const notRefused = OWNER_INTERACTIVE_ROUTES.filter((route) => {
     const declared = byRoute.get(route)?.declared;
     return !(declared?.kind === 'FORBIDDEN' && declared.reason === 'OWNER_INTERACTIVE');
   }).map((route) => `${route}: ${byRoute.has(route) ? describe(byRoute.get(route)!.declared) : 'no such JwtAuthGuard route'}`);
@@ -330,8 +291,8 @@ test("§5: the owner channel's doors are refused to every token, and are exactly
   const unlisted = routes
     .filter((r) => r.declared.kind === 'FORBIDDEN' && r.declared.reason === 'OWNER_INTERACTIVE')
     .map((r) => r.route)
-    .filter((route) => !OWNER_INTERACTIVE.includes(route));
-  assert.deepEqual(unlisted, [], 'refused as the owner channel but not in OWNER_INTERACTIVE above');
+    .filter((route) => !OWNER_INTERACTIVE_ROUTES.includes(route));
+  assert.deepEqual(unlisted, [], 'refused as the owner channel but not in OWNER_INTERACTIVE_ROUTES');
 });
 
 test('declarations name scopes and reasons that exist, a scope sits on a handler only, and every scope opens a route', async () => {

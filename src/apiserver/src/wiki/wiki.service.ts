@@ -57,6 +57,8 @@ import {
   type WikiVerificationOutcome,
   type WikiVerificationVerdict,
 } from '@orbit/shared';
+import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
+import type { AuthCredential } from '../common/current-user.decorator';
 import { sha256 } from '../common/crypto.util';
 import { redactSecrets } from '../common/secret-redaction';
 import {
@@ -969,11 +971,13 @@ export class WikiService {
    * maintenance from the start when the request names it, which is the owner channel's alone, as the
    * PATCH that sets it later is. The maintenance a request names is checked before the space is made
    * (the workspace is the owner's, the provider one a run could start on), so a refused one makes nothing.
+   * A personal access token is refused it the same way, by `credential` (docs/personal-access-token-design.md §5).
    */
   async createSpace(
     ownerId: string,
     input: { title: string; repoUrl?: string; slug?: string; maintenance?: WikiMaintenanceInput },
     actingSessionId: string | null = null,
+    credential?: AuthCredential,
   ) {
     if (input.maintenance !== undefined && actingSessionId) {
       return refuse(
@@ -982,6 +986,7 @@ export class WikiService {
           + 'create the space without it, and let a person set it.',
       );
     }
+    refuseOwnerFieldsToToken(credential, { maintenance: input.maintenance });
     const normalized = input.repoUrl ? normalizeRepoUrl(input.repoUrl) : null;
     if (input.repoUrl && normalized === null) {
       return refuse('WIKI_SCHEMA', 'repoUrl says nothing a repository identity can be read from');
@@ -1032,6 +1037,9 @@ export class WikiService {
    * spot checks' window (which counts from the last change) is not restarted by it. Whether an
    * Automatic space sends the owner spot checks at all (`automaticSpotChecks`) is the owner's in the
    * same way: it decides how much of what the machine applied a person ever looks at.
+   *
+   * The three owner-channel fields are refused to a personal access token as well, by `credential`,
+   * and the whole request with them (docs/personal-access-token-design.md §5); the rest are a token's.
    */
   async updateSpace(
     ownerId: string,
@@ -1045,6 +1053,7 @@ export class WikiService {
       title?: string;
     },
     actingSessionId: string | null = null,
+    credential?: AuthCredential,
   ) {
     if (input.maintenance !== undefined && actingSessionId) {
       return refuse(
@@ -1067,6 +1076,11 @@ export class WikiService {
           + 'channel with no acting session: report what should change, and let a person change it.',
       );
     }
+    refuseOwnerFieldsToToken(credential, {
+      reviewMode: input.reviewMode,
+      maintenance: input.maintenance,
+      automaticSpotChecks: input.automaticSpotChecks,
+    });
     const current = await this.requireSpace(ownerId, spaceId);
     // Maintenance is written by its own unit, under the space row's lock and with the hidden list it
     // may need (`setWikiMaintenance`); every other key below is merged over the row as it stands, so

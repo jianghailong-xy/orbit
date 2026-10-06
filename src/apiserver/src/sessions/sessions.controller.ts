@@ -555,9 +555,11 @@ export class SessionsController {
     // The person's door, and the only one that routes a message onto the run that holds this
     // session's task — see SessionsService.resume's `routeToCurrentRun` for why the sweeps and the
     // dispatchers keep the refusal instead.
-    return this.sessions.resume(user.userId, id, dto, { routeToCurrentRun: true });
+    return this.sessions.resume(user.userId, id, dto, { routeToCurrentRun: true, credential: user.credential });
   }
 
+  /** A personal access token reaches this with `sessions:write`, but never changes the permission
+   *  mode — see SessionsService.updateConfig. */
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Patch(':id/config')
   updateConfig(
@@ -565,7 +567,7 @@ export class SessionsController {
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: SessionConfigDto,
   ) {
-    return this.sessions.updateConfig(user.userId, id, dto);
+    return this.sessions.updateConfig(user.userId, id, dto, user.credential);
   }
 
   /** Which of its runner's Codex or Claude accounts the session runs on — see switchAccount. */
