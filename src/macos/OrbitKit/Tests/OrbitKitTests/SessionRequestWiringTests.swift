@@ -22,7 +22,7 @@ final class SessionRequestWiringTests: XCTestCase {
         }
     }
 
-    private static let consolePath = "src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift"
+    private static let rowPath = "src/macos/OrbitApp/Sources/OrbitApp/Views/Console/UserTurnRow.swift"
     private static let messageCardPath = "src/macos/OrbitApp/Sources/OrbitApp/Views/SessionMessageCardView.swift"
     private static let replyCardPath = "src/macos/OrbitApp/Sources/OrbitApp/Views/SessionReplyCardView.swift"
     private static let iosProject = "src/ios/project.yml"
@@ -55,9 +55,11 @@ final class SessionRequestWiringTests: XCTestCase {
     }
 
     func testTheTranscriptDrawsReplyCardsForATurnThatHandedOutcomesBack() throws {
-        let view = try section(try source(Self.consolePath),
-                               from: "struct TranscriptItemView: View", to: "case .assistant(let b)")
-        let user = statements(try section(view, from: "case .user(let b):", to: "UserBubbleView(bubble: b)\n"))
+        // The row the transcript and the queue both draw a user turn with (`UserTurnRow`).
+        let view = try section(try source(Self.rowPath),
+                               from: "struct UserTurnRow: View", to: "private func attachedRest")
+        let user = statements(try section(view, from: "var body: some View {",
+                                          to: "UserBubbleView(bubble: b, onCancelQueued: cancel)\n"))
         let branch = try XCTUnwrap(user.firstIndex(of: "} else if let replies = b.sessionReplies, !replies.isEmpty {"),
                                    "a turn that handed outcomes back is not drawn as reply cards")
         // After the cards whose own wiring test pins the first branches, before the readings of text.
@@ -65,7 +67,7 @@ final class SessionRequestWiringTests: XCTestCase {
         let watch = try XCTUnwrap(user.firstIndex(where: { $0.hasPrefix("} else if let wake = WatchWakeText.parse(") }))
         XCTAssertTrue(started < branch && branch < watch, "the reply-card branch moved out of its place")
         let body = user[branch..<watch].joined(separator: "\n")
-        XCTAssertTrue(body.contains("SessionReplyCardsView(replies: replies, ts: b.ts, attached: replyRest(b))"))
+        XCTAssertTrue(body.contains("SessionReplyCardsView(replies: replies, ts: b.ts, attached: replyRest(b),"))
         // The owner's own words, when the turn had any, stay theirs — without the note the cards drew.
         XCTAssertTrue(body.contains("UserBubbleView(bubble: withoutNote(b))"))
         XCTAssertFalse(user.contains { $0.hasPrefix("#if") }, "the cards are drawn on one platform only")
