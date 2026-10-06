@@ -541,13 +541,19 @@ export const openProjectsQuery = () =>
   });
 
 /** The project document also supplies title and task counts when a finished project is
- *  absent from the Open-only sidebar. Shares the detail page's existing cache entry. */
+ *  absent from the Open-only sidebar, and the workspace its coordinator runs in, which the Wiki opens
+ *  the space of (design §12.3.4). Shares the detail page's existing cache entry. */
 export const projectDetailsQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId] as const,
-    queryFn: () => api<{ id: string; title: string; status?: string; tasksByStatus?: Record<string, number> }>(
-      `/projects/${encodeURIComponent(projectId)}`,
-    ),
+    queryFn: () =>
+      api<{
+        id: string;
+        title: string;
+        status?: string;
+        tasksByStatus?: Record<string, number>;
+        coordinatorWorkspaceId?: string | null;
+      }>(`/projects/${encodeURIComponent(projectId)}`),
   });
 
 /**

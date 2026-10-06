@@ -1,16 +1,33 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WikiHome } from '../components/WikiHome';
 import type { WikiArticleDirectory } from '@orbit/shared';
 import type { WikiChangeset, WikiEntry, WikiSpaceWithUsage, WikiTimeline } from '../lib/wiki';
 import { WIKI_DISABLED_NOTE, WIKI_NO_ENTRIES, WIKI_NO_PRINCIPLES, WIKI_NO_SPACES } from '../lib/wiki';
+import { WIKI_FROM_WORKSPACE_KEY, WIKI_LAST_SPACE_KEY, wikiWaiting } from '../lib/wikiSpace';
 import { WikiPage } from './WikiPage';
 
-vi.hoisted(() => {
-  const noop = (): void => undefined;
-  vi.stubGlobal('localStorage', { getItem: () => null, setItem: noop, removeItem: noop });
+// The browser's storage, which the space `/wiki` opens reads: the workspace this tab came from and the
+// space last looked at. Empty unless a test fills it.
+const browser = vi.hoisted(() => {
+  const store = () => {
+    const items = new Map<string, string>();
+    return {
+      items,
+      storage: {
+        getItem: (key: string) => items.get(key) ?? null,
+        setItem: (key: string, value: string) => void items.set(key, value),
+        removeItem: (key: string) => void items.delete(key),
+      },
+    };
+  };
+  const local = store();
+  const session = store();
+  vi.stubGlobal('localStorage', local.storage);
+  vi.stubGlobal('sessionStorage', session.storage);
+  return { local: local.items, session: session.items };
 });
 
 vi.mock('../api', async (importOriginal) => ({
@@ -326,5 +343,102 @@ describe('the Wiki, for an account the server has not switched it on for', () =>
       expect(html, path).not.toContain(WIKI_NO_SPACES);
       expect(html, path).not.toContain('>Principles<');
     }
+  });
+});
+
+/**
+ * The head (design §12.3.1, §12.3.4, mocks 30 ③ and 31 ④): `Wiki`, the space, Contents, Activity with
+ * the number waiting on the owner, Settings and New entry. One space is a label; several are a select.
+ */
+const WIKOVA_ID = '0196e000-0000-7000-8000-0000000000b2';
+const WIKIDS_ID = '0196e000-0000-7000-8000-0000000000b3';
+const THREE_SPACES = [
+  { ...SPACE, pendingOps: 2, planWaiting: 1, workspaceIds: ['ws-orbit-develop'], docs: { written: 5, total: 35 } },
+  {
+    ...SPACE,
+    id: WIKOVA_ID,
+    slug: 'wikova',
+    title: 'github-com-jianghailong-xy-wikova',
+    repoUrlNorm: 'github.com/jianghailong-xy/wikova',
+    pendingOps: 1,
+    planWaiting: 3,
+    workspaceIds: ['ws-wikova-develop'],
+    docs: { written: 12, total: 12 },
+  },
+  {
+    ...SPACE,
+    id: WIKIDS_ID,
+    slug: 'wikids',
+    title: 'github-com-jianghailong-xy-wikids',
+    repoUrlNorm: 'github.com/jianghailong-xy/wikids',
+    pendingOps: 0,
+    planWaiting: 0,
+    workspaceIds: [],
+    docs: null,
+  },
+];
+
+describe('the Wiki head', () => {
+  it('names a lone space by its repository, as a label with nothing to choose', () => {
+    const html = paint('home', '/wiki/orbit');
+    expect(html).toContain('<span class="wk-space-tag" title="The codebase this wiki describes">orbit</span>');
+    expect(html).not.toContain('<select');
+  });
+
+  it('offers a native select over several, closed on the name, each option saying what waits in it', () => {
+    const html = paint('home', '/wiki/orbit', { spaces: THREE_SPACES });
+    expect(html).toContain('<span class="v">orbit</span>');
+    expect(html).toContain('<option value="orbit" selected="">orbit · 3 waiting</option>');
+    expect(html).toContain('<option value="wikova">wikova · 4 waiting</option>');
+    expect(html).toContain('<option value="wikids">wikids</option>');
+    expect(html).not.toContain('wk-space-tag');
+  });
+
+  it('puts Contents, Activity, Settings and New entry in that order, Activity carrying every space’s number', () => {
+    const html = paint('home', '/wiki/orbit', { spaces: THREE_SPACES });
+    const at = (needle: string) => html.indexOf(needle);
+    expect(at('wk-contents-btn')).toBeGreaterThan(-1);
+    expect(at('wk-activity-btn')).toBeGreaterThan(at('wk-contents-btn'));
+    expect(at('aria-label="Settings"')).toBeGreaterThan(at('wk-activity-btn'));
+    expect(at('aria-label="New entry"')).toBeGreaterThan(at('aria-label="Settings"'));
+    expect(wikiWaiting(THREE_SPACES)).toBe(7);
+    expect(html).toContain('class="tp-rail-badge needs-you" title="7 waiting on you" aria-label="7 waiting on you">7</span>');
+  });
+
+  it('draws no badge at zero', () => {
+    const html = paint('home', '/wiki/orbit', { spaces: [{ ...SPACE, pendingOps: 0, planWaiting: 0 }] });
+    expect(html).toContain('wk-activity-btn');
+    expect(html).not.toContain('tp-rail-badge');
+  });
+});
+
+describe('the space /wiki opens (design §12.3.4)', () => {
+  beforeEach(() => {
+    browser.local.clear();
+    browser.session.clear();
+  });
+
+  const opened = (path = '/wiki'): string | null =>
+    paint('home', path, { spaces: THREE_SPACES }).match(/<option value="([^"]+)" selected="">/)?.[1] ?? null;
+
+  it('is the one bound to the workspace the reader came from, ahead of the last one looked at', () => {
+    browser.session.set(WIKI_FROM_WORKSPACE_KEY, 'ws-wikova-develop');
+    browser.local.set(WIKI_LAST_SPACE_KEY, 'orbit');
+    expect(opened()).toBe('wikova');
+  });
+
+  it('else the one last looked at', () => {
+    browser.session.set(WIKI_FROM_WORKSPACE_KEY, 'ws-bound-to-nothing');
+    browser.local.set(WIKI_LAST_SPACE_KEY, 'wikids');
+    expect(opened()).toBe('wikids');
+  });
+
+  it('else the one with the most documents written', () => {
+    expect(opened()).toBe('wikova');
+  });
+
+  it('is never asked when the URL names a space', () => {
+    browser.session.set(WIKI_FROM_WORKSPACE_KEY, 'ws-wikova-develop');
+    expect(opened('/wiki/orbit')).toBe('orbit');
   });
 });
