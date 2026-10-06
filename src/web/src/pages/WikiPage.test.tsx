@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WikiActivityPage } from '../components/WikiActivityPage';
 import type { WikiArticleDirectory, WikiDocsDirectory } from '@orbit/shared';
 import type { WikiChangeset, WikiEntry, WikiSpaceWithUsage, WikiTimeline } from '../lib/wiki';
-import { WIKI_DISABLED_NOTE, WIKI_NO_ENTRIES, WIKI_NO_PRINCIPLES, WIKI_NO_SPACES } from '../lib/wiki';
+import { WIKI_DISABLED_NOTE, WIKI_NO_ENTRIES, WIKI_NO_SPACES } from '../lib/wiki';
 import { WIKI_NO_DOCUMENTS, WIKI_NO_DOCUMENTS_NOTE } from '../lib/wikiDocs';
 import { WIKI_FROM_WORKSPACE_KEY, WIKI_LAST_SPACE_KEY, wikiWaiting } from '../lib/wikiSpace';
 import { WikiPage } from './WikiPage';
@@ -341,13 +341,11 @@ describe('the Wiki home', () => {
     expect(html).toContain('Delete means forget');
     expect(html).toContain('<span class="wk-home-n">2</span>');
     expect(html).not.toContain('Wakeups are held by the server');
-    expect(html).not.toContain(WIKI_NO_PRINCIPLES);
   });
 
   it('draws no Principles at all when there is none, and says nothing for them', () => {
     const html = paint('home', '/wiki/orbit', { docs: DOCS, entries: ENTRIES.filter((row) => row.kind !== 'principle') });
     expect(html).not.toContain('Principles');
-    expect(html).not.toContain(WIKI_NO_PRINCIPLES);
     expect(html).not.toContain(WIKI_NO_ENTRIES);
   });
 
