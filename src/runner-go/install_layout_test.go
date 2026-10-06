@@ -2,12 +2,7 @@ package main
 
 import (
 	"bytes"
-	"compress/gzip"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -562,18 +557,6 @@ func TestUserBinRegisterKeepsAnInstallItMustNotMove(t *testing.T) {
 	})
 }
 
-// fakeRelease is a stand-in runner binary: a shell script that answers the two probes
-// downloadAndSwap runs, padded past its plausibility floor.
-func fakeRelease(ver string) []byte {
-	script := "#!/bin/sh\n" +
-		"case \"$1\" in\n" +
-		"  version) echo " + ver + " ;;\n" +
-		"  capabilities) echo '{\"schemaVersion\":1}' ;;\n" +
-		"esac\n" +
-		"exit 0\n"
-	return []byte(script + "# " + strings.Repeat("x", 1_000_000) + "\n")
-}
-
 // A self-update of an install.sh install replaces the file in ~/.orbit/bin, leaving the
 // /usr/local/bin/orbit symlink pointing at it. As root (`sudo orbit upgrade`) the new file
 // stays the account's.
@@ -588,27 +571,15 @@ func TestUserBinSelfUpdateReplacesTheCopyInOrbitBin(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	release := fakeRelease("9.9.9")
-	var gz bytes.Buffer
-	w := gzip.NewWriter(&gz)
-	_, _ = w.Write(release)
-	_ = w.Close()
-	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/dl/orbit-"+platformKey()+".gz" {
-			http.NotFound(rw, r)
-			return
-		}
-		_, _ = rw.Write(gz.Bytes())
-	}))
-	defer srv.Close()
+	binary, gz := fakeRelease(t, sha256TestRelease, "user-bin")
+	manifest := sha256TestManifest(publishedAssets(gz))
+	srv := serveRelease(t, manifest, gz)
 
-	sum := sha256.Sum256(gz.Bytes())
-	manifest := Manifest{Version: "9.9.9", Assets: map[string]ManifestAsset{platformKey(): {SHA256: hex.EncodeToString(sum[:])}}}
 	var log strings.Builder
 	if !downloadAndSwap(srv.URL, platformKey(), manifest, func(s string) { log.WriteString(s) }) {
 		t.Fatalf("downloadAndSwap failed: %s", log.String())
 	}
-	if got, _ := os.ReadFile(real); !bytes.Equal(got, release) {
+	if got, _ := os.ReadFile(real); !bytes.Equal(got, binary) {
 		t.Fatalf("%s was not replaced by the release", real)
 	}
 	if fi, err := os.Lstat(link); err != nil || fi.Mode()&os.ModeSymlink == 0 {

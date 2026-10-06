@@ -439,7 +439,7 @@ func upgrade(server string) {
 	// runner can replace it next time. Its service restarts once the release is in place.
 	var restart func()
 	if os.Geteuid() == 0 {
-		if exe, err := resolvedExecutable(); err == nil {
+		if exe, err := selfUpdateTarget(); err == nil {
 			restart = migrateLegacyInstall(exe)
 		}
 	}
