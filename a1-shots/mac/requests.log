@@ -1,0 +1,33 @@
+22:27:52 :8765   GET /api/auth/methods
+22:27:52 :8765 "GET /api/auth/methods HTTP/1.1" 200 -
+22:27:52 :8769   GET /api/auth/methods
+22:27:52 :8769 "GET /api/auth/methods HTTP/1.1" 200 -
+22:27:52 :8765   GET /api/auth/methods
+22:27:52 :8765 "GET /api/auth/methods HTTP/1.1" 200 -
+22:31:37 :8765 "POST /__reset HTTP/1.1" 200 -
+22:31:39 :8765   GET /api/auth/methods
+22:31:39 :8765 "GET /api/auth/methods HTTP/1.1" 200 -
+22:31:41 :8765 "GET /__log HTTP/1.1" 200 -
+22:31:44 :8765 "POST /__reset HTTP/1.1" 200 -
+22:31:46 :8766   GET /api/auth/methods
+22:31:46 :8766 "GET /api/auth/methods HTTP/1.1" 200 -
+22:31:48 :8765 "GET /__log HTTP/1.1" 200 -
+22:31:50 :8765 "POST /__reset HTTP/1.1" 200 -
+22:31:52 :8767   GET /api/auth/methods
+22:31:52 :8767 "GET /api/auth/methods HTTP/1.1" 200 -
+22:31:54 :8765 "GET /__log HTTP/1.1" 200 -
+22:31:56 :8765 "POST /__reset HTTP/1.1" 200 -
+22:31:58 :8768   GET /api/auth/methods
+22:31:58 :8768 "GET /api/auth/methods HTTP/1.1" 404 -
+22:32:00 :8765 "GET /__log HTTP/1.1" 200 -
+22:32:03 :8765 "POST /__reset HTTP/1.1" 200 -
+22:32:06 :8765   GET /api/auth/methods
+22:32:06 :8765 "GET /api/auth/methods HTTP/1.1" 200 -
+22:32:08 :8765 "GET /__log HTTP/1.1" 200 -
+22:32:12 :8765 "POST /__reset HTTP/1.1" 200 -
+22:32:15 :8765   GET /api/auth/methods
+22:32:15 :8765 "GET /api/auth/methods HTTP/1.1" 200 -
+22:33:49 :8765 "GET /__log HTTP/1.1" 200 -
+22:33:50 :8765 "POST /__reset HTTP/1.1" 200 -
+22:33:53 :8769   GET /api/auth/methods
+22:33:53 :8769 "GET /api/auth/methods HTTP/1.1" 200 -

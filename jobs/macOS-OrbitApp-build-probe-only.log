@@ -1,0 +1,1123 @@
+﻿2026-10-06T22:28:18.1851320Z Current runner version: '2.337.0'
+2026-10-06T22:28:18.1904260Z ##[group]Runner Image Provisioner
+2026-10-06T22:28:18.1906580Z Hosted Compute Agent
+2026-10-06T22:28:18.1907730Z Version: 20260828.587
+2026-10-06T22:28:18.1910280Z Commit: abac92662cab4cc7352de4f9f9d2e2419aad9c29
+2026-10-06T22:28:18.1911250Z Build Date: 2026-08-28T16:44:25Z
+2026-10-06T22:28:18.1912460Z Worker ID: {800feee1-92a7-4875-886b-c56e3781496a}
+2026-10-06T22:28:18.1914480Z Azure Region: westus
+2026-10-06T22:28:18.1915310Z ##[endgroup]
+2026-10-06T22:28:18.1917120Z ##[group]Operating System
+2026-10-06T22:28:18.1917640Z macOS
+2026-10-06T22:28:18.1917970Z 15.7.9
+2026-10-06T22:28:18.1918290Z 24G830
+2026-10-06T22:28:18.1919860Z ##[endgroup]
+2026-10-06T22:28:18.1920250Z ##[group]Runner Image
+2026-10-06T22:28:18.1920680Z Image: macos-15-arm64
+2026-10-06T22:28:18.1921170Z Version: 20260907.0337.1
+2026-10-06T22:28:18.1922120Z Included Software: https://github.com/actions/runner-images/blob/macos-15-arm64/20260907.0337/images/macos/macos-15-arm64-Readme.md
+2026-10-06T22:28:18.1924120Z Image Release: https://github.com/actions/runner-images/releases/tag/macos-15-arm64%2F20260907.0337
+2026-10-06T22:28:18.1925080Z ##[endgroup]
+2026-10-06T22:28:18.1926030Z ##[group]GITHUB_TOKEN Permissions
+2026-10-06T22:28:18.1927950Z Contents: read
+2026-10-06T22:28:18.1929550Z Metadata: read
+2026-10-06T22:28:18.1930010Z Packages: read
+2026-10-06T22:28:18.1930570Z ##[endgroup]
+2026-10-06T22:28:18.1933510Z Secret source: Actions
+2026-10-06T22:28:18.1934620Z Cache mode: write
+2026-10-06T22:28:18.1935340Z Prepare workflow directory
+2026-10-06T22:28:18.2339770Z Prepare all required actions
+2026-10-06T22:28:18.2376630Z Getting action download info
+2026-10-06T22:28:18.5890240Z Download action repository 'actions/checkout@v7' (SHA:3d3c42e5aac5ba805825da76410c181273ba90b1)
+2026-10-06T22:28:18.9528800Z Download action repository 'maxim-lobanov/setup-xcode@v1' (SHA:ed7a3b1fda3918c0306d1b724322adc0b8cc0a90)
+2026-10-06T22:28:19.4487240Z Complete job name: macOS OrbitApp build (probe-only)
+2026-10-06T22:28:19.4992870Z ##[group]Run actions/checkout@v7
+2026-10-06T22:28:19.4994280Z with:
+2026-10-06T22:28:19.4994650Z   repository: jianghailong-xy/orbit
+2026-10-06T22:28:19.4997750Z   token: ***
+2026-10-06T22:28:19.4998090Z   ssh-strict: true
+2026-10-06T22:28:19.4998430Z   ssh-user: git
+2026-10-06T22:28:19.4998780Z   persist-credentials: true
+2026-10-06T22:28:19.4999250Z   clean: true
+2026-10-06T22:28:19.4999630Z   sparse-checkout-cone-mode: true
+2026-10-06T22:28:19.5000220Z   fetch-depth: 1
+2026-10-06T22:28:19.5000560Z   fetch-tags: false
+2026-10-06T22:28:19.5000900Z   show-progress: true
+2026-10-06T22:28:19.5001250Z   lfs: false
+2026-10-06T22:28:19.5001570Z   submodules: false
+2026-10-06T22:28:19.5001920Z   set-safe-directory: true
+2026-10-06T22:28:19.5002320Z   allow-unsafe-pr-checkout: false
+2026-10-06T22:28:19.5003180Z ##[endgroup]
+2026-10-06T22:28:19.8739380Z Syncing repository: jianghailong-xy/orbit
+2026-10-06T22:28:19.8740940Z ##[group]Getting Git version info
+2026-10-06T22:28:19.8741660Z Working directory is '/Users/runner/work/orbit/orbit'
+2026-10-06T22:28:19.8749940Z [command]/opt/homebrew/bin/git version
+2026-10-06T22:28:19.9297090Z git version 2.55.0
+2026-10-06T22:28:19.9313660Z ##[endgroup]
+2026-10-06T22:28:19.9324660Z Copying '/Users/runner/.gitconfig' to '/Users/runner/work/_temp/3812af90-27c2-45e2-a68f-6fe7f7c307e5/.gitconfig'
+2026-10-06T22:28:19.9327990Z Temporarily overriding HOME='/Users/runner/work/_temp/3812af90-27c2-45e2-a68f-6fe7f7c307e5' before making global git config changes
+2026-10-06T22:28:19.9331080Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-06T22:28:19.9333820Z [command]/opt/homebrew/bin/git config --global --add safe.directory /Users/runner/work/orbit/orbit
+2026-10-06T22:28:19.9435440Z Deleting the contents of '/Users/runner/work/orbit/orbit'
+2026-10-06T22:28:19.9438310Z ##[group]Determining repository object format
+2026-10-06T22:28:19.9440490Z ##[endgroup]
+2026-10-06T22:28:19.9442430Z ##[group]Initializing the repository
+2026-10-06T22:28:19.9445450Z [command]/opt/homebrew/bin/git init /Users/runner/work/orbit/orbit
+2026-10-06T22:28:19.9651990Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-10-06T22:28:19.9653830Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-10-06T22:28:19.9654810Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-10-06T22:28:19.9655800Z hint: call:
+2026-10-06T22:28:19.9656300Z hint:
+2026-10-06T22:28:19.9656800Z hint: 	git config --global init.defaultBranch <name>
+2026-10-06T22:28:19.9657320Z hint:
+2026-10-06T22:28:19.9657840Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-10-06T22:28:19.9658610Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-10-06T22:28:19.9659240Z hint:
+2026-10-06T22:28:19.9659600Z hint: 	git branch -m <name>
+2026-10-06T22:28:19.9660030Z hint:
+2026-10-06T22:28:19.9660630Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-10-06T22:28:19.9661730Z Initialized empty Git repository in /Users/runner/work/orbit/orbit/.git/
+2026-10-06T22:28:19.9667320Z [command]/opt/homebrew/bin/git remote add origin https://github.com/jianghailong-xy/orbit
+2026-10-06T22:28:19.9741130Z ##[endgroup]
+2026-10-06T22:28:19.9743060Z ##[group]Disabling automatic garbage collection
+2026-10-06T22:28:19.9744960Z [command]/opt/homebrew/bin/git config --local gc.auto 0
+2026-10-06T22:28:19.9811690Z ##[endgroup]
+2026-10-06T22:28:19.9813870Z ##[group]Setting up auth
+2026-10-06T22:28:19.9815480Z Removing SSH command configuration
+2026-10-06T22:28:19.9817840Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-06T22:28:19.9879910Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-06T22:28:20.0877350Z Removing HTTP extra header
+2026-10-06T22:28:20.0881080Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-06T22:28:20.0943200Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-06T22:28:20.1772670Z Removing includeIf entries pointing to credentials config files
+2026-10-06T22:28:20.1774780Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-06T22:28:20.1840330Z [command]/opt/homebrew/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-06T22:28:20.4386900Z [command]/opt/homebrew/bin/git config --file /Users/runner/work/_temp/git-credentials-eabfef20-1063-4726-8c30-8148f33f7fcb.config http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-10-06T22:28:20.4390860Z [command]/opt/homebrew/bin/git config --local includeIf.gitdir:/Users/runner/work/orbit/orbit/.git.path /Users/runner/work/_temp/git-credentials-eabfef20-1063-4726-8c30-8148f33f7fcb.config
+2026-10-06T22:28:20.4394390Z [command]/opt/homebrew/bin/git config --local includeIf.gitdir:/Users/runner/work/orbit/orbit/.git/worktrees/*.path /Users/runner/work/_temp/git-credentials-eabfef20-1063-4726-8c30-8148f33f7fcb.config
+2026-10-06T22:28:20.4397780Z [command]/opt/homebrew/bin/git config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-eabfef20-1063-4726-8c30-8148f33f7fcb.config
+2026-10-06T22:28:20.4400790Z [command]/opt/homebrew/bin/git config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-eabfef20-1063-4726-8c30-8148f33f7fcb.config
+2026-10-06T22:28:20.4442520Z ##[endgroup]
+2026-10-06T22:28:20.4463800Z ##[group]Fetching the repository
+2026-10-06T22:28:20.4498780Z [command]/opt/homebrew/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +8d8afb3414067382e846b497024eacaee73bbc4e:refs/remotes/origin/probe/a1-google
+2026-10-06T22:29:03.7742800Z From https://github.com/jianghailong-xy/orbit
+2026-10-06T22:29:03.7746780Z  * [new ref]         8d8afb3414067382e846b497024eacaee73bbc4e -> origin/probe/a1-google
+2026-10-06T22:29:03.7761490Z [command]/opt/homebrew/bin/git branch --list --remote origin/probe/a1-google
+2026-10-06T22:29:03.7928750Z   origin/probe/a1-google
+2026-10-06T22:29:03.7986780Z [command]/opt/homebrew/bin/git rev-parse refs/remotes/origin/probe/a1-google
+2026-10-06T22:29:03.8070730Z 8d8afb3414067382e846b497024eacaee73bbc4e
+2026-10-06T22:29:03.8203780Z ##[endgroup]
+2026-10-06T22:29:03.8213360Z ##[group]Determining the checkout info
+2026-10-06T22:29:03.8214450Z ##[endgroup]
+2026-10-06T22:29:03.8215150Z [command]/opt/homebrew/bin/git sparse-checkout disable
+2026-10-06T22:29:03.8268210Z [command]/opt/homebrew/bin/git config --local --unset-all extensions.worktreeConfig
+2026-10-06T22:29:03.8445900Z ##[group]Checking out the ref
+2026-10-06T22:29:03.8448100Z [command]/opt/homebrew/bin/git checkout --progress --force -B probe/a1-google refs/remotes/origin/probe/a1-google
+2026-10-06T22:29:05.0116460Z Updating files:   7% (2014/28753)
+2026-10-06T22:29:05.0974580Z Updating files:   8% (2301/28753)
+2026-10-06T22:29:05.1747770Z Updating files:   9% (2588/28753)
+2026-10-06T22:29:05.3036790Z Updating files:  10% (2876/28753)
+2026-10-06T22:29:05.3893460Z Updating files:  11% (3163/28753)
+2026-10-06T22:29:05.5410760Z Updating files:  12% (3451/28753)
+2026-10-06T22:29:05.6057330Z Updating files:  13% (3738/28753)
+2026-10-06T22:29:05.6984910Z Updating files:  14% (4026/28753)
+2026-10-06T22:29:05.7750230Z Updating files:  15% (4313/28753)
+2026-10-06T22:29:05.8773060Z Updating files:  16% (4601/28753)
+2026-10-06T22:29:05.8814830Z Updating files:  17% (4889/28753)
+2026-10-06T22:29:05.9271430Z Updating files:  17% (4910/28753)
+2026-10-06T22:29:06.0381710Z Updating files:  18% (5176/28753)
+2026-10-06T22:29:06.1068620Z Updating files:  19% (5464/28753)
+2026-10-06T22:29:06.1526200Z Updating files:  20% (5751/28753)
+2026-10-06T22:29:06.1905880Z Updating files:  21% (6039/28753)
+2026-10-06T22:29:06.2311020Z Updating files:  22% (6326/28753)
+2026-10-06T22:29:06.2838570Z Updating files:  23% (6614/28753)
+2026-10-06T22:29:06.3295610Z Updating files:  24% (6901/28753)
+2026-10-06T22:29:06.3664190Z Updating files:  25% (7189/28753)
+2026-10-06T22:29:06.5741100Z Updating files:  26% (7476/28753)
+2026-10-06T22:29:06.7099570Z Updating files:  27% (7764/28753)
+2026-10-06T22:29:06.7822050Z Updating files:  28% (8051/28753)
+2026-10-06T22:29:06.8208360Z Updating files:  29% (8339/28753)
+2026-10-06T22:29:06.8976870Z Updating files:  30% (8626/28753)
+2026-10-06T22:29:06.9117640Z Updating files:  30% (8838/28753)
+2026-10-06T22:29:07.0369230Z Updating files:  31% (8914/28753)
+2026-10-06T22:29:07.0954800Z Updating files:  32% (9201/28753)
+2026-10-06T22:29:07.1457230Z Updating files:  33% (9489/28753)
+2026-10-06T22:29:07.2430530Z Updating files:  34% (9777/28753)
+2026-10-06T22:29:07.3863110Z Updating files:  35% (10064/28753)
+2026-10-06T22:29:07.4541140Z Updating files:  36% (10352/28753)
+2026-10-06T22:29:07.4983040Z Updating files:  37% (10639/28753)
+2026-10-06T22:29:07.6030780Z Updating files:  38% (10927/28753)
+2026-10-06T22:29:07.6628130Z Updating files:  39% (11214/28753)
+2026-10-06T22:29:07.8051220Z Updating files:  40% (11502/28753)
+2026-10-06T22:29:07.8814140Z Updating files:  41% (11789/28753)
+2026-10-06T22:29:07.9143520Z Updating files:  41% (11958/28753)
+2026-10-06T22:29:08.0316680Z Updating files:  42% (12077/28753)
+2026-10-06T22:29:08.1067920Z Updating files:  43% (12364/28753)
+2026-10-06T22:29:08.2356260Z Updating files:  44% (12652/28753)
+2026-10-06T22:29:08.4533810Z Updating files:  45% (12939/28753)
+2026-10-06T22:29:08.6602470Z Updating files:  46% (13227/28753)
+2026-10-06T22:29:08.8819360Z Updating files:  47% (13514/28753)
+2026-10-06T22:29:08.8954570Z Updating files:  47% (13761/28753)
+2026-10-06T22:29:08.9787770Z Updating files:  48% (13802/28753)
+2026-10-06T22:29:09.0937990Z Updating files:  49% (14089/28753)
+2026-10-06T22:29:09.3325240Z Updating files:  50% (14377/28753)
+2026-10-06T22:29:09.8972910Z Updating files:  51% (14665/28753)
+2026-10-06T22:29:10.0170540Z Updating files:  51% (14802/28753)
+2026-10-06T22:29:10.0766160Z Updating files:  52% (14952/28753)
+2026-10-06T22:29:10.1391140Z Updating files:  53% (15240/28753)
+2026-10-06T22:29:10.2621770Z Updating files:  54% (15527/28753)
+2026-10-06T22:29:10.3465510Z Updating files:  55% (15815/28753)
+2026-10-06T22:29:10.4366530Z Updating files:  56% (16102/28753)
+2026-10-06T22:29:10.5492330Z Updating files:  57% (16390/28753)
+2026-10-06T22:29:10.6703650Z Updating files:  58% (16677/28753)
+2026-10-06T22:29:10.7905360Z Updating files:  59% (16965/28753)
+2026-10-06T22:29:10.8909860Z Updating files:  60% (17252/28753)
+2026-10-06T22:29:10.9443840Z Updating files:  60% (17341/28753)
+2026-10-06T22:29:11.1768790Z Updating files:  61% (17540/28753)
+2026-10-06T22:29:11.8070370Z Updating files:  62% (17827/28753)
+2026-10-06T22:29:11.8993060Z Updating files:  63% (18115/28753)
+2026-10-06T22:29:12.1680650Z Updating files:  63% (18173/28753)
+2026-10-06T22:29:12.3512590Z Updating files:  64% (18402/28753)
+2026-10-06T22:29:12.4599740Z Updating files:  65% (18690/28753)
+2026-10-06T22:29:12.6288470Z Updating files:  66% (18977/28753)
+2026-10-06T22:29:12.7091180Z Updating files:  67% (19265/28753)
+2026-10-06T22:29:12.8182290Z Updating files:  68% (19553/28753)
+2026-10-06T22:29:12.8816990Z Updating files:  69% (19840/28753)
+2026-10-06T22:29:12.8967000Z Updating files:  69% (20098/28753)
+2026-10-06T22:29:13.0071770Z Updating files:  70% (20128/28753)
+2026-10-06T22:29:13.1390920Z Updating files:  71% (20415/28753)
+2026-10-06T22:29:13.2231340Z Updating files:  72% (20703/28753)
+2026-10-06T22:29:13.3074820Z Updating files:  73% (20990/28753)
+2026-10-06T22:29:13.5055250Z Updating files:  74% (21278/28753)
+2026-10-06T22:29:13.6069300Z Updating files:  75% (21565/28753)
+2026-10-06T22:29:13.7494550Z Updating files:  76% (21853/28753)
+2026-10-06T22:29:13.8302950Z Updating files:  77% (22140/28753)
+2026-10-06T22:29:13.8816230Z Updating files:  78% (22428/28753)
+2026-10-06T22:29:13.9002770Z Updating files:  78% (22607/28753)
+2026-10-06T22:29:13.9620270Z Updating files:  79% (22715/28753)
+2026-10-06T22:29:14.0537500Z Updating files:  80% (23003/28753)
+2026-10-06T22:29:14.1111510Z Updating files:  81% (23290/28753)
+2026-10-06T22:29:14.2155470Z Updating files:  82% (23578/28753)
+2026-10-06T22:29:14.3227320Z Updating files:  83% (23865/28753)
+2026-10-06T22:29:14.8930690Z Updating files:  84% (24153/28753)
+2026-10-06T22:29:14.9148410Z Updating files:  84% (24433/28753)
+2026-10-06T22:29:15.8921980Z Updating files:  85% (24441/28753)
+2026-10-06T22:29:16.3541170Z Updating files:  85% (24686/28753)
+2026-10-06T22:29:16.4865230Z Updating files:  86% (24728/28753)
+2026-10-06T22:29:16.5569300Z Updating files:  87% (25016/28753)
+2026-10-06T22:29:16.6406730Z Updating files:  88% (25303/28753)
+2026-10-06T22:29:16.7444000Z Updating files:  89% (25591/28753)
+2026-10-06T22:29:16.8017910Z Updating files:  90% (25878/28753)
+2026-10-06T22:29:16.8811840Z Updating files:  91% (26166/28753)
+2026-10-06T22:29:16.8841610Z Updating files:  91% (26440/28753)
+2026-10-06T22:29:16.9677670Z Updating files:  92% (26453/28753)
+2026-10-06T22:29:17.0241500Z Updating files:  93% (26741/28753)
+2026-10-06T22:29:17.0800110Z Updating files:  94% (27028/28753)
+2026-10-06T22:29:17.1384570Z Updating files:  95% (27316/28753)
+2026-10-06T22:29:17.2141390Z Updating files:  96% (27603/28753)
+2026-10-06T22:29:17.2708380Z Updating files:  97% (27891/28753)
+2026-10-06T22:29:17.3337300Z Updating files:  98% (28178/28753)
+2026-10-06T22:29:17.3915970Z Updating files:  99% (28466/28753)
+2026-10-06T22:29:17.3918530Z Updating files: 100% (28753/28753)
+2026-10-06T22:29:17.3919000Z Updating files: 100% (28753/28753), done.
+2026-10-06T22:29:17.4489150Z Switched to a new branch 'probe/a1-google'
+2026-10-06T22:29:17.4496480Z branch 'probe/a1-google' set up to track 'origin/probe/a1-google'.
+2026-10-06T22:29:17.4615540Z ##[endgroup]
+2026-10-06T22:29:17.4915340Z [command]/opt/homebrew/bin/git log -1 --format=%H
+2026-10-06T22:29:17.5058600Z 8d8afb3414067382e846b497024eacaee73bbc4e
+2026-10-06T22:29:17.5724620Z ##[group]Run maxim-lobanov/setup-xcode@v1
+2026-10-06T22:29:17.5725380Z with:
+2026-10-06T22:29:17.5725650Z   xcode-version: latest-stable
+2026-10-06T22:29:17.5726050Z ##[endgroup]
+2026-10-06T22:29:17.7925600Z Switching Xcode to version 'latest-stable'...
+2026-10-06T22:29:17.9797170Z Xcode is set to 26.3.0 (17C529)
+2026-10-06T22:29:17.9950430Z ##[group]Run swift --version && xcodebuild -version
+2026-10-06T22:29:17.9950990Z [36;1mswift --version && xcodebuild -version[0m
+2026-10-06T22:29:18.0265050Z shell: /bin/bash -e {0}
+2026-10-06T22:29:18.0265910Z env:
+2026-10-06T22:29:18.0266500Z   MD_APPLE_SDK_ROOT: /Applications/Xcode_26.3.app
+2026-10-06T22:29:18.0267370Z ##[endgroup]
+2026-10-06T22:29:23.8628290Z Apple Swift version 6.2.4 (swiftlang-6.2.4.1.4 clang-1700.6.4.2)
+2026-10-06T22:29:23.8629670Z Target: arm64-apple-macosx15.0
+2026-10-06T22:29:24.6535210Z Xcode 26.3
+2026-10-06T22:29:24.6536080Z Build version 17C529
+2026-10-06T22:29:24.6542700Z swift-driver version: 1.127.15 
+2026-10-06T22:29:24.6625320Z ##[group]Run swift build
+2026-10-06T22:29:24.6625680Z [36;1mswift build[0m
+2026-10-06T22:29:24.6665570Z shell: /bin/bash -e {0}
+2026-10-06T22:29:24.6665840Z env:
+2026-10-06T22:29:24.6666350Z   MD_APPLE_SDK_ROOT: /Applications/Xcode_26.3.app
+2026-10-06T22:29:24.6666720Z ##[endgroup]
+2026-10-06T22:29:29.6914420Z Fetching https://github.com/sparkle-project/Sparkle
+2026-10-06T22:29:29.6936090Z Fetching https://github.com/swiftlang/swift-cmark.git
+2026-10-06T22:29:30.4461860Z [1/44166] Fetching sparkle
+2026-10-06T22:29:30.4652180Z [443/62779] Fetching sparkle, swift-cmark
+2026-10-06T22:29:30.8960630Z Fetched https://github.com/swiftlang/swift-cmark.git from cache (1.20s)
+2026-10-06T22:29:30.9055030Z Fetching https://github.com/apple/swift-markdown
+2026-10-06T22:29:31.3760310Z [6625/44166] Fetching sparkle
+2026-10-06T22:29:31.4913680Z [9276/51929] Fetching sparkle, swift-markdown
+2026-10-06T22:29:31.6929080Z Fetched https://github.com/apple/swift-markdown from cache (0.79s)
+2026-10-06T22:29:31.7031710Z [11925/44166] Fetching sparkle
+2026-10-06T22:29:34.1579830Z Fetched https://github.com/sparkle-project/Sparkle from cache (4.47s)
+2026-10-06T22:29:34.1584690Z Computing version for https://github.com/apple/swift-markdown
+2026-10-06T22:29:43.2872290Z Computed https://github.com/apple/swift-markdown at 0.8.0 (13.60s)
+2026-10-06T22:29:43.2882030Z Computing version for https://github.com/sparkle-project/Sparkle
+2026-10-06T22:29:46.2941890Z Computed https://github.com/sparkle-project/Sparkle at 2.10.0 (3.01s)
+2026-10-06T22:29:46.2942880Z Computing version for https://github.com/swiftlang/swift-cmark.git
+2026-10-06T22:29:46.9618830Z Computed https://github.com/swiftlang/swift-cmark.git at 0.8.0 (0.67s)
+2026-10-06T22:29:47.1054010Z Creating working copy for https://github.com/sparkle-project/Sparkle
+2026-10-06T22:29:47.6370380Z Working copy of https://github.com/sparkle-project/Sparkle resolved at 2.10.0
+2026-10-06T22:29:47.6817200Z Creating working copy for https://github.com/swiftlang/swift-cmark.git
+2026-10-06T22:29:47.9551830Z Working copy of https://github.com/swiftlang/swift-cmark.git resolved at 0.8.0
+2026-10-06T22:29:48.0112210Z Creating working copy for https://github.com/apple/swift-markdown
+2026-10-06T22:29:48.2184260Z Working copy of https://github.com/apple/swift-markdown resolved at 0.8.0
+2026-10-06T22:29:50.3474740Z Downloading binary artifact https://github.com/sparkle-project/Sparkle/releases/download/2.10.0/Sparkle-for-Swift-Package-Manager.zip
+2026-10-06T22:29:50.6901310Z [5503/10193895] Downloading https://github.com/sparkle-project/Sparkle/releases/download/2.10.0/Sparkle-for-Swift-Package-Manager.zip
+2026-10-06T22:29:51.4868570Z Downloaded https://github.com/sparkle-project/Sparkle/releases/download/2.10.0/Sparkle-for-Swift-Package-Manager.zip (1.14s)
+2026-10-06T22:29:51.7267140Z Building for debugging...
+2026-10-06T22:29:51.9738510Z [0/44] Write swift-version-1977FEB4D2752686.txt
+2026-10-06T22:29:52.3611250Z [1/44] Compiling cmark-gfm-extensions tagfilter.c
+2026-10-06T22:29:52.3824360Z [2/44] Compiling cmark-gfm-extensions tasklist.c
+2026-10-06T22:29:52.4195040Z [3/44] Compiling cmark-gfm-extensions strikethrough.c
+2026-10-06T22:29:52.4297130Z [4/44] Compiling cmark-gfm-extensions ext_scanners.c
+2026-10-06T22:29:52.4462090Z [5/44] Compiling cmark-gfm-extensions table.c
+2026-10-06T22:29:52.4760200Z [6/44] Compiling cmark-gfm-extensions core-extensions.c
+2026-10-06T22:29:52.5239120Z [7/44] Compiling cmark-gfm xml.c
+2026-10-06T22:29:52.5752870Z [8/44] Compiling cmark-gfm syntax_extension.c
+2026-10-06T22:29:52.6100100Z [9/44] Compiling cmark-gfm utf8.c
+2026-10-06T22:29:52.6825020Z [10/44] Compiling cmark-gfm render.c
+2026-10-06T22:29:52.7466120Z [11/44] Compiling cmark-gfm registry.c
+2026-10-06T22:29:52.7929230Z [12/44] Compiling cmark-gfm scanners.c
+2026-10-06T22:29:52.8161880Z [13/44] Compiling cmark-gfm references.c
+2026-10-06T22:29:52.8731460Z [14/44] Compiling cmark-gfm plugin.c
+2026-10-06T22:29:52.9117160Z [15/44] Compiling cmark-gfm plaintext.c
+2026-10-06T22:29:52.9682940Z [16/44] Compiling cmark-gfm-extensions autolink.c
+2026-10-06T22:29:52.9819380Z [17/44] Compiling cmark-gfm node.c
+2026-10-06T22:29:52.9948290Z [18/44] Compiling cmark-gfm map.c
+2026-10-06T22:29:53.0531880Z [19/44] Compiling cmark-gfm linked_list.c
+2026-10-06T22:29:53.0635700Z [20/44] Compiling cmark-gfm man.c
+2026-10-06T22:29:53.0837610Z [21/44] Compiling cmark-gfm latex.c
+2026-10-06T22:29:53.1041400Z [22/44] Compiling cmark-gfm iterator.c
+2026-10-06T22:29:53.1591890Z [23/44] Compiling cmark-gfm html.c
+2026-10-06T22:29:53.1780950Z [24/44] Compiling cmark-gfm inlines.c
+2026-10-06T22:29:53.2027610Z [25/44] Compiling cmark-gfm houdini_html_u.c
+2026-10-06T22:29:53.2259190Z [26/44] Compiling cmark-gfm houdini_html_e.c
+2026-10-06T22:29:53.2355270Z [27/44] Compiling cmark-gfm houdini_href_e.c
+2026-10-06T22:29:53.2565360Z [28/44] Compiling cmark-gfm footnotes.c
+2026-10-06T22:29:53.2768210Z [29/44] Compiling cmark-gfm cmark_ctype.c
+2026-10-06T22:29:53.2972910Z [30/44] Compiling cmark-gfm commonmark.c
+2026-10-06T22:29:53.3282650Z [31/44] Compiling cmark-gfm cmark.c
+2026-10-06T22:29:53.3478930Z [32/44] Compiling cmark-gfm buffer.c
+2026-10-06T22:29:53.3934790Z [33/44] Compiling cmark-gfm arena.c
+2026-10-06T22:29:53.4036470Z [33/44] Copying Sparkle.framework
+2026-10-06T22:29:53.4138560Z [33/44] Write sources
+2026-10-06T22:29:53.4244820Z [38/44] Write OrbitApp-entitlement.plist
+2026-10-06T22:29:53.4298770Z [39/44] Compiling cmark-gfm blocks.c
+2026-10-06T22:29:53.4407350Z [40/44] Compiling CAtomic CAtomic.c
+2026-10-06T22:29:57.8966720Z [42/92] Emitting module Markdown
+2026-10-06T22:30:03.5338390Z [43/115] Compiling Markdown ThematicBreak.swift
+2026-10-06T22:30:03.5434490Z [44/115] Compiling Markdown Table.swift
+2026-10-06T22:30:03.5537490Z [45/115] Compiling Markdown TableBody.swift
+2026-10-06T22:30:03.5639240Z [46/115] Compiling Markdown TableCell.swift
+2026-10-06T22:30:03.5742020Z [47/115] Compiling Markdown TableCellContainer.swift
+2026-10-06T22:30:03.5844380Z [48/115] Compiling Markdown TableHead.swift
+2026-10-06T22:30:03.5959520Z [49/115] Compiling Markdown TableRow.swift
+2026-10-06T22:30:03.6068890Z [50/115] Compiling Markdown Replacement.swift
+2026-10-06T22:30:03.6171600Z [51/115] Compiling Markdown SourceLocation.swift
+2026-10-06T22:30:03.6272090Z [52/115] Compiling Markdown Emphasis.swift
+2026-10-06T22:30:03.6372980Z [53/115] Compiling Markdown Image.swift
+2026-10-06T22:30:03.6474430Z [54/115] Compiling Markdown InlineAttributes.swift
+2026-10-06T22:30:03.6576250Z [55/115] Compiling Markdown Link.swift
+2026-10-06T22:30:03.6667430Z [56/115] Compiling Markdown Strikethrough.swift
+2026-10-06T22:30:03.6765310Z [57/115] Compiling Markdown Strong.swift
+2026-10-06T22:30:03.6867120Z [58/115] Compiling Markdown CustomInline.swift
+2026-10-06T22:30:03.6929880Z [59/115] Compiling Markdown InlineCode.swift
+2026-10-06T22:30:03.7047160Z [60/115] Compiling Markdown InlineHTML.swift
+2026-10-06T22:30:03.7086160Z [61/115] Compiling Markdown LineBreak.swift
+2026-10-06T22:30:03.7188080Z [62/115] Compiling Markdown SoftBreak.swift
+2026-10-06T22:30:03.7296440Z [63/115] Compiling Markdown SymbolLink.swift
+2026-10-06T22:30:03.7398960Z [64/115] Compiling Markdown Text.swift
+2026-10-06T22:30:03.7500550Z [65/115] Compiling Markdown Aside.swift
+2026-10-06T22:30:03.7587640Z [66/115] Compiling Markdown ChildIndexPath.swift
+2026-10-06T22:30:03.7674340Z [67/115] Compiling Markdown DirectiveArgument.swift
+2026-10-06T22:30:03.7732270Z [68/115] Compiling Markdown Document.swift
+2026-10-06T22:30:03.7734130Z [69/115] Compiling Markdown LiteralMarkup.swift
+2026-10-06T22:30:03.7735520Z [70/115] Compiling Markdown Markup.swift
+2026-10-06T22:30:03.7736760Z [71/115] Compiling Markdown MarkupChildren.swift
+2026-10-06T22:30:03.7738050Z [72/115] Compiling Markdown MarkupData.swift
+2026-10-06T22:30:03.7739340Z [73/115] Compiling Markdown PlainTextConvertibleMarkup.swift
+2026-10-06T22:30:03.7750840Z [74/115] Compiling Markdown RawMarkup.swift
+2026-10-06T22:30:03.7752200Z [75/115] Compiling Markdown BlockDirective.swift
+2026-10-06T22:30:03.7768930Z [76/115] Compiling Markdown BlockQuote.swift
+2026-10-06T22:30:03.7770550Z [77/115] Compiling Markdown CustomBlock.swift
+2026-10-06T22:30:03.7771480Z [78/115] Compiling Markdown DoxygenAbstract.swift
+2026-10-06T22:30:03.7772420Z [79/115] Compiling Markdown DoxygenDiscussion.swift
+2026-10-06T22:30:03.7773220Z [80/115] Compiling Markdown DoxygenNote.swift
+2026-10-06T22:30:03.7774030Z [81/115] Compiling Markdown DoxygenParameter.swift
+2026-10-06T22:30:03.7775020Z [82/115] Compiling Markdown DoxygenReturns.swift
+2026-10-06T22:30:03.7775920Z [83/115] Compiling Markdown ListItem.swift
+2026-10-06T22:30:03.7776640Z [84/115] Compiling Markdown OrderedList.swift
+2026-10-06T22:30:03.7777490Z [85/115] Compiling Markdown UnorderedList.swift
+2026-10-06T22:30:03.7778250Z [86/115] Compiling Markdown Paragraph.swift
+2026-10-06T22:30:03.7779090Z [87/115] Compiling Markdown CodeBlock.swift
+2026-10-06T22:30:03.7779920Z [88/115] Compiling Markdown HTMLBlock.swift
+2026-10-06T22:30:03.7780610Z [89/115] Compiling Markdown Heading.swift
+2026-10-06T22:30:04.4453290Z [90/115] Compiling Markdown BlockDirectiveParser.swift
+2026-10-06T22:30:04.4454700Z [91/115] Compiling Markdown CommonMarkConverter.swift
+2026-10-06T22:30:04.4455750Z [92/115] Compiling Markdown LazySplitLines.swift
+2026-10-06T22:30:04.4456630Z [93/115] Compiling Markdown ParseOptions.swift
+2026-10-06T22:30:04.4457630Z [94/115] Compiling Markdown RangeAdjuster.swift
+2026-10-06T22:30:04.4458590Z [95/115] Compiling Markdown RangerTracker.swift
+2026-10-06T22:30:04.4459720Z [96/115] Compiling Markdown MarkupRewriter.swift
+2026-10-06T22:30:04.4460740Z [97/115] Compiling Markdown BasicBlockContainer.swift
+2026-10-06T22:30:04.4461800Z [98/115] Compiling Markdown BasicInlineContainer.swift
+2026-10-06T22:30:04.4462910Z [99/115] Compiling Markdown BlockContainer.swift
+2026-10-06T22:30:04.4463920Z [100/115] Compiling Markdown BlockMarkup.swift
+2026-10-06T22:30:04.4464990Z [101/115] Compiling Markdown InlineContainer.swift
+2026-10-06T22:30:04.4465910Z [102/115] Compiling Markdown InlineMarkup.swift
+2026-10-06T22:30:04.4466940Z [103/115] Compiling Markdown ListItemContainer.swift
+2026-10-06T22:30:04.4467990Z [104/115] Compiling Markdown AtomicCounter.swift
+2026-10-06T22:30:04.4468910Z [105/115] Compiling Markdown CharacterExtensions.swift
+2026-10-06T22:30:04.4469950Z [106/115] Compiling Markdown CollectionExtensions.swift
+2026-10-06T22:30:04.4470960Z [107/115] Compiling Markdown StringExtensions.swift
+2026-10-06T22:30:04.4472820Z [108/115] Compiling Markdown MarkupVisitor.swift
+2026-10-06T22:30:04.4473730Z [109/115] Compiling Markdown MarkupWalker.swift
+2026-10-06T22:30:04.4474750Z [110/115] Compiling Markdown HTMLFormatter.swift
+2026-10-06T22:30:04.4475780Z [111/115] Compiling Markdown MarkupFormatter.swift
+2026-10-06T22:30:04.4476740Z [112/115] Compiling Markdown MarkupTreeDumper.swift
+2026-10-06T22:30:22.0430260Z [113/166] Emitting module OrbitKit
+2026-10-06T22:30:22.0571130Z [114/166] Compiling OrbitKit AccessTokensList.swift
+2026-10-06T22:30:22.0719860Z [115/166] Compiling OrbitKit AccountPause.swift
+2026-10-06T22:30:22.0843690Z [116/166] Compiling OrbitKit AddPoolKey.swift
+2026-10-06T22:30:22.0976810Z [117/166] Compiling OrbitKit AgentDefaults.swift
+2026-10-06T22:30:22.1079420Z [118/166] Compiling OrbitKit AgentListLogic.swift
+2026-10-06T22:30:22.1151730Z [119/166] Compiling OrbitKit AppSection.swift
+2026-10-06T22:30:22.1153910Z [120/166] Compiling OrbitKit ApprovalReviewDrafts.swift
+2026-10-06T22:30:22.1155150Z [121/166] Compiling OrbitKit Approvals.swift
+2026-10-06T22:30:22.1156310Z [122/166] Compiling OrbitKit ArtifactByteCache.swift
+2026-10-06T22:30:22.1162460Z [123/166] Compiling OrbitKit AttachmentLink.swift
+2026-10-06T22:30:22.1163930Z [124/166] Compiling OrbitKit AutoRetryLogic.swift
+2026-10-06T22:30:22.1165170Z [125/166] Compiling OrbitKit BackgroundWake.swift
+2026-10-06T22:30:22.1169200Z [126/166] Compiling OrbitKit BatchTree.swift
+2026-10-06T22:30:22.1173530Z [127/166] Compiling OrbitKit BottomSearchReveal.swift
+2026-10-06T22:30:22.1174210Z [128/166] Compiling OrbitKit CoalescedRefreshQueue.swift
+2026-10-06T22:30:22.1190840Z [129/166] Compiling OrbitKit CodexAccounts.swift
+2026-10-06T22:30:22.1191700Z [130/166] Compiling OrbitKit CodexLoginPool.swift
+2026-10-06T22:30:22.1192150Z [131/166] Compiling OrbitKit CodexPoolPage.swift
+2026-10-06T22:30:22.1192480Z [132/166] Compiling OrbitKit CodexSignIn.swift
+2026-10-06T22:30:22.1193000Z [133/166] Compiling OrbitKit Composer.swift
+2026-10-06T22:30:22.1193390Z [134/166] Compiling OrbitKit CriteriaChange.swift
+2026-10-06T22:30:22.1193840Z [135/166] Compiling OrbitKit CriteriaDecision.swift
+2026-10-06T22:30:22.1194270Z [136/166] Compiling OrbitKit DeepLink.swift
+2026-10-06T22:30:22.1194580Z [137/166] Compiling OrbitKit DshRuntime.swift
+2026-10-06T22:30:22.1194990Z [138/166] Compiling OrbitKit EngineAuth.swift
+2026-10-06T22:30:23.9159290Z [139/216] Compiling OrbitKit EngineErrors.swift
+2026-10-06T22:30:23.9300500Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:23.9440400Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:23.9598240Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:23.9729420Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:23.9953310Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:23.9995640Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:24.0091580Z  833 |     }
+2026-10-06T22:30:24.0193150Z [140/216] Compiling OrbitKit EvidenceDecision.swift
+2026-10-06T22:30:24.0296550Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.0395420Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:24.0497790Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:24.0599740Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:24.0701520Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.0803790Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:24.0902300Z  833 |     }
+2026-10-06T22:30:24.1004600Z [141/216] Compiling OrbitKit ImageViewerGeometry.swift
+2026-10-06T22:30:24.1105550Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.1206490Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:24.1308150Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:24.1409470Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:24.1510460Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.1610040Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:24.1711110Z  833 |     }
+2026-10-06T22:30:24.1812210Z [142/216] Compiling OrbitKit LaunchSnapshot.swift
+2026-10-06T22:30:24.1913090Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.2031840Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:24.2133100Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:24.2234740Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:24.2480570Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.2538600Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:24.2648800Z  833 |     }
+2026-10-06T22:30:24.2751800Z [143/216] Compiling OrbitKit LoadFailureLogic.swift
+2026-10-06T22:30:24.2864670Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.2991970Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:24.3112920Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:24.3214490Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:24.3320740Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.3425200Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:24.3540340Z  833 |     }
+2026-10-06T22:30:24.3642170Z [144/216] Compiling OrbitKit LoginFailure.swift
+2026-10-06T22:30:24.3743070Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.3845340Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:24.3946260Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:24.4047790Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:24.4148960Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.4249920Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:24.4351120Z  833 |     }
+2026-10-06T22:30:24.4495270Z [145/216] Compiling OrbitKit Markdown.swift
+2026-10-06T22:30:24.4597140Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.4699820Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:24.4830710Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:24.4952490Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:24.5053960Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.5191730Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:24.5293940Z  833 |     }
+2026-10-06T22:30:24.5415770Z [146/216] Compiling OrbitKit MarkdownFileRef.swift
+2026-10-06T22:30:24.5517460Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.5619810Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:24.5722570Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:24.5824760Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:24.5927240Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.6034150Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:24.6135700Z  833 |     }
+2026-10-06T22:30:24.6260370Z [147/216] Compiling OrbitKit MenuBar.swift
+2026-10-06T22:30:24.6366620Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.6470040Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:24.6575840Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:24.6678270Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:24.6784970Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.6887350Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:24.6988890Z  833 |     }
+2026-10-06T22:30:24.7110450Z [148/216] Compiling OrbitKit Navigation.swift
+2026-10-06T22:30:24.7214380Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.7317770Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:24.7424580Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:24.7526670Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:24.7628720Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.7730300Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:24.7831440Z  833 |     }
+2026-10-06T22:30:24.7933350Z [149/216] Compiling OrbitKit NeedsYou.swift
+2026-10-06T22:30:24.8038730Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.8146190Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:24.8248190Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:24.8350630Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:24.8453270Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.8463740Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:24.8565190Z  833 |     }
+2026-10-06T22:30:24.8667780Z [150/216] Compiling OrbitKit Notifications.swift
+2026-10-06T22:30:24.8773630Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.8876230Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:24.8979230Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:24.9110300Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:24.9262110Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.9384320Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:24.9488580Z  833 |     }
+2026-10-06T22:30:24.9613160Z [151/216] Compiling OrbitKit OpenCodeKeys.swift
+2026-10-06T22:30:24.9735110Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:24.9847670Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:24.9949480Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:25.0054590Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:25.0162840Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.0284580Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:25.0386740Z  833 |     }
+2026-10-06T22:30:25.0489150Z [152/216] Compiling OrbitKit OpenListReader.swift
+2026-10-06T22:30:25.0591310Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.0693010Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:25.0796120Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:25.0917430Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:25.1020410Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.1123510Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:25.1225680Z  833 |     }
+2026-10-06T22:30:25.1328080Z [153/216] Compiling OrbitKit OpenListRowUpdate.swift
+2026-10-06T22:30:25.1435230Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.1538480Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:25.1641030Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:25.1743150Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:25.1847480Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.1951500Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:25.2053250Z  833 |     }
+2026-10-06T22:30:25.2155540Z [154/216] Compiling OrbitKit OrbitAskPreview.swift
+2026-10-06T22:30:25.2261250Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.2365520Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:25.2468540Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:25.2572270Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:25.2674240Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.2802170Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:25.2903840Z  833 |     }
+2026-10-06T22:30:25.3005130Z [155/216] Compiling OrbitKit OrbitLink.swift
+2026-10-06T22:30:25.3108350Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.3221620Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:25.3324260Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:25.3426430Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:25.3528070Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.3629870Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:25.3731850Z  833 |     }
+2026-10-06T22:30:25.3857220Z [156/216] Compiling OrbitKit OrbitLinkCard.swift
+2026-10-06T22:30:25.3960220Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.4062970Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:25.4165470Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:25.4267120Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:25.4369650Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.4471970Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:25.4573930Z  833 |     }
+2026-10-06T22:30:25.4675630Z [157/216] Compiling OrbitKit OrbitLinkDestination.swift
+2026-10-06T22:30:25.4779020Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.4882390Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:25.4984390Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:25.5086680Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:25.5195680Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.5298600Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:25.5400020Z  833 |     }
+2026-10-06T22:30:25.5501970Z [158/216] Compiling OrbitKit OrbitLinkPlacement.swift
+2026-10-06T22:30:25.5605400Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.5707260Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:25.5809860Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:25.5912120Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:25.6013780Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.6116940Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:25.6242200Z  833 |     }
+2026-10-06T22:30:25.6344260Z [159/216] Compiling OrbitKit OrbitLinkStore.swift
+2026-10-06T22:30:25.6448520Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.6552370Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:25.6658540Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:25.6761150Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:25.6862790Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.6964580Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:25.7066570Z  833 |     }
+2026-10-06T22:30:25.7167720Z [160/216] Compiling OrbitKit OwnerConfirmation.swift
+2026-10-06T22:30:25.7269480Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.7372810Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:25.7492860Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:25.7596470Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:25.7703980Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.7806230Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:25.7907390Z  833 |     }
+2026-10-06T22:30:25.8008940Z [161/216] Compiling OrbitKit OwnerConfirmationReview.swift
+2026-10-06T22:30:25.8123610Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.8255020Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:25.8358020Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:25.8492790Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:25.8628990Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.8730800Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:25.8832030Z  833 |     }
+2026-10-06T22:30:25.8933220Z [162/216] Compiling OrbitKit OwnerItemCards.swift
+2026-10-06T22:30:25.9035020Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.9136900Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:25.9137490Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:25.9238680Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:25.9340150Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.9441630Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:25.9542410Z  833 |     }
+2026-10-06T22:30:25.9644320Z [163/216] Compiling OrbitKit PendingSessionOperations.swift
+2026-10-06T22:30:25.9746260Z /Users/runner/work/orbit/orbit/src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift:831:19: warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:25.9847800Z  829 |     /// (`whatTheRunReported`).
+2026-10-06T22:30:25.9981660Z  830 |     public static func reportHeading(_ report: OwnerConfirmationReport?, time: String?) -> String {
+2026-10-06T22:30:26.0083610Z  831 |         guard let report, let time else { return whatTheRunReported }
+2026-10-06T22:30:26.0187780Z      |                   `- warning: immutable value 'report' was never used; consider replacing with '_' or removing it [#no-usage]
+2026-10-06T22:30:26.0290900Z  832 |         return "\(whatTheRunReported) · \(time)"
+2026-10-06T22:30:26.0381340Z  833 |     }
+2026-10-06T22:30:31.7100290Z [164/241] Compiling OrbitKit SessionGrouping.swift
+2026-10-06T22:30:31.7225870Z [165/241] Compiling OrbitKit SessionHeader.swift
+2026-10-06T22:30:31.7363280Z [166/241] Compiling OrbitKit SessionLine.swift
+2026-10-06T22:30:31.7486430Z [167/241] Compiling OrbitKit SessionListingMemo.swift
+2026-10-06T22:30:31.7593490Z [168/241] Compiling OrbitKit SessionMove.swift
+2026-10-06T22:30:31.7695180Z [169/241] Compiling OrbitKit SessionProjectCopy.swift
+2026-10-06T22:30:31.7745190Z [170/241] Compiling OrbitKit SessionProjectGrouping.swift
+2026-10-06T22:30:31.7745880Z [171/241] Compiling OrbitKit SessionProjectMembers.swift
+2026-10-06T22:30:31.7746680Z [172/241] Compiling OrbitKit SessionProviderChoices.swift
+2026-10-06T22:30:31.7848590Z [173/241] Compiling OrbitKit SessionSearchHighlight.swift
+2026-10-06T22:30:31.7949850Z [174/241] Compiling OrbitKit SessionStatusGlyph.swift
+2026-10-06T22:30:31.8053380Z [175/241] Compiling OrbitKit SessionTimeGrouping.swift
+2026-10-06T22:30:31.8153610Z [176/241] Compiling OrbitKit SessionUpsert.swift
+2026-10-06T22:30:31.8256100Z [177/241] Compiling OrbitKit SessionViews.swift
+2026-10-06T22:30:31.8355900Z [178/241] Compiling OrbitKit SessionWorkspaceMove.swift
+2026-10-06T22:30:31.8458010Z [179/241] Compiling OrbitKit SettingsHome.swift
+2026-10-06T22:30:31.8559240Z [180/241] Compiling OrbitKit ShareMarkdown.swift
+2026-10-06T22:30:31.8660240Z [181/241] Compiling OrbitKit SharePanel.swift
+2026-10-06T22:30:31.8761450Z [182/241] Compiling OrbitKit SharedLinksList.swift
+2026-10-06T22:30:31.8864430Z [183/241] Compiling OrbitKit SharedPoolAdapter.swift
+2026-10-06T22:30:31.9002540Z [184/241] Compiling OrbitKit SharedPoolPage.swift
+2026-10-06T22:30:31.9103890Z [185/241] Compiling OrbitKit SkillsLogic.swift
+2026-10-06T22:30:31.9213060Z [186/241] Compiling OrbitKit StartProject.swift
+2026-10-06T22:30:31.9315360Z [187/241] Compiling OrbitKit TagChipColor.swift
+2026-10-06T22:30:31.9419100Z [188/241] Compiling OrbitKit TaskDetailPage.swift
+2026-10-06T22:30:33.5868810Z [189/266] Compiling OrbitKit PinnedCache.swift
+2026-10-06T22:30:33.6010280Z [190/266] Compiling OrbitKit ProjectAttention.swift
+2026-10-06T22:30:33.6151260Z [191/266] Compiling OrbitKit ProjectDone.swift
+2026-10-06T22:30:33.6278520Z [192/266] Compiling OrbitKit ProjectGraphLayout.swift
+2026-10-06T22:30:33.6420640Z [193/266] Compiling OrbitKit ProjectPage.swift
+2026-10-06T22:30:33.6554690Z [194/266] Compiling OrbitKit ProjectPageSections.swift
+2026-10-06T22:30:33.6657600Z [195/266] Compiling OrbitKit ProjectRunSettings.swift
+2026-10-06T22:30:33.6759920Z [196/266] Compiling OrbitKit ProjectTimeline.swift
+2026-10-06T22:30:33.6862420Z [197/266] Compiling OrbitKit ProviderPoolLogic.swift
+2026-10-06T22:30:33.6965470Z [198/266] Compiling OrbitKit ProvidersOverview.swift
+2026-10-06T22:30:33.7076060Z [199/266] Compiling OrbitKit RecentsLogic.swift
+2026-10-06T22:30:33.7178900Z [200/266] Compiling OrbitKit RefreshControlClearance.swift
+2026-10-06T22:30:33.7281120Z [201/266] Compiling OrbitKit RelativeTime.swift
+2026-10-06T22:30:33.7382990Z [202/266] Compiling OrbitKit RetryRoute.swift
+2026-10-06T22:30:33.7484630Z [203/266] Compiling OrbitKit RowSwipeGeometry.swift
+2026-10-06T22:30:33.7587190Z [204/266] Compiling OrbitKit RunnerAttention.swift
+2026-10-06T22:30:33.7688890Z [205/266] Compiling OrbitKit RunnerControl.swift
+2026-10-06T22:30:33.7790330Z [206/266] Compiling OrbitKit RunnerDownload.swift
+2026-10-06T22:30:33.7892200Z [207/266] Compiling OrbitKit RunnerPageCopy.swift
+2026-10-06T22:30:33.8020440Z [208/266] Compiling OrbitKit RunnerPageFormat.swift
+2026-10-06T22:30:33.8123830Z [209/266] Compiling OrbitKit ServerURL.swift
+2026-10-06T22:30:33.8226070Z [210/266] Compiling OrbitKit SessionCreatedTasksCopy.swift
+2026-10-06T22:30:33.8328150Z [211/266] Compiling OrbitKit SessionDetailCache.swift
+2026-10-06T22:30:33.8431770Z [212/266] Compiling OrbitKit SessionFolderCopy.swift
+2026-10-06T22:30:33.8534300Z [213/266] Compiling OrbitKit SessionFolderGrouping.swift
+2026-10-06T22:30:38.8594940Z [214/291] Compiling OrbitKit TaskJudgment.swift
+2026-10-06T22:30:38.8723290Z [215/291] Compiling OrbitKit TaskListCopy.swift
+2026-10-06T22:30:38.8858170Z [216/291] Compiling OrbitKit TaskListLogic.swift
+2026-10-06T22:30:38.8997470Z [217/291] Compiling OrbitKit TaskPageIncrementalReducer.swift
+2026-10-06T22:30:38.9122910Z [218/291] Compiling OrbitKit TaskReopen.swift
+2026-10-06T22:30:38.9252940Z [219/291] Compiling OrbitKit TaskRunHandoff.swift
+2026-10-06T22:30:38.9354620Z [220/291] Compiling OrbitKit TextFilePreview.swift
+2026-10-06T22:30:38.9455070Z [221/291] Compiling OrbitKit ToastFeed.swift
+2026-10-06T22:30:38.9556260Z [222/291] Compiling OrbitKit UnifiedDiff.swift
+2026-10-06T22:30:38.9661180Z [223/291] Compiling OrbitKit WatchEditing.swift
+2026-10-06T22:30:38.9759670Z [224/291] Compiling OrbitKit WatchProjection.swift
+2026-10-06T22:30:38.9861290Z [225/291] Compiling OrbitKit WatchStateMachine.swift
+2026-10-06T22:30:38.9963110Z [226/291] Compiling OrbitKit WatchWake.swift
+2026-10-06T22:30:39.0063340Z [227/291] Compiling OrbitKit WhoCanUseIt.swift
+2026-10-06T22:30:39.0164230Z [228/291] Compiling OrbitKit WikiArticleLogic.swift
+2026-10-06T22:30:39.0265040Z [229/291] Compiling OrbitKit WikiDocLogic.swift
+2026-10-06T22:30:39.0366240Z [230/291] Compiling OrbitKit WikiHealthLogic.swift
+2026-10-06T22:30:39.0468280Z [231/291] Compiling OrbitKit WikiLogic.swift
+2026-10-06T22:30:39.0569550Z [232/291] Compiling OrbitKit WikiModeLogic.swift
+2026-10-06T22:30:39.0671540Z [233/291] Compiling OrbitKit WikiPlanLogic.swift
+2026-10-06T22:30:39.0773020Z [234/291] Compiling OrbitKit WikiSpaceLogic.swift
+2026-10-06T22:30:39.0874050Z [235/291] Compiling OrbitKit WorkspaceActivity.swift
+2026-10-06T22:30:39.0976310Z [236/291] Compiling OrbitKit WorktreeBarLogic.swift
+2026-10-06T22:30:39.1078140Z [237/291] Compiling OrbitKit WorktreeFileFailure.swift
+2026-10-06T22:30:39.1409450Z [238/291] Compiling OrbitKit GoogleSignIn.swift
+2026-10-06T22:30:48.2522090Z [239/316] Compiling OrbitKit OpenItemDelivery.swift
+2026-10-06T22:30:48.2524570Z [240/316] Compiling OrbitKit ProjectStarted.swift
+2026-10-06T22:30:48.2631170Z [241/316] Compiling OrbitKit ReferencedTask.swift
+2026-10-06T22:30:48.2754700Z [242/316] Compiling OrbitKit ScrubRailGeometry.swift
+2026-10-06T22:30:48.2857630Z [243/316] Compiling OrbitKit SessionMessage.swift
+2026-10-06T22:30:48.2963670Z [244/316] Compiling OrbitKit SessionPreviewImages.swift
+2026-10-06T22:30:48.3078250Z [245/316] Compiling OrbitKit SessionRequest.swift
+2026-10-06T22:30:48.3182110Z [246/316] Compiling OrbitKit SessionStore.swift
+2026-10-06T22:30:48.3283190Z [247/316] Compiling OrbitKit SteerDelivery.swift
+2026-10-06T22:30:48.3384980Z [248/316] Compiling OrbitKit StickyQuestionHold.swift
+2026-10-06T22:30:48.3485310Z [249/316] Compiling OrbitKit StickySummary.swift
+2026-10-06T22:30:48.3587360Z [250/316] Compiling OrbitKit TailPinning.swift
+2026-10-06T22:30:48.3689480Z [251/316] Compiling OrbitKit TaskProgress.swift
+2026-10-06T22:30:48.3791480Z [252/316] Compiling OrbitKit TaskProgressCopy.swift
+2026-10-06T22:30:48.3893500Z [253/316] Compiling OrbitKit TaskStart.swift
+2026-10-06T22:30:48.3995400Z [254/316] Compiling OrbitKit ThinkingSummary.swift
+2026-10-06T22:30:48.4097710Z [255/316] Compiling OrbitKit ToolDisplay.swift
+2026-10-06T22:30:48.4197860Z [256/316] Compiling OrbitKit ToolGroupSummary.swift
+2026-10-06T22:30:48.4324700Z [257/316] Compiling OrbitKit ToolResultContent.swift
+2026-10-06T22:30:48.4339970Z [258/316] Compiling OrbitKit Transcript.swift
+2026-10-06T22:30:48.4340540Z [259/316] Compiling OrbitKit TranscriptRecordAnchor.swift
+2026-10-06T22:30:48.4341180Z [260/316] Compiling OrbitKit TranscriptReducer.swift
+2026-10-06T22:30:48.4341710Z [261/316] Compiling OrbitKit TranscriptRows.swift
+2026-10-06T22:30:48.4342190Z [262/316] Compiling OrbitKit TranscriptStore.swift
+2026-10-06T22:30:48.4388820Z [263/316] Compiling OrbitKit TurnCards.swift
+2026-10-06T22:30:53.4360490Z [264/316] Compiling OrbitKit TokenStore.swift
+2026-10-06T22:30:53.4416800Z [265/316] Compiling OrbitKit AccessTokens.swift
+2026-10-06T22:30:53.4430270Z [266/316] Compiling OrbitKit Admin.swift
+2026-10-06T22:30:53.4469890Z [267/316] Compiling OrbitKit Agents.swift
+2026-10-06T22:30:53.4470620Z [268/316] Compiling OrbitKit CodexLogin.swift
+2026-10-06T22:30:53.4471190Z [269/316] Compiling OrbitKit ControlEvent.swift
+2026-10-06T22:30:53.4472270Z [270/316] Compiling OrbitKit DTOs.swift
+2026-10-06T22:30:53.4472750Z [271/316] Compiling OrbitKit Enums.swift
+2026-10-06T22:30:53.4473310Z [272/316] Compiling OrbitKit FieldUpdate.swift
+2026-10-06T22:30:53.4473820Z [273/316] Compiling OrbitKit JSONValue.swift
+2026-10-06T22:30:53.4474410Z [274/316] Compiling OrbitKit LinkPreviews.swift
+2026-10-06T22:30:53.4475000Z [275/316] Compiling OrbitKit MergeRecovery.swift
+2026-10-06T22:30:53.4475570Z [276/316] Compiling OrbitKit OpenListDelta.swift
+2026-10-06T22:30:53.4476340Z [277/316] Compiling OrbitKit Preferences.swift
+2026-10-06T22:30:53.4476810Z [278/316] Compiling OrbitKit ProjectDetail.swift
+2026-10-06T22:30:53.4488000Z [279/316] Compiling OrbitKit ProjectOwnerItems.swift
+2026-10-06T22:30:53.4488990Z [280/316] Compiling OrbitKit ProjectPlan.swift
+2026-10-06T22:30:53.4489370Z [281/316] Compiling OrbitKit Projects.swift
+2026-10-06T22:30:53.4489880Z [282/316] Compiling OrbitKit ProviderPools.swift
+2026-10-06T22:30:53.4490230Z [283/316] Compiling OrbitKit Providers.swift
+2026-10-06T22:30:53.4490590Z [284/316] Compiling OrbitKit PublicID.swift
+2026-10-06T22:30:53.4490910Z [285/316] Compiling OrbitKit Push.swift
+2026-10-06T22:30:53.4491280Z [286/316] Compiling OrbitKit RunEvent.swift
+2026-10-06T22:30:53.4491600Z [287/316] Compiling OrbitKit Runners.swift
+2026-10-06T22:30:53.4492020Z [288/316] Compiling OrbitKit SessionCreatedTasks.swift
+2026-10-06T22:30:55.7070320Z [289/316] Compiling OrbitKit SessionFolder.swift
+2026-10-06T22:30:55.7071330Z [290/316] Compiling OrbitKit SessionMoveTargets.swift
+2026-10-06T22:30:55.7072190Z [291/316] Compiling OrbitKit SessionProjectMembership.swift
+2026-10-06T22:30:55.7072940Z [292/316] Compiling OrbitKit ShareLinks.swift
+2026-10-06T22:30:55.7073510Z [293/316] Compiling OrbitKit SharedPools.swift
+2026-10-06T22:30:55.7074420Z [294/316] Compiling OrbitKit TaskDetailReads.swift
+2026-10-06T22:30:55.7075070Z [295/316] Compiling OrbitKit Tasks.swift
+2026-10-06T22:30:55.7075430Z [296/316] Compiling OrbitKit Watches.swift
+2026-10-06T22:30:55.7075810Z [297/316] Compiling OrbitKit Wiki.swift
+2026-10-06T22:30:55.7077210Z [298/316] Compiling OrbitKit WikiArticles.swift
+2026-10-06T22:30:55.7078420Z [299/316] Compiling OrbitKit WikiDocs.swift
+2026-10-06T22:30:55.7079300Z [300/316] Compiling OrbitKit WikiHealth.swift
+2026-10-06T22:30:55.7080400Z [301/316] Compiling OrbitKit WikiPlan.swift
+2026-10-06T22:30:55.7081490Z [302/316] Compiling OrbitKit APIClient.swift
+2026-10-06T22:30:55.7082420Z [303/316] Compiling OrbitKit SessionRefresher.swift
+2026-10-06T22:30:55.7083560Z [304/316] Compiling OrbitKit URLSession+Orbit.swift
+2026-10-06T22:30:55.7084670Z [305/316] Compiling OrbitKit ControlStream.swift
+2026-10-06T22:30:55.7085710Z [306/316] Compiling OrbitKit EventStream.swift
+2026-10-06T22:30:55.7086870Z [307/316] Compiling OrbitKit ReconnectPolicy.swift
+2026-10-06T22:30:55.7087820Z [308/316] Compiling OrbitKit SSEFrameParser.swift
+2026-10-06T22:30:55.7088690Z [309/316] Compiling OrbitKit BackgroundJobs.swift
+2026-10-06T22:30:55.7089460Z [310/316] Compiling OrbitKit BackgroundSummary.swift
+2026-10-06T22:30:55.7090400Z [311/316] Compiling OrbitKit ConfirmationReviewTurns.swift
+2026-10-06T22:30:55.7091320Z [312/316] Compiling OrbitKit DeliveredMessage.swift
+2026-10-06T22:30:55.7092620Z [313/316] Compiling OrbitKit MonospaceOutputLayout.swift
+2026-10-06T22:31:32.8285060Z [314/363] Emitting module OrbitApp
+2026-10-06T22:31:32.8387040Z [315/363] Compiling OrbitApp AccountPauseControls.swift
+2026-10-06T22:31:32.8542590Z [316/363] Compiling OrbitApp AddRunnerSheet.swift
+2026-10-06T22:31:32.8647780Z [317/363] Compiling OrbitApp AgentIdentity.swift
+2026-10-06T22:31:32.8748220Z [318/363] Compiling OrbitApp AgentsView.swift
+2026-10-06T22:31:32.8850280Z [319/363] Compiling OrbitApp ApprovalCards.swift
+2026-10-06T22:31:32.8951750Z [320/363] Compiling OrbitApp ApprovalReview.swift
+2026-10-06T22:31:32.9059110Z [321/363] Compiling OrbitApp BackgroundWakeCardView.swift
+2026-10-06T22:31:32.9159220Z [322/363] Compiling OrbitApp BrandMarks.swift
+2026-10-06T22:31:32.9260540Z [323/363] Compiling OrbitApp CodexResetCreditView.swift
+2026-10-06T22:31:32.9371260Z [324/363] Compiling OrbitApp CompactShell.swift
+2026-10-06T22:31:32.9472870Z [325/363] Compiling OrbitApp ComposerView.swift
+2026-10-06T22:31:32.9586820Z [326/363] Compiling OrbitApp ConfirmationReviewTurnCardViews.swift
+2026-10-06T22:31:32.9688930Z [327/363] Compiling OrbitApp ConfirmationStyle.swift
+2026-10-06T22:31:32.9754680Z [328/363] Compiling OrbitApp AttachedNoteView.swift
+2026-10-06T22:31:32.9755380Z [329/363] Compiling OrbitApp AttachmentViews.swift
+2026-10-06T22:31:32.9757700Z [330/363] Compiling OrbitApp AutoRetryCard.swift
+2026-10-06T22:31:32.9777810Z [331/363] Compiling OrbitApp BackgroundTaskViews.swift
+2026-10-06T22:31:32.9783620Z [332/363] Compiling OrbitApp ConsoleView.swift
+2026-10-06T22:31:32.9785540Z [333/363] Compiling OrbitApp ImageViewer.swift
+2026-10-06T22:31:32.9786850Z [334/363] Compiling OrbitApp LinkDetection.swift
+2026-10-06T22:31:32.9791800Z [335/363] Compiling OrbitApp MessageBubbles.swift
+2026-10-06T22:31:32.9792280Z [336/363] Compiling OrbitApp MonospaceOutputViewer.swift
+2026-10-06T22:31:32.9793460Z [337/363] Compiling OrbitApp SelectableText.swift
+2026-10-06T22:31:32.9793960Z [338/363] Compiling OrbitApp AccessTokensModel.swift
+2026-10-06T22:31:32.9794380Z [339/363] Compiling OrbitApp AdminModel.swift
+2026-10-06T22:31:32.9794700Z [340/363] Compiling OrbitApp AgentsModel.swift
+2026-10-06T22:31:32.9795070Z [341/363] Compiling OrbitApp AppModel.swift
+2026-10-06T22:31:32.9795420Z [342/363] Compiling OrbitApp AttachmentImageStore.swift
+2026-10-06T22:31:32.9795840Z [343/363] Compiling OrbitApp ConsoleModel.swift
+2026-10-06T22:31:32.9796200Z [344/363] Compiling OrbitApp ConsoleRegistry.swift
+2026-10-06T22:31:32.9796530Z [345/363] Compiling OrbitApp CreatedTasksModel.swift
+2026-10-06T22:31:32.9796930Z [346/363] Compiling OrbitApp HotKeyManager.swift
+2026-10-06T22:31:32.9797410Z [347/363] Compiling OrbitApp NotificationManager.swift
+2026-10-06T22:31:32.9797830Z [348/363] Compiling OrbitApp OrbitApp.swift
+2026-10-06T22:31:32.9798150Z [349/363] Compiling OrbitApp OrbitLinkCards.swift
+2026-10-06T22:31:32.9798510Z [350/363] Compiling OrbitApp Platform.swift
+2026-10-06T22:31:32.9798860Z [351/363] Compiling OrbitApp ProjectMergeModel.swift
+2026-10-06T22:31:32.9799280Z [352/363] Compiling OrbitApp ProjectsModel.swift
+2026-10-06T22:31:32.9799650Z [353/363] Compiling OrbitApp RunnerControl.swift
+2026-10-06T22:31:32.9800880Z [354/363] Compiling OrbitApp RunnerSignInModel.swift
+2026-10-06T22:31:32.9801350Z [355/363] Compiling OrbitApp RunnersModel.swift
+2026-10-06T22:31:32.9801670Z [356/363] Compiling OrbitApp SharedLinksModel.swift
+2026-10-06T22:31:32.9802050Z [357/363] Compiling OrbitApp SharedPoolsModel.swift
+2026-10-06T22:31:32.9802380Z [358/363] Compiling OrbitApp TasksModel.swift
+2026-10-06T22:31:32.9802750Z [359/363] Compiling OrbitApp UpdaterModel.swift
+2026-10-06T22:31:32.9803050Z [360/363] Compiling OrbitApp AccessTokenRow.swift
+2026-10-06T22:32:18.0477600Z [361/431] Compiling OrbitApp TaskStartCardView.swift
+2026-10-06T22:32:18.0579310Z [362/431] Compiling OrbitApp TasksView.swift
+2026-10-06T22:32:18.0682190Z [363/431] Compiling OrbitApp ToastHost.swift
+2026-10-06T22:32:18.0787900Z [364/431] Compiling OrbitApp TopInsetClearOfRefresh.swift
+2026-10-06T22:32:18.0889150Z [365/431] Compiling OrbitApp Typography.swift
+2026-10-06T22:32:18.0990590Z [366/431] Compiling OrbitApp WatchViews.swift
+2026-10-06T22:32:18.1091870Z [367/431] Compiling OrbitApp WatchWakeCardView.swift
+2026-10-06T22:32:18.1195970Z [368/431] Compiling OrbitApp WatchingCard.swift
+2026-10-06T22:32:18.1300340Z [369/431] Compiling OrbitApp WikiActivityView.swift
+2026-10-06T22:32:18.1399300Z [370/431] Compiling OrbitApp WikiArticleView.swift
+2026-10-06T22:32:18.1501280Z [371/431] Compiling OrbitApp WikiDocScreens.swift
+2026-10-06T22:32:18.1601950Z [372/431] Compiling OrbitApp WikiDocView.swift
+2026-10-06T22:32:18.1703360Z [373/431] Compiling OrbitApp WikiPlanView.swift
+2026-10-06T22:32:18.1836600Z [374/431] Compiling OrbitApp WikiRunView.swift
+2026-10-06T22:32:18.1939150Z [375/431] Compiling OrbitApp WikiScreens.swift
+2026-10-06T22:32:18.2040600Z [376/431] Compiling OrbitApp WikiSettingsView.swift
+2026-10-06T22:32:18.2146230Z [377/431] Compiling OrbitApp WikiView.swift
+2026-10-06T22:32:18.2161980Z [378/431] Compiling OrbitApp WorktreeBar.swift
+2026-10-06T22:32:18.2220020Z [379/431] Compiling OrbitApp WorktreeFilePreview.swift
+2026-10-06T22:32:18.2220790Z [380/431] Compiling OrbitApp WatchesModel.swift
+2026-10-06T22:32:18.2221340Z [381/431] Compiling OrbitApp WikiModel.swift
+2026-10-06T22:32:18.2221900Z [382/431] Compiling OrbitApp WorktreeModel.swift
+2026-10-06T22:32:18.2222380Z [383/431] Compiling OrbitApp ToolCards.swift
+2026-10-06T22:32:18.2225340Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2228800Z 71 |                        value: spun)
+2026-10-06T22:32:18.2229230Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2229730Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2230590Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2231320Z 74 |     }
+2026-10-06T22:32:18.2231710Z 75 | }
+2026-10-06T22:32:18.2232030Z 
+2026-10-06T22:32:18.2232540Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2233500Z [384/431] Compiling OrbitApp UserTurnRow.swift
+2026-10-06T22:32:18.2234610Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2235640Z 71 |                        value: spun)
+2026-10-06T22:32:18.2236110Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2236570Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2237480Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2238090Z 74 |     }
+2026-10-06T22:32:18.2238820Z 75 | }
+2026-10-06T22:32:18.2238900Z 
+2026-10-06T22:32:18.2239230Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2239760Z [385/431] Compiling OrbitApp CreatedTasksCard.swift
+2026-10-06T22:32:18.2240650Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2241560Z 71 |                        value: spun)
+2026-10-06T22:32:18.2241860Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2242140Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2242770Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2243340Z 74 |     }
+2026-10-06T22:32:18.2243560Z 75 | }
+2026-10-06T22:32:18.2259840Z 
+2026-10-06T22:32:18.2260160Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2261090Z [386/431] Compiling OrbitApp CreatedTasksPage.swift
+2026-10-06T22:32:18.2263980Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2264990Z 71 |                        value: spun)
+2026-10-06T22:32:18.2265700Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2266300Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2267550Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2268380Z 74 |     }
+2026-10-06T22:32:18.2268970Z 75 | }
+2026-10-06T22:32:18.2269510Z 
+2026-10-06T22:32:18.2269900Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2271530Z [387/431] Compiling OrbitApp FileHandoff.swift
+2026-10-06T22:32:18.2272830Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2276290Z 71 |                        value: spun)
+2026-10-06T22:32:18.2276760Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2277240Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2278140Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2280880Z 74 |     }
+2026-10-06T22:32:18.2282200Z 75 | }
+2026-10-06T22:32:18.2286460Z 
+2026-10-06T22:32:18.2287270Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2340440Z [388/431] Compiling OrbitApp FollowingView.swift
+2026-10-06T22:32:18.2401420Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2406000Z 71 |                        value: spun)
+2026-10-06T22:32:18.2406280Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2406650Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2407280Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2408080Z 74 |     }
+2026-10-06T22:32:18.2408330Z 75 | }
+2026-10-06T22:32:18.2408480Z 
+2026-10-06T22:32:18.2408880Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2409450Z [389/431] Compiling OrbitApp LoginView.swift
+2026-10-06T22:32:18.2410440Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2412150Z 71 |                        value: spun)
+2026-10-06T22:32:18.2431450Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2437100Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2437980Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2439170Z 74 |     }
+2026-10-06T22:32:18.2439580Z 75 | }
+2026-10-06T22:32:18.2474560Z 
+2026-10-06T22:32:18.2475180Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2475880Z [390/431] Compiling OrbitApp MainView.swift
+2026-10-06T22:32:18.2477170Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2482850Z 71 |                        value: spun)
+2026-10-06T22:32:18.2484380Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2489520Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2490350Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2491210Z 74 |     }
+2026-10-06T22:32:18.2491670Z 75 | }
+2026-10-06T22:32:18.2491910Z 
+2026-10-06T22:32:18.2492860Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2493660Z [391/431] Compiling OrbitApp MarkdownView.swift
+2026-10-06T22:32:18.2494730Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2495900Z 71 |                        value: spun)
+2026-10-06T22:32:18.2498880Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2511630Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2520890Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2522570Z 74 |     }
+2026-10-06T22:32:18.2523130Z 75 | }
+2026-10-06T22:32:18.2523330Z 
+2026-10-06T22:32:18.2524210Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2527790Z [392/431] Compiling OrbitApp MenuBarContent.swift
+2026-10-06T22:32:18.2530110Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2542650Z 71 |                        value: spun)
+2026-10-06T22:32:18.2543670Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2544110Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2545030Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2546130Z 74 |     }
+2026-10-06T22:32:18.2546390Z 75 | }
+2026-10-06T22:32:18.2546690Z 
+2026-10-06T22:32:18.2547070Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2547720Z [393/431] Compiling OrbitApp MergeRecoverySheet.swift
+2026-10-06T22:32:18.2549340Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2554520Z 71 |                        value: spun)
+2026-10-06T22:32:18.2555140Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2556560Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2557570Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2560200Z 74 |     }
+2026-10-06T22:32:18.2560720Z 75 | }
+2026-10-06T22:32:18.2561050Z 
+2026-10-06T22:32:18.2561530Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2562690Z [394/431] Compiling OrbitApp NeedsYouBannerView.swift
+2026-10-06T22:32:18.2563880Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2565470Z 71 |                        value: spun)
+2026-10-06T22:32:18.2565850Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2567110Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2567880Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2569010Z 74 |     }
+2026-10-06T22:32:18.2569820Z 75 | }
+2026-10-06T22:32:18.2570280Z 
+2026-10-06T22:32:18.2571020Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2571670Z [395/431] Compiling OrbitApp OpenItemDeliveryCardView.swift
+2026-10-06T22:32:18.2573140Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2578090Z 71 |                        value: spun)
+2026-10-06T22:32:18.2578970Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2579770Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2582160Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2583740Z 74 |     }
+2026-10-06T22:32:18.2584420Z 75 | }
+2026-10-06T22:32:18.2584560Z 
+2026-10-06T22:32:18.2585130Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2586930Z [396/431] Compiling OrbitApp OrbitLinkCardView.swift
+2026-10-06T22:32:18.2587920Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2591830Z 71 |                        value: spun)
+2026-10-06T22:32:18.2614370Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2614900Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2615660Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2616290Z 74 |     }
+2026-10-06T22:32:18.2616560Z 75 | }
+2026-10-06T22:32:18.2616690Z 
+2026-10-06T22:32:18.2616980Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2617550Z [397/431] Compiling OrbitApp ProjectDoneCards.swift
+2026-10-06T22:32:18.2618440Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2619410Z 71 |                        value: spun)
+2026-10-06T22:32:18.2619750Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2620110Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2621370Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2621950Z 74 |     }
+2026-10-06T22:32:18.2622220Z 75 | }
+2026-10-06T22:32:18.2622350Z 
+2026-10-06T22:32:18.2622620Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2623230Z [398/431] Compiling OrbitApp ProjectGraphView.swift
+2026-10-06T22:32:18.2624210Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2625070Z 71 |                        value: spun)
+2026-10-06T22:32:18.2625430Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2625710Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2626800Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2627370Z 74 |     }
+2026-10-06T22:32:18.2627580Z 75 | }
+2026-10-06T22:32:18.2627720Z 
+2026-10-06T22:32:18.2628060Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2628560Z [399/431] Compiling OrbitApp ProjectLandingRow.swift
+2026-10-06T22:32:18.2630640Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2631570Z 71 |                        value: spun)
+2026-10-06T22:32:18.2631890Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2632130Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2632860Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2633420Z 74 |     }
+2026-10-06T22:32:18.2633600Z 75 | }
+2026-10-06T22:32:18.2633740Z 
+2026-10-06T22:32:18.2634050Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2634570Z [400/431] Compiling OrbitApp ProjectStartedCardView.swift
+2026-10-06T22:32:18.2635620Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2636450Z 71 |                        value: spun)
+2026-10-06T22:32:18.2636730Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2637140Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2638450Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2639100Z 74 |     }
+2026-10-06T22:32:18.2639290Z 75 | }
+2026-10-06T22:32:18.2639420Z 
+2026-10-06T22:32:18.2639780Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2640320Z [401/431] Compiling OrbitApp ProjectsView.swift
+2026-10-06T22:32:18.2641320Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2642230Z 71 |                        value: spun)
+2026-10-06T22:32:18.2642470Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2643050Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2643760Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2644400Z 74 |     }
+2026-10-06T22:32:18.2644630Z 75 | }
+2026-10-06T22:32:18.2644700Z 
+2026-10-06T22:32:18.2645050Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2645680Z [402/431] Compiling OrbitApp ProviderPoolViews.swift
+2026-10-06T22:32:18.2646660Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2647510Z 71 |                        value: spun)
+2026-10-06T22:32:18.2647760Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2654150Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2654970Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2655570Z 74 |     }
+2026-10-06T22:32:18.2655780Z 75 | }
+2026-10-06T22:32:18.2655920Z 
+2026-10-06T22:32:18.2656250Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2656770Z [403/431] Compiling OrbitApp RowSwipeActions.swift
+2026-10-06T22:32:18.2657720Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2658580Z 71 |                        value: spun)
+2026-10-06T22:32:18.2658900Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2659180Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2659820Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2660430Z 74 |     }
+2026-10-06T22:32:18.2660670Z 75 | }
+2026-10-06T22:32:18.2660800Z 
+2026-10-06T22:32:18.2661120Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2661630Z [404/431] Compiling OrbitApp RunnerControlPane.swift
+2026-10-06T22:32:18.2662560Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2663410Z 71 |                        value: spun)
+2026-10-06T22:32:18.2663710Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2663990Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2664650Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2665240Z 74 |     }
+2026-10-06T22:32:18.2665420Z 75 | }
+2026-10-06T22:32:18.2665550Z 
+2026-10-06T22:32:18.2665880Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2666390Z [405/431] Compiling OrbitApp RunnerEnginePage.swift
+2026-10-06T22:32:18.2667320Z /Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2668180Z 71 |                        value: spun)
+2026-10-06T22:32:18.2668640Z 72 |             .onAppear { spun = running }
+2026-10-06T22:32:18.2668910Z 73 |             .onChange(of: running) { spun = $0 }
+2026-10-06T22:32:18.2669500Z    |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+2026-10-06T22:32:18.2670110Z 74 |     }
+2026-10-06T22:32:18.2670300Z 75 | }
+2026-10-06T22:32:18.2670420Z 
+2026-10-06T22:32:18.2670750Z [#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+2026-10-06T22:32:18.2671200Z [406/431] Compiling OrbitApp RunnerNamePage.swift
+2026-10-06T22:32:18.2671820Z [407/431] Compiling OrbitApp RunnerPageParts.swift
+2026-10-06T22:32:18.2672150Z [408/431] Compiling OrbitApp RunnerSignInView.swift
+2026-10-06T22:32:18.2672560Z [409/431] Compiling OrbitApp SessionCoordinatorBadge.swift
+2026-10-06T22:32:18.2672980Z [410/431] Compiling OrbitApp SessionFolderPage.swift
+2026-10-06T22:32:18.2673310Z [411/431] Compiling OrbitApp SessionListSearch.swift
+2026-10-06T22:32:18.2673690Z [412/431] Compiling OrbitApp SessionMessageCardView.swift
+2026-10-06T22:32:18.2674150Z [413/431] Compiling OrbitApp SessionMoveSheet.swift
+2026-10-06T22:32:18.2674440Z [414/431] Compiling OrbitApp SessionMoveTargetPage.swift
+2026-10-06T22:32:18.2674750Z [415/431] Compiling OrbitApp SessionProjectListSupport.swift
+2026-10-06T22:32:18.2675080Z [416/431] Compiling OrbitApp SessionProjectPage.swift
+2026-10-06T22:32:18.2675360Z [417/431] Compiling OrbitApp SessionRenameAlert.swift
+2026-10-06T22:32:18.2675650Z [418/431] Compiling OrbitApp SessionReplyCardView.swift
+2026-10-06T22:32:18.2675930Z [419/431] Compiling OrbitApp SessionRowActions.swift
+2026-10-06T22:32:18.2676200Z [420/431] Compiling OrbitApp SessionSearchView.swift
+2026-10-06T22:32:18.2676460Z [421/431] Compiling OrbitApp SessionTagViews.swift
+2026-10-06T22:32:18.2676730Z [422/431] Compiling OrbitApp SettingsAdminView.swift
+2026-10-06T22:32:18.2676990Z [423/431] Compiling OrbitApp SettingsSheet.swift
+2026-10-06T22:32:18.2677230Z [424/431] Compiling OrbitApp ShareSheet.swift
+2026-10-06T22:32:18.2677490Z [425/431] Compiling OrbitApp SkillsRunnersView.swift
+2026-10-06T22:32:18.2677770Z [426/431] Compiling OrbitApp TaskDetailParts.swift
+2026-10-06T22:32:18.2678030Z [427/431] Compiling OrbitApp TaskListParts.swift
+2026-10-06T22:32:18.2678300Z [428/431] Compiling OrbitApp TaskRunHandoffCard.swift
+2026-10-06T22:32:18.4582790Z [428/431] Write Objects.LinkFileList
+2026-10-06T22:32:24.4896230Z [429/431] Linking OrbitApp
+2026-10-06T22:32:24.7688760Z [430/431] Applying OrbitApp
+2026-10-06T22:32:24.7812940Z Build complete! (175.57s)
+2026-10-06T22:32:24.8332840Z Post job cleanup.
+2026-10-06T22:32:25.8582720Z [command]/opt/homebrew/bin/git version
+2026-10-06T22:32:26.0329580Z git version 2.55.0
+2026-10-06T22:32:26.0390590Z Copying '/Users/runner/.gitconfig' to '/Users/runner/work/_temp/f9c03483-5a3b-4db8-8e6a-22faa4ca042c/.gitconfig'
+2026-10-06T22:32:26.0404330Z Temporarily overriding HOME='/Users/runner/work/_temp/f9c03483-5a3b-4db8-8e6a-22faa4ca042c' before making global git config changes
+2026-10-06T22:32:26.0406420Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-06T22:32:26.0408830Z [command]/opt/homebrew/bin/git config --global --add safe.directory /Users/runner/work/orbit/orbit
+2026-10-06T22:32:26.0595030Z Removing SSH command configuration
+2026-10-06T22:32:26.0608420Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-06T22:32:26.0747660Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-06T22:32:26.4407440Z Removing HTTP extra header
+2026-10-06T22:32:26.4414600Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-06T22:32:26.4523570Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-06T22:32:26.5831230Z Removing includeIf entries pointing to credentials config files
+2026-10-06T22:32:26.5847670Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-06T22:32:26.5963900Z includeif.gitdir:/Users/runner/work/orbit/orbit/.git.path
+2026-10-06T22:32:26.5969330Z includeif.gitdir:/Users/runner/work/orbit/orbit/.git/worktrees/*.path
+2026-10-06T22:32:26.5969830Z includeif.gitdir:/github/workspace/.git.path
+2026-10-06T22:32:26.5970420Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-10-06T22:32:26.5981460Z [command]/opt/homebrew/bin/git config --local --get-all includeif.gitdir:/Users/runner/work/orbit/orbit/.git.path
+2026-10-06T22:32:26.6112050Z /Users/runner/work/_temp/git-credentials-eabfef20-1063-4726-8c30-8148f33f7fcb.config
+2026-10-06T22:32:26.6418700Z [command]/opt/homebrew/bin/git config --local --unset includeif.gitdir:/Users/runner/work/orbit/orbit/.git.path \/Users\/runner\/work\/_temp\/git\-credentials\-eabfef20\-1063\-4726\-8c30\-8148f33f7fcb\.config
+2026-10-06T22:32:26.6457090Z [command]/opt/homebrew/bin/git config --local --get-all includeif.gitdir:/Users/runner/work/orbit/orbit/.git/worktrees/*.path
+2026-10-06T22:32:26.6461040Z /Users/runner/work/_temp/git-credentials-eabfef20-1063-4726-8c30-8148f33f7fcb.config
+2026-10-06T22:32:26.6464450Z [command]/opt/homebrew/bin/git config --local --unset includeif.gitdir:/Users/runner/work/orbit/orbit/.git/worktrees/*.path \/Users\/runner\/work\/_temp\/git\-credentials\-eabfef20\-1063\-4726\-8c30\-8148f33f7fcb\.config
+2026-10-06T22:32:26.6538540Z [command]/opt/homebrew/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+2026-10-06T22:32:26.6611180Z /github/runner_temp/git-credentials-eabfef20-1063-4726-8c30-8148f33f7fcb.config
+2026-10-06T22:32:26.6623930Z [command]/opt/homebrew/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path \/github\/runner_temp\/git\-credentials\-eabfef20\-1063\-4726\-8c30\-8148f33f7fcb\.config
+2026-10-06T22:32:26.6712740Z [command]/opt/homebrew/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-10-06T22:32:26.6787950Z /github/runner_temp/git-credentials-eabfef20-1063-4726-8c30-8148f33f7fcb.config
+2026-10-06T22:32:26.6794400Z [command]/opt/homebrew/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path \/github\/runner_temp\/git\-credentials\-eabfef20\-1063\-4726\-8c30\-8148f33f7fcb\.config
+2026-10-06T22:32:26.6911040Z [command]/opt/homebrew/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-06T22:32:26.9037000Z Removing credentials config '/Users/runner/work/_temp/git-credentials-eabfef20-1063-4726-8c30-8148f33f7fcb.config'
+2026-10-06T22:32:26.9366920Z Cleaning up orphan processes

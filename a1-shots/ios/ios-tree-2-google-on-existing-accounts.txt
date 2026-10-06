@@ -1,0 +1,34 @@
+Attributes: Application, 0x1163a0000, pid: 30787, label: 'A1Probe'
+Element subtree:
+ →Application, 0x1163a0000, pid: 30787, label: 'A1Probe'
+    Window (Main), 0x1163a0140, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x1163a0280, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x1163a03c0, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x1163a0500, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x1163a0640, {{0.0, 0.0}, {402.0, 874.0}}
+              ScrollView, 0x1163a0780, {{0.0, 0.0}, {402.0, 874.0}}
+                Other, 0x1163a08c0, {{0.0, 62.0}, {402.0, 778.0}}
+                  Other, 0x1163a0a00, {{163.0, 202.7}, {76.0, 76.0}}, label: 'Orbit'
+                  StaticText, 0x1163a0b40, {{85.3, 298.5}, {231.3, 40.7}}, label: 'Welcome back'
+                  StaticText, 0x1163a0c80, {{99.3, 345.2}, {203.3, 20.3}}, label: 'Sign in to continue to Orbit'
+                  StaticText, 0x1163a0dc0, {{40.0, 411.5}, {32.7, 15.7}}, label: 'Email'
+                  TextField, 0x1163a0f00, {{40.0, 429.3}, {322.0, 22.0}}, placeholderValue: 'you@example.com'
+                  StaticText, 0x1163a1040, {{40.0, 483.2}, {58.3, 15.7}}, label: 'Password'
+                  SecureTextField, 0x1163a1180, {{40.0, 501.0}, {287.7, 21.0}}, placeholderValue: 'Enter your password'
+                  Button, 0x1163a12c0, {{337.3, 504.3}, {23.0, 14.3}}, identifier: 'eye', label: 'Show password'
+                  Button, 0x1163a1400, {{24.0, 552.0}, {354.0, 50.0}}, label: 'Sign In', Disabled
+                  StaticText, 0x1163a1540, {{194.7, 617.8}, {12.7, 15.7}}, label: 'or'
+                  Button, 0x1163a1680, {{24.0, 649.7}, {354.0, 50.0}}, label: 'Continue with Google'
+                    Other, 0x1163a17c0, {{101.7, 665.7}, {18.0, 18.0}}
+                    StaticText, 0x1163a1900, {{24.0, 649.7}, {354.0, 50.0}}, label: 'Continue with Google'
+                Other, 0x1163a1a40, {{369.0, 62.0}, {30.0, 750.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x1163a1b80, {{396.0, 65.0}, {3.0, 744.0}}
+                Other, 0x1163a1cc0, {{369.0, 62.0}, {30.0, 750.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x1163a1e00, {{396.0, 65.0}, {3.0, 744.0}}
+Path to element:
+ →Application, 0x1163a0000, pid: 30787, label: 'A1Probe'
+Query chain:
+ →Find: Target Application 'io.orbitd.a1probe'
+  Output: {
+    Application, 0x1163a1f40, pid: 30787, label: 'A1Probe'
+  }

@@ -1,0 +1,300 @@
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/PlugIns/A1ProbeUITests.xctest/A1ProbeUITests --scan-folder /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/PlugIns/A1ProbeUITests.xctest/Frameworks --scan-folder /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/PlugIns/A1ProbeUITests.xctest/PlugIns --scan-folder /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/PlugIns/A1ProbeUITests.xctest/SystemExtensions --scan-folder /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/PlugIns/A1ProbeUITests.xctest/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.QFSZvD/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/PlugIns/A1ProbeUITests.xctest/Frameworks --strip-bitcode --scan-executable /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Intermediates.noindex/A1Probe.build/Debug-iphonesimulator/A1ProbeUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+
+AppIntentsSSUTraining (in target 'A1ProbeUITests' from project 'A1Probe')
+    cd /Users/runner/work/orbit/orbit/.a1-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/PlugIns/A1ProbeUITests.xctest/Info.plist --temp-dir-path /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Intermediates.noindex/A1Probe.build/Debug-iphonesimulator/A1ProbeUITests.build/ssu --bundle-id io.orbitd.a1probe.uitests --product-path /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/PlugIns/A1ProbeUITests.xctest --extracted-metadata-path /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/PlugIns/A1ProbeUITests.xctest/Metadata.appintents --metadata-file-list /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Intermediates.noindex/A1Probe.build/Debug-iphonesimulator/A1ProbeUITests.build/A1ProbeUITests.DependencyMetadataFileList --source-file /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/PlugIns/A1ProbeUITests.xctest/Info.plist --archive-ssu-assets
+2026-10-06 22:38:40.939 appintentsnltrainingprocessor[26825:77839] Parsing options for appintentsnltrainingprocessor
+2026-10-06 22:38:40.941 appintentsnltrainingprocessor[26825:77839] Starting AppIntents SSU YAML Generation
+2026-10-06 22:38:40.941 appintentsnltrainingprocessor[26825:77839] No AppShortcuts found - Skipping.
+
+MkDir /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app (in target 'A1ProbeUITests' from project 'A1Probe')
+    cd /Users/runner/work/orbit/orbit/.a1-probe
+    /bin/mkdir -p /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app
+
+CopyAndPreserveArchs /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/A1ProbeUITests-Runner (in target 'A1ProbeUITests' from project 'A1Probe')
+    cd /Users/runner/work/orbit/orbit/.a1-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/lipo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/XCTRunner -output /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/A1ProbeUITests-Runner -extract arm64
+
+CopyPlistFile /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/Info.plist /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Info.plist (in target 'A1ProbeUITests' from project 'A1Probe')
+    cd /Users/runner/work/orbit/orbit/.a1-probe
+    builtin-copyPlist --validate --convert xml1 --macro-expansion WRAPPEDPRODUCTNAME A1ProbeUITests-Runner --macro-expansion WRAPPEDPRODUCTBUNDLEIDENTIFIER io.orbitd.a1probe.uitests.xctrunner --macro-expansion TESTPRODUCTNAME A1ProbeUITests --macro-expansion TESTPRODUCTBUNDLEIDENTIFIER io.orbitd.a1probe.uitests --copy-value UIDeviceFamily /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/PlugIns/A1ProbeUITests.xctest/Info.plist --outdir /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app -- /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Info.plist
+
+Copy /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/PkgInfo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/PkgInfo (in target 'A1ProbeUITests' from project 'A1Probe')
+    cd /Users/runner/work/orbit/orbit/.a1-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/PkgInfo /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app
+
+Copy /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/Frameworks/libXCTestSwiftSupport.dylib /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib (in target 'A1ProbeUITests' from project 'A1Probe')
+    cd /Users/runner/work/orbit/orbit/.a1-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/Frameworks/XCUnit.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework (in target 'A1ProbeUITests' from project 'A1Probe')
+    cd /Users/runner/work/orbit/orbit/.a1-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/Frameworks/XCUIAutomation.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework (in target 'A1ProbeUITests' from project 'A1Probe')
+    cd /Users/runner/work/orbit/orbit/.a1-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/Frameworks/XCTestSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework (in target 'A1ProbeUITests' from project 'A1Probe')
+    cd /Users/runner/work/orbit/orbit/.a1-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/Frameworks/XCTestCore.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework (in target 'A1ProbeUITests' from project 'A1Probe')
+    cd /Users/runner/work/orbit/orbit/.a1-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/Frameworks/XCTest.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework (in target 'A1ProbeUITests' from project 'A1Probe')
+    cd /Users/runner/work/orbit/orbit/.a1-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/Frameworks/XCTAutomationSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework (in target 'A1ProbeUITests' from project 'A1Probe')
+    cd /Users/runner/work/orbit/orbit/.a1-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/Frameworks/Testing.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework (in target 'A1ProbeUITests' from project 'A1Probe')
+    cd /Users/runner/work/orbit/orbit/.a1-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/Frameworks
+
+CodeSign /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/PlugIns/A1ProbeUITests.xctest (in target 'A1ProbeUITests' from project 'A1Probe')
+    cd /Users/runner/work/orbit/orbit/.a1-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/PlugIns/A1ProbeUITests.xctest
+
+CodeSign /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app (in target 'A1ProbeUITests' from project 'A1Probe')
+    cd /Users/runner/work/orbit/orbit/.a1-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app
+/Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app: replacing existing signature
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/PlugIns/A1ProbeUITests.xctest (in target 'A1ProbeUITests' from project 'A1Probe')
+    cd /Users/runner/work/orbit/orbit/.a1-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/PlugIns/A1ProbeUITests.xctest
+
+Touch /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/PlugIns/A1ProbeUITests.xctest (in target 'A1ProbeUITests' from project 'A1Probe')
+    cd /Users/runner/work/orbit/orbit/.a1-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.a1-probe/.dd-ios/Build/Products/Debug-iphonesimulator/A1ProbeUITests-Runner.app/PlugIns/A1ProbeUITests.xctest
+
+2026-10-06 22:39:07.034856+0000 A1ProbeUITests-Runner[27816:80350] [Default] Running tests...
+objc[27816]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x108928310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x109190398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'All tests' started at 2026-10-06 22:39:13.904.
+Test Suite 'A1ProbeUITests.xctest' started at 2026-10-06 22:39:13.906.
+Test Suite 'GoogleShotTests' started at 2026-10-06 22:39:13.906.
+Test Case '-[A1ProbeUITests.GoogleShotTests test1GoogleOnAndOpeningAccounts]' started.
+    t =     0.00s Start Test at 2026-10-06 22:39:13.908
+    t =     0.71s Set Up
+    t =     1.36s Open io.orbitd.a1probe
+    t =     1.36s     Launch io.orbitd.a1probe
+2026-10-06 22:39:15.762 xcodebuild[15649:51188] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 22:39:15.762 xcodebuild[15649:51188] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     6.71s         Setting up automation session
+    t =    13.50s         Wait for io.orbitd.a1probe to idle
+    t =    19.08s Checking existence of `Any (First Match)`
+    t =    24.70s Checking existence of `Button (First Match)`
+    t =    26.49s Checking existence of `Any (First Match)`
+    t =    26.53s Checking existence of `Any (First Match)`
+    t =    34.41s Added attachment named 'ios-1-google-on-signup-open'
+    t =    34.41s Requesting snapshot of accessibility hierarchy for app with pid 28625
+    t =    36.35s Requesting snapshot of accessibility hierarchy for app with pid 28625
+    t =    36.37s Added attachment named 'ios-tree-1-google-on-signup-open.txt'
+    t =    37.68s Tear Down
+    t =    37.68s     Added attachment named 'ios-GoogleShotTeststest1GoogleOnAndOpeningAccounts-notes.txt'
+Test Case '-[A1ProbeUITests.GoogleShotTests test1GoogleOnAndOpeningAccounts]' passed (38.052 seconds).
+Test Case '-[A1ProbeUITests.GoogleShotTests test2GoogleOnForExistingAccounts]' started.
+    t =     0.00s Start Test at 2026-10-06 22:39:51.961
+    t =     0.03s Set Up
+    t =     0.41s Open io.orbitd.a1probe
+    t =     0.41s     Launch io.orbitd.a1probe
+    t =     0.41s         Terminate io.orbitd.a1probe:28625
+2026-10-06 22:39:53.390 xcodebuild[15649:51188] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 22:39:53.405 xcodebuild[15649:51188] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     8.56s         Setting up automation session
+    t =    11.35s         Wait for io.orbitd.a1probe to idle
+    t =    13.09s Checking existence of `Any (First Match)`
+    t =    16.78s Checking existence of `Button (First Match)`
+    t =    16.80s Checking existence of `Any (First Match)`
+    t =    16.83s Checking existence of `Any (First Match)`
+    t =    17.03s Added attachment named 'ios-2-google-on-existing-accounts'
+    t =    17.04s Requesting snapshot of accessibility hierarchy for app with pid 30787
+    t =    17.14s Requesting snapshot of accessibility hierarchy for app with pid 30787
+    t =    17.18s Added attachment named 'ios-tree-2-google-on-existing-accounts.txt'
+    t =    17.18s Tear Down
+    t =    17.18s     Added attachment named 'ios-GoogleShotTeststest2GoogleOnForExistingAccounts-notes.txt'
+Test Case '-[A1ProbeUITests.GoogleShotTests test2GoogleOnForExistingAccounts]' passed (17.431 seconds).
+Test Case '-[A1ProbeUITests.GoogleShotTests test3GoogleOff]' started.
+    t =     0.00s Start Test at 2026-10-06 22:40:09.392
+    t =     0.03s Set Up
+    t =     0.07s Open io.orbitd.a1probe
+    t =     0.07s     Launch io.orbitd.a1probe
+    t =     0.07s         Terminate io.orbitd.a1probe:30787
+2026-10-06 22:40:10.783 xcodebuild[15649:51188] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 22:40:10.783 xcodebuild[15649:51188] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     2.53s         Setting up automation session
+    t =     9.29s         Wait for io.orbitd.a1probe to idle
+    t =    11.11s Checking existence of `Any (First Match)`
+    t =    15.51s Checking existence of `Button (First Match)`
+    t =    15.57s Checking existence of `Any (First Match)`
+    t =    15.59s Checking existence of `Any (First Match)`
+    t =    15.75s Added attachment named 'ios-3-google-off'
+    t =    15.76s Requesting snapshot of accessibility hierarchy for app with pid 31174
+    t =    15.81s Requesting snapshot of accessibility hierarchy for app with pid 31174
+    t =    15.83s Added attachment named 'ios-tree-3-google-off.txt'
+    t =    15.84s Tear Down
+    t =    15.84s     Added attachment named 'ios-GoogleShotTeststest3GoogleOff-notes.txt'
+Test Case '-[A1ProbeUITests.GoogleShotTests test3GoogleOff]' passed (16.084 seconds).
+Test Case '-[A1ProbeUITests.GoogleShotTests test4ServerFromBeforeGoogleSignIn]' started.
+    t =     0.00s Start Test at 2026-10-06 22:40:25.476
+    t =     0.02s Set Up
+    t =     0.04s Open io.orbitd.a1probe
+    t =     0.04s     Launch io.orbitd.a1probe
+    t =     0.04s         Terminate io.orbitd.a1probe:31174
+2026-10-06 22:40:26.542 xcodebuild[15649:51188] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 22:40:26.542 xcodebuild[15649:51188] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     2.10s         Setting up automation session
+    t =     3.58s         Wait for io.orbitd.a1probe to idle
+    t =     5.09s Checking existence of `Any (First Match)`
+    t =     8.67s Checking existence of `Button (First Match)`
+    t =     8.74s Checking existence of `Any (First Match)`
+    t =     8.76s Checking existence of `Any (First Match)`
+    t =     8.92s Added attachment named 'ios-4-old-server-404'
+    t =     8.93s Requesting snapshot of accessibility hierarchy for app with pid 31872
+    t =     8.98s Requesting snapshot of accessibility hierarchy for app with pid 31872
+    t =     9.00s Added attachment named 'ios-tree-4-old-server-404.txt'
+    t =     9.00s Tear Down
+    t =     9.00s     Added attachment named 'ios-GoogleShotTeststest4ServerFromBeforeGoogleSignIn-notes.txt'
+Test Case '-[A1ProbeUITests.GoogleShotTests test4ServerFromBeforeGoogleSignIn]' passed (9.224 seconds).
+Test Case '-[A1ProbeUITests.GoogleShotTests test5GoogleOnDark]' started.
+    t =     0.00s Start Test at 2026-10-06 22:40:34.701
+    t =     0.02s Set Up
+    t =     0.06s Open io.orbitd.a1probe
+    t =     0.06s     Launch io.orbitd.a1probe
+    t =     0.06s         Terminate io.orbitd.a1probe:31872
+2026-10-06 22:40:35.798 xcodebuild[15649:51188] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 22:40:35.798 xcodebuild[15649:51188] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.98s         Setting up automation session
+    t =     3.56s         Wait for io.orbitd.a1probe to idle
+    t =     5.51s Checking existence of `Any (First Match)`
+    t =    11.36s Checking existence of `Button (First Match)`
+    t =    11.38s Checking existence of `Any (First Match)`
+    t =    11.40s Checking existence of `Any (First Match)`
+    t =    11.55s Added attachment named 'ios-5-google-on-signup-open-dark'
+    t =    11.56s Requesting snapshot of accessibility hierarchy for app with pid 32161
+    t =    11.62s Requesting snapshot of accessibility hierarchy for app with pid 32161
+    t =    11.64s Added attachment named 'ios-tree-5-google-on-signup-open-dark.txt'
+    t =    11.64s Tear Down
+    t =    11.64s     Added attachment named 'ios-GoogleShotTeststest5GoogleOnDark-notes.txt'
+Test Case '-[A1ProbeUITests.GoogleShotTests test5GoogleOnDark]' passed (11.866 seconds).
+Test Case '-[A1ProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn]' started.
+    t =     0.00s Start Test at 2026-10-06 22:40:46.568
+    t =     0.02s Set Up
+    t =     0.04s Open io.orbitd.a1probe
+    t =     0.04s     Launch io.orbitd.a1probe
+    t =     0.04s         Terminate io.orbitd.a1probe:32161
+2026-10-06 22:40:47.627 xcodebuild[15649:51188] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 22:40:47.627 xcodebuild[15649:51188] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.92s         Setting up automation session
+    t =     5.14s         Wait for io.orbitd.a1probe to idle
+    t =     6.77s Checking existence of `Any (First Match)`
+    t =     8.78s Checking existence of `Button (First Match)`
+    t =     8.81s Tap Button (First Match)
+    t =     8.81s     Wait for io.orbitd.a1probe to idle
+    t =     8.82s     Find the Button (First Match)
+    t =     8.84s     Check for interrupting elements affecting "Continue with Google" Button
+    t =     8.91s     Synthesize event
+    t =     9.36s     Wait for io.orbitd.a1probe to idle
+    t =     9.96s Checking existence of `Any (First Match)`
+    t =    10.00s Checking existence of `"Continue" Button`
+    t =    10.19s Checking existence of `"Continue" Button`
+    t =    10.72s Checking existence of `Any (First Match)`
+    t =    10.77s Checking existence of `"Continue" Button`
+    t =    10.79s Checking existence of `"Continue" Button`
+    t =    11.33s Checking existence of `Any (First Match)`
+    t =    11.41s Checking existence of `"Continue" Button`
+    t =    11.44s Checking existence of `"Continue" Button`
+    t =    12.01s Checking existence of `Any (First Match)`
+    t =    12.08s Checking existence of `"Continue" Button`
+    t =    12.15s Find the "Continue" Button
+    t =    12.39s Added attachment named 'ios-sign-in-prompt'
+    t =    12.40s Tap "Continue" Button
+    t =    12.40s     Wait for com.apple.springboard to idle
+    t =    12.41s     Find the "Continue" Button
+    t =    12.44s     Check for interrupting elements affecting "Continue" Button
+    t =    12.53s     Synthesize event
+    t =    12.95s     Wait for com.apple.springboard to idle
+    t =    15.94s Added attachment named 'ios-6-sign-in-meanwhile-4'
+    t =    16.45s Checking existence of `Any (First Match)`
+    t =    19.92s Checking existence of `"Continue" Button`
+    t =    19.98s Checking existence of `"Continue" Button`
+    t =    21.70s Ignoring failure to get hierarchy for remote element in process 33279 (Error getting main window kAXErrorInvalidUIElement)
+    t =    21.71s Ignoring failure to get hierarchy for remote element in process 33279 (Error getting main window kAXErrorInvalidUIElement)
+    t =    22.22s Checking existence of `Any (First Match)`
+    t =    22.28s Open io.orbitd.a1probe
+    t =    22.28s     Activate io.orbitd.a1probe
+    t =    22.31s         Wait for io.orbitd.a1probe to idle
+    t =    23.44s Added attachment named 'ios-6-signed-in-with-google'
+    t =    23.45s Checking existence of `Any (First Match)`
+    t =    23.47s Checking existence of `Any (First Match)`
+    t =    23.51s Tear Down
+    t =    23.51s     Added attachment named 'ios-GoogleShotTeststest6ContinueWithGoogleSignsIn-notes.txt'
+Test Case '-[A1ProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn]' passed (23.800 seconds).
+Test Case '-[A1ProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy]' started.
+    t =     0.00s Start Test at 2026-10-06 22:41:10.368
+    t =     0.03s Set Up
+    t =     0.06s Open io.orbitd.a1probe
+    t =     0.06s     Launch io.orbitd.a1probe
+    t =     0.06s         Terminate io.orbitd.a1probe:32586
+2026-10-06 22:41:11.446 xcodebuild[15649:51188] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 22:41:11.447 xcodebuild[15649:51188] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     5.27s         Setting up automation session
+    t =     5.33s         Wait for io.orbitd.a1probe to idle
+    t =     6.34s Checking existence of `Any (First Match)`
+    t =     7.96s Checking existence of `Button (First Match)`
+    t =     7.98s Tap Button (First Match)
+    t =     7.98s     Wait for io.orbitd.a1probe to idle
+    t =     7.98s     Find the Button (First Match)
+    t =     8.00s     Check for interrupting elements affecting "Continue with Google" Button
+    t =     8.03s     Synthesize event
+    t =     8.34s     Wait for io.orbitd.a1probe to idle
+    t =     8.34s Checking existence of `Any (First Match)`
+    t =     8.41s Checking existence of `"Continue" Button`
+    t =     8.51s Checking existence of `"Continue" Button`
+    t =     9.08s Checking existence of `Any (First Match)`
+    t =     9.11s Checking existence of `"Continue" Button`
+    t =     9.15s Find the "Continue" Button
+    t =     9.35s Added attachment named 'ios-sign-in-prompt'
+    t =     9.36s Tap "Continue" Button
+    t =     9.36s     Wait for com.apple.springboard to idle
+    t =     9.36s     Find the "Continue" Button
+    t =     9.40s     Check for interrupting elements affecting "Continue" Button
+    t =     9.44s     Synthesize event
+    t =     9.75s     Wait for com.apple.springboard to idle
+    t =    11.54s Checking existence of `Any (First Match)`
+    t =    11.79s Open io.orbitd.a1probe
+    t =    11.79s     Activate io.orbitd.a1probe
+    t =    11.80s         Wait for io.orbitd.a1probe to idle
+    t =    12.98s Added attachment named 'ios-7-google-refused'
+    t =    12.98s Checking existence of `Any (First Match)`
+    t =    13.01s Checking existence of `Any (First Match)`
+    t =    13.04s Tear Down
+    t =    13.04s     Added attachment named 'ios-GoogleShotTeststest7ARefusedGoogleSignInSaysWhy-notes.txt'
+Test Case '-[A1ProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy]' passed (13.283 seconds).
+Test Suite 'GoogleShotTests' passed at 2026-10-06 22:41:23.650.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 129.738 (129.744) seconds
+Test Suite 'A1ProbeUITests.xctest' passed at 2026-10-06 22:41:23.651.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 129.738 (129.745) seconds
+Test Suite 'All tests' passed at 2026-10-06 22:41:23.651.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 129.738 (129.747) seconds
+2026-10-06 22:41:24.706 xcodebuild[15649:51188] [MT] IDETestOperationsObserverDebug: 163.154 elapsed -- Testing started completed.
+2026-10-06 22:41:24.706 xcodebuild[15649:51188] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-06 22:41:24.706 xcodebuild[15649:51188] [MT] IDETestOperationsObserverDebug: 163.154 sec, +163.154 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.a1-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

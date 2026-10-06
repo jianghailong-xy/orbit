@@ -1,0 +1,30 @@
+Attributes: Application, 0x108c13840, pid: 31872, label: 'A1Probe'
+Element subtree:
+ →Application, 0x108c13840, pid: 31872, label: 'A1Probe'
+    Window (Main), 0x108c13980, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x108c13ac0, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x108c13c00, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x108c13d40, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x108c13e80, {{0.0, 0.0}, {402.0, 874.0}}
+              ScrollView, 0x1163a3e80, {{0.0, 0.0}, {402.0, 874.0}}
+                Other, 0x108c14000, {{0.0, 62.0}, {402.0, 778.0}}
+                  Other, 0x108c14140, {{163.0, 251.3}, {76.0, 76.0}}, label: 'Orbit'
+                  StaticText, 0x108c14280, {{85.3, 347.3}, {231.3, 40.7}}, label: 'Welcome back'
+                  StaticText, 0x108c143c0, {{99.3, 394.0}, {203.3, 20.3}}, label: 'Sign in to continue to Orbit'
+                  StaticText, 0x108c14500, {{40.0, 460.3}, {32.7, 15.7}}, label: 'Email'
+                  TextField, 0x108c14640, {{40.0, 478.0}, {322.0, 22.0}}, placeholderValue: 'you@example.com'
+                  StaticText, 0x108c14780, {{40.0, 532.0}, {58.3, 15.7}}, label: 'Password'
+                  SecureTextField, 0x108c148c0, {{40.0, 549.7}, {287.7, 21.0}}, placeholderValue: 'Enter your password'
+                  Button, 0x108c14a00, {{337.3, 553.0}, {23.0, 14.3}}, identifier: 'eye', label: 'Show password'
+                  Button, 0x108c14b40, {{24.0, 600.7}, {354.0, 50.0}}, label: 'Sign In', Disabled
+                Other, 0x108c14c80, {{369.0, 62.0}, {30.0, 750.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x108c14dc0, {{396.0, 65.0}, {3.0, 744.0}}
+                Other, 0x108c14f00, {{369.0, 62.0}, {30.0, 750.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x108c15040, {{396.0, 65.0}, {3.0, 744.0}}
+Path to element:
+ →Application, 0x108c13840, pid: 31872, label: 'A1Probe'
+Query chain:
+ →Find: Target Application 'io.orbitd.a1probe'
+  Output: {
+    Application, 0x108c15180, pid: 31872, label: 'A1Probe'
+  }

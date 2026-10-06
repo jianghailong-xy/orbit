@@ -1,0 +1,20 @@
+Test Case '-[A1MacProbeUITests.GoogleShotTests test1GoogleOnAndOpeningAccounts]' started.
+Test Case '-[A1MacProbeUITests.GoogleShotTests test1GoogleOnAndOpeningAccounts]' passed (8.871 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test2GoogleOnForExistingAccounts]' started.
+Test Case '-[A1MacProbeUITests.GoogleShotTests test2GoogleOnForExistingAccounts]' passed (6.136 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test3GoogleOff]' started.
+Test Case '-[A1MacProbeUITests.GoogleShotTests test3GoogleOff]' passed (6.195 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test4ServerFromBeforeGoogleSignIn]' started.
+Test Case '-[A1MacProbeUITests.GoogleShotTests test4ServerFromBeforeGoogleSignIn]' passed (6.115 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test5GoogleOnDark]' started.
+Test Case '-[A1MacProbeUITests.GoogleShotTests test5GoogleOnDark]' passed (9.247 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn]' started.
+/Users/runner/work/orbit/orbit/.a1-probe/UITests/GoogleShotTests.swift:106: error: -[A1MacProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn] : failed - Continue with Google never signed in; the stub saw ["GET /api/auth/methods"]; the page says ["", "", "", "", "", "", ""]
+Test Case '-[A1MacProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn]' failed (98.243 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy]' started.
+/Users/runner/work/orbit/orbit/.a1-probe/UITests/GoogleShotTests.swift:87: error: -[A1MacProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy] : The app representing com.apple.AuthenticationServicesCore.AuthenticationServicesAgent could not be found. (NSInternalInconsistencyException)
+Test Case '-[A1MacProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy]' failed (43.547 seconds).
+	 Executed 7 tests, with 2 failures (1 unexpected) in 178.355 (178.359) seconds
+	 Executed 7 tests, with 2 failures (1 unexpected) in 178.355 (178.361) seconds
+	 Executed 7 tests, with 2 failures (1 unexpected) in 178.355 (178.362) seconds
+** TEST FAILED **

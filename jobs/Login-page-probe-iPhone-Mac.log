@@ -1,0 +1,458 @@
+﻿2026-10-06T22:25:02.3365160Z Current runner version: '2.337.0'
+2026-10-06T22:25:02.3378980Z ##[group]Runner Image Provisioner
+2026-10-06T22:25:02.3379480Z Hosted Compute Agent
+2026-10-06T22:25:02.3379850Z Version: 20260828.587
+2026-10-06T22:25:02.3380250Z Commit: abac92662cab4cc7352de4f9f9d2e2419aad9c29
+2026-10-06T22:25:02.3380860Z Build Date: 2026-08-28T16:44:25Z
+2026-10-06T22:25:02.3381290Z Worker ID: {5ec32374-ecde-43ce-b570-b92b1b51f355}
+2026-10-06T22:25:02.3381740Z Azure Region: westus
+2026-10-06T22:25:02.3382100Z ##[endgroup]
+2026-10-06T22:25:02.3382910Z ##[group]Operating System
+2026-10-06T22:25:02.3383290Z macOS
+2026-10-06T22:25:02.3383650Z 26.6.2
+2026-10-06T22:25:02.3383980Z 25G83
+2026-10-06T22:25:02.3384300Z ##[endgroup]
+2026-10-06T22:25:02.3384640Z ##[group]Runner Image
+2026-10-06T22:25:02.3385020Z Image: macos-26-arm64
+2026-10-06T22:25:02.3385370Z Version: 20260907.0351.1
+2026-10-06T22:25:02.3386140Z Included Software: https://github.com/actions/runner-images/blob/macos-26-arm64/20260907.0351/images/macos/macos-26-arm64-Readme.md
+2026-10-06T22:25:02.3387160Z Image Release: https://github.com/actions/runner-images/releases/tag/macos-26-arm64%2F20260907.0351
+2026-10-06T22:25:02.3387790Z ##[endgroup]
+2026-10-06T22:25:02.3388550Z ##[group]GITHUB_TOKEN Permissions
+2026-10-06T22:25:02.3389480Z Contents: read
+2026-10-06T22:25:02.3389830Z Metadata: read
+2026-10-06T22:25:02.3390170Z Packages: read
+2026-10-06T22:25:02.3390520Z ##[endgroup]
+2026-10-06T22:25:02.3391780Z Secret source: Actions
+2026-10-06T22:25:02.3392320Z Cache mode: write
+2026-10-06T22:25:02.3392740Z Prepare workflow directory
+2026-10-06T22:25:02.3595880Z Prepare all required actions
+2026-10-06T22:25:02.3629150Z Getting action download info
+2026-10-06T22:25:02.8072830Z Download action repository 'actions/checkout@v7' (SHA:3d3c42e5aac5ba805825da76410c181273ba90b1)
+2026-10-06T22:25:02.9755450Z Download action repository 'maxim-lobanov/setup-xcode@v1' (SHA:ed7a3b1fda3918c0306d1b724322adc0b8cc0a90)
+2026-10-06T22:25:03.3563700Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-10-06T22:25:03.5123810Z Complete job name: Login page probe (iPhone + Mac)
+2026-10-06T22:25:03.5533870Z ##[group]Run actions/checkout@v7
+2026-10-06T22:25:03.5534400Z with:
+2026-10-06T22:25:03.5534730Z   repository: jianghailong-xy/orbit
+2026-10-06T22:25:03.5537250Z   token: ***
+2026-10-06T22:25:03.5537560Z   ssh-strict: true
+2026-10-06T22:25:03.5537880Z   ssh-user: git
+2026-10-06T22:25:03.5538200Z   persist-credentials: true
+2026-10-06T22:25:03.5538550Z   clean: true
+2026-10-06T22:25:03.5538880Z   sparse-checkout-cone-mode: true
+2026-10-06T22:25:03.5539250Z   fetch-depth: 1
+2026-10-06T22:25:03.5539560Z   fetch-tags: false
+2026-10-06T22:25:03.5539890Z   show-progress: true
+2026-10-06T22:25:03.5540210Z   lfs: false
+2026-10-06T22:25:03.5540510Z   submodules: false
+2026-10-06T22:25:03.5540840Z   set-safe-directory: true
+2026-10-06T22:25:03.5541200Z   allow-unsafe-pr-checkout: false
+2026-10-06T22:25:03.5541680Z ##[endgroup]
+2026-10-06T22:25:03.8688190Z Syncing repository: jianghailong-xy/orbit
+2026-10-06T22:25:03.8690430Z ##[group]Getting Git version info
+2026-10-06T22:25:03.8691080Z Working directory is '/Users/runner/work/orbit/orbit'
+2026-10-06T22:25:03.8691910Z [command]/opt/homebrew/bin/git version
+2026-10-06T22:25:03.9157900Z git version 2.55.0
+2026-10-06T22:25:03.9172230Z ##[endgroup]
+2026-10-06T22:25:03.9178840Z Copying '/Users/runner/.gitconfig' to '/Users/runner/work/_temp/2e12c883-efd8-46cf-991a-46c8c0b70823/.gitconfig'
+2026-10-06T22:25:03.9183360Z Temporarily overriding HOME='/Users/runner/work/_temp/2e12c883-efd8-46cf-991a-46c8c0b70823' before making global git config changes
+2026-10-06T22:25:03.9184330Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-06T22:25:03.9186620Z [command]/opt/homebrew/bin/git config --global --add safe.directory /Users/runner/work/orbit/orbit
+2026-10-06T22:25:03.9284480Z Deleting the contents of '/Users/runner/work/orbit/orbit'
+2026-10-06T22:25:03.9288290Z ##[group]Determining repository object format
+2026-10-06T22:25:03.9289690Z ##[endgroup]
+2026-10-06T22:25:03.9290330Z ##[group]Initializing the repository
+2026-10-06T22:25:03.9292350Z [command]/opt/homebrew/bin/git init /Users/runner/work/orbit/orbit
+2026-10-06T22:25:03.9496420Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-10-06T22:25:03.9497440Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-10-06T22:25:03.9498350Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-10-06T22:25:03.9498890Z hint: call:
+2026-10-06T22:25:03.9499290Z hint:
+2026-10-06T22:25:03.9499700Z hint: 	git config --global init.defaultBranch <name>
+2026-10-06T22:25:03.9500190Z hint:
+2026-10-06T22:25:03.9500700Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-10-06T22:25:03.9501380Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-10-06T22:25:03.9502030Z hint:
+2026-10-06T22:25:03.9502370Z hint: 	git branch -m <name>
+2026-10-06T22:25:03.9502800Z hint:
+2026-10-06T22:25:03.9503320Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-10-06T22:25:03.9504160Z Initialized empty Git repository in /Users/runner/work/orbit/orbit/.git/
+2026-10-06T22:25:03.9505540Z [command]/opt/homebrew/bin/git remote add origin https://github.com/jianghailong-xy/orbit
+2026-10-06T22:25:03.9582990Z ##[endgroup]
+2026-10-06T22:25:03.9584670Z ##[group]Disabling automatic garbage collection
+2026-10-06T22:25:03.9585540Z [command]/opt/homebrew/bin/git config --local gc.auto 0
+2026-10-06T22:25:03.9646190Z ##[endgroup]
+2026-10-06T22:25:03.9646880Z ##[group]Setting up auth
+2026-10-06T22:25:03.9647340Z Removing SSH command configuration
+2026-10-06T22:25:03.9650840Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-06T22:25:03.9715930Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-06T22:25:04.0718590Z Removing HTTP extra header
+2026-10-06T22:25:04.0723390Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-06T22:25:04.0782820Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-06T22:25:04.1509280Z Removing includeIf entries pointing to credentials config files
+2026-10-06T22:25:04.1513500Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-06T22:25:04.1576370Z [command]/opt/homebrew/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-06T22:25:04.2314450Z [command]/opt/homebrew/bin/git config --file /Users/runner/work/_temp/git-credentials-c9ebe263-9315-49c7-a3dd-033c65cbb213.config http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-10-06T22:25:04.2570720Z [command]/opt/homebrew/bin/git config --local includeIf.gitdir:/Users/runner/work/orbit/orbit/.git.path /Users/runner/work/_temp/git-credentials-c9ebe263-9315-49c7-a3dd-033c65cbb213.config
+2026-10-06T22:25:04.2631740Z [command]/opt/homebrew/bin/git config --local includeIf.gitdir:/Users/runner/work/orbit/orbit/.git/worktrees/*.path /Users/runner/work/_temp/git-credentials-c9ebe263-9315-49c7-a3dd-033c65cbb213.config
+2026-10-06T22:25:04.2692050Z [command]/opt/homebrew/bin/git config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-c9ebe263-9315-49c7-a3dd-033c65cbb213.config
+2026-10-06T22:25:04.2754430Z [command]/opt/homebrew/bin/git config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-c9ebe263-9315-49c7-a3dd-033c65cbb213.config
+2026-10-06T22:25:04.2812470Z ##[endgroup]
+2026-10-06T22:25:04.2813460Z ##[group]Fetching the repository
+2026-10-06T22:25:04.2817650Z [command]/opt/homebrew/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +8d8afb3414067382e846b497024eacaee73bbc4e:refs/remotes/origin/probe/a1-google
+2026-10-06T22:25:40.6577910Z From https://github.com/jianghailong-xy/orbit
+2026-10-06T22:25:40.6579070Z  * [new ref]         8d8afb3414067382e846b497024eacaee73bbc4e -> origin/probe/a1-google
+2026-10-06T22:25:40.6586790Z [command]/opt/homebrew/bin/git branch --list --remote origin/probe/a1-google
+2026-10-06T22:25:40.6665420Z   origin/probe/a1-google
+2026-10-06T22:25:40.6672110Z [command]/opt/homebrew/bin/git rev-parse refs/remotes/origin/probe/a1-google
+2026-10-06T22:25:40.6727410Z 8d8afb3414067382e846b497024eacaee73bbc4e
+2026-10-06T22:25:40.6729310Z ##[endgroup]
+2026-10-06T22:25:40.6729730Z ##[group]Determining the checkout info
+2026-10-06T22:25:40.6730370Z ##[endgroup]
+2026-10-06T22:25:40.6733880Z [command]/opt/homebrew/bin/git sparse-checkout disable
+2026-10-06T22:25:40.6814710Z [command]/opt/homebrew/bin/git config --local --unset-all extensions.worktreeConfig
+2026-10-06T22:25:40.6875580Z ##[group]Checking out the ref
+2026-10-06T22:25:40.6877380Z [command]/opt/homebrew/bin/git checkout --progress --force -B probe/a1-google refs/remotes/origin/probe/a1-google
+2026-10-06T22:25:41.7951250Z Updating files:  13% (4000/28753)
+2026-10-06T22:25:41.8571940Z Updating files:  14% (4026/28753)
+2026-10-06T22:25:41.8983410Z Updating files:  15% (4313/28753)
+2026-10-06T22:25:41.9653180Z Updating files:  16% (4601/28753)
+2026-10-06T22:25:42.0329260Z Updating files:  17% (4889/28753)
+2026-10-06T22:25:42.1131760Z Updating files:  18% (5176/28753)
+2026-10-06T22:25:42.1478730Z Updating files:  19% (5464/28753)
+2026-10-06T22:25:42.1757140Z Updating files:  20% (5751/28753)
+2026-10-06T22:25:42.1980250Z Updating files:  21% (6039/28753)
+2026-10-06T22:25:42.2251070Z Updating files:  22% (6326/28753)
+2026-10-06T22:25:42.2542730Z Updating files:  23% (6614/28753)
+2026-10-06T22:25:42.2827420Z Updating files:  24% (6901/28753)
+2026-10-06T22:25:42.3090780Z Updating files:  25% (7189/28753)
+2026-10-06T22:25:42.4651360Z Updating files:  26% (7476/28753)
+2026-10-06T22:25:42.5792800Z Updating files:  27% (7764/28753)
+2026-10-06T22:25:42.6478000Z Updating files:  28% (8051/28753)
+2026-10-06T22:25:42.6872290Z Updating files:  29% (8339/28753)
+2026-10-06T22:25:42.7419620Z Updating files:  30% (8626/28753)
+2026-10-06T22:25:42.7534210Z Updating files:  30% (8838/28753)
+2026-10-06T22:25:42.8155080Z Updating files:  31% (8914/28753)
+2026-10-06T22:25:42.8471190Z Updating files:  32% (9201/28753)
+2026-10-06T22:25:42.8765010Z Updating files:  33% (9489/28753)
+2026-10-06T22:25:42.9320410Z Updating files:  34% (9777/28753)
+2026-10-06T22:25:43.0016530Z Updating files:  35% (10064/28753)
+2026-10-06T22:25:43.0547960Z Updating files:  36% (10352/28753)
+2026-10-06T22:25:43.0977830Z Updating files:  37% (10639/28753)
+2026-10-06T22:25:43.1682780Z Updating files:  38% (10927/28753)
+2026-10-06T22:25:43.2205800Z Updating files:  39% (11214/28753)
+2026-10-06T22:25:43.3144740Z Updating files:  40% (11502/28753)
+2026-10-06T22:25:43.3831200Z Updating files:  41% (11789/28753)
+2026-10-06T22:25:43.4473280Z Updating files:  42% (12077/28753)
+2026-10-06T22:25:43.4967680Z Updating files:  43% (12364/28753)
+2026-10-06T22:25:43.5644500Z Updating files:  44% (12652/28753)
+2026-10-06T22:25:43.7230690Z Updating files:  45% (12939/28753)
+2026-10-06T22:25:43.7270670Z Updating files:  45% (13213/28753)
+2026-10-06T22:25:43.8340750Z Updating files:  46% (13227/28753)
+2026-10-06T22:25:43.9529100Z Updating files:  47% (13514/28753)
+2026-10-06T22:25:44.0050620Z Updating files:  48% (13802/28753)
+2026-10-06T22:25:44.0554750Z Updating files:  49% (14089/28753)
+2026-10-06T22:25:44.1800550Z Updating files:  50% (14377/28753)
+2026-10-06T22:25:44.5251680Z Updating files:  51% (14665/28753)
+2026-10-06T22:25:44.5658820Z Updating files:  52% (14952/28753)
+2026-10-06T22:25:44.6033120Z Updating files:  53% (15240/28753)
+2026-10-06T22:25:44.6708570Z Updating files:  54% (15527/28753)
+2026-10-06T22:25:44.7120810Z Updating files:  55% (15815/28753)
+2026-10-06T22:25:44.7182680Z Updating files:  56% (16102/28753)
+2026-10-06T22:25:44.8004710Z Updating files:  56% (16133/28753)
+2026-10-06T22:25:44.8496680Z Updating files:  57% (16390/28753)
+2026-10-06T22:25:44.9035750Z Updating files:  58% (16677/28753)
+2026-10-06T22:25:44.9594870Z Updating files:  59% (16965/28753)
+2026-10-06T22:25:45.0082250Z Updating files:  60% (17252/28753)
+2026-10-06T22:25:45.1075260Z Updating files:  61% (17540/28753)
+2026-10-06T22:25:45.3783290Z Updating files:  62% (17827/28753)
+2026-10-06T22:25:45.5803160Z Updating files:  63% (18115/28753)
+2026-10-06T22:25:45.6650180Z Updating files:  64% (18402/28753)
+2026-10-06T22:25:45.7164140Z Updating files:  65% (18690/28753)
+2026-10-06T22:25:45.7186170Z Updating files:  66% (18977/28753)
+2026-10-06T22:25:45.7964740Z Updating files:  66% (18988/28753)
+2026-10-06T22:25:45.8433150Z Updating files:  67% (19265/28753)
+2026-10-06T22:25:45.9032140Z Updating files:  68% (19553/28753)
+2026-10-06T22:25:45.9525510Z Updating files:  69% (19840/28753)
+2026-10-06T22:25:46.0130840Z Updating files:  70% (20128/28753)
+2026-10-06T22:25:46.0811640Z Updating files:  71% (20415/28753)
+2026-10-06T22:25:46.1584420Z Updating files:  72% (20703/28753)
+2026-10-06T22:25:46.2054850Z Updating files:  73% (20990/28753)
+2026-10-06T22:25:46.2416480Z Updating files:  74% (21278/28753)
+2026-10-06T22:25:46.2926570Z Updating files:  75% (21565/28753)
+2026-10-06T22:25:46.3649200Z Updating files:  76% (21853/28753)
+2026-10-06T22:25:46.4345970Z Updating files:  77% (22140/28753)
+2026-10-06T22:25:46.4993430Z Updating files:  78% (22428/28753)
+2026-10-06T22:25:46.5442970Z Updating files:  79% (22715/28753)
+2026-10-06T22:25:46.6072980Z Updating files:  80% (23003/28753)
+2026-10-06T22:25:46.6451320Z Updating files:  81% (23290/28753)
+2026-10-06T22:25:46.7064560Z Updating files:  82% (23578/28753)
+2026-10-06T22:25:46.7195420Z Updating files:  83% (23865/28753)
+2026-10-06T22:25:46.7882470Z Updating files:  83% (23951/28753)
+2026-10-06T22:25:47.1998590Z Updating files:  84% (24153/28753)
+2026-10-06T22:25:47.7202610Z Updating files:  85% (24441/28753)
+2026-10-06T22:25:48.1349400Z Updating files:  85% (24679/28753)
+2026-10-06T22:25:48.2139680Z Updating files:  86% (24728/28753)
+2026-10-06T22:25:48.2554840Z Updating files:  87% (25016/28753)
+2026-10-06T22:25:48.2962240Z Updating files:  88% (25303/28753)
+2026-10-06T22:25:48.3383740Z Updating files:  89% (25591/28753)
+2026-10-06T22:25:48.3880500Z Updating files:  90% (25878/28753)
+2026-10-06T22:25:48.4551450Z Updating files:  91% (26166/28753)
+2026-10-06T22:25:48.6092490Z Updating files:  92% (26453/28753)
+2026-10-06T22:25:48.6663940Z Updating files:  93% (26741/28753)
+2026-10-06T22:25:48.7151910Z Updating files:  94% (27028/28753)
+2026-10-06T22:25:48.7201110Z Updating files:  95% (27316/28753)
+2026-10-06T22:25:48.7636560Z Updating files:  95% (27343/28753)
+2026-10-06T22:25:48.8163420Z Updating files:  96% (27603/28753)
+2026-10-06T22:25:48.8741880Z Updating files:  97% (27891/28753)
+2026-10-06T22:25:48.9259060Z Updating files:  98% (28178/28753)
+2026-10-06T22:25:48.9660330Z Updating files:  99% (28466/28753)
+2026-10-06T22:25:48.9662290Z Updating files: 100% (28753/28753)
+2026-10-06T22:25:48.9662800Z Updating files: 100% (28753/28753), done.
+2026-10-06T22:25:49.0065440Z Switched to a new branch 'probe/a1-google'
+2026-10-06T22:25:49.0105190Z branch 'probe/a1-google' set up to track 'origin/probe/a1-google'.
+2026-10-06T22:25:49.0153240Z ##[endgroup]
+2026-10-06T22:25:49.0285580Z [command]/opt/homebrew/bin/git log -1 --format=%H
+2026-10-06T22:25:49.0377400Z 8d8afb3414067382e846b497024eacaee73bbc4e
+2026-10-06T22:25:49.0681000Z ##[group]Run maxim-lobanov/setup-xcode@v1
+2026-10-06T22:25:49.0681270Z with:
+2026-10-06T22:25:49.0681450Z   xcode-version: latest-stable
+2026-10-06T22:25:49.0681640Z ##[endgroup]
+2026-10-06T22:25:49.1670020Z Switching Xcode to version 'latest-stable'...
+2026-10-06T22:25:49.2454190Z Xcode is set to 26.6.0 (17F113)
+2026-10-06T22:25:49.2535860Z ##[group]Run brew install xcodegen
+2026-10-06T22:25:49.2536240Z [36;1mbrew install xcodegen[0m
+2026-10-06T22:25:49.2728080Z shell: /bin/bash -e {0}
+2026-10-06T22:25:49.2728540Z env:
+2026-10-06T22:25:49.2728920Z   MD_APPLE_SDK_ROOT: /Applications/Xcode_26.6.app
+2026-10-06T22:25:49.2729290Z ##[endgroup]
+2026-10-06T22:25:51.6092890Z [32m==>[0m [1mDownloading bottle manifests[0m
+2026-10-06T22:25:51.6293510Z ✔︎ Bottle Manifest xcodegen (2.46.0)
+2026-10-06T22:25:51.6294050Z [34m==>[0m [1mWould install 1 formula:[0m
+2026-10-06T22:25:51.6360430Z [32m==>[0m [1mFetching downloads for: [32mxcodegen[39m[0m
+2026-10-06T22:25:51.6360850Z xcodegen
+2026-10-06T22:25:51.8719900Z ✔︎ Bottle xcodegen (2.46.0)
+2026-10-06T22:25:51.9100280Z [34m==>[0m [1mPouring xcodegen--2.46.0.arm64_tahoe.bottle.1.tar.gz[0m
+2026-10-06T22:25:52.0314410Z 🍺  /opt/homebrew/Cellar/xcodegen/2.46.0: 38 files, 7.4MB
+2026-10-06T22:25:52.0408880Z ##[group]Run swift --version && xcodebuild -version && xcodegen --version && sw_vers
+2026-10-06T22:25:52.0409370Z [36;1mswift --version && xcodebuild -version && xcodegen --version && sw_vers[0m
+2026-10-06T22:25:52.0440830Z shell: /bin/bash -e {0}
+2026-10-06T22:25:52.0441020Z env:
+2026-10-06T22:25:52.0441220Z   MD_APPLE_SDK_ROOT: /Applications/Xcode_26.6.app
+2026-10-06T22:25:52.0441500Z ##[endgroup]
+2026-10-06T22:25:54.3229850Z Apple Swift version 6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)
+2026-10-06T22:25:54.3230260Z Target: arm64-apple-macosx26.0
+2026-10-06T22:25:54.3900530Z Xcode 26.6
+2026-10-06T22:25:54.3903450Z Build version 17F113
+2026-10-06T22:25:54.3992820Z Version: 2.46.0
+2026-10-06T22:25:54.4086930Z ProductName:		macOS
+2026-10-06T22:25:54.4087250Z ProductVersion:		26.6.2
+2026-10-06T22:25:54.4087540Z BuildVersion:		25G83
+2026-10-06T22:25:54.4090490Z swift-driver version: 1.148.6 
+2026-10-06T22:25:54.4120760Z ##[group]Run bash .a1-probe/run.sh 2>&1 | tee run-output.log
+2026-10-06T22:25:54.4121120Z [36;1mbash .a1-probe/run.sh 2>&1 | tee run-output.log[0m
+2026-10-06T22:25:54.4121430Z [36;1mexit "${PIPESTATUS[0]}"[0m
+2026-10-06T22:25:54.4151100Z shell: /bin/bash -e {0}
+2026-10-06T22:25:54.4151340Z env:
+2026-10-06T22:25:54.4151530Z   MD_APPLE_SDK_ROOT: /Applications/Xcode_26.6.app
+2026-10-06T22:25:54.4151770Z ##[endgroup]
+2026-10-06T22:25:58.1030430Z iPhone: iPhone 17 Pro com.apple.CoreSimulator.SimRuntime.iOS-26-5
+2026-10-06T22:25:58.1073940Z ==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+2026-10-06T22:27:52.4950380Z ==> stub ready (pid 2705, after 2s): {"password": true, "google": true, "googleSignup": true}
+2026-10-06T22:27:52.5039430Z ==> mac
+2026-10-06T22:34:50.9779050Z Test Case '-[A1MacProbeUITests.GoogleShotTests test1GoogleOnAndOpeningAccounts]' started.
+2026-10-06T22:34:50.9839000Z Test Case '-[A1MacProbeUITests.GoogleShotTests test1GoogleOnAndOpeningAccounts]' passed (8.871 seconds).
+2026-10-06T22:34:50.9839970Z Test Case '-[A1MacProbeUITests.GoogleShotTests test2GoogleOnForExistingAccounts]' started.
+2026-10-06T22:34:50.9841920Z Test Case '-[A1MacProbeUITests.GoogleShotTests test2GoogleOnForExistingAccounts]' passed (6.136 seconds).
+2026-10-06T22:34:50.9843450Z Test Case '-[A1MacProbeUITests.GoogleShotTests test3GoogleOff]' started.
+2026-10-06T22:34:50.9846210Z Test Case '-[A1MacProbeUITests.GoogleShotTests test3GoogleOff]' passed (6.195 seconds).
+2026-10-06T22:34:50.9849590Z Test Case '-[A1MacProbeUITests.GoogleShotTests test4ServerFromBeforeGoogleSignIn]' started.
+2026-10-06T22:34:50.9854540Z Test Case '-[A1MacProbeUITests.GoogleShotTests test4ServerFromBeforeGoogleSignIn]' passed (6.115 seconds).
+2026-10-06T22:34:50.9855610Z Test Case '-[A1MacProbeUITests.GoogleShotTests test5GoogleOnDark]' started.
+2026-10-06T22:34:50.9858780Z Test Case '-[A1MacProbeUITests.GoogleShotTests test5GoogleOnDark]' passed (9.247 seconds).
+2026-10-06T22:34:50.9859630Z Test Case '-[A1MacProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn]' started.
+2026-10-06T22:34:50.9871160Z /Users/runner/work/orbit/orbit/.a1-probe/UITests/GoogleShotTests.swift:106: error: -[A1MacProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn] : failed - Continue with Google never signed in; the stub saw ["GET /api/auth/methods"]; the page says ["", "", "", "", "", "", ""]
+2026-10-06T22:34:50.9902540Z Test Case '-[A1MacProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn]' failed (98.243 seconds).
+2026-10-06T22:34:50.9910930Z Test Case '-[A1MacProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy]' started.
+2026-10-06T22:34:50.9914120Z /Users/runner/work/orbit/orbit/.a1-probe/UITests/GoogleShotTests.swift:87: error: -[A1MacProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy] : The app representing com.apple.AuthenticationServicesCore.AuthenticationServicesAgent could not be found. (NSInternalInconsistencyException)
+2026-10-06T22:34:50.9916500Z Test Case '-[A1MacProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy]' failed (43.547 seconds).
+2026-10-06T22:34:50.9919930Z 	 Executed 7 tests, with 2 failures (1 unexpected) in 178.355 (178.359) seconds
+2026-10-06T22:34:50.9921480Z 	 Executed 7 tests, with 2 failures (1 unexpected) in 178.355 (178.361) seconds
+2026-10-06T22:34:50.9922330Z 	 Executed 7 tests, with 2 failures (1 unexpected) in 178.355 (178.362) seconds
+2026-10-06T22:34:50.9923880Z ** TEST FAILED **
+2026-10-06T22:34:55.3039820Z ==> stub ready (pid 15640, after 2s): {"password": true, "google": true, "googleSignup": true}
+2026-10-06T22:34:55.3040410Z ==> ios
+2026-10-06T22:41:25.3519970Z Test Case '-[A1ProbeUITests.GoogleShotTests test1GoogleOnAndOpeningAccounts]' started.
+2026-10-06T22:41:25.3522260Z Test Case '-[A1ProbeUITests.GoogleShotTests test1GoogleOnAndOpeningAccounts]' passed (38.052 seconds).
+2026-10-06T22:41:25.3523090Z Test Case '-[A1ProbeUITests.GoogleShotTests test2GoogleOnForExistingAccounts]' started.
+2026-10-06T22:41:25.3532250Z Test Case '-[A1ProbeUITests.GoogleShotTests test2GoogleOnForExistingAccounts]' passed (17.431 seconds).
+2026-10-06T22:41:25.3533050Z Test Case '-[A1ProbeUITests.GoogleShotTests test3GoogleOff]' started.
+2026-10-06T22:41:25.3535120Z Test Case '-[A1ProbeUITests.GoogleShotTests test3GoogleOff]' passed (16.084 seconds).
+2026-10-06T22:41:25.3536090Z Test Case '-[A1ProbeUITests.GoogleShotTests test4ServerFromBeforeGoogleSignIn]' started.
+2026-10-06T22:41:25.3538430Z Test Case '-[A1ProbeUITests.GoogleShotTests test4ServerFromBeforeGoogleSignIn]' passed (9.224 seconds).
+2026-10-06T22:41:25.3539850Z Test Case '-[A1ProbeUITests.GoogleShotTests test5GoogleOnDark]' started.
+2026-10-06T22:41:25.3540640Z Test Case '-[A1ProbeUITests.GoogleShotTests test5GoogleOnDark]' passed (11.866 seconds).
+2026-10-06T22:41:25.3541590Z Test Case '-[A1ProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn]' started.
+2026-10-06T22:41:25.3542420Z Test Case '-[A1ProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn]' passed (23.800 seconds).
+2026-10-06T22:41:25.3543550Z Test Case '-[A1ProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy]' started.
+2026-10-06T22:41:25.3548930Z Test Case '-[A1ProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy]' passed (13.283 seconds).
+2026-10-06T22:41:25.3549820Z 	 Executed 7 tests, with 0 failures (0 unexpected) in 129.738 (129.744) seconds
+2026-10-06T22:41:25.3550650Z 	 Executed 7 tests, with 0 failures (0 unexpected) in 129.738 (129.745) seconds
+2026-10-06T22:41:25.3551630Z 	 Executed 7 tests, with 0 failures (0 unexpected) in 129.738 (129.747) seconds
+2026-10-06T22:41:25.3552330Z ** TEST SUCCEEDED **
+2026-10-06T22:41:26.0079980Z /Users/runner/work/orbit/orbit/.a1-probe/shots/ios:
+2026-10-06T22:41:26.0082410Z total 19848
+2026-10-06T22:41:26.0083790Z drwxr-xr-x  27 runner  staff      864 Oct  6 22:41 .
+2026-10-06T22:41:26.0084230Z drwxr-xr-x   4 runner  staff      128 Oct  6 22:25 ..
+2026-10-06T22:41:26.0085050Z drwxr-xr-x  25 runner  staff      800 Oct  6 22:41 attachments
+2026-10-06T22:41:26.0086480Z -rw-r--r--   1 runner  staff  1440726 Oct  6 22:39 ios-1-google-on-signup-open.png
+2026-10-06T22:41:26.0096890Z -rw-r--r--   1 runner  staff  1428434 Oct  6 22:40 ios-2-google-on-existing-accounts.png
+2026-10-06T22:41:26.0402580Z -rw-r--r--   1 runner  staff  1431616 Oct  6 22:40 ios-3-google-off.png
+2026-10-06T22:41:26.0403240Z -rw-r--r--   1 runner  staff  1431616 Oct  6 22:40 ios-4-old-server-404.png
+2026-10-06T22:41:26.0403820Z -rw-r--r--   1 runner  staff   774558 Oct  6 22:40 ios-5-google-on-signup-open-dark.png
+2026-10-06T22:41:26.0404480Z -rw-r--r--   1 runner  staff   102112 Oct  6 22:41 ios-6-sign-in-meanwhile-4.png
+2026-10-06T22:41:26.0405030Z -rw-r--r--   1 runner  staff    88330 Oct  6 22:41 ios-6-signed-in-with-google.png
+2026-10-06T22:41:26.0406140Z -rw-r--r--   1 runner  staff  1471222 Oct  6 22:41 ios-7-google-refused.png
+2026-10-06T22:41:26.0407130Z -rw-r--r--@  1 runner  staff        0 Oct  6 22:39 ios-GoogleShotTeststest1GoogleOnAndOpeningAccounts-notes.txt
+2026-10-06T22:41:26.0408490Z -rw-r--r--@  1 runner  staff        0 Oct  6 22:40 ios-GoogleShotTeststest2GoogleOnForExistingAccounts-notes.txt
+2026-10-06T22:41:26.0409190Z -rw-r--r--@  1 runner  staff        0 Oct  6 22:40 ios-GoogleShotTeststest3GoogleOff-notes.txt
+2026-10-06T22:41:26.0410060Z -rw-r--r--@  1 runner  staff        0 Oct  6 22:40 ios-GoogleShotTeststest4ServerFromBeforeGoogleSignIn-notes.txt
+2026-10-06T22:41:26.0410860Z -rw-r--r--@  1 runner  staff        0 Oct  6 22:40 ios-GoogleShotTeststest5GoogleOnDark-notes.txt
+2026-10-06T22:41:26.0411820Z -rw-r--r--@  1 runner  staff      180 Oct  6 22:41 ios-GoogleShotTeststest6ContinueWithGoogleSignsIn-notes.txt
+2026-10-06T22:41:26.0412770Z -rw-r--r--@  1 runner  staff      180 Oct  6 22:41 ios-GoogleShotTeststest7ARefusedGoogleSignInSaysWhy-notes.txt
+2026-10-06T22:41:26.0615330Z -rw-r--r--   1 runner  staff  1290283 Oct  6 22:41 ios-sign-in-prompt.png
+2026-10-06T22:41:26.0618770Z -rw-r--r--@  1 runner  staff     2575 Oct  6 22:39 ios-tree-1-google-on-signup-open.txt
+2026-10-06T22:41:26.0619870Z -rw-r--r--@  1 runner  staff     2434 Oct  6 22:40 ios-tree-2-google-on-existing-accounts.txt
+2026-10-06T22:41:26.0620710Z -rw-r--r--@  1 runner  staff     2068 Oct  6 22:40 ios-tree-3-google-off.txt
+2026-10-06T22:41:26.0621420Z -rw-r--r--@  1 runner  staff     2068 Oct  6 22:40 ios-tree-4-old-server-404.txt
+2026-10-06T22:41:26.0622020Z -rw-r--r--@  1 runner  staff     2575 Oct  6 22:40 ios-tree-5-google-on-signup-open-dark.txt
+2026-10-06T22:41:26.0622550Z -rw-r--r--   1 runner  staff     2345 Oct  6 22:41 requests.log
+2026-10-06T22:41:26.0623090Z -rw-r--r--   1 runner  staff       69 Oct  6 22:34 requests.log.out
+2026-10-06T22:41:26.0623550Z -rw-r--r--   1 runner  staff   646340 Oct  6 22:41 xcodebuild-ios.log
+2026-10-06T22:41:26.0623900Z 
+2026-10-06T22:41:26.0624000Z /Users/runner/work/orbit/orbit/.a1-probe/shots/mac:
+2026-10-06T22:41:26.0624520Z total 12584
+2026-10-06T22:41:26.0624910Z drwxr-xr-x  33 runner  staff    1056 Oct  6 22:34 .
+2026-10-06T22:41:26.0625300Z drwxr-xr-x   4 runner  staff     128 Oct  6 22:25 ..
+2026-10-06T22:41:26.0625910Z drwxr-xr-x  34 runner  staff    1088 Oct  6 22:34 attachments
+2026-10-06T22:41:26.0626260Z -rw-r--r--   1 runner  staff   10411 Oct  6 22:34 Complete Issue Description.txt
+2026-10-06T22:41:26.0627060Z -rw-r--r--   1 runner  staff  395878 Oct  6 22:34 mac-1-google-on-signup-open.png
+2026-10-06T22:41:26.0627540Z -rw-r--r--   1 runner  staff  389824 Oct  6 22:34 mac-2-google-on-existing-accounts.png
+2026-10-06T22:41:26.0628200Z -rw-r--r--   1 runner  staff  393543 Oct  6 22:34 mac-3-google-off.png
+2026-10-06T22:41:26.0628670Z -rw-r--r--   1 runner  staff  393543 Oct  6 22:34 mac-4-old-server-404.png
+2026-10-06T22:41:26.0629180Z -rw-r--r--   1 runner  staff  257021 Oct  6 22:34 mac-5-google-on-signup-open-dark.png
+2026-10-06T22:41:26.0629860Z -rw-r--r--   1 runner  staff  468726 Oct  6 22:34 mac-6-never-signed-in.png
+2026-10-06T22:41:26.0633540Z -rw-r--r--   1 runner  staff  468590 Oct  6 22:34 mac-6-sign-in-meanwhile-120.png
+2026-10-06T22:41:26.0634420Z -rw-r--r--   1 runner  staff  468556 Oct  6 22:34 mac-6-sign-in-meanwhile-30.png
+2026-10-06T22:41:26.0634960Z -rw-r--r--   1 runner  staff  466607 Oct  6 22:34 mac-6-sign-in-meanwhile-4.png
+2026-10-06T22:41:26.0635820Z -rw-r--r--   1 runner  staff  468713 Oct  6 22:34 mac-6-sign-in-meanwhile-60.png
+2026-10-06T22:41:26.0636380Z -rw-r--r--   1 runner  staff  468472 Oct  6 22:34 mac-6-sign-in-meanwhile-90.png
+2026-10-06T22:41:26.0636900Z -rw-r--r--   1 runner  staff  460881 Oct  6 22:34 mac-7-refused-meanwhile-30.png
+2026-10-06T22:41:26.0637420Z -rw-r--r--   1 runner  staff  460826 Oct  6 22:34 mac-7-refused-meanwhile-4.png
+2026-10-06T22:41:26.0638140Z -rw-r--r--   1 runner  staff      36 Oct  6 22:34 mac-GoogleShotTeststest1GoogleOnAndOpeningAccounts-notes.txt
+2026-10-06T22:41:26.0638940Z -rw-r--r--   1 runner  staff      42 Oct  6 22:34 mac-GoogleShotTeststest2GoogleOnForExistingAccounts-notes.txt
+2026-10-06T22:41:26.0639590Z -rw-r--r--   1 runner  staff      25 Oct  6 22:34 mac-GoogleShotTeststest3GoogleOff-notes.txt
+2026-10-06T22:41:26.0640390Z -rw-r--r--   1 runner  staff      29 Oct  6 22:34 mac-GoogleShotTeststest4ServerFromBeforeGoogleSignIn-notes.txt
+2026-10-06T22:41:26.0641170Z -rw-r--r--   1 runner  staff      41 Oct  6 22:34 mac-GoogleShotTeststest5GoogleOnDark-notes.txt
+2026-10-06T22:41:26.0641950Z -rw-r--r--   1 runner  staff      22 Oct  6 22:34 mac-GoogleShotTeststest6ContinueWithGoogleSignsIn-notes.txt
+2026-10-06T22:41:26.0642650Z -rw-r--r--   1 runner  staff      22 Oct  6 22:34 mac-GoogleShotTeststest7ARefusedGoogleSignInSaysWhy-notes.txt
+2026-10-06T22:41:26.0643360Z -rw-r--r--   1 runner  staff   17855 Oct  6 22:34 mac-missing-signed-in.txt
+2026-10-06T22:41:26.0644010Z -rw-r--r--   1 runner  staff   17955 Oct  6 22:34 mac-tree-1-google-on-signup-open.txt
+2026-10-06T22:41:26.0644570Z -rw-r--r--   1 runner  staff   17727 Oct  6 22:34 mac-tree-2-google-on-existing-accounts.txt
+2026-10-06T22:41:26.0645410Z -rw-r--r--   1 runner  staff   17556 Oct  6 22:34 mac-tree-3-google-off.txt
+2026-10-06T22:41:26.0646030Z -rw-r--r--   1 runner  staff   17556 Oct  6 22:34 mac-tree-4-old-server-404.txt
+2026-10-06T22:41:26.0646710Z -rw-r--r--   1 runner  staff   17824 Oct  6 22:34 mac-tree-5-google-on-signup-open-dark.txt
+2026-10-06T22:41:26.0647170Z -rw-r--r--   1 runner  staff    1510 Oct  6 22:33 requests.log
+2026-10-06T22:41:26.0647720Z -rw-r--r--   1 runner  staff      69 Oct  6 22:27 requests.log.out
+2026-10-06T22:41:26.0648220Z -rw-r--r--   1 runner  staff  678078 Oct  6 22:34 xcodebuild-mac.log
+2026-10-06T22:41:26.0648740Z .a1-probe/run.sh: line 75: 15640 Terminated: 15          python3 -u stub.py "$1" > "$1.out" 2>&1
+2026-10-06T22:41:26.0740100Z ##[error]Process completed with exit code 1.
+2026-10-06T22:41:26.1013410Z ##[group]Run mkdir -p .a1-probe/shots
+2026-10-06T22:41:26.1014500Z [36;1mmkdir -p .a1-probe/shots[0m
+2026-10-06T22:41:26.1014900Z [36;1mcp run-output.log .a1-probe/shots/run-output.log 2>/dev/null || true[0m
+2026-10-06T22:41:26.1015370Z [36;1mfor log in .a1-probe/build-*.log; do[0m
+2026-10-06T22:41:26.1015810Z [36;1m  [ -f "$log" ] || continue[0m
+2026-10-06T22:41:26.1016180Z [36;1m  base=$(basename "$log" .log)[0m
+2026-10-06T22:41:26.1016790Z [36;1m  grep -E "error:|warning: .*(GoogleSignIn|LoginView|AppModel)|Test Case|Executed|\*\* TEST|\*\* BUILD" "$log" | head -400 > ".a1-probe/shots/summary-$base.txt" || true[0m
+2026-10-06T22:41:26.1017570Z [36;1m  tail -300 "$log" > ".a1-probe/shots/tail-$base.txt" || true[0m
+2026-10-06T22:41:26.1017970Z [36;1mdone[0m
+2026-10-06T22:41:26.1018240Z [36;1mfind .a1-probe/shots -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;[0m
+2026-10-06T22:41:26.1018770Z [36;1mecho "capture=failure" > .a1-probe/shots/outcomes.txt[0m
+2026-10-06T22:41:26.2758910Z shell: /bin/bash -e {0}
+2026-10-06T22:41:26.2759510Z env:
+2026-10-06T22:41:26.2759860Z   MD_APPLE_SDK_ROOT: /Applications/Xcode_26.6.app
+2026-10-06T22:41:26.2760480Z ##[endgroup]
+2026-10-06T22:41:26.5352300Z ##[group]Run actions/upload-artifact@v4
+2026-10-06T22:41:26.5352590Z with:
+2026-10-06T22:41:26.5352740Z   name: a1-shots
+2026-10-06T22:41:26.5352900Z   path: .a1-probe/shots
+2026-10-06T22:41:26.5353090Z   if-no-files-found: warn
+2026-10-06T22:41:26.5353280Z   compression-level: 6
+2026-10-06T22:41:26.5353690Z   overwrite: false
+2026-10-06T22:41:26.5353870Z   include-hidden-files: false
+2026-10-06T22:41:26.5354070Z env:
+2026-10-06T22:41:26.5354250Z   MD_APPLE_SDK_ROOT: /Applications/Xcode_26.6.app
+2026-10-06T22:41:26.5354490Z ##[endgroup]
+2026-10-06T22:41:27.1324970Z (node:34483) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-06T22:41:27.1326650Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-06T22:41:27.1516960Z With the provided path, there will be 115 files uploaded
+2026-10-06T22:41:27.1517600Z Artifact name is valid!
+2026-10-06T22:41:27.1518070Z Root directory input is valid!
+2026-10-06T22:41:27.6040630Z Beginning upload of artifact content to blob storage
+2026-10-06T22:41:28.0009540Z (node:34483) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-10-06T22:41:28.9333080Z Uploaded bytes 8388608
+2026-10-06T22:41:29.4943250Z Uploaded bytes 16777216
+2026-10-06T22:41:29.5395940Z Uploaded bytes 25165824
+2026-10-06T22:41:29.8027590Z Uploaded bytes 33554432
+2026-10-06T22:41:30.3801990Z Uploaded bytes 41943040
+2026-10-06T22:41:30.8804210Z Uploaded bytes 42804310
+2026-10-06T22:41:30.9535840Z Finished uploading artifact content to blob storage!
+2026-10-06T22:41:30.9636560Z SHA256 digest of uploaded artifact zip is fced707e3d468f494cd7fb61fc370653e9f0d95ab271d562dd49176b36279550
+2026-10-06T22:41:30.9737630Z Finalizing artifact upload
+2026-10-06T22:41:31.2329050Z Artifact a1-shots.zip successfully finalized. Artifact ID 11449571035
+2026-10-06T22:41:31.2329950Z Artifact a1-shots has been successfully uploaded! Final size is 42804310 bytes. Artifact ID is 11449571035
+2026-10-06T22:41:31.2337130Z Artifact download URL: https://github.com/jianghailong-xy/orbit/actions/runs/37540423283/artifacts/11449571035
+2026-10-06T22:41:31.2509930Z ##[group]Run exit 1
+2026-10-06T22:41:31.2510310Z [36;1mexit 1[0m
+2026-10-06T22:41:31.2546850Z shell: /bin/bash -e {0}
+2026-10-06T22:41:31.2547080Z env:
+2026-10-06T22:41:31.2547410Z   MD_APPLE_SDK_ROOT: /Applications/Xcode_26.6.app
+2026-10-06T22:41:31.2547730Z ##[endgroup]
+2026-10-06T22:41:31.2855870Z ##[error]Process completed with exit code 1.
+2026-10-06T22:41:31.2978230Z Post job cleanup.
+2026-10-06T22:41:31.4323660Z [command]/opt/homebrew/bin/git version
+2026-10-06T22:41:31.5125670Z git version 2.55.0
+2026-10-06T22:41:31.5144930Z Copying '/Users/runner/.gitconfig' to '/Users/runner/work/_temp/541ebcff-f758-429c-9a06-92f8223d3b57/.gitconfig'
+2026-10-06T22:41:31.5153210Z Temporarily overriding HOME='/Users/runner/work/_temp/541ebcff-f758-429c-9a06-92f8223d3b57' before making global git config changes
+2026-10-06T22:41:31.5154220Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-06T22:41:31.5157760Z [command]/opt/homebrew/bin/git config --global --add safe.directory /Users/runner/work/orbit/orbit
+2026-10-06T22:41:31.5284310Z Removing SSH command configuration
+2026-10-06T22:41:31.5289850Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-06T22:41:31.5358890Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-06T22:41:31.6394030Z Removing HTTP extra header
+2026-10-06T22:41:31.6400340Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-06T22:41:31.6608400Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-06T22:41:31.7511140Z Removing includeIf entries pointing to credentials config files
+2026-10-06T22:41:31.7516710Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-06T22:41:31.7584400Z includeif.gitdir:/Users/runner/work/orbit/orbit/.git.path
+2026-10-06T22:41:31.7584950Z includeif.gitdir:/Users/runner/work/orbit/orbit/.git/worktrees/*.path
+2026-10-06T22:41:31.7585390Z includeif.gitdir:/github/workspace/.git.path
+2026-10-06T22:41:31.7585790Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-10-06T22:41:31.7591540Z [command]/opt/homebrew/bin/git config --local --get-all includeif.gitdir:/Users/runner/work/orbit/orbit/.git.path
+2026-10-06T22:41:31.7657170Z /Users/runner/work/_temp/git-credentials-c9ebe263-9315-49c7-a3dd-033c65cbb213.config
+2026-10-06T22:41:31.7664890Z [command]/opt/homebrew/bin/git config --local --unset includeif.gitdir:/Users/runner/work/orbit/orbit/.git.path \/Users\/runner\/work\/_temp\/git\-credentials\-c9ebe263\-9315\-49c7\-a3dd\-033c65cbb213\.config
+2026-10-06T22:41:31.7736490Z [command]/opt/homebrew/bin/git config --local --get-all includeif.gitdir:/Users/runner/work/orbit/orbit/.git/worktrees/*.path
+2026-10-06T22:41:31.7796200Z /Users/runner/work/_temp/git-credentials-c9ebe263-9315-49c7-a3dd-033c65cbb213.config
+2026-10-06T22:41:31.7807090Z [command]/opt/homebrew/bin/git config --local --unset includeif.gitdir:/Users/runner/work/orbit/orbit/.git/worktrees/*.path \/Users\/runner\/work\/_temp\/git\-credentials\-c9ebe263\-9315\-49c7\-a3dd\-033c65cbb213\.config
+2026-10-06T22:41:31.7876090Z [command]/opt/homebrew/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+2026-10-06T22:41:31.7935100Z /github/runner_temp/git-credentials-c9ebe263-9315-49c7-a3dd-033c65cbb213.config
+2026-10-06T22:41:31.7940930Z [command]/opt/homebrew/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path \/github\/runner_temp\/git\-credentials\-c9ebe263\-9315\-49c7\-a3dd\-033c65cbb213\.config
+2026-10-06T22:41:31.8155550Z [command]/opt/homebrew/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-10-06T22:41:31.8222260Z /github/runner_temp/git-credentials-c9ebe263-9315-49c7-a3dd-033c65cbb213.config
+2026-10-06T22:41:31.8230150Z [command]/opt/homebrew/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path \/github\/runner_temp\/git\-credentials\-c9ebe263\-9315\-49c7\-a3dd\-033c65cbb213\.config
+2026-10-06T22:41:31.8304880Z [command]/opt/homebrew/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-06T22:41:31.9188800Z Removing credentials config '/Users/runner/work/_temp/git-credentials-c9ebe263-9315-49c7-a3dd-033c65cbb213.config'
+2026-10-06T22:41:31.9288290Z Cleaning up orphan processes
+2026-10-06T22:41:33.5303830Z Terminate orphan process: pid (27870) (DTServiceHub)
+2026-10-06T22:41:44.4326320Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

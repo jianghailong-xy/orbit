@@ -1,0 +1,84 @@
+failed: caught "NSInternalInconsistencyException", "The app representing com.apple.AuthenticationServicesCore.AuthenticationServicesAgent could not be found."
+(
+	0   CoreFoundation                      0x000000018d8271f0 __exceptionPreprocess + 176
+	1   libobjc.A.dylib                     0x000000018d2a291c objc_exception_throw + 88
+	2   Foundation                          0x000000018f0b7010 -[NSCalendarDate initWithCoder:] + 0
+	3   XCUIAutomation                      0x0000000100df9c74 -[XCUIApplication commonInitWithApplicationSpecifier:device:] + 920
+	4   XCUIAutomation                      0x0000000100df8fd4 -[XCUIApplication initWithBundleIdentifier:] + 156
+	5   A1MacProbeUITests                   0x0000000102912d78 $sSo15XCUIApplicationC16bundleIdentifierABSS_tcfcTO + 44
+	6   A1MacProbeUITests                   0x00000001029100fc $sSo15XCUIApplicationC16bundleIdentifierABSS_tcfC + 52
+	7   A1MacProbeUITests                   0x00000001029100ac $s17A1MacProbeUITests15GoogleShotTestsC18acceptSignInPrompt33_9EEBCEA4526215E1F947CB6289893930LLySbSo15XCUIApplicationCFSS_AGtSSXEfU0_ + 112
+	8   A1MacProbeUITests                   0x0000000102910570 $sSlsE3mapySayqd__Gqd__7ElementQzqd_0_YKXEqd_0_YKs5ErrorRd_0_r0_lF + 1124
+	9   A1MacProbeUITests                   0x000000010290f628 $s17A1MacProbeUITests15GoogleShotTestsC18acceptSignInPrompt33_9EEBCEA4526215E1F947CB6289893930LLySbSo15XCUIApplicationCF + 696
+	10  A1MacProbeUITests                   0x000000010290f068 $s17A1MacProbeUITests15GoogleShotTestsC6signIn33_9EEBCEA4526215E1F947CB6289893930LL_5until_SbSo15XCUIApplicationC_S2StFSbyXEfU_ + 192
+	11  A1MacProbeUITests                   0x00000001029171f0 $s17A1MacProbeUITests0C4CaseC9waitUntilySbSd_SbyXEtF + 280
+	12  A1MacProbeUITests                   0x000000010290edfc $s17A1MacProbeUITests15GoogleShotTestsC6signIn33_9EEBCEA4526215E1F947CB6289893930LL_5until_SbSo15XCUIApplicationC_S2StF + 312
+	13  A1MacProbeUITests                   0x0000000102911e98 $s17A1MacProbeUITests15GoogleShotTestsC013test7ARefusedE13SignInSaysWhyyyF + 304
+	14  A1MacProbeUITests                   0x00000001029129e0 $s17A1MacProbeUITests15GoogleShotTestsC013test7ARefusedE13SignInSaysWhyyyFTo + 44
+	15  CoreFoundation                      0x000000018d799664 __invoking___ + 148
+	16  CoreFoundation                      0x000000018d7994f0 -[NSInvocation invoke] + 424
+	17  XCTestCore                          0x000000010148374c +[XCTFailableInvocation invokeStandardConventionInvocation:completion:] + 64
+	18  XCTestCore                          0x0000000101483704 __90+[XCTFailableInvocation invokeInvocation:withTestMethodConvention:lastObservedErrorIssue:]_block_invoke_3 + 28
+	19  XCTestCore                          0x0000000101482db0 __81+[XCTFailableInvocation invokeWithAsynchronousWait:lastObservedErrorIssue:block:]_block_invoke + 364
+	20  XCTestCore                          0x00000001014734cc __49+[XCTSwiftErrorObservation observeErrorsInBlock:]_block_invoke + 36
+	21  XCTestCore                          0x00000001014fc4f4 $sSo24XCTSwiftErrorObservationC10XCTestCoreE14_observeErrors33_4641E344ACA55A25D2B1EC985574C54DLL2inSo0abC6ResultCSgyyXE_tFZ + 336
+	22  XCTestCore                          0x00000001014fc590 $sSo24XCTSwiftErrorObservationC10XCTestCoreE14_observeErrors33_4641E344ACA55A25D2B1EC985574C54DLL2inSo0abC6ResultCSgyyXE_tFZTo + 60
+	23  XCTestCore                          0x00000001014733c4 +[XCTSwiftErrorObservation observeErrorsInBlock:] + 208
+	24  XCTestCore                          0x0000000101482b44 +[XCTFailableInvocation invokeWithAsynchronousWait:lastObservedErrorIssue:block:] + 224
+	25  XCTestCore                          0x00000001014833d8 +[XCTFailableInvocation invokeInvocation:withTestMethodConvention:lastObservedErrorIssue:] + 548
+	26  XCTestCore                          0x00000001014837f0 +[XCTFailableInvocation invokeInvocation:lastObservedErrorIssue:] + 72
+	27  XCTestCore                          0x00000001014aaff0 -[XCTestCase invokeTestMethod:] + 64
+	28  XCTestCore                          0x00000001014abc28 __24-[XCTestCase invokeTest]_block_invoke_4 + 56
+	29  XCTestCore                          0x00000001014d9414 -[XCTMemoryChecker _assertInvalidObjectsDeallocatedAfterScope:] + 84
+	30  XCTestCore                          0x00000001014af2e8 -[XCTestCase assertInvalidObjectsDeallocatedAfterScope:] + 92
+	31  XCTestCore                          0x00000001014ab970 __24-[XCTestCase invokeTest]_block_invoke.112 + 696
+	32  XCTestCore                          0x00000001014b1da4 -[XCTestCase(XCTIssueHandling) _caughtUnhandledDeveloperExceptionPermittingControlFlowInterruptions:caughtInterruptionException:whileExecutingBlock:] + 168
+	33  XCTestCore                          0x00000001014ab2bc -[XCTestCase invokeTest] + 640
+	34  XCTestCore                          0x00000001014ad28c __26-[XCTestCase performTest:]_block_invoke.170 + 36
+	35  XCTestCore                          0x00000001014b1da4 -[XCTestCase(XCTIssueHandling) _caughtUnhandledDeveloperExceptionPermittingControlFlowInterruptions:caughtInterruptionException:whileExecutingBlock:] + 168
+	36  XCTestCore                          0x00000001014acc7c __26-[XCTestCase performTest:]_block_invoke.155 + 552
+	37  XCTestCore                          0x000000010147016c +[XCTContext _runInChildOfContext:forTestCase:markAsReportingBase:block:] + 172
+	38  XCTestCore                          0x000000010147005c +[XCTContext runInContextForTestCase:markAsReportingBase:block:] + 100
+	39  XCTestCore                          0x00000001014ac70c -[XCTestCase performTest:] + 308
+	40  XCTestCore                          0x00000001014a7c54 -[XCTest runTest] + 48
+	41  XCTestCore                          0x00000001014b8944 -[XCTestSuite runTestBasedOnRepetitionPolicy:testRun:] + 64
+	42  XCTestCore                          0x00000001014b8748 __27-[XCTestSuite performTest:]_block_invoke + 184
+	43  XCTestCore                          0x00000001014b7ce0 __59-[XCTestSuite _performProtectedSectionForTest:testSection:]_block_invoke + 48
+	44  XCTestCore                          0x000000010147016c +[XCTContext _runInChildOfContext:forTestCase:markAsReportingBase:block:] + 172
+	45  XCTestCore                          0x000000010147005c +[XCTContext runInContextForTestCase:markAsReportingBase:block:] + 100
+	46  XCTestCore                          0x00000001014b7c50 -[XCTestSuite _performProtectedSectionForTest:testSection:] + 168
+	47  XCTestCore                          0x00000001014b81c8 -[XCTestSuite performTest:] + 236
+	48  XCTestCore                          0x00000001014a7c54 -[XCTest runTest] + 48
+	49  XCTestCore                          0x00000001014b8944 -[XCTestSuite runTestBasedOnRepetitionPolicy:testRun:] + 64
+	50  XCTestCore                          0x00000001014b8748 __27-[XCTestSuite performTest:]_block_invoke + 184
+	51  XCTestCore                          0x00000001014b7ce0 __59-[XCTestSuite _performProtectedSectionForTest:testSection:]_block_invoke + 48
+	52  XCTestCore                          0x000000010147016c +[XCTContext _runInChildOfContext:forTestCase:markAsReportingBase:block:] + 172
+	53  XCTestCore                          0x000000010147005c +[XCTContext runInContextForTestCase:markAsReportingBase:block:] + 100
+	54  XCTestCore                          0x00000001014b7c50 -[XCTestSuite _performProtectedSectionForTest:testSection:] + 168
+	55  XCTestCore                          0x00000001014b81c8 -[XCTestSuite performTest:] + 236
+	56  XCTestCore                          0x00000001014a7c54 -[XCTest runTest] + 48
+	57  XCTestCore                          0x00000001014b8944 -[XCTestSuite runTestBasedOnRepetitionPolicy:testRun:] + 64
+	58  XCTestCore                          0x00000001014b8748 __27-[XCTestSuite performTest:]_block_invoke + 184
+	59  XCTestCore                          0x00000001014b7ce0 __59-[XCTestSuite _performProtectedSectionForTest:testSection:]_block_invoke + 48
+	60  XCTestCore                          0x000000010147016c +[XCTContext _runInChildOfContext:forTestCase:markAsReportingBase:block:] + 172
+	61  XCTestCore                          0x000000010147005c +[XCTContext runInContextForTestCase:markAsReportingBase:block:] + 100
+	62  XCTestCore                          0x00000001014b7c50 -[XCTestSuite _performProtectedSectionForTest:testSection:] + 168
+	63  XCTestCore                          0x00000001014b81c8 -[XCTestSuite performTest:] + 236
+	64  XCTestCore                          0x00000001014a7c54 -[XCTest runTest] + 48
+	65  XCTestCore                          0x00000001014d6140 __89-[XCTTestRunSession executeTestsWithIdentifiers:skippingTestsWithIdentifiers:completion:]_block_invoke + 100
+	66  XCTestCore                          0x000000010147016c +[XCTContext _runInChildOfContext:forTestCase:markAsReportingBase:block:] + 172
+	67  XCTestCore                          0x000000010147005c +[XCTContext runInContextForTestCase:markAsReportingBase:block:] + 100
+	68  XCTestCore                          0x00000001014d5fe8 -[XCTTestRunSession executeTestsWithIdentifiers:skippingTestsWithIdentifiers:completion:] + 340
+	69  XCTestCore                          0x00000001014cb7a4 __72-[XCTExecutionWorker enqueueTestIdentifiersToRun:testIdentifiersToSkip:]_block_invoke_2 + 156
+	70  XCTestCore                          0x00000001014cc804 __XCTAsyncEnumerateWithWaiter_block_invoke + 244
+	71  XCTestCore                          0x00000001014cc9b8 __XCTAsyncEnumerate_block_invoke.117 + 64
+	72  XCTestCore                          0x00000001014cb600 XCTAsyncEnumerateWithWaiter + 568
+	73  XCTestCore                          0x00000001014cb378 __72-[XCTExecutionWorker enqueueTestIdentifiersToRun:testIdentifiersToSkip:]_block_invoke + 148
+	74  XCTestCore                          0x00000001014cb8e8 -[XCTExecutionWorker runWithError:] + 84
+	75  XCTestCore                          0x00000001014c9608 __25-[XCTestDriver _runTests]_block_invoke.400 + 56
+	76  XCTestCore                          0x00000001014e06b0 -[XCTestObservationCenter _observeTestExecutionForTestBundle:inBlock:] + 104
+	77  XCTestCore                          0x00000001014c8fe0 -[XCTestDriver _runTests] + 1192
+	78  XCTestCore                          0x00000001014caff8 _XCTestMain + 96
+	79  A1MacProbeUITests-Runner            0x0000000100465abc main + 436
+	80  dyld                                0x000000018d3304e4 start + 6992
+)

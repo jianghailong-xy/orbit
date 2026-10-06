@@ -1,0 +1,110 @@
+iPhone: iPhone 17 Pro com.apple.CoreSimulator.SimRuntime.iOS-26-5
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+==> stub ready (pid 2705, after 2s): {"password": true, "google": true, "googleSignup": true}
+==> mac
+Test Case '-[A1MacProbeUITests.GoogleShotTests test1GoogleOnAndOpeningAccounts]' started.
+Test Case '-[A1MacProbeUITests.GoogleShotTests test1GoogleOnAndOpeningAccounts]' passed (8.871 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test2GoogleOnForExistingAccounts]' started.
+Test Case '-[A1MacProbeUITests.GoogleShotTests test2GoogleOnForExistingAccounts]' passed (6.136 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test3GoogleOff]' started.
+Test Case '-[A1MacProbeUITests.GoogleShotTests test3GoogleOff]' passed (6.195 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test4ServerFromBeforeGoogleSignIn]' started.
+Test Case '-[A1MacProbeUITests.GoogleShotTests test4ServerFromBeforeGoogleSignIn]' passed (6.115 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test5GoogleOnDark]' started.
+Test Case '-[A1MacProbeUITests.GoogleShotTests test5GoogleOnDark]' passed (9.247 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn]' started.
+/Users/runner/work/orbit/orbit/.a1-probe/UITests/GoogleShotTests.swift:106: error: -[A1MacProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn] : failed - Continue with Google never signed in; the stub saw ["GET /api/auth/methods"]; the page says ["", "", "", "", "", "", ""]
+Test Case '-[A1MacProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn]' failed (98.243 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy]' started.
+/Users/runner/work/orbit/orbit/.a1-probe/UITests/GoogleShotTests.swift:87: error: -[A1MacProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy] : The app representing com.apple.AuthenticationServicesCore.AuthenticationServicesAgent could not be found. (NSInternalInconsistencyException)
+Test Case '-[A1MacProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy]' failed (43.547 seconds).
+	 Executed 7 tests, with 2 failures (1 unexpected) in 178.355 (178.359) seconds
+	 Executed 7 tests, with 2 failures (1 unexpected) in 178.355 (178.361) seconds
+	 Executed 7 tests, with 2 failures (1 unexpected) in 178.355 (178.362) seconds
+** TEST FAILED **
+==> stub ready (pid 15640, after 2s): {"password": true, "google": true, "googleSignup": true}
+==> ios
+Test Case '-[A1ProbeUITests.GoogleShotTests test1GoogleOnAndOpeningAccounts]' started.
+Test Case '-[A1ProbeUITests.GoogleShotTests test1GoogleOnAndOpeningAccounts]' passed (38.052 seconds).
+Test Case '-[A1ProbeUITests.GoogleShotTests test2GoogleOnForExistingAccounts]' started.
+Test Case '-[A1ProbeUITests.GoogleShotTests test2GoogleOnForExistingAccounts]' passed (17.431 seconds).
+Test Case '-[A1ProbeUITests.GoogleShotTests test3GoogleOff]' started.
+Test Case '-[A1ProbeUITests.GoogleShotTests test3GoogleOff]' passed (16.084 seconds).
+Test Case '-[A1ProbeUITests.GoogleShotTests test4ServerFromBeforeGoogleSignIn]' started.
+Test Case '-[A1ProbeUITests.GoogleShotTests test4ServerFromBeforeGoogleSignIn]' passed (9.224 seconds).
+Test Case '-[A1ProbeUITests.GoogleShotTests test5GoogleOnDark]' started.
+Test Case '-[A1ProbeUITests.GoogleShotTests test5GoogleOnDark]' passed (11.866 seconds).
+Test Case '-[A1ProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn]' started.
+Test Case '-[A1ProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn]' passed (23.800 seconds).
+Test Case '-[A1ProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy]' started.
+Test Case '-[A1ProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy]' passed (13.283 seconds).
+	 Executed 7 tests, with 0 failures (0 unexpected) in 129.738 (129.744) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 129.738 (129.745) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 129.738 (129.747) seconds
+** TEST SUCCEEDED **
+/Users/runner/work/orbit/orbit/.a1-probe/shots/ios:
+total 19848
+drwxr-xr-x  27 runner  staff      864 Oct  6 22:41 .
+drwxr-xr-x   4 runner  staff      128 Oct  6 22:25 ..
+drwxr-xr-x  25 runner  staff      800 Oct  6 22:41 attachments
+-rw-r--r--   1 runner  staff  1440726 Oct  6 22:39 ios-1-google-on-signup-open.png
+-rw-r--r--   1 runner  staff  1428434 Oct  6 22:40 ios-2-google-on-existing-accounts.png
+-rw-r--r--   1 runner  staff  1431616 Oct  6 22:40 ios-3-google-off.png
+-rw-r--r--   1 runner  staff  1431616 Oct  6 22:40 ios-4-old-server-404.png
+-rw-r--r--   1 runner  staff   774558 Oct  6 22:40 ios-5-google-on-signup-open-dark.png
+-rw-r--r--   1 runner  staff   102112 Oct  6 22:41 ios-6-sign-in-meanwhile-4.png
+-rw-r--r--   1 runner  staff    88330 Oct  6 22:41 ios-6-signed-in-with-google.png
+-rw-r--r--   1 runner  staff  1471222 Oct  6 22:41 ios-7-google-refused.png
+-rw-r--r--@  1 runner  staff        0 Oct  6 22:39 ios-GoogleShotTeststest1GoogleOnAndOpeningAccounts-notes.txt
+-rw-r--r--@  1 runner  staff        0 Oct  6 22:40 ios-GoogleShotTeststest2GoogleOnForExistingAccounts-notes.txt
+-rw-r--r--@  1 runner  staff        0 Oct  6 22:40 ios-GoogleShotTeststest3GoogleOff-notes.txt
+-rw-r--r--@  1 runner  staff        0 Oct  6 22:40 ios-GoogleShotTeststest4ServerFromBeforeGoogleSignIn-notes.txt
+-rw-r--r--@  1 runner  staff        0 Oct  6 22:40 ios-GoogleShotTeststest5GoogleOnDark-notes.txt
+-rw-r--r--@  1 runner  staff      180 Oct  6 22:41 ios-GoogleShotTeststest6ContinueWithGoogleSignsIn-notes.txt
+-rw-r--r--@  1 runner  staff      180 Oct  6 22:41 ios-GoogleShotTeststest7ARefusedGoogleSignInSaysWhy-notes.txt
+-rw-r--r--   1 runner  staff  1290283 Oct  6 22:41 ios-sign-in-prompt.png
+-rw-r--r--@  1 runner  staff     2575 Oct  6 22:39 ios-tree-1-google-on-signup-open.txt
+-rw-r--r--@  1 runner  staff     2434 Oct  6 22:40 ios-tree-2-google-on-existing-accounts.txt
+-rw-r--r--@  1 runner  staff     2068 Oct  6 22:40 ios-tree-3-google-off.txt
+-rw-r--r--@  1 runner  staff     2068 Oct  6 22:40 ios-tree-4-old-server-404.txt
+-rw-r--r--@  1 runner  staff     2575 Oct  6 22:40 ios-tree-5-google-on-signup-open-dark.txt
+-rw-r--r--   1 runner  staff     2345 Oct  6 22:41 requests.log
+-rw-r--r--   1 runner  staff       69 Oct  6 22:34 requests.log.out
+-rw-r--r--   1 runner  staff   646340 Oct  6 22:41 xcodebuild-ios.log
+
+/Users/runner/work/orbit/orbit/.a1-probe/shots/mac:
+total 12584
+drwxr-xr-x  33 runner  staff    1056 Oct  6 22:34 .
+drwxr-xr-x   4 runner  staff     128 Oct  6 22:25 ..
+drwxr-xr-x  34 runner  staff    1088 Oct  6 22:34 attachments
+-rw-r--r--   1 runner  staff   10411 Oct  6 22:34 Complete Issue Description.txt
+-rw-r--r--   1 runner  staff  395878 Oct  6 22:34 mac-1-google-on-signup-open.png
+-rw-r--r--   1 runner  staff  389824 Oct  6 22:34 mac-2-google-on-existing-accounts.png
+-rw-r--r--   1 runner  staff  393543 Oct  6 22:34 mac-3-google-off.png
+-rw-r--r--   1 runner  staff  393543 Oct  6 22:34 mac-4-old-server-404.png
+-rw-r--r--   1 runner  staff  257021 Oct  6 22:34 mac-5-google-on-signup-open-dark.png
+-rw-r--r--   1 runner  staff  468726 Oct  6 22:34 mac-6-never-signed-in.png
+-rw-r--r--   1 runner  staff  468590 Oct  6 22:34 mac-6-sign-in-meanwhile-120.png
+-rw-r--r--   1 runner  staff  468556 Oct  6 22:34 mac-6-sign-in-meanwhile-30.png
+-rw-r--r--   1 runner  staff  466607 Oct  6 22:34 mac-6-sign-in-meanwhile-4.png
+-rw-r--r--   1 runner  staff  468713 Oct  6 22:34 mac-6-sign-in-meanwhile-60.png
+-rw-r--r--   1 runner  staff  468472 Oct  6 22:34 mac-6-sign-in-meanwhile-90.png
+-rw-r--r--   1 runner  staff  460881 Oct  6 22:34 mac-7-refused-meanwhile-30.png
+-rw-r--r--   1 runner  staff  460826 Oct  6 22:34 mac-7-refused-meanwhile-4.png
+-rw-r--r--   1 runner  staff      36 Oct  6 22:34 mac-GoogleShotTeststest1GoogleOnAndOpeningAccounts-notes.txt
+-rw-r--r--   1 runner  staff      42 Oct  6 22:34 mac-GoogleShotTeststest2GoogleOnForExistingAccounts-notes.txt
+-rw-r--r--   1 runner  staff      25 Oct  6 22:34 mac-GoogleShotTeststest3GoogleOff-notes.txt
+-rw-r--r--   1 runner  staff      29 Oct  6 22:34 mac-GoogleShotTeststest4ServerFromBeforeGoogleSignIn-notes.txt
+-rw-r--r--   1 runner  staff      41 Oct  6 22:34 mac-GoogleShotTeststest5GoogleOnDark-notes.txt
+-rw-r--r--   1 runner  staff      22 Oct  6 22:34 mac-GoogleShotTeststest6ContinueWithGoogleSignsIn-notes.txt
+-rw-r--r--   1 runner  staff      22 Oct  6 22:34 mac-GoogleShotTeststest7ARefusedGoogleSignInSaysWhy-notes.txt
+-rw-r--r--   1 runner  staff   17855 Oct  6 22:34 mac-missing-signed-in.txt
+-rw-r--r--   1 runner  staff   17955 Oct  6 22:34 mac-tree-1-google-on-signup-open.txt
+-rw-r--r--   1 runner  staff   17727 Oct  6 22:34 mac-tree-2-google-on-existing-accounts.txt
+-rw-r--r--   1 runner  staff   17556 Oct  6 22:34 mac-tree-3-google-off.txt
+-rw-r--r--   1 runner  staff   17556 Oct  6 22:34 mac-tree-4-old-server-404.txt
+-rw-r--r--   1 runner  staff   17824 Oct  6 22:34 mac-tree-5-google-on-signup-open-dark.txt
+-rw-r--r--   1 runner  staff    1510 Oct  6 22:33 requests.log
+-rw-r--r--   1 runner  staff      69 Oct  6 22:27 requests.log.out
+-rw-r--r--   1 runner  staff  678078 Oct  6 22:34 xcodebuild-mac.log
+.a1-probe/run.sh: line 75: 15640 Terminated: 15          python3 -u stub.py "$1" > "$1.out" 2>&1
