@@ -643,11 +643,13 @@ orbit wiki import --from <dir|file> --space <id>            # 阶段 2：CLAUDE.
 
 ## 12. 客户端
 
+> 2026-10-06 起的信息架构见 §12.3（效果图 30–33）：从抽屉进入 Wiki，第一屏是内容；管理信息都在二级的 Activity 页。12.1、12.2 里被它替代的句子标了「10-06 改为……」，其余已定的照旧。
+
 ### 12.1 Web（效果图 01–05）
 
-- **侧栏**：TOP 在 Projects 下面新增 `Wiki`，带琥珀待审数（沿用 `tp-count needs-you` 样式）。
-- **路由**：`/wiki`、`/wiki/:space`、`/wiki/:space/t/:topic`、`/wiki/:space/e/:entry`（右侧抽屉）、`/wiki/review`。
-- **首页**：Principles → Topics 网格 → Recent decisions；右栏依次是 Review、Recently changed、Agents used the wiki。
+- **侧栏**：TOP 在 Projects 下面新增 `Wiki`，带琥珀待审数（沿用 `tp-count needs-you` 样式）。10-06 改为：数的是「等你」数，即待审提议加上 plan 等你的件数（§12.3.3）。
+- **路由**：`/wiki`、`/wiki/:space`、`/wiki/:space/t/:topic`、`/wiki/:space/e/:entry`（右侧抽屉）、`/wiki/review`。10-06 起加 `/wiki/:space/activity`；`/wiki` 不带 slug 时按 §12.3.4 的默认规则打开，不再是第一个 space。
+- **首页**：Principles → Topics 网格 → Recent decisions；右栏依次是 Review、Recently changed、Agents used the wiki。10-06 改为：首页是内容，即原则组和按大类排的文档；Review、Plan、Recent decisions、Recently changed、Agents used 连同状态行都进 Activity 页（§12.3.1–12.3.2，效果图 30、31、33）。
 - **主题页**：Summary（生成的、每句都有脚注、标注生成时的 ref）加上按类型分组的条目。
   - Summary 是 `wiki_topic_summary` 缓存，只能引用本主题的条目下标，越界的引用会被剥掉（Wikova 问答路径那种确定性校验）；
   - 不推送给 agent。
@@ -665,7 +667,7 @@ orbit wiki import --from <dir|file> --space <id>            # 阶段 2：CLAUDE.
 
 ### 12.2 OrbitKit / iOS（效果图 06–09）
 
-- 抽屉的 `AppSection.workSections` 变成 `[.projects, .tasks, .wiki]`，SF Symbol 用 `book.closed`，琥珀数字规则与 Projects 相同。
+- 抽屉的 `AppSection.workSections` 变成 `[.projects, .tasks, .wiki]`，SF Symbol 用 `book.closed`，琥珀数字规则与 Projects 相同。10-06 改为：数的是 §12.3.3 的「等你」数；样子仍同 Projects：琥珀色，0 不画。
 - **结构、区块、顺序与 web 移动端逐一对应**，用 copy-parity 测试锁住。正文块模型建议用共享 JSON fixture（同 `orbit-link.fixture.json` 的做法）。
 - 新增文件：
   - `Models/Wiki.swift`，未知值落 `.unknown`；
@@ -674,6 +676,110 @@ orbit wiki import --from <dir|file> --space <id>            # 阶段 2：CLAUDE.
   - `App/WikiLogic.swift`，纯逻辑，在 Linux 上能跑 `swift test`；
   - `Views/WikiView.swift`。
 - SwiftUI 只能在 CI（`client.yml`）编译。
+
+### 12.3 首页是内容，管理信息在 Activity（owner 2026-10-06 定，效果图 30–33）
+
+抽屉里 Wiki 这一行承诺的是「这个代码库知道什么」，琥珀数字是次要的那句「有几件事等你」。所以进来第一屏是能读的内容。管理信息（维护状态、待审、plan 进度、决定日志、最近改动、agent 用量）整体放在二级的 Activity 页。
+
+iPhone 抽屉、web 手机抽屉、web 桌面侧栏、iPad 与 macOS 侧栏都走这一套。手机和 iOS 的样子见图 30、31，iPad 见图 32，web 桌面见图 33。图与文字冲突时以图为准。
+
+#### 12.3.1 首页：内容
+
+- **从上到下**：页头 → 内容状态行 → 搜索 → 原则组 → 文档按大类 → `Browse by category · A–Z index`。web 手机、iOS、iPad 详情栏是同一个顺序（图 30 ③、31 ①③）。顺序由 web 的 `WikiHome.tsx`、`index.css` 的手机规则和 iOS 的 `WikiLogic.HomeBand` 一起钉住。
+- **页头**：`Wiki` · space（§12.3.4）· Contents · Activity（带「等你」数，§12.3.3）· Settings · New entry。
+  - iOS 工具栏：Contents（`list.bullet`）· Activity（`clock.arrow.circlepath`）· Settings。
+  - web 桌面不画 Contents：目录栏就在左边。今天 ≥961px 就是这样，≤960px 才有这个按钮。
+- **内容状态行**：`35 documents · 5 written`，即 `docs.total` 与 `docs.written`。维护状态（条目数、待审、维护、追赶）不在首页，在 Activity。
+- **原则组**：有原则才画，0 条整组不画，也不再说「这个 space 没有任何记录」。
+  - 画的是 owner 写的、钉住的那几条：标题一行一条，最多三条，后接 `All N ›`。
+  - 按 kind 单独读（`?kind=principle`），不受「最新 200 条」窗口影响。
+- **文档按大类**：每篇一行，写编号、标题、两行导语。
+  - 复用 plan 页的文档行：web `WikiPlanPage.tsx` 的 `wk-pl-doc`（手机是 `wk-pl-doc phone`），iOS `WikiPlanView.swift` 的 `docRow`。第二行从「问题」换成导语，颜色深一级。
+  - 导语：文档第一节里按 position 排、没有撤回的头两句，超过约 200 字截断加省略号。服务端在 docs 目录读里给每篇已写文档带上 `lead`，没写的为 null。
+  - 上次来之后新写的文档带蓝点：web 用 `wikiSeenKey`，iOS 用语义相同的时间戳。
+  - 没写的篇每类折成一行 `+N not written yet`；整类都没写的是 `N documents · Not written yet`。点开列出篇名（灰字，`Not written yet`）。
+  - 点一篇进文档页（图 23、24）。
+- **类目怎么排**：手机与 iOS 一类一组（iOS 是分组卡片，grouped 背景）。web 桌面一类一张卡：主区 ≥1100px（容器查询）排两列，否则一列（图 33 ①②）。
+- **末尾**：手机与 iOS 是 `Browse by category · A–Z index`。web 桌面不放这一行，目录栏最上面就有。
+- **没有确认的 plan 时**：照今天目录的逻辑列主题文章（`wikiReadsByDocs` 为假的那支），每行只有标题、没有导语。内容状态行写 `N articles`。
+- **新 space**（还没有文档、也没配维护，图 31 ⑥）：只画一张卡，写 `This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space.`，加一个 `Set up maintenance`，进 Wiki 设置的 Maintenance。内容状态行写 `No documents yet`。
+- **首页上不再有任何管理区块**：状态行、待审横幅 / Review 卡、plan 横幅 / Plan 卡、Recent decisions、Recently changed、Agents used 都在 Activity。web 桌面撤掉右栏（图 33）。
+
+#### 12.3.2 Activity：管理信息
+
+- **入口**：页头的 Activity 按钮（web `HistoryOutlined`，iOS `clock.arrow.circlepath`）。按钮右上角的琥珀角标是「等你」数：web 照收起侧栏的 `tp-rail-badge`，iOS 用抽屉同一个橙色。web 桌面的按钮和 Settings、New entry 一样带字；在 Activity 页上呈按下态。
+- **路由**：web `/wiki/:space/activity`；iOS 新加一个 NavNode（如 `.wikiActivity`），iPad 与 macOS 开在详情栏。
+- **页头**：
+  - web 手机照 Review 页：`← Wiki`、大标题 `Activity`，space 名作标签。
+  - iOS 照 Review 的导航栏：返回、标题 `Activity`，副标题是 space 名。
+  - web 桌面留在 Wiki 框架里：面包屑 `Wiki › Activity`，目录栏留在左边，没有一项选中（同 plan 页）。
+- **内容**：10-06 以前首页上的管理区块原样搬过来，顺序不动：
+  1. 状态行：条目数 · 待审 · 维护 · 追赶；
+  2. 待审横幅（手机、iOS）/ Review 卡（桌面）；
+  3. plan 横幅 / Plan 卡；
+  4. Recent decisions；
+  5. Recently changed；
+  6. Agents used the wiki。
+
+  Principles 不在这里，它是内容。
+- **web 桌面**沿用图 29 的卡片网格：Review 与 Plan 并排在最上，Agents used 是右栏、从顶到底，Recent decisions、Recently changed 横在下面。主区 ≥1400px 时这两张并排；窗口 961–1320px 时卡片排成一列（图 33 ④⑤）。
+- **Recently changed 标出上次来之后的**：标题旁写 `N new since you last looked`，这些行带蓝点。
+  - web 用 `wikiSeenKey(space, 'home')`，iOS 用 UserDefaults 记语义相同的时间戳。
+  - 桌面的运行行本来就有一个点：改成上次来之后是蓝的、之前是灰的。
+- **Recent decisions** 按 kind 单独读（`?kind=decision&limit=4`），不受 200 条窗口影响。
+- **Agents used** 另议：自动推送已下线，`sessions received wiki context` 只会往下掉，改成看 agent 的 search / get 不在这次范围。
+
+#### 12.3.3 「等你」数
+
+- **口径**：等你数 W = 所有 space 的待审提议（`pendingOps`）+ plan 等你的件数（`planWaiting`）。
+  - 一句话：等你的每一件都算进 W，W 里的每一件点进去都找得到。
+  - `planWaiting` 的口径同客户端的 `wikiPlanPending` / `WikiPlanLogic.pending`：held（open 或 build job 起不来，包括维护 runner 不在线）、failed job、待确认的 draft、未处理的 plan 修改建议，各算一件。
+  - 服务端在 `GET /wiki/spaces` 每行算好；TS、Swift 和服务端用同一组契约向量钉住，客户端不再各算一套。
+- **四处同一个数**：
+  - 抽屉 / web 侧栏的 Wiki 行，和页头 Activity 角标，都是 W。两端各用一个函数算，侧栏和角标调同一个。
+  - Activity 页的琥珀横幅加起来是 W。第一条是待审提议，按所有 space 数，别处的份数写在同一行：`3 proposals to review · 2 in wikova`（只有当前 space 有时不加后半句），点进去是所有 space 的 Review。plan 等你的事跟在后面，一件一条（今天的 plan 横幅；别的 space 的要写明是哪个 space）。
+  - Review 页头数的是所有 space 的待审提议，与第一条横幅同数。
+  - plan 没有等你的事时（今天就是这样），四处是同一个数（图 31 ⑤）。
+- **不算进去的**：蓝色的进度（plan 起草中、文档写作中）；文档的 `Needs review` 琥珀点，那是文档的质量状态，不是等你做的事。
+- **样子**：0 不画。抽屉、侧栏、角标的无障碍名和悬停提示写 `N waiting on you`，和 Projects 行同一个说法。汉堡按钮上不加点，也不推送。
+- 图 06 定「只数提议」是 09-25，plan 09-29 才有：把 plan 算进来是补漏算，不是推翻当初的决定。
+
+#### 12.3.4 space：名字、选择器、默认打开哪个
+
+- **名字** = 仓库地址（`repoUrlNorm`）的最后一段：`github.com/jianghailong-xy/orbit` → `orbit`。没有仓库地址的 space 用它的 title；两个 space 同名时，补上前一段（`jianghailong-xy/orbit`）。web 与 iOS 用同一组用例测。
+- **只有一个 space**（今天的真实情况）：页头只有名字。它是标签，不是控件：没有箭头、没有菜单；web 不渲染 select，iOS 不包 Menu（图 31 ④ 上半）。样子同 Activity 页页头的 space 标签。
+- **两个以上**（图 31 ④ 下半）：
+  - iOS 用 `Menu` + `Toggle`，一个 space 一行：名字、仓库地址，再附文档数（`35 documents`，还没有的写 `No documents yet`）和等你的数（琥珀，0 不画）。最底下隔开一项 `Manage spaces`，进 Wiki 设置。
+  - web 用原生 select：选项写名字，有等你的加 `· N waiting`。仓库地址和文档数在 Wiki 设置里看。
+  - 系统菜单的一行只有标题、副标题、图标三格：名字是标题，地址和文档数是副标题，琥珀数放在图标格（`N.circle.fill`，按原色渲染）。CI 截图上画不成琥珀的话，退成副标题末尾的 `· N waiting`，和 web 同一句。
+- **默认打开**，web 与 iOS 同一条规则：**当前所在的 workspace（或项目）对应的 space → 上次看的 → 文档最多的**。
+  - 当前 workspace：web 是侧栏的 `activeWorkspaceId`，没有就用最近一次进过的 workspace；iOS 是当前选中的 workspace；在项目里看项目协调会话所在的 workspace。对应关系读 `GET /wiki/spaces` 每行的 `workspaceIds`。
+  - 上次看的：web 记在 localStorage，iOS 记在 UserDefaults（`orbit.wiki.space`），存的是 slug。今天 web 每次都回到按 slug 排第一的，10-06 改为记住上次看的。
+  - 文档最多：比 `docs.written`，一样多时取服务端列表里的第一个。
+  - `/wiki` 不带 slug 时按这条走；`/wiki/:space` 照旧直达。
+
+#### 12.3.5 iPad 与 macOS：三栏
+
+- **侧栏**就是 iPhone 的抽屉（原有决定）。点 Wiki 后：
+  - **中栏是目录**：Home、Browse by category、A–Z index、Plan，再接各大类与篇。它和 web 桌面的目录栏、手机的 Contents sheet 是同一张单子。中栏页头写 `Wiki` 和 space（§12.3.4）。
+  - **详情栏默认是内容首页**（Home 选中），和手机首页同一份。点中栏的篇，详情栏换成文档页。
+- Activity、Review、Settings 都开在详情栏，按钮在详情栏页头，Activity 带等你数。去掉 `Pick an entry, or open Review.` 这个空状态（图 32）。
+- web 桌面是同一个结构的两栏版：目录栏（sticky、独立滚动，图 29）+ 主区。主区默认是内容首页，Activity 也开在主区（图 33）。
+
+#### 12.3.6 加载
+
+- **先画已经知道的**：抽屉早就读过 `/wiki/spaces`，页头的 space 名字和 Activity 的数直接画，不用等。
+- **内容出骨架**：内容状态行和文档各出各的骨架（iOS `.redacted(reason: .placeholder)`，web 同样的灰条），不再整页转圈。只有第一次进入看得到骨架，之后先画上次的内容再刷新（图 31 ⑦）。
+- **plan 不再推着首页跳**：
+  - 今天 iOS 读完首页才读 plan，蓝横幅晚一拍出现，整页往下跳。
+  - 改后首页读的是目录（文档与导语），plan 进度在 Activity。
+  - iOS 的读取并行做：用 `Task` 句柄加 `defer` cancel，不写并列的 `async let`（d22b276cc 修过的 teardown 崩溃）。
+
+#### 12.3.7 新句子
+
+`Activity` · `N waiting on you` · `N new since you last looked` · `· N in <space>` · `N documents · M written` · `+N not written yet` · `N documents · Not written yet` · `No documents yet` · `This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space.` · `Set up maintenance` · `Manage spaces` · `· N waiting`。另外单数写作 `1 proposal to review`。
+
+每个新句子先在 web 的 lib（`src/web/src/lib/wiki.ts`、`wikiDocs.ts`、`wikiPlan.ts`）里定义，再在 Swift 的 `WikiCopy` 里镜像。`WikiCopyParityTests` 等 parity 测试跟着改：缺了对应项必须红，不许 skip。
 
 ---
 
@@ -797,6 +903,10 @@ H4 精度 <50%、出现任何一次泄漏，或 H5 显示检索不比编译差�
 | `05-session-touchpoints` | 会话里的四个接触点：启动卡、链接卡、Add to Wiki（05c）、⌘K。05c 的 Add to Wiki 已按 owner 2026-09-26 决定取消（效果图保留原样） |
 | `06–09-phone-*` | 手机：入口、首页、详情、Review；排成「web 手机 \| iOS \| 说明」三栏逐区块对照 |
 | `10-architecture` | 技术架构图 |
+| `30-drawer-entry` | 从抽屉进入 Wiki 的第一屏：抽屉那一行的数、现状（一张管理看板）、改后（首页是内容）；web 手机 \| iOS \| 说明（§12.3） |
+| `31-home-states` | 首页往下、Activity 页、有原则时、换 space（一个时只有名字 / 两个以上的菜单）、多个 space 时四处同一个数、新 space、加载中 |
+| `32-ipad-entry` | iPad 三栏：中栏是目录，详情栏默认是内容首页 |
+| `33-desktop` | web 桌面（1920×1080、1440×900）：首页主区是内容；Activity 页沿用图 29 的卡片排法 |
 
 ## 附 B：Wikova 借鉴对照
 

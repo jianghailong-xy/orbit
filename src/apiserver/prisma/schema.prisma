@@ -319,6 +319,7 @@ model User {
   sessionFolders   SessionFolder[] // folders sessions are filed in, each inside one workspace (0348)
   refreshTokens    RefreshToken[] // long-lived rotating refresh tokens (hashed at rest)
   personalAccessTokens PersonalAccessToken[] // the user's own API tokens (hashed at rest, 0383)
+  patDeviceLogins  PatDeviceLogin[] // the `orbit login` requests this user approved or denied (0388)
   clientVersions   ClientVersion[] // which build of each client this user is running
   mergeReceipts    SessionMergeReceipt[] // merges recorded against this user's session branches
   agents           Agent[] // Agent identities this user owns (tenant scope)
@@ -412,6 +413,40 @@ model PersonalAccessToken {
 
   @@index([ownerId])
   @@map("personal_access_token")
+}
+
+/// An `orbit login` through the browser (docs/personal-access-token-design.md §7.3, migration 0388):
+/// what the CLI asked for, until a person signed in to Orbit approves or denies it at
+/// /cli-login?code=… and the CLI, polling with its device code, collects the token. No token is ever
+/// kept here: approving records who approved, and the token is issued to them in the answer to the
+/// CLI's next poll (PatDeviceLoginService), so `personal_access_token` holds its only trace.
+///
+/// `pat_device_login_status_chk` (status from the list below; decided ⇔ `decidedById` and
+/// `decidedAt` set) and `pat_device_login_expires_in_days_chk` live only in the migration.
+model PatDeviceLogin {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  /// sha256 hex of the device code the CLI polls with.
+  deviceCodeHash String    @unique @map("device_code_hash")
+  /// The short code the browser and the terminal both show (`WXYZ4-8K2QP`).
+  userCode       String    @unique @map("user_code")
+  /// The requested token: its name, scopes, and lifetime in days (NULL = never expires).
+  name           String
+  scopes         String[]  @default([])
+  expiresInDays  Int?      @map("expires_in_days")
+  /// The host the CLI says it runs on, shown on the approval page.
+  hostname       String?
+  /// `PENDING` | `APPROVED` | `DENIED` | `DELIVERED` (a poll collected the token).
+  status         String    @default("PENDING")
+  /// Who approved or denied it — the token's owner.
+  decidedById    String?   @map("decided_by_id") @db.Uuid
+  decidedBy      User?     @relation(fields: [decidedById], references: [id], onDelete: Cascade)
+  decidedAt      DateTime? @map("decided_at") @db.Timestamptz(3)
+  /// The request's own end, ten minutes after it starts; the token's is `expiresInDays`.
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([decidedById])
+  @@map("pat_device_login")
 }
 
 /// Owner-scoped APNs/FCM registration. Token uniqueness is global; Android also replaces the

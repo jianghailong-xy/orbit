@@ -75,7 +75,7 @@ Usage:
   orbit wiki <command>              Read the Orbit wiki and propose to it
   orbit notify --message TEXT       Alert this account's devices with a line you write
   orbit token <command>             Mint/list/revoke credentials for headless processes
-  orbit login --with-token          Act as yourself with a personal access token (read from stdin)
+  orbit login [--with-token]        Act as yourself: approve a personal access token in the browser
   orbit logout [--keep-token]       Revoke that token and forget it
   orbit whoami [--json]             Show who the CLI acts as, and why
   orbit api [-X METHOD] PATH        Call the Orbit REST API as yourself

@@ -1012,9 +1012,12 @@ public final class APIClient: @unchecked Sendable {
     public func wikiSpace(_ id: String) async throws -> WikiSpace {
         try await get("wiki/spaces/\(id)", query: [URLQueryItem(name: "include", value: "usage")])
     }
-    /// `GET /wiki/spaces/:id/entries`: a space's entries of every status, newest recorded first.
-    public func wikiEntries(spaceID: String, limit: Int = 200) async throws -> [WikiEntry] {
-        try await get("wiki/spaces/\(spaceID)/entries", query: [URLQueryItem(name: "limit", value: String(limit))])
+    /// `GET /wiki/spaces/:id/entries`: a space's entries of every status, newest recorded first — of one
+    /// kind when `kind` is given. The server answers 200 at most.
+    public func wikiEntries(spaceID: String, kind: WikiEntryKind? = nil, limit: Int = 200) async throws -> [WikiEntry] {
+        var query = [URLQueryItem(name: "limit", value: String(limit))]
+        if let kind { query.insert(URLQueryItem(name: "kind", value: kind.rawValue), at: 0) }
+        return try await get("wiki/spaces/\(spaceID)/entries", query: query)
     }
     /// `GET /wiki/spaces/:id/timeline`: what changed, newest first.
     public func wikiTimeline(spaceID: String) async throws -> WikiTimeline {

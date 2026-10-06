@@ -15,7 +15,10 @@ final class WikiModel {
     /// Every space, by slug, each with the proposals waiting in it.
     private(set) var spaces: [WikiSpace] = []
     private(set) var spacesState = ListLoadState()
-    /// The home page of the space on screen, once all four of its reads are in.
+    /// The server said the wiki is not switched on for this account (404 WIKI_DISABLED): an answer,
+    /// not a failure — the drawer draws no Wiki row, and the section says why.
+    private(set) var disabled = false
+    /// The home page of the space on screen, once all six of its reads are in.
     private(set) var home: WikiHomeContent?
     private(set) var homeState = ListLoadState()
     /// Every changeset with an op still waiting, across the spaces — the queue Review pages through.
@@ -86,6 +89,9 @@ final class WikiModel {
     /// The drawer's amber number: every space's proposals, summed as the web sidebar sums them.
     var proposalsToReview: Int { WikiLogic.proposalsToReview(spaces) }
 
+    /// Whether the drawer — and the iPad sidebar, the same rail — draws the Wiki row at all.
+    var shown: Bool { WikiLogic.shown(spacesState, disabled: disabled) }
+
     /// The space the home page is about: the one picked, else the first by slug.
     var currentSpace: WikiSpace? {
         spaces.first { $0.slug == selectedSlug } ?? spaces.first
@@ -122,13 +128,18 @@ final class WikiModel {
         do {
             let list = try await api.wikiSpaces()
             if list != spaces { spaces = list }
+            disabled = false
+            spacesState.succeed()
+        } catch let error where WikiLogic.isDisabled(error) {
+            disabled = true
+            if !spaces.isEmpty { spaces = [] }
             spacesState.succeed()
         } catch {
             spacesState.fail()
         }
     }
 
-    /// The spaces, then the four reads the home page is drawn from, side by side — and then each run
+    /// The spaces, then the six reads the home page is drawn from, side by side — and then each run
     /// Recently changed folds, by its own read.
     func loadHome() async {
         homeState.begin()
@@ -138,26 +149,48 @@ final class WikiModel {
             if spacesState.lastLoadFailed { homeState.fail() } else { homeState.succeed() }
             return
         }
-        async let documentRead = api.wikiSpace(space.id)
-        async let entriesRead = api.wikiEntries(spaceID: space.id)
-        async let timelineRead = api.wikiTimeline(spaceID: space.id)
-        async let healthRead = api.wikiHealth(spaceID: space.id)
+        // Side by side through task handles, not `async let`: iOS 27's concurrency runtime can abort
+        // while tearing down several async-let results in one continuation (d22b276cc).
+        let documentRead = Task { try await api.wikiSpace(space.id) }
+        let entriesRead = Task { try await api.wikiEntries(spaceID: space.id) }
+        // Principles and Recent decisions read their own kind: out of the newest 200 entries of every
+        // kind, a space of thousands had none of its principles left to show.
+        let principlesRead = Task {
+            try await api.wikiEntries(spaceID: space.id, kind: .principle, limit: WikiHomeContent.principlesRead)
+        }
+        let decisionsRead = Task {
+            try await api.wikiEntries(spaceID: space.id, kind: .decision, limit: WikiHomeContent.recentDecisionCount)
+        }
+        let timelineRead = Task { try await api.wikiTimeline(spaceID: space.id) }
+        let healthRead = Task { try await api.wikiHealth(spaceID: space.id) }
+        defer {
+            documentRead.cancel()
+            entriesRead.cancel()
+            principlesRead.cancel()
+            decisionsRead.cancel()
+            timelineRead.cancel()
+            healthRead.cancel()
+        }
         do {
-            let document = try await documentRead
-            let entries = try await entriesRead
+            let document = try await documentRead.value
+            let entries = try await entriesRead.value
+            let principles = try await principlesRead.value
+            let decisions = try await decisionsRead.value
             // The timeline is one band of six; the page still draws without it.
-            let timeline = try? await timelineRead
+            let timeline = try? await timelineRead.value
             // The status line's count and maintenance part (criterion 5); without it the line says what
             // the entries read here count, and nothing of maintenance.
-            let health = try? await healthRead
+            let health = try? await healthRead.value
             // Every item names its changeset: the runs among the rows are read by their ids, whether or
             // not anything of them still waits in Review. A run whose read failed keeps its row.
-            let base = WikiHomeContent(space: document, spaces: spaces, entries: entries,
-                                       timeline: timeline?.items ?? [], proposals: space.pendingOps ?? 0)
+            let base = WikiHomeContent(space: document, spaces: spaces, entries: entries, principles: principles,
+                                       decisions: decisions, timeline: timeline?.items ?? [],
+                                       proposals: space.pendingOps ?? 0)
             let runs = await readRuns(base.recentRunIDs)
             // Another space was picked while this one was reading: its own read owns the page.
             guard currentSpace?.id == space.id else { return }
             let content = WikiHomeContent(space: base.space, spaces: base.spaces, entries: base.entries,
+                                          principles: base.principleEntries, decisions: base.decisionEntries,
                                           timeline: base.timeline, proposals: base.proposals, runs: runs,
                                           health: health)
             if content != home { home = content }
@@ -181,7 +214,8 @@ final class WikiModel {
     }
 
     /// One entry's page. A 404 is an entry the server will not show — deleted, or not this account's;
-    /// any other failure keeps what is on screen, and says so only when there is nothing on screen.
+    /// any other failure keeps what is on screen, and says so only when there is nothing on screen. A
+    /// 404 WIKI_DISABLED is the wiki off for this account, which a link from a conversation can land on.
     func loadEntry(_ id: String) async {
         let key = PublicID.storageKey(id)
         do {
@@ -189,6 +223,8 @@ final class WikiModel {
             missing.remove(key)
             failed.remove(key)
             if details[key] != detail { details[key] = detail }
+        } catch let error where WikiLogic.isDisabled(error) {
+            disabled = true
         } catch APIError.http(let status, _) where status == 404 {
             missing.insert(key)
         } catch {
