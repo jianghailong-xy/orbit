@@ -171,6 +171,41 @@ final class OpenListRowUpdateTests: XCTestCase {
         }
     }
 
+    /// A poll that changed several rows in place, applied as one row after another in list order,
+    /// leaves what the whole new list derives, and alerts as the whole-list diff does.
+    func testSeveralRowsInPlaceMatchTheFullSnapshot() {
+        let list = busy
+        var next = list
+        next[0] = row("a", "SUCCEEDED")
+        next[2] = row("c", agent: "w2", approvals: 1, title: "Ask")
+        next[4] = row("e", agent: "w3")
+        next[5] = row("f", "AWAITING_INPUT", agent: "w3")
+        guard let changes = OpenRowChange.replacements(of: ["a", "c", "e", "f", "g"], in: next, over: list)
+        else { return XCTFail("rows changed in place") }
+        XCTAssertEqual(changes.map(\.index), [0, 2, 4, 5], "g reads the same and is left out")
+        var held = list
+        var derived = OpenListDerived(list)
+        var events: [NotificationEvent] = []
+        for change in changes {
+            let old = held[change.index]
+            held[change.index] = change.row
+            events += SessionDelta.diff(previous: [old], current: [change.row])
+            derived.replace(old, with: change.row, in: held)
+        }
+        XCTAssertEqual(held, next)
+        XCTAssertEqual(derived, OpenListDerived(next))
+        XCTAssertEqual(events, SessionDelta.diff(previous: list, current: next))
+        XCTAssertEqual(events.count, 2)
+    }
+
+    func testAListThatMovedIsNotReplacedInPlace() {
+        let list = busy
+        XCTAssertNil(OpenRowChange.replacements(of: ["a"], in: Array(list.dropFirst()), over: list))
+        XCTAssertNil(OpenRowChange.replacements(of: ["a"], in: Array(list.reversed()), over: list))
+        XCTAssertNil(OpenRowChange.replacements(of: ["zz"], in: list, over: list))
+        XCTAssertEqual(OpenRowChange.replacements(of: [], in: list, over: list)?.count, 0)
+    }
+
     // MARK: which events take the one-row path
 
     func testSummaryLeavingOpenOrEndingTheRunNeedsTheSnapshot() {

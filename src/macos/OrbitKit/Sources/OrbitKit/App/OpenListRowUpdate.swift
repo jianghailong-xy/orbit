@@ -42,6 +42,23 @@ public enum OpenRowChange: Equatable, Sendable {
                         row: sessions[index].settingPendingApprovals(pending, waitingKind: waitingKind))
     }
 
+    /// A polled `list` that differs from `sessions` only in the rows named by `ids`, each in its
+    /// place, as the replacements to apply in list order — or nil when it cannot be told that way
+    /// (a row count that moved, an id not where `sessions` has it), and the list is adopted whole.
+    /// Rows that already read the same are left out.
+    public static func replacements(of ids: Set<String>, in list: [Session],
+                                    over sessions: [Session]) -> [(index: Int, row: Session)]? {
+        guard list.count == sessions.count else { return nil }
+        var changes: [(index: Int, row: Session)] = []
+        var found = 0
+        for (index, row) in list.enumerated() where ids.contains(row.id) {
+            found += 1
+            guard sessions[index].id == row.id else { return nil }
+            if sessions[index] != row { changes.append((index, row)) }
+        }
+        return found == ids.count ? changes : nil
+    }
+
     private static func change(at index: Int, to row: Session, in sessions: [Session]) -> OpenRowChange {
         row == sessions[index] ? .unchanged : .replace(index: index, row: row)
     }

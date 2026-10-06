@@ -167,6 +167,33 @@ final class OpenListDeltaTests: XCTestCase {
                                          "view=open&since=c1", "view=open&since=c2"])
     }
 
+    /// Which lists only changed rows in place, so the caller can apply those rows alone.
+    func testAnInPlaceDeltaNamesTheRowsItReplaced() async throws {
+        let script = Script([
+            (200, [:], #"{"full":true,"sessions":[\#(row("a")),\#(row("b"))],"cursor":"c1"}"#),
+            (200, [:], #"{"full":false,"upserts":[\#(row("b", "x"))],"removedIds":[],"cursor":"c2"}"#),
+            (200, [:], #"{"full":false,"upserts":[],"removedIds":[],"cursor":"c2"}"#),
+            (200, [:], #"{"full":false,"upserts":[],"removedIds":[],"order":["b","a"],"cursor":"c3"}"#),
+            (200, [:], #"{"full":false,"upserts":[],"removedIds":["a"],"order":["b"],"cursor":"c4"}"#),
+        ])
+        let reader = OpenListReader(api: client(script))
+        _ = try await reader.read()
+        XCTAssertNil(reader.replacedRows, "a whole list")
+        reader.adopted()
+        _ = try await reader.read()
+        XCTAssertEqual(reader.replacedRows, [session("b", "x")])
+        reader.adopted()
+        reader.invalidate()
+        _ = try await reader.read()
+        XCTAssertEqual(reader.replacedRows, [], "an empty delta after an event replaced nothing itself")
+        reader.adopted()
+        _ = try await reader.read()
+        XCTAssertNil(reader.replacedRows, "a new order")
+        reader.adopted()
+        _ = try await reader.read()
+        XCTAssertNil(reader.replacedRows, "a row removed")
+    }
+
     /// An event folded into the caller's list since: an empty delta must hand back the server's list
     /// rather than vouch for the edited one, as the full read would.
     func testAnInvalidatedListIsNotAnsweredUnchanged() async throws {

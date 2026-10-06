@@ -404,6 +404,12 @@ final class AppModel {
     /// whenever `sessions` is written any other way (an event folded in), so an "unchanged" answer
     /// only ever vouches for the list it describes. One per instance and sign-in.
     private var openListReader: OpenListReader?
+    /// Whether `sessions` is the list the reader last handed out, apart from the rows in
+    /// `eventWrittenRows` that `applySessionRow` has changed in place since — what lets a poll that
+    /// only changed rows in place be applied one row at a time (`fetchOpenSessions`). Any other
+    /// write goes through `applySessionSnapshot`, which clears it.
+    private var openListIsReaderBase = false
+    private var eventWrittenRows: Set<String> = []
 
     private static let instanceKey = "orbit.instance"
     /// The email of the last successful sign-in, prefilled on the login page.
@@ -782,6 +788,8 @@ final class AppModel {
         resetNavigation()
         lastSnapshot = nil
         openListFromLaunchSnapshot = false
+        openListIsReaderBase = false
+        eventWrittenRows = []
         menuSummary = .empty
         updateDockBadge(nil)
         // Clear the write-skip trackers so the next sign-in's first snapshot always reconciles the
@@ -1377,8 +1385,20 @@ final class AppModel {
                 return true
             }
             openListFromLaunchSnapshot = false
-            applySessionSnapshot(list)
+            // A poll that only changed rows in place goes through the same one-row path as an
+            // event: the rows it changed, and the rows events wrote since the last adopted list
+            // (which the server's list now answers for), are all that can differ from it.
+            if openListIsReaderBase, let replaced = reader.replacedRows, lastSnapshot != nil,
+               let changes = OpenRowChange.replacements(
+                   of: Set(replaced.map(\.id)).union(eventWrittenRows), in: list, over: sessions) {
+                for change in changes { applySessionRow(.replace(index: change.index, row: change.row)) }
+                scheduleReviewDueRefresh(sessions)
+            } else {
+                applySessionSnapshot(list)
+            }
             reader.adopted()
+            openListIsReaderBase = true
+            eventWrittenRows = []
             return true
         } catch APIError.unauthorized {
             logout()
@@ -1397,6 +1417,7 @@ final class AppModel {
     /// purge), where the diff would otherwise post a bogus "finished" alert.
     private func applySessionSnapshot(_ list: [Session], notify: Bool = true) {
         openListReader?.invalidate()   // see `openListReader`; a fetch marks it adopted once this is done
+        openListIsReaderBase = false
         // Notify on snapshot-to-snapshot transitions (skip the first load, which only primes). Skip
         // the session whose console is on screen — its own stream already shows the change.
         if notify, let prev = lastSnapshot {
@@ -1486,6 +1507,7 @@ final class AppModel {
             return true
         }
         openListReader?.invalidate()   // not a full write either; see `openListReader`
+        eventWrittenRows.insert(row.id)
         let old = sessions[index]
         // Every other row is unchanged, so this row's diff is the whole list's.
         post(SessionDelta.diff(previous: [old], current: [row],
