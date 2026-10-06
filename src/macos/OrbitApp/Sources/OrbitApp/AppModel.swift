@@ -452,6 +452,9 @@ final class AppModel {
     private(set) var admin: AdminModel?
     /// Every public link the account has made: Settings → Shared links, and the count on its row.
     private(set) var sharedLinks: SharedLinksModel?
+    /// Every personal access token the account has issued: Settings → Access tokens, and the count
+    /// on its row.
+    private(set) var accessTokens: AccessTokensModel?
     /// The shared pools the account is in: Settings → Providers, and each pool's page.
     private(set) var sharedPools: SharedPoolsModel?
     /// The account's watches: Following, the console's Watching card, and every session's row and header.
@@ -519,6 +522,7 @@ final class AppModel {
         runners = RunnersModel(baseURL: url, tokenStore: tokenStore)
         admin = AdminModel(baseURL: url, tokenStore: tokenStore)
         sharedLinks = SharedLinksModel(baseURL: url, tokenStore: tokenStore)
+        accessTokens = AccessTokensModel(baseURL: url, tokenStore: tokenStore)
         sharedPools = SharedPoolsModel(baseURL: url, tokenStore: tokenStore)
         let watchesModel = WatchesModel(baseURL: url, tokenStore: tokenStore)
         #if os(macOS)
