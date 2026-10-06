@@ -251,8 +251,8 @@ private struct RunnerListEditing: ViewModifier {
     func body(content: Content) -> some View {
         content
             .sheet(isPresented: $addingRunner) { AddRunnerSheet() }
-            .confirmationDialog(removalTitle, isPresented: removalAsked, titleVisibility: .visible,
-                                presenting: pendingRemoval) { runner in
+            .orbitConfirmation({ _ in removalTitle },
+                               isPresented: removalAsked, presenting: pendingRemoval) { runner in
                 Button(RunnerPageCopy.RUNNER_REMOVE, role: .destructive) {
                     Task { await remove(runner) }
                 }
@@ -669,8 +669,8 @@ struct RunnerDetailContent: View {
     private var rotateSection: some View {
         Section {
             Button(RunnerPageCopy.RUNNER_ROTATE_TOKEN) { confirmingRotate = true }
-                .confirmationDialog("Rotate token for “\(RunnerPageFormat.displayName(runner))”?",
-                                    isPresented: $confirmingRotate, titleVisibility: .visible) {
+                .orbitConfirmation("Rotate token for “\(RunnerPageFormat.displayName(runner))”?",
+                                   isPresented: $confirmingRotate) {
                     Button("Rotate Token", role: .destructive) { rotate() }
                     Button("Cancel", role: .cancel) {}
                 } message: {
@@ -694,8 +694,8 @@ struct RunnerDetailContent: View {
                 Text(RunnerPageCopy.RUNNER_REMOVE)
                     .frame(maxWidth: .infinity)
             }
-            .confirmationDialog("Remove “\(RunnerPageFormat.displayName(runner))”?",
-                                isPresented: $confirmingRemove, titleVisibility: .visible) {
+            .orbitConfirmation("Remove “\(RunnerPageFormat.displayName(runner))”?",
+                               isPresented: $confirmingRemove) {
                 Button(RunnerPageCopy.RUNNER_REMOVE, role: .destructive) { remove() }
                 Button("Cancel", role: .cancel) {}
             } message: {
@@ -740,8 +740,7 @@ struct RunnerDetailContent: View {
             Button(RunnerPageCopy.RUNNER_SET_A_RESERVE) { choosingReserve = true }
                 // On the button that asks, so the panel opens against it rather than at the top of
                 // the page.
-                .confirmationDialog(RunnerPageCopy.RUNNER_KEEP_FREE, isPresented: $choosingReserve,
-                                    titleVisibility: .visible) {
+                .orbitConfirmation(RunnerPageCopy.RUNNER_KEEP_FREE, isPresented: $choosingReserve) {
                     ForEach(RunnerAttention.KEEP_FREE_TIERS.filter { $0.mb != nil }, id: \.label) { tier in
                         Button(tier.label) { keepFree = tier.mb }
                     }

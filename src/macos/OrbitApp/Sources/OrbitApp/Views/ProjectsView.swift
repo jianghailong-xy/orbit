@@ -1088,8 +1088,7 @@ struct ProjectDetailView: View {
                     .disabled(store.busy)
                     // On the menu that asks, so the panel opens against it rather than at the top of
                     // the page.
-                    .confirmationDialog(ProjectPage.replaceCoordinatorQuestion, isPresented: $confirmingReplace,
-                                        titleVisibility: .visible) {
+                    .orbitConfirmation(ProjectPage.replaceCoordinatorQuestion, isPresented: $confirmingReplace) {
                         Button(ProjectPage.replaceCoordinatorConfirm, role: .destructive) { replaceCoordinator(store) }
                         Button(ProjectPage.replaceCoordinatorKeep, role: .cancel) {}
                     } message: {
@@ -1561,15 +1560,18 @@ struct ProjectDetailView: View {
                 .disabled(store.busy)
                 // On the row's own button, so the panel opens against it rather than at the top of
                 // the page.
-                .confirmationDialog(listToResume?.pausedList.map(ProjectPage.resumeListQuestion) ?? "",
+                .orbitConfirmation({ $0.pausedList.map(ProjectPage.resumeListQuestion) ?? "" },
                                     isPresented: Binding(get: { listToResume != nil },
                                                          set: { if !$0 { listToResume = nil } }),
-                                    titleVisibility: .visible, presenting: listToResume) { item in
+                                    presenting: listToResume) { item in
                     if let list = item.pausedList {
                         Button(ProjectPage.resumeListPress) {
                             Task { notice = await store.resumeList(list.id) }
                         }
                     }
+                    // An alert carries no way out but its buttons — the panel this question used to
+                    // be could be dismissed by tapping outside, so every alert says Cancel.
+                    Button(SharePanelCopy.cancel, role: .cancel) {}
                 } message: { item in
                     Text(ProjectPage.resumeListDetail(item))
                 }
@@ -1861,21 +1863,22 @@ struct ProjectDetailView: View {
         .disabled(store.busy)
         // Both asks are raised by this menu, so they hang off it rather than off the page: the panel
         // opens against the ⋯ that was pressed.
-        .confirmationDialog(confirmTitle, isPresented: Binding(get: { confirmingStatus != nil },
-                                                              set: { if !$0 { confirmingStatus = nil } }),
-                            titleVisibility: .visible) {
+        .orbitConfirmation(confirmTitle, isPresented: Binding(get: { confirmingStatus != nil },
+                                                              set: { if !$0 { confirmingStatus = nil } })) {
             if let status = confirmingStatus {
                 Button(confirmButton(status), role: status == .cancelled ? .destructive : nil) {
                     Task { notice = await store.setStatus(status) }
                 }
             }
+            Button(SharePanelCopy.cancel, role: .cancel) {}
         } message: {
             Text(confirmMessage(store))
         }
-        .confirmationDialog("Delete this project?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+        .orbitConfirmation("Delete this project?", isPresented: $confirmingDelete) {
             Button("Delete project", role: .destructive) {
                 Task { notice = await store.delete() }
             }
+            Button(SharePanelCopy.cancel, role: .cancel) {}
         } message: {
             Text("Only a project with no tasks can be deleted.")
         }

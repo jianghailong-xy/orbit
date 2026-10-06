@@ -345,8 +345,8 @@ struct CodexPoolPageView: View {
             }
             // On the row that asks — its own Sign out control and the swipe both raise this — so the
             // panel opens against it rather than at the top of the page.
-            .confirmationDialog(signingOut.map(CodexLoginPool.signOutTitle) ?? CodexLoginPool.signOut,
-                                isPresented: asked($signingOut), titleVisibility: .visible, presenting: signingOut) { login in
+            .orbitConfirmation(CodexLoginPool.signOutTitle,
+                               isPresented: asked($signingOut), presenting: signingOut) { login in
                 Button(CodexLoginPool.signOut, role: .destructive) {
                     run(done: CodexLoginPool.signedOut(login)) { await accountActions?.signOut(login) }
                 }
@@ -379,8 +379,8 @@ struct CodexPoolPageView: View {
                 }
             }
             // On the key's own row, whose swipe raises it.
-            .confirmationDialog(removingKey.map(SharedPoolPage.removeKeyTitle) ?? "",
-                                isPresented: asked($removingKey), titleVisibility: .visible, presenting: removingKey) { key in
+            .orbitConfirmation(SharedPoolPage.removeKeyTitle,
+                               isPresented: asked($removingKey), presenting: removingKey) { key in
                 Button(SharedPoolPage.remove, role: .destructive) {
                     run(done: SharedPoolPage.removedKey(key)) { await accessActions?.removeKey(key) }
                 }
@@ -429,8 +429,7 @@ struct CodexPoolPageView: View {
                 .padding(.vertical, 4)
                 // The switch that asks: flipping it to Just me raises this, so it opens against the
                 // control rather than at the top of the page.
-                .confirmationDialog(page.access.map(JustMine.title) ?? "", isPresented: $confirmingJustMine,
-                                    titleVisibility: .visible) {
+                .orbitConfirmation(page.access.map(JustMine.title) ?? "", isPresented: $confirmingJustMine) {
                     Button(JustMine.confirm, role: .destructive) {
                         run { await accessActions?.keepToSelf() }
                     }
@@ -462,9 +461,9 @@ struct CodexPoolPageView: View {
                         }
                     }
                     // On the person's row, whose swipe raises it.
-                    .confirmationDialog(removingPerson.flatMap { person in page.access.map { SharedPoolPage.removePersonTitle(person, in: $0) } } ?? "",
-                                        isPresented: asked($removingPerson), titleVisibility: .visible,
-                                        presenting: removingPerson) { person in
+                    .orbitConfirmation({ person in
+                        page.access.map { SharedPoolPage.removePersonTitle(person, in: $0) } ?? ""
+                    }, isPresented: asked($removingPerson), presenting: removingPerson) { person in
                         Button(SharedPoolPage.remove, role: .destructive) {
                             run { await accessActions?.removePerson(person) }
                         }
@@ -537,7 +536,7 @@ struct CodexPoolPageView: View {
                 Text(page.exitLabel)
                     .frame(maxWidth: .infinity)
             }
-            .confirmationDialog(page.exitTitle, isPresented: $confirmingExit, titleVisibility: .visible) {
+            .orbitConfirmation(page.exitTitle, isPresented: $confirmingExit) {
                 Button(page.exitConfirm, role: .destructive) {
                     run { await exit() }
                 }
