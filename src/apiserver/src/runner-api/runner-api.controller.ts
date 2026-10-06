@@ -6433,7 +6433,7 @@ export class RunnerApiController {
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/worktrees-removable')
   async worktreesRemovable(
-    @CurrentRunner() runner: { id: string },
+    @CurrentRunner() runner: { id: string; ownerId?: string },
     @Body() dto: WorktreesRemovableRequest,
   ): Promise<WorktreesRemovableResponse> {
     const ids = (dto.ids ?? []).slice(0, 1000);
@@ -6443,6 +6443,10 @@ export class RunnerApiController {
       ? await this.prisma.session.findMany({
           where: {
             id: { in: valid },
+            // Only the runner's own account's sessions are kept: a checkout no session of that
+            // account names is leftover, whatever another account's session of that id is doing —
+            // and what another account's session is doing is not this runner's to learn.
+            ...(runner.ownerId !== undefined ? { ownerId: runner.ownerId } : {}),
             completedAt: null,
             archivedAt: null,
             deletedAt: null,
