@@ -80,15 +80,16 @@ import {
   keepFreeLabel,
   latestRunnerVersion,
   runnerAttention,
+  runnerCanUpdateNow,
   runnerDisk,
   type AttentionItem,
   type AttentionKind,
 } from '../lib/runnerAttention';
 import {
-  ATTENTION_CANT_UPDATE_ITSELF,
   RUNNER_ABOUT,
   RUNNER_ABOUT_HOSTNAME,
   RUNNER_ABOUT_LAST_CHECK_IN,
+  RUNNER_ABOUT_LAST_UPDATE,
   RUNNER_ABOUT_NAME,
   RUNNER_ABOUT_REGISTERED,
   RUNNER_ABOUT_REPOS_FOLDER,
@@ -99,6 +100,7 @@ import {
   RUNNER_COPY_COMMAND,
   RUNNER_DISK,
   RUNNER_KEEP_FREE,
+  RUNNER_LINE_SEPARATOR,
   RUNNER_MAX_CONCURRENT,
   RUNNER_NEEDS_ATTENTION,
   RUNNER_OFFLINE,
@@ -110,13 +112,17 @@ import {
   RUNNER_SET_A_RESERVE,
   RUNNER_SIGN_IN,
   RUNNER_UPDATE_ENGINES_NOW,
+  RUNNER_UPDATE_RUNNER_NOW,
+  RUNNER_UPDATE_RUNNER_REQUESTED,
   RUNNER_VERSION_INSTALLS_WHEN_IDLE,
   RUNNER_VERSION_LATEST,
+  RUNNER_VERSION_NOT_ROLLED_OUT,
   RUNNER_WORKSPACES,
   attentionQuotaResets,
   runnerDiskUsed,
   runnerOfflineLastSeen,
   runnerRunningOf,
+  runnerUpdatedFromTo,
   runnerVersionTag,
   runnerWorkspaceRunning,
 } from '../lib/runnerCopy';
@@ -303,6 +309,17 @@ export function RunnerDetailPage() {
   const capacityRef = useRef<HTMLElement>(null);
   const keepFreeRef = useRef<RefSelectProps>(null);
   const engineUpdate = useEngineUpdate(runnerId ?? '');
+  // Update Runner Now: the runner checks for its release at once rather than at its next 10-minute
+  // check, by the same rules — a turn in flight still holds the install. Nothing answers but the
+  // update state its next heartbeats report, which the list's refetch brings to this page.
+  const runnerUpdate = useMutation({
+    mutationFn: () => api(`/runners/${runnerId}/self-update`, { method: 'POST' }),
+    onSuccess: () => {
+      message.success(RUNNER_UPDATE_RUNNER_REQUESTED);
+      void qc.invalidateQueries({ queryKey: ['runners'] });
+    },
+    onError: (e: Error) => message.error("Couldn't start the runner update", e.message),
+  });
   const rotation = useRunnerTokenRotation();
   // Repair a checkout stuck mid-merge — the same request and words as a session's merge bar.
   const repairMut = useMutation({
@@ -1113,16 +1130,34 @@ export function RunnerDetailPage() {
     else capacityMut.mutate({ maxConcurrent: next });
   };
 
-  // About's version line: current, catching up by itself, or stuck until someone upgrades it.
+  // About's version line: current, catching up by itself, or stuck until someone upgrades it. A
+  // runner that reports where its updates stand says which; an older one is judged by runsAsRoot.
   const version = runner.version?.trim() || null;
   const versionNote = (() => {
     if (!version || !latestVersion) return null;
-    if (attention.some((item) => item.kind === 'cannotSelfUpdate')) {
-      return { text: ATTENTION_CANT_UPDATE_ITSELF, warn: true };
-    }
+    const stuck = attention.find((item) => item.kind === 'cannotSelfUpdate');
+    if (stuck) return { text: stuck.short, warn: true };
     if (compareRunnerVersions(version, latestVersion) >= 0) return { text: RUNNER_VERSION_LATEST, warn: false };
+    const state = runner.selfUpdate?.state;
+    if (state === 'heldByRollout') return { text: RUNNER_VERSION_NOT_ROLLED_OUT, warn: false };
+    if (state === 'enabled' || state === 'waitingForIdle') {
+      return { text: RUNNER_VERSION_INSTALLS_WHEN_IDLE, warn: false };
+    }
+    if (state) return null;
     return runner.runsAsRoot ? { text: RUNNER_VERSION_INSTALLS_WHEN_IDLE, warn: false } : null;
   })();
+  // The last update it installed into itself, for a runner that reports it: when, and its versions.
+  const lastUpdate = (() => {
+    const report = runner.selfUpdate;
+    if (!report) return null;
+    const versions =
+      report.lastUpdatedFrom && report.lastUpdatedTo
+        ? runnerUpdatedFromTo(report.lastUpdatedFrom, report.lastUpdatedTo)
+        : report.lastUpdatedTo;
+    const parts = [report.lastUpdatedAt ? fmtTime(report.lastUpdatedAt) : null, versions];
+    return parts.filter(Boolean).join(RUNNER_LINE_SEPARATOR) || '—';
+  })();
+  const canUpdateNow = runnerCanUpdateNow(runner, nowMs);
 
   const openRename = () => {
     setRenameVal(shownName);
@@ -1185,6 +1220,12 @@ export function RunnerDetailPage() {
         return (
           <Button size="small" disabled={engineUpdate.isPending} onClick={() => engineUpdate.mutate()}>
             {RUNNER_UPDATE_ENGINES_NOW}
+          </Button>
+        );
+      case 'updateRunner':
+        return (
+          <Button size="small" disabled={runnerUpdate.isPending} onClick={() => runnerUpdate.mutate()}>
+            {RUNNER_UPDATE_RUNNER_NOW}
           </Button>
         );
       default:
@@ -1415,6 +1456,13 @@ export function RunnerDetailPage() {
           <section className="rd-section rd-about">
             <div className="rd-section-head">
               <div className="rd-section-title">{RUNNER_ABOUT}</div>
+              {/* Like Update engines: the escape hatch for when its own 10-minute check isn't soon
+                  enough. Offered only where a check now can change something. */}
+              {canUpdateNow && (
+                <Button size="small" disabled={runnerUpdate.isPending} onClick={() => runnerUpdate.mutate()}>
+                  {RUNNER_UPDATE_RUNNER_NOW}
+                </Button>
+              )}
             </div>
             <div className="rd-box">
               <AboutRow label={RUNNER_ABOUT_NAME}>
@@ -1430,6 +1478,7 @@ export function RunnerDetailPage() {
                   <small className={versionNote.warn ? 'warn' : undefined}>{versionNote.text}</small>
                 )}
               </AboutRow>
+              {lastUpdate && <AboutRow label={RUNNER_ABOUT_LAST_UPDATE}>{lastUpdate}</AboutRow>}
               <AboutRow label={RUNNER_ABOUT_RUNS_AS}>{runsAs}</AboutRow>
               <AboutRow label={RUNNER_ABOUT_REPOS_FOLDER}>{runner.reposRoot || '—'}</AboutRow>
               <AboutRow label={RUNNER_ABOUT_LAST_CHECK_IN}>
