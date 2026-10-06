@@ -4,7 +4,6 @@ import {
   currentProviderChoice,
   defaultModelLabel,
   engineChoices,
-  engineProviderDetail,
   providerChoices,
   runtimeSummary,
   sameRuntimeChoices,
@@ -771,11 +770,6 @@ describe('engineChoices', () => {
     expect(kimi.provider.fixEngine).toBe('kimi');
   });
 
-  it("labels an engine with how its own sign-in signs in, never with a provider of it", () => {
-    const [claude] = engineChoices(all, configured, ['deepseek']);
-    expect(engineProviderDetail(claude)).toBeUndefined();
-    expect(engineProviderDetail(engineChoices(all, configured).find((e) => e.slug === 'antigravity')!)).toBe('env key');
-  });
 });
 
 describe('OpenCode and the keys it may spend', () => {
@@ -820,7 +814,6 @@ describe('OpenCode and the keys it may spend', () => {
     const openCode = engineChoices(choices, configured, ['opencode/deepseek']).find((e) => e.slug === 'opencode')!;
     expect(openCode.label).toBe('OpenCode');
     expect(openCode.provider.slug).toBe('opencode/deepseek');
-    expect(engineProviderDetail(openCode)).toBeUndefined();
     expect(sameRuntimeChoices('opencode/deepseek', choices, configured).map((c) => c.slug)).toEqual([
       'opencode',
       'opencode/deepseek',

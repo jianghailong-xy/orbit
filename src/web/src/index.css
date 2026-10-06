@@ -16671,10 +16671,6 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   font-size: 12px;
 }
-.np-list.with-details {
-  width: 360px;
-  max-width: calc(100vw - 32px);
-}
 /* The composer's account pill: which of a pool's accounts this session is spending. */
 .composer-account {
   padding-right: 6px;

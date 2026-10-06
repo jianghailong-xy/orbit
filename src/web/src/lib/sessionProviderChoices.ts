@@ -565,8 +565,3 @@ export function engineChoices(
     return engineChoiceFor(landing, configured);
   });
 }
-
-/** The small label beside an engine's name: how its own sign-in signs in (Antigravity's "env key"),
- *  and nothing for a provider of it — which provider is the composer's Provider menu's to say. */
-export const engineProviderDetail = (engine: EngineChoice): string | undefined =>
-  engine.provider.slug === engine.slug ? engine.provider.labelDetail : undefined;
