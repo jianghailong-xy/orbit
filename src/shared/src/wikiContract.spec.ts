@@ -43,6 +43,8 @@ import {
   WIKI_SEARCH_MATCHES,
   WIKI_SLUG_PATTERN,
   WIKI_SOURCE_KINDS,
+  WIKI_SOURCE_REFS,
+  WIKI_SOURCE_ROW_ID_KINDS,
   WIKI_SOURCE_STATES,
   WIKI_TRUST_LEVELS,
   WIKI_UNSET_REVIEW_MODE,
@@ -1384,6 +1386,38 @@ describe('wiki contract', () => {
     expect(CONTRACT.realtime.payload).toEqual(['id']);
     expect(CONTRACT.realtime.notPublishedWhen).toContain('an idempotent replay');
     expect(CONTRACT.realtime.correctness).toMatch(/Nothing depends on it/u);
+  });
+
+  it("says what each source kind takes as its ref, and refuses a row's ref that is no id by its path", () => {
+    // One phrase per kind, the words a refusal of a ref that names nothing says too (sourceInput.refs).
+    expect(keysOf(CONTRACT.sourceInput.refs)).toEqual([...WIKI_SOURCE_KINDS]);
+    expect(CONTRACT.sourceInput.refs).toEqual(WIKI_SOURCE_REFS);
+    // The kinds whose ref can only be a row's id: a tool_call takes a tool_use_id too, and a commit is a sha.
+    expect(CONTRACT.sourceInput.rowIdKinds).toEqual([...WIKI_SOURCE_ROW_ID_KINDS]);
+    for (const kind of WIKI_SOURCE_ROW_ID_KINDS) expect(WIKI_SOURCE_KINDS).toContain(kind);
+    expect(WIKI_SOURCE_ROW_ID_KINDS).not.toContain('tool_call');
+    expect(WIKI_SOURCE_ROW_ID_KINDS).not.toContain('commit');
+    expect(WIKI_SOURCE_REFS.tool_call).toMatch(/tool_use_id/u);
+    expect(CONTRACT.sourceInput.toolUseId).toMatch(/that two sessions carry, is unresolved/u);
+
+    // A tool_use_id where a task's id goes is refused by its path, saying what goes there instead. As a
+    // tool_call's ref it is a tool_use_id, which only the lookup can judge.
+    const toolUseId = 'toolu_0195URa2d9G6F4AKQoGfVprN';
+    const errors = validateWikiSources([{ kind: 'tool_call', ref: toolUseId }, { kind: 'task', ref: toolUseId }], 'ops[0].sources');
+    expect(errors.map((e) => e.path)).toEqual(['ops[0].sources[1].ref']);
+    expect(errors[0]!.message).toContain(WIKI_SOURCE_REFS.task);
+    expect(errors[0]!.message).toMatch(/the UUID, or the short public id/u);
+    // Both spellings of an id are one id.
+    expect(validateWikiSources([
+      { kind: 'task', ref: '0199aaaa-0000-7000-8000-000000000000' },
+      { kind: 'task', ref: '34UuAT0pwUgBln9yRlAZF' },
+    ])).toEqual([]);
+
+    // A dry run is answered with the status the request itself would be.
+    expect(CONTRACT.refusalRules.dryRun).toMatch(/under the status the request would be answered with/u);
+    const status = (code: string) => CONTRACT.refusals.find((r: { code: string }) => r.code === code)?.httpStatus;
+    expect(status('WIKI_SCHEMA')).toBe(400);
+    expect(status('WIKI_SOURCE_UNRESOLVED')).toBe(422);
   });
 
   it('carries uniquely named vectors with reasons, a valid and an invalid one for every kind', () => {

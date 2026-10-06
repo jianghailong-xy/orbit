@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -593,6 +595,97 @@ func TestWikiProposeReadsARefusedBatchAsAnAnswer(t *testing.T) {
 	})
 	if result["isError"] != true || !strings.Contains(wikiToolText(t, result), "knowledge is not evidence") {
 		t.Errorf("a request-level refusal was not carried to the caller: %v %s", result["isError"], wikiToolText(t, result))
+	}
+}
+
+// A refusal names the field it is about: errors[] is where a WIKI_SCHEMA says which op's which
+// source is wrong, and the answer an agent reads carries it. A dry run is refused with the status the
+// request would be, and that is an answer too.
+func TestWikiProposeNamesTheSourceARefusalIsAbout(t *testing.T) {
+	refused := `{"changesetId":null,"replayed":false,"dryRun":true,"ops":[{"seq":0,"status":"refused","reasons":[` +
+		`{"code":"WIKI_SCHEMA","message":"the op does not have the shape this contract gives it","errors":[` +
+		`{"path":"ops[0].sources[1].ref","message":"names no task: a task source's ref is the task's id (an id is the UUID, or the short public id Orbit shows)"}]}]}],` +
+		`"breaker":{"scope":"changeset","activeAtStart":0,"changed":0,"remaining":null}}`
+	srv, _ := wikiDoor(t, http.StatusBadRequest, refused)
+	result := wikiMCP(t, srv.URL).callTool("wiki_propose", map[string]interface{}{
+		"ops":            []interface{}{map[string]interface{}{"op": "add"}},
+		"rationale":      "r",
+		"idempotencyKey": "k",
+		"dryRun":         true,
+	})
+	if result["isError"] == true {
+		t.Fatalf("a refused dry run came back as a failed call, losing the per-op answer: %s", wikiToolText(t, result))
+	}
+	text := wikiToolText(t, result)
+	for _, phrase := range []string{
+		"Dry run: every op was checked, and NOTHING was recorded",
+		"op 0 add: refused WIKI_SCHEMA: the op does not have the shape this contract gives it; " +
+			"ops[0].sources[1].ref names no task: a task source's ref is the task's id",
+	} {
+		if !strings.Contains(text, phrase) {
+			t.Errorf("the answer does not say %q:\n%s", phrase, text)
+		}
+	}
+}
+
+// What a source's ref is, said where a source is filled in — the tool's schema and `orbit wiki
+// propose --help` — for every kind the contract lists (contract `sourceInput.refs`). A tool_use_id
+// where a row's id goes was a 500; telling the caller first is cheaper than refusing it.
+func TestWikiProposeSaysWhatEachSourceKindTakesAsItsRef(t *testing.T) {
+	input, _ := wikiContract(t)["sourceInput"].(map[string]interface{})
+	refs, _ := input["refs"].(map[string]interface{})
+	kinds, _ := wikiContract(t)["sourceKinds"].(map[string]interface{})
+	if len(refs) == 0 || len(refs) != len(kinds) {
+		t.Fatalf("the contract's sourceInput.refs (%d) does not say what each of its %d source kinds takes", len(refs), len(kinds))
+	}
+	schema, _ := wikiDescriptor(t, "wiki_propose")["inputSchema"].(map[string]interface{})
+	ops, _ := schema["properties"].(map[string]interface{})["ops"].(map[string]interface{})
+	item, _ := ops["items"].(map[string]interface{})
+	sources, _ := item["properties"].(map[string]interface{})["sources"].(map[string]interface{})
+	described, _ := sources["description"].(string)
+	doors := map[string]string{"the wiki_propose sources schema": described, "orbit wiki propose --help": wikiActionHelp["propose"]}
+	for door, text := range doors {
+		for kind := range refs {
+			// A whole word: task is not said by task_comment.
+			if !regexp.MustCompile(`\b` + regexp.QuoteMeta(kind) + `\b`).MatchString(text) {
+				t.Errorf("%s does not say what a %s source's ref is", door, kind)
+			}
+		}
+		for _, phrase := range []string{
+			"the short id Orbit shows",
+			"the tool_use_id its engine gave the call (toolu_…",
+			"this session's own call first",
+			"the one session of the owner's that made it",
+			"full sha",
+			"cannot be cited yet",
+			"A ref that names nothing is refused, naming the source as ops[i].sources[j].ref",
+		} {
+			if !strings.Contains(strings.Join(strings.Fields(text), " "), phrase) {
+				t.Errorf("%s does not say %q", door, phrase)
+			}
+		}
+	}
+	if !strings.Contains(described, `{kind:"turn",session:"self"}`) || !strings.Contains(wikiActionHelp["propose"], `{"kind":"turn","session":"self"}`) {
+		t.Errorf("a turn of this session is not shown as session self on both doors")
+	}
+	// The kinds whose ref is only ever a row's id are the ones both doors say take the record's id.
+	rowIDKinds, _ := input["rowIdKinds"].([]interface{})
+	said := regexp.MustCompile(`ref by kind: ([a-z_, ]+?) take the record's id`).FindStringSubmatch(described)
+	if len(said) != 2 {
+		t.Fatalf("the sources schema does not list the kinds that take a record's id: %q", described)
+	}
+	listed := strings.FieldsFunc(strings.ReplaceAll(said[1], " and ", ","), func(r rune) bool { return r == ',' || r == ' ' })
+	want := []string{}
+	for _, kind := range rowIDKinds {
+		if kind != "owner_decision" {
+			want = append(want, kind.(string))
+		}
+	}
+	sortedListed, sortedWant := append([]string{}, listed...), append([]string{}, want...)
+	sort.Strings(sortedListed)
+	sort.Strings(sortedWant)
+	if !reflect.DeepEqual(sortedListed, sortedWant) {
+		t.Errorf("the schema says %v take the record's id, and the contract's rowIdKinds (bar owner_decision, said on its own) are %v", listed, want)
 	}
 }
 
