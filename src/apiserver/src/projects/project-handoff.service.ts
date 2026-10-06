@@ -27,7 +27,9 @@
  *     not the approver). A compare-and-set on the state it was read in, so two clicks produce one
  *     answer and one 409 rather than an answer that depends on timing. Re-approving a live yes
  *     writes nothing at all: it is a stable read-back, not a second decision, so nobody can extend
- *     their own deadline by clicking approve again.
+ *     their own deadline by clicking approve again. A yes to a MOVE_TASK is the exception, because
+ *     it is not a permission somebody spends later: confirming a move IS the move (account owner,
+ *     2026-10-06), so it is answered, applied and spent in one transaction by `HandoffMoveApplier`.
  *   - **spend** runs INSIDE the caller's transaction as one compare-and-set that pins every column
  *     of the authority tuple. A second application updates no row and throws, which aborts the
  *     caller's transaction and takes the task it was about to write with it. That is exactly-once
@@ -41,11 +43,13 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { uuidToBase62 } from '@orbit/shared';
 
+import type { AuthCredential } from '../common/current-user.decorator';
 import { orderedIds } from '../common/lock-order';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
@@ -66,6 +70,7 @@ import {
   type HandoffRequestIdentity,
   type HandoffStoredState,
 } from './project-handoff';
+import { SCOPE_RULES } from './project-scope-contract';
 import type { HandoffApproval } from './project-scope-decision';
 
 /** The columns every read below needs. Spelled once so no caller invents a narrower read. */
@@ -207,11 +212,37 @@ export interface HandoffAnswer {
 /** A read client: the plain Prisma service, or the caller's transaction. */
 type HandoffReadClient = Pick<Prisma.TransactionClient, 'projectHandoffApproval'>;
 
+/**
+ * What applies the account owner's yes to a MOVE_TASK: `TasksService.applyMoveApproval`.
+ *
+ * A move writes a task, and every rule about writing one — the hierarchy it must not split, the
+ * criterion it declares, what the projects hear afterwards — lives in `TasksService`, which already
+ * depends on this service. So the dependency is handed over rather than injected back: the
+ * `TasksService` built over this instance binds itself here (one of each in the server; a fixture
+ * that builds both gets the same pair). Typed by the one method, so this module imports nothing
+ * from the tasks module.
+ */
+export interface HandoffMoveApplier {
+  applyMoveApproval(
+    ownerId: string,
+    userId: string,
+    handoffId: string,
+    now: Date,
+    credential?: AuthCredential,
+  ): Promise<void>;
+}
+
 @Injectable()
 export class ProjectHandoffService {
   private readonly log = new Logger(ProjectHandoffService.name);
+  private moveApplier?: HandoffMoveApplier;
 
   constructor(private readonly prisma: PrismaService) {}
+
+  /** Called by the `TasksService` that shares this instance; see `HandoffMoveApplier`. */
+  bindMoveApplier(applier: HandoffMoveApplier): void {
+    this.moveApplier = applier;
+  }
 
   /** The canonical authority tuple of a declaration, as everything below spells it. */
   authorityOf(ownerId: string, declaration: HandoffDeclaration): HandoffAuthority {
@@ -368,6 +399,25 @@ export class ProjectHandoffService {
   }
 
   /**
+   * Whether a task serves one of the acceptance criteria `projectId` states — its criterion
+   * declaration names one of them. The fact R8 and HP1 read about a move out of a settled project
+   * (`settledEndRule`), read from the rows by each door that decides one: the request, the question
+   * filed under `declare`'s locks, and the confirmation under its own.
+   */
+  async servesCriterionOf(
+    db: Pick<Prisma.TransactionClient, 'task'>,
+    ownerId: string,
+    taskId: string,
+    projectId: string,
+  ): Promise<boolean> {
+    const serving = await db.task.findFirst({
+      where: { id: taskId, ownerId, criterionDefinition: { projectId } },
+      select: { id: true },
+    });
+    return serving !== null;
+  }
+
+  /**
    * A task is not moved while its own landing is queued or running — refused when the move is
    * asked for, and again by whatever applies it.
    *
@@ -375,12 +425,13 @@ export class ProjectHandoffService {
    * criterion it lands for are all that project's, and a task that changed goals in the middle would
    * leave a job landing work for a project that no longer owns it. Nothing about the request is
    * wrong, so nothing has to change in it: once the job has ended the same request can be made, or
-   * answered, again.
+   * answered, again. `confirming` is the request being answered, when that is who is asking.
    */
   async assertMoveNotLanding(
     db: Pick<Prisma.TransactionClient, 'projectIntegrationJob'>,
     ownerId: string,
     taskId: string,
+    confirming?: { handoffId: string; handoffState: string },
   ): Promise<void> {
     const job = await db.projectIntegrationJob.findFirst({
       where: {
@@ -398,10 +449,14 @@ export class ProjectHandoffService {
       requiredAction: 'WAIT_FOR_THE_LANDING',
       taskId,
       jobId: job.id,
+      ...(confirming ?? {}),
       message:
         `task ${uuidToBase62(taskId)} is being landed (${job.kind} ${uuidToBase62(job.id)} is `
         + `${job.state}), and a landing belongs to the project the task is in — nothing was `
-        + 'written. Ask for the move again once that job has ended.',
+        + (confirming
+          ? 'written and the request is still waiting. Confirm it again once that job has ended, '
+            + 'or deny it.'
+          : 'written. Ask for the move again once that job has ended.'),
     });
   }
 
@@ -498,6 +553,24 @@ export class ProjectHandoffService {
       if (existing) return existing;
 
       const acceptance = await this.acceptanceUnderLock(tx, ownerId, declaration);
+      // A move nobody's answer could make is not asked about: confirming it would be refused, so a
+      // question filed for it would only be a card nobody can say yes to. HP1 under these locks is
+      // R8 as the caller's admission read it — a settled end, or a task its settled source counts —
+      // re-read here in case either moved since.
+      if (acceptance.acceptedBy === null) {
+        const rule = SCOPE_RULES.find((candidate) => candidate.code === acceptance.refusal);
+        throw new ForbiddenException({
+          code: acceptance.refusal,
+          rule: rule?.id ?? null,
+          requiredAction: rule?.requiredAction ?? null,
+          taskId: declaration.subjectTaskId,
+          message:
+            (acceptance.refusal === 'MOVE_TASK_SERVES_SETTLED_CRITERION'
+              ? 'this task serves an acceptance criterion of the settled project it would leave'
+              : 'a settled project takes no work until it is reopened')
+            + ' — nothing was written and no question was filed',
+        });
+      }
       // Asked rather than assumed, and it can only come back a person's answer: the one row that
       // used to say `POLICY` was the automatic acceptance, and the column it was read from is gone.
       // So a declaration its author is allowed to make files a QUESTION, and nothing here writes a
@@ -740,9 +813,19 @@ export class ProjectHandoffService {
     const from = ends.find((row) => row.id === declaration.fromProjectId);
     const to = ends.find((row) => row.id === declaration.toProjectId);
     if (!from || !to) throw new ForbiddenException('project not found');
+    // A move's subject is under this transaction's FOR SHARE, so what it serves cannot change
+    // before the insert.
+    const move = declaration.kind === 'MOVE_TASK' && declaration.subjectTaskId
+      ? {
+          servesSourceCriterion: await this.servesCriterionOf(
+            tx, ownerId, declaration.subjectTaskId, declaration.fromProjectId,
+          ),
+        }
+      : null;
     return decideHandoffAcceptance(
       { status: from.status as 'OPEN' | 'DONE' | 'CANCELLED' },
       { status: to.status as 'OPEN' | 'DONE' | 'CANCELLED' },
+      move,
     );
   }
 
@@ -886,6 +969,13 @@ export class ProjectHandoffService {
    *     second decision, which is an expiry that can always be outrun.
    *   - The write is a compare-and-set on the state that was read, so two clicks produce one answer
    *     and one 409 rather than an answer that depends on timing.
+   *
+   * A yes to a MOVE_TASK is not written here. Confirming a move is the move (account owner,
+   * 2026-10-06), so the answer, the task write and the spend are one transaction, and that
+   * transaction is the `HandoffMoveApplier`'s: if the move can no longer be made, the yes is not
+   * recorded either and the request stays as it was. A no to a move, and every answer about the
+   * other two kinds, is the compare-and-set below, unchanged. `credential` is the door the person
+   * answered through, recorded with the move.
    */
   async decide(
     ownerId: string,
@@ -893,17 +983,22 @@ export class ProjectHandoffService {
     id: string,
     decision: 'APPROVE' | 'DENY',
     now: Date,
+    credential?: AuthCredential,
   ): Promise<HandoffAnswer> {
     const { row } = await this.get(ownerId, id, now);
     const state = row.state as HandoffStoredState;
     const next = nextHandoffState(state, decision);
-    if (!next) {
-      throw new ConflictException(
-        `handoff approval ${uuidToBase62(row.id)} is ${state} and cannot be ${decision}D; `
-        + (state === 'DENIED'
-          ? 'a refused crossing stays refused — file the work yourself if you have changed your mind'
-          : 'a spent approval authorised one crossing and is finished'),
-      );
+    if (!next) throw this.transitionRefusal(row, decision);
+    if (row.kind === 'MOVE_TASK' && next === 'APPROVED') {
+      if (!this.moveApplier) {
+        // Fail closed: recording the yes without the move would leave exactly the approved-but-not-
+        // moved row this path exists to stop producing.
+        throw new ServiceUnavailableException(
+          'this server cannot apply a move right now — nothing was written; try again',
+        );
+      }
+      await this.moveApplier.applyMoveApproval(ownerId, userId, row.id, now, credential);
+      return this.get(ownerId, id, now);
     }
     if (next === state) return this.get(ownerId, id, now);
     const approved = next === 'APPROVED';
@@ -925,6 +1020,119 @@ export class ProjectHandoffService {
       );
     }
     return this.get(ownerId, id, now);
+  }
+
+  /** The 409 for an answer §6 has no edge for — `decide`'s, and a confirmation's under its lock. */
+  private transitionRefusal(row: HandoffRow, decision: 'APPROVE' | 'DENY'): ConflictException {
+    return new ConflictException(
+      `handoff approval ${uuidToBase62(row.id)} is ${row.state} and cannot be ${decision}D; `
+      + (row.state === 'DENIED'
+        ? 'a refused crossing stays refused — file the work yourself if you have changed your mind'
+        : 'a spent approval authorised one crossing and is finished'),
+    );
+  }
+
+  /**
+   * The MOVE_TASK request a confirmation is answering, locked (rank 60) inside the confirmation's
+   * transaction and checked again there: against itself, and against the answer it can still take.
+   *
+   * PENDING is the request as asked. APPROVED is a yes an earlier build recorded without moving
+   * anything, and confirming it again applies it — unless it has expired, which is R13's answer
+   * here too (`APPROVAL_EXPIRED`), with nothing written. Anything else was answered while this
+   * one was on its way, and is refused exactly as `decide` refuses it.
+   */
+  async lockMoveForConfirmation(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    id: string,
+    now: Date,
+  ): Promise<HandoffRow> {
+    const [locked] = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT "id" FROM "project_handoff_approval"
+       WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+       FOR UPDATE`;
+    const row = locked
+      ? ((await tx.projectHandoffApproval.findFirst({
+          where: { id, ownerId },
+          select: HANDOFF_SELECT,
+        })) as HandoffRow | null)
+      : null;
+    if (!row) throw new NotFoundException('handoff approval not found');
+    this.assertSelfConsistent(row);
+    if (row.kind !== 'MOVE_TASK' || !row.subjectTaskId) {
+      throw new Error(`handoff approval ${row.id} is a ${row.kind}, not a move`);
+    }
+    if (row.state !== 'PENDING' && row.state !== 'APPROVED') {
+      throw this.transitionRefusal(row, 'APPROVE');
+    }
+    if (this.answerOf(row, now).approval.state === 'EXPIRED') {
+      throw new ConflictException({
+        code: 'APPROVAL_EXPIRED',
+        requiredAction: 'AWAIT_HANDOFF_APPROVAL',
+        handoffId: row.id,
+        handoffState: row.state,
+        taskId: row.subjectTaskId,
+        message:
+          `the yes recorded on handoff approval ${uuidToBase62(row.id)} expired before it was `
+          + 'applied, and an expired answer moves nothing — nothing was written. The task can be '
+          + 'asked for again, or moved by you directly.',
+      });
+    }
+    return row;
+  }
+
+  /**
+   * The person's yes, written inside the transaction that applies it, and the authority `spend`
+   * then spends — the row's own tuple, every column of which it has just been checked to reproduce.
+   *
+   * The same answer `decide` writes for the other kinds, by the same compare-and-set on the state it
+   * was read in, pinned on the whole crossing like `spend`: a row that changed underneath updates
+   * nothing and the transaction ends here. A yes already on the row is not given a second time —
+   * its decider, moment and expiry are what the spend keeps (0155).
+   */
+  async approveMoveForConfirmation(
+    tx: Prisma.TransactionClient,
+    row: HandoffRow,
+    userId: string,
+    now: Date,
+  ): Promise<HandoffAuthority> {
+    const authority: HandoffAuthority = {
+      ownerId: row.ownerId,
+      fromProjectId: row.fromProjectId,
+      toProjectId: row.toProjectId,
+      kind: row.kind as HandoffKind,
+      subjectTaskId: row.subjectTaskId,
+      payloadDigest: row.payloadDigest,
+      crossingKey: row.crossingKey,
+      requestedBySessionId: row.requestedBySessionId,
+    };
+    if (row.state !== 'PENDING') return authority;
+    const approved = await tx.$executeRaw(Prisma.sql`
+      UPDATE "project_handoff_approval"
+         SET "state" = 'APPROVED',
+             "decided_by" = 'USER',
+             "decided_by_user_id" = ${userId}::uuid,
+             "decided_at" = ${now},
+             "expires_at" = ${new Date(now.getTime() + HANDOFF_APPROVAL_TTL_MS)},
+             "updated_at" = ${now}
+       WHERE "id" = ${row.id}::uuid
+         AND "owner_id" = ${authority.ownerId}::uuid
+         AND "from_project_id" = ${authority.fromProjectId}::uuid
+         AND "to_project_id" = ${authority.toProjectId}::uuid
+         AND "kind" = ${authority.kind}
+         AND "subject_task_id" IS NOT DISTINCT FROM ${authority.subjectTaskId}::uuid
+         AND "payload_digest" = ${authority.payloadDigest}
+         AND "crossing_key" = ${authority.crossingKey}
+         AND "requested_by_session_id" = ${authority.requestedBySessionId}::uuid
+         AND "state" = 'PENDING'
+    `);
+    if (approved !== 1) {
+      throw new ConflictException(
+        `handoff approval ${uuidToBase62(row.id)} was answered by somebody else while you were `
+        + 'deciding; re-read it before answering again',
+      );
+    }
+    return authority;
   }
 
   /**

@@ -240,12 +240,22 @@ export const wikiOldest = (when: string): string => `oldest ${when}`;
 /** A pending op expires 14 days after it was written; Review says when. */
 export const WIKI_PENDING_EXPIRES = (when: string): string => `expires ${when}`;
 
-// The bands of the home page, in the order both clients draw them.
+// The bands' titles: Principles is the home's (design §12.3.1), the other three Activity's, in the order
+// both clients draw them.
 export const WIKI_PRINCIPLES = 'Principles';
 export const WIKI_RECENT_DECISIONS = 'Recent decisions';
 export const WIKI_RECENTLY_CHANGED = 'Recently changed';
 export const WIKI_AGENTS_USED = 'Agents used the wiki';
 export const WIKI_ALL_DECISIONS = 'All decisions ›';
+/** After the home's first principles, the rest of them (mock 31 ③): `All 6 ›`. */
+export const wikiAllPrinciples = (count: number): string => `All ${count} ›`;
+
+/** A principle's day at the end of its row on the home (mock 31 ③): `9/6`, in the reader's time zone. */
+export function wikiShortDay(iso: string): string | null {
+  const at = new Date(iso);
+  if (!Number.isFinite(at.getTime())) return null;
+  return `${at.getMonth() + 1}/${at.getDate()}`;
+}
 
 export const WIKI_PRINCIPLES_HINT = 'written by you · pinned';
 export const WIKI_TOPICS_HINT = 'topics';

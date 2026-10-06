@@ -1747,7 +1747,9 @@ func crossProjectCrossingGuidance(err error) string {
 		return "\n  where:   this names one row of project_crossings " +
 			"(orbit project crossings PROJECT_ID) — read it to see whether the crossing has been " +
 			"asked, is still waiting, or was already answered. Only the ACCOUNT OWNER can answer " +
-			"it: no tool does, by design, so point them at the project page."
+			"it: no tool does, by design, so point them at the project page. A request to MOVE a " +
+			"task that already exists is done by their confirmation: once they confirm it, the " +
+			"task is in the target project and nothing has to be sent again."
 	case projectScopeMismatch:
 		// Only when the server itself named asking as the remedy. The code alone would decorate
 		// refusals whose answer is something else entirely.
@@ -1758,9 +1760,11 @@ func crossProjectCrossingGuidance(err error) string {
 			"declaration beside the projectId it names — {\"handoff\":{\"reason\":\"why this " +
 			"belongs over there\"}} over MCP, --handoff-reason TEXT at a terminal. The declaration " +
 			"carries no authority: it files the crossing as a question the ACCOUNT OWNER answers, " +
-			"which orbit project crossings PROJECT_ID reads back. It reaches that question from " +
-			"task_create and task_create_batch; MOVING a task that already exists is refused here " +
-			"declared or not, so take that one to the owner yourself."
+			"which orbit project crossings PROJECT_ID reads back. New work (task_create, " +
+			"task_create_batch) is filed by sending the write again once that says APPROVED. A " +
+			"move of a task that already exists (task_update) can be asked for when this " +
+			"session's own project is the move's source or its target, and the owner's " +
+			"confirmation moves the task: nothing has to be sent again."
 	}
 	return ""
 }

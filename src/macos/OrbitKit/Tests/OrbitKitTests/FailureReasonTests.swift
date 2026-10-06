@@ -19,6 +19,7 @@ final class FailureReasonTests: XCTestCase {
         "src/macos/OrbitApp/Sources/OrbitApp/RunnerControl.swift",
         "src/macos/OrbitApp/Sources/OrbitApp/ProjectsModel.swift",
         "src/macos/OrbitApp/Sources/OrbitApp/SharedLinksModel.swift",
+        "src/macos/OrbitApp/Sources/OrbitApp/AccessTokensModel.swift",
         "src/macos/OrbitApp/Sources/OrbitApp/RunnersModel.swift",
         "src/macos/OrbitApp/Sources/OrbitApp/Views/AddRunnerSheet.swift",
     ]

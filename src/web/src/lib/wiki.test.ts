@@ -31,6 +31,8 @@ import {
   wikiSpaceWaiting,
   wikiWaitingOnYou,
   writeWikiSeen,
+  wikiAllPrinciples,
+  wikiShortDay,
 } from './wiki';
 import { WIKI_NO_DOCUMENTS_YET, wikiDocumentCount } from './wikiDocs';
 
@@ -323,6 +325,16 @@ describe('the words of Activity and of what waits', () => {
     expect(wikiDocumentCount(1)).toBe('1 document');
     expect(wikiDocumentCount(1234)).toBe('1,234 documents');
     expect(WIKI_NO_DOCUMENTS_YET).toBe('No documents yet');
+  });
+});
+
+/** The home's principles (design §12.3.1, mock 31 ③): the first three, then the way to all of them. */
+describe('the words of the home’s principles', () => {
+  it('says the way to the rest with their number, and a principle’s day as month/day', () => {
+    expect(wikiAllPrinciples(6)).toBe('All 6 ›');
+    expect(wikiShortDay('2026-09-06T12:00:00.000Z')).toBe('9/6');
+    expect(wikiShortDay('2026-10-19T12:00:00.000Z')).toBe('10/19');
+    expect(wikiShortDay('not a day')).toBeNull();
   });
 });
 

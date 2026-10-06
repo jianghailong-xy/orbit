@@ -99,6 +99,9 @@ export interface ScopeAdmissionRequest {
   /** Status of every project this write touches; a project absent from it counts as not OPEN. */
   projectStatus: Readonly<Record<string, ScopeProjectStatus>>;
   approval?: HandoffApproval | null;
+  /** A move: whether the task serves one of the criteria of the project it would leave, as the
+   *  server read it. Absent when nobody read it. */
+  servesSourceCriterion?: boolean;
 }
 
 export interface ScopeAdmission {
@@ -195,6 +198,7 @@ export function admitProjectScopeWrite(request: ScopeAdmissionRequest): ScopeAdm
         scope: request.scope,
         projectStatus: request.projectStatus,
         approval: request.approval ?? null,
+        servesSourceCriterion: request.servesSourceCriterion,
       },
     }),
   };
@@ -275,7 +279,14 @@ export function scopeRefusalBody(
       + (outcome.rule === 'R6_OUT_OF_SCOPE' && outcome.crossing
         ? 'A move is asked for from one of its ends — the project the task is in, or the project '
           + 'it would go to — and this session holds neither.'
-        : (REFUSAL_PROSE[outcome.requiredAction ?? ''] ?? 'This write is outside its scope.')),
+        // R8B: the reason is the task, not the project — a settled project does give up work, but
+        // only work none of its criteria count.
+        : outcome.rule === 'R8B_SETTLED_CRITERION_SERVED'
+          ? `This task serves an acceptance criterion of project ${scopeId ?? 'none'}, which is `
+            + 'settled, so moving it would change what that acceptance counted — even with its '
+            + 'declaration taken back. A settled project gives up only work none of its criteria '
+            + 'count; this task can move once that project has been reopened.'
+          : (REFUSAL_PROSE[outcome.requiredAction ?? ''] ?? 'This write is outside its scope.')),
     taskId,
     scope: outcome.ends.from === null ? null : { projectId: outcome.ends.from },
     target: outcome.ends.to === null ? null : { projectId: outcome.ends.to },
