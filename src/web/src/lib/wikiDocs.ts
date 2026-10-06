@@ -124,6 +124,13 @@ export const WIKI_BROWSE_SECTIONS_SHOWN_PHONE = 6;
 
 const plural = (count: number, one: string, many: string): string => `${wikiCount(count)} ${count === 1 ? one : many}`;
 
+/**
+ * A space's documents, as the native space picker says them under its repository (design §12.3.4, mock
+ * 31 ④): how many its confirmed plan has — or, with none, `WIKI_NO_DOCUMENTS`. The web's select names the
+ * spaces alone; the words are kept here with the documents' others so OrbitKit's `WikiCopy` says the same.
+ */
+export const wikiDocumentCount = (count: number): string => plural(count, 'document', 'documents');
+
 export const wikiMoreLines = (count: number): string => `… ${plural(count, 'more line', 'more lines')}`;
 export const wikiMoreSections = (count: number): string => plural(count, 'more section', 'more sections');
 export const wikiDocEntriesHint = (count: number): string => `the ${wikiCount(count)} this document’s quotes came through, by kind`;

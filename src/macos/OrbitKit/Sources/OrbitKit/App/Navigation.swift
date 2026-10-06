@@ -86,6 +86,10 @@ public enum NavNode: Hashable, Sendable {
     /// Review: the proposals waiting for the owner, one card at a time. Pushed from the Wiki home's
     /// amber banner.
     case wikiReview
+    /// Activity (design §12.3.2): what the home said besides its content — the status line, what waits
+    /// on the owner, the decisions, the changes and the agents' use. Pushed from the bar's Activity
+    /// button; the three-column shells open it in the detail pane.
+    case wikiActivity
     /// The space's Wiki settings — its review mode and maintenance — pushed from the home's gear.
     case wikiSettings
     /// One run: what a maintenance run, an import or a session's proposal applied at once, pushed
@@ -280,6 +284,12 @@ public struct NavState: Equatable, Sendable {
     /// Whether Review is the page on top of the Wiki section's stack.
     public var wikiReviewOnTop: Bool {
         if case .wikiReview = path.last { return true }
+        return false
+    }
+
+    /// Whether Activity is the page on top of the Wiki section's stack.
+    public var wikiActivityOnTop: Bool {
+        if case .wikiActivity = path.last { return true }
         return false
     }
 

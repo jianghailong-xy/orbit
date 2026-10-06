@@ -19,6 +19,7 @@ import {
   wikiProposalsToReview,
   wikiTabOf,
   WIKI_ACTIVITY,
+  WIKI_MANAGE_SPACES,
   moveWikiSeen,
   readWikiSeen,
   readWikiSeenBefore,
@@ -33,6 +34,7 @@ import {
   wikiAllPrinciples,
   wikiShortDay,
 } from './wiki';
+import { WIKI_NO_DOCUMENTS, wikiDocumentCount } from './wikiDocs';
 
 /**
  * The Wiki's derivations, which is where its words and its readings live.
@@ -315,6 +317,14 @@ describe('the words of Activity and of what waits', () => {
     expect(wikiProposalsToReview(1)).toBe('1 proposal to review');
     expect(`${wikiProposalsToReview(3)} ${wikiCountInSpace(2, 'wikova')}`).toBe('3 proposals to review · 2 in wikova');
     expect(wikiActivityPath('orbit')).toBe('/wiki/orbit/activity');
+  });
+
+  it("says the native picker's words as the design writes them", () => {
+    expect(WIKI_MANAGE_SPACES).toBe('Manage spaces');
+    expect(wikiDocumentCount(35)).toBe('35 documents');
+    expect(wikiDocumentCount(1)).toBe('1 document');
+    expect(wikiDocumentCount(1234)).toBe('1,234 documents');
+    expect(WIKI_NO_DOCUMENTS).toBe('No documents yet');
   });
 });
 
