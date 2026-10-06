@@ -1,0 +1,300 @@
+    t =    77.89s     Find the "Open navigation" Button
+    t =    78.36s     Check for interrupting elements affecting "line.3.horizontal" Button
+    t =    78.76s     Synthesize event
+    t =    79.39s     Wait for io.orbitd.wikiprobe to idle
+    t =    80.20s Waiting 20.0s for Button (First Match) to exist
+    t =    81.22s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    81.22s         Checking existence of `Button (First Match)`
+    t =    81.52s Checking existence of `Button (First Match)`
+    t =    81.77s Find the Button (First Match)
+    t =    82.14s Find the "Wiki, 1 waiting on you" Button
+    t =    82.39s Find the "Wiki, 1 waiting on you" Button
+    t =    82.62s Find the "Wiki, 1 waiting on you" Button
+    t =    82.89s Find the "Wiki, 1 waiting on you" Button
+    t =    85.01s Added attachment named '01-one-drawer'
+    t =    85.03s Requesting snapshot of accessibility hierarchy for app with pid 23306
+    t =    85.89s Requesting snapshot of accessibility hierarchy for app with pid 23306
+    t =    86.11s Tap "Wiki, 1 waiting on you" Button
+    t =    86.11s     Wait for io.orbitd.wikiprobe to idle
+    t =    86.13s     Find the "Wiki, 1 waiting on you" Button
+    t =    86.84s     Check for interrupting elements affecting "Wiki, 1 waiting on you" Button
+    t =    87.04s     Synthesize event
+    t =    87.37s     Wait for io.orbitd.wikiprobe to idle
+    t =    88.03s Waiting 20.0s for "The codebase this wiki describes" StaticText to exist
+    t =    89.09s     Checking `Expect predicate `existsNoRetry == 1` for object "The codebase this wiki describes" StaticText`
+    t =    89.09s         Checking existence of `"The codebase this wiki describes" StaticText`
+    t =    89.19s         Capturing element debug description
+    t =    90.11s     Checking `Expect predicate `existsNoRetry == 1` for object "The codebase this wiki describes" StaticText`
+    t =    90.12s         Checking existence of `"The codebase this wiki describes" StaticText`
+    t =    91.44s Find the "The codebase this wiki describes" StaticText
+    t =    91.69s Checking existence of `"The codebase this wiki describes" Button`
+    t =    94.17s Added attachment named '02-one-home-head'
+    t =    94.18s Requesting snapshot of accessibility hierarchy for app with pid 23306
+    t =    95.29s Requesting snapshot of accessibility hierarchy for app with pid 23306
+    t =    95.62s Waiting 20.0s for "Activity" Button to exist
+    t =    96.65s     Checking `Expect predicate `existsNoRetry == 1` for object "Activity" Button`
+    t =    96.65s         Checking existence of `"Activity" Button`
+    t =    96.93s Find the "Activity" Button
+    t =    97.16s Checking existence of `"Activity" Button`
+    t =    97.53s Find the "Activity" Button
+    t =    97.88s Find the "Activity" Button
+    t =    98.13s Find the "Activity" Button
+    t =    98.50s Find the "Activity" Button
+    t =    98.90s Find the "Activity" Button
+    t =    99.20s Tap "Activity" Button
+    t =    99.20s     Wait for io.orbitd.wikiprobe to idle
+    t =    99.21s     Find the "Activity" Button
+    t =    99.51s     Check for interrupting elements affecting "Activity" Button
+    t =    99.70s     Synthesize event
+    t =   100.11s     Wait for io.orbitd.wikiprobe to idle
+    t =   102.61s Waiting 20.0s for "Activity" StaticText to exist
+    t =   103.65s     Checking `Expect predicate `existsNoRetry == 1` for object "Activity" StaticText`
+    t =   103.65s         Checking existence of `"Activity" StaticText`
+    t =   103.86s Waiting 20.0s for Any (First Match) to exist
+    t =   104.89s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   104.90s         Checking existence of `Any (First Match)`
+    t =   105.86s Checking existence of `Any (First Match)`
+    t =   106.83s Find the Any (First Match)
+    t =   107.30s Find the "1 proposal to review" Button
+    t =   107.87s Find the "1 proposal to review" Button
+    t =   108.48s Find the "1 proposal to review" Button
+    t =   109.38s Find the "1 proposal to review" Button
+    t =   109.92s Waiting 20.0s for Any (First Match) to exist
+    t =   110.94s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   110.95s         Checking existence of `Any (First Match)`
+    t =   111.73s Checking existence of `Any (First Match)`
+    t =   112.33s Find the Any (First Match)
+    t =   112.84s Find the "Writing documents · 5 of 35" Button
+    t =   113.45s Find the "Writing documents · 5 of 35" Button
+    t =   113.98s Find the "Writing documents · 5 of 35" Button
+    t =   114.37s Find the "Writing documents · 5 of 35" Button
+    t =   114.92s Waiting 20.0s for Any (First Match) to exist
+    t =   115.93s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   115.93s         Checking existence of `Any (First Match)`
+    t =   116.37s Checking existence of `Any (First Match)`
+    t =   116.67s Find the Any (First Match)
+    t =   117.05s Find the "4 new since you last looked" StaticText
+    t =   117.70s Find the "4 new since you last looked" StaticText
+    t =   117.95s Find the "4 new since you last looked" StaticText
+    t =   118.20s Find the "4 new since you last looked" StaticText
+    t =   120.58s Added attachment named '03-one-activity'
+    t =   120.58s Requesting snapshot of accessibility hierarchy for app with pid 23306
+    t =   121.27s Requesting snapshot of accessibility hierarchy for app with pid 23306
+    t =   121.39s Swipe up Target Application 'io.orbitd.wikiprobe'
+    t =   121.39s     Wait for io.orbitd.wikiprobe to idle
+    t =   121.39s     Find the Target Application 'io.orbitd.wikiprobe'
+    t =   121.45s     Check for interrupting elements affecting "WikiProbe" Application
+    t =   121.52s     Synthesize event
+    t =   121.95s     Wait for io.orbitd.wikiprobe to idle
+    t =   124.48s Added attachment named '04-one-activity-scrolled'
+    t =   124.48s Swipe down Target Application 'io.orbitd.wikiprobe'
+    t =   124.48s     Wait for io.orbitd.wikiprobe to idle
+    t =   124.49s     Find the Target Application 'io.orbitd.wikiprobe'
+    t =   124.58s     Check for interrupting elements affecting "WikiProbe" Application
+    t =   124.66s     Synthesize event
+    t =   125.12s     Wait for io.orbitd.wikiprobe to idle
+    t =   127.06s Waiting 10.0s for Button (First Match) to exist
+    t =   128.12s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =   128.12s         Checking existence of `Button (First Match)`
+    t =   128.44s Tap Button (First Match)
+    t =   128.44s     Wait for io.orbitd.wikiprobe to idle
+    t =   128.45s     Find the Button (First Match)
+    t =   128.77s     Check for interrupting elements affecting "1 proposal to review" Button
+    t =   128.96s     Synthesize event
+    t =   129.28s     Wait for io.orbitd.wikiprobe to idle
+    t =   129.70s Waiting 20.0s for Any (First Match) to exist
+    t =   130.72s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   130.73s         Checking existence of `Any (First Match)`
+    t =   130.99s Checking existence of `Any (First Match)`
+    t =   131.16s Find the Any (First Match)
+    t =   131.32s Find the "1 proposal from 1 session · oldest 2h ago" StaticText
+    t =   131.56s Find the "1 proposal from 1 session · oldest 2h ago" StaticText
+    t =   131.88s Find the "1 proposal from 1 session · oldest 2h ago" StaticText
+    t =   132.26s Find the "1 proposal from 1 session · oldest 2h ago" StaticText
+    t =   134.79s Added attachment named '05-one-review'
+    t =   134.79s Requesting snapshot of accessibility hierarchy for app with pid 23306
+    t =   135.26s Requesting snapshot of accessibility hierarchy for app with pid 23306
+    t =   135.38s Tear Down
+Test Case '-[WikiProbeUITests.WikiShotsTests testOneSpace]' passed (135.862 seconds).
+Test Case '-[WikiProbeUITests.WikiShotsTests testThreeSpaces]' started.
+    t =     0.00s Start Test at 2026-10-06 19:04:18.899
+    t =     0.12s Set Up
+    t =     0.12s Open io.orbitd.wikiprobe
+    t =     0.12s     Launch io.orbitd.wikiprobe
+    t =     0.12s         Terminate io.orbitd.wikiprobe:23306
+2026-10-06 19:04:20.053 xcodebuild[4314:18556] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 19:04:20.053 xcodebuild[4314:18556] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     8.02s         Setting up automation session
+    t =    12.14s         Wait for io.orbitd.wikiprobe to idle
+    t =    16.24s Waiting 60.0s for "Open navigation" Button to exist
+    t =    17.28s     Checking `Expect predicate `existsNoRetry == 1` for object "Open navigation" Button`
+    t =    17.28s         Checking existence of `"Open navigation" Button`
+    t =    20.94s Tap "Open navigation" Button
+    t =    20.94s     Wait for io.orbitd.wikiprobe to idle
+    t =    20.95s     Find the "Open navigation" Button
+    t =    21.12s     Check for interrupting elements affecting "line.3.horizontal" Button
+    t =    21.31s     Synthesize event
+    t =    21.78s     Wait for io.orbitd.wikiprobe to idle
+    t =    22.61s Waiting 20.0s for Button (First Match) to exist
+    t =    23.67s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    23.67s         Checking existence of `Button (First Match)`
+    t =    23.80s Checking existence of `Button (First Match)`
+    t =    23.94s Find the Button (First Match)
+    t =    24.11s Find the "Wiki, 4 waiting on you" Button
+    t =    24.26s Find the "Wiki, 4 waiting on you" Button
+    t =    24.40s Find the "Wiki, 4 waiting on you" Button
+    t =    24.52s Find the "Wiki, 4 waiting on you" Button
+    t =    26.32s Added attachment named '11-three-drawer'
+    t =    26.32s Requesting snapshot of accessibility hierarchy for app with pid 26136
+    t =    26.63s Requesting snapshot of accessibility hierarchy for app with pid 26136
+    t =    26.73s Tap "Wiki, 4 waiting on you" Button
+    t =    26.73s     Wait for io.orbitd.wikiprobe to idle
+    t =    26.74s     Find the "Wiki, 4 waiting on you" Button
+    t =    26.81s     Check for interrupting elements affecting "Wiki, 4 waiting on you" Button
+    t =    26.86s     Synthesize event
+    t =    27.17s     Wait for io.orbitd.wikiprobe to idle
+    t =    27.48s Waiting 20.0s for "The codebase this wiki describes" Button to exist
+    t =    28.57s     Checking `Expect predicate `existsNoRetry == 1` for object "The codebase this wiki describes" Button`
+    t =    28.57s         Checking existence of `"The codebase this wiki describes" Button`
+    t =    29.02s Find the "The codebase this wiki describes" Button
+    t =    31.34s Added attachment named '12-three-home-head'
+    t =    31.34s Requesting snapshot of accessibility hierarchy for app with pid 26136
+    t =    31.85s Requesting snapshot of accessibility hierarchy for app with pid 26136
+    t =    31.98s Tap "The codebase this wiki describes" Button
+    t =    31.98s     Wait for io.orbitd.wikiprobe to idle
+    t =    31.98s     Find the "The codebase this wiki describes" Button
+    t =    32.07s     Check for interrupting elements affecting "The codebase this wiki describes" Button
+    t =    32.15s     Synthesize event
+    t =    32.48s     Wait for io.orbitd.wikiprobe to idle
+    t =    32.68s Waiting 10.0s for "Manage spaces" Button to exist
+    t =    33.71s     Checking `Expect predicate `existsNoRetry == 1` for object "Manage spaces" Button`
+    t =    33.72s         Checking existence of `"Manage spaces" Button`
+    t =    34.07s Waiting 5.0s for Button (First Match) to exist
+    t =    35.13s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    35.13s         Checking existence of `Button (First Match)`
+    t =    35.22s Find the Button (First Match)
+    t =    35.31s Checking existence of `"orbit" Button`
+    t =    35.42s Find the "orbit" Button
+    t =    35.54s Find the "orbit" Button
+    t =    35.68s Find the "orbit" Button
+    t =    35.80s Find the "orbit" Button
+    t =    35.93s Find the "orbit" Button
+    t =    36.05s Waiting 5.0s for Button (First Match) to exist
+    t =    37.09s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    37.09s         Checking existence of `Button (First Match)`
+    t =    37.23s Find the Button (First Match)
+    t =    37.35s Checking existence of `"wikova" Button`
+    t =    37.45s Find the "wikova" Button
+    t =    37.52s Find the "wikova" Button
+    t =    37.62s Find the "wikova" Button
+    t =    37.76s Find the "wikova" Button
+    t =    37.84s Find the "wikova" Button
+    t =    37.94s Waiting 5.0s for Button (First Match) to exist
+    t =    39.01s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    39.01s         Checking existence of `Button (First Match)`
+    t =    39.20s Find the Button (First Match)
+    t =    39.37s Checking existence of `"wikids" Button`
+    t =    39.56s Find the "wikids" Button
+    t =    39.67s Find the "wikids" Button
+    t =    39.83s Find the "wikids" Button
+    t =    39.96s Find the "wikids" Button
+    t =    40.08s Find the "wikids" Button
+    t =    41.87s Added attachment named '13-three-space-menu'
+    t =    41.88s Requesting snapshot of accessibility hierarchy for app with pid 26136
+    t =    42.66s Requesting snapshot of accessibility hierarchy for app with pid 26136
+    t =    42.79s Tap Button (First Match)
+    t =    42.79s     Wait for io.orbitd.wikiprobe to idle
+    t =    42.79s     Find the Button (First Match)
+    t =    42.93s     Check for interrupting elements affecting "orbit" Button
+    t =    43.04s     Synthesize event
+    t =    43.39s     Wait for io.orbitd.wikiprobe to idle
+    t =    46.74s Checking existence of `"Manage spaces" Button`
+    t =    46.92s Find the "The codebase this wiki describes" Button
+    t =    47.10s Waiting 20.0s for "Activity" Button to exist
+    t =    48.13s     Checking `Expect predicate `existsNoRetry == 1` for object "Activity" Button`
+    t =    48.13s         Checking existence of `"Activity" Button`
+    t =    48.59s Find the "Activity" Button
+    t =    48.79s Checking existence of `"Activity" Button`
+    t =    49.02s Find the "Activity" Button
+    t =    49.26s Find the "Activity" Button
+    t =    49.50s Find the "Activity" Button
+    t =    49.65s Find the "Activity" Button
+    t =    49.83s Find the "Activity" Button
+    t =    50.01s Tap "Activity" Button
+    t =    50.01s     Wait for io.orbitd.wikiprobe to idle
+    t =    50.02s     Find the "Activity" Button
+    t =    50.22s     Check for interrupting elements affecting "Activity" Button
+    t =    50.33s     Synthesize event
+    t =    50.69s     Wait for io.orbitd.wikiprobe to idle
+    t =    51.79s Waiting 20.0s for "Activity" StaticText to exist
+    t =    52.80s     Checking `Expect predicate `existsNoRetry == 1` for object "Activity" StaticText`
+    t =    52.80s         Checking existence of `"Activity" StaticText`
+    t =    52.93s Waiting 20.0s for Any (First Match) to exist
+    t =    53.97s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    53.97s         Checking existence of `Any (First Match)`
+    t =    54.35s Checking existence of `Any (First Match)`
+    t =    54.99s Find the Any (First Match)
+    t =    55.44s Find the "3 proposals to review · 2 in wikova" Button
+    t =    55.93s Find the "3 proposals to review · 2 in wikova" Button
+    t =    56.19s Find the "3 proposals to review · 2 in wikova" Button
+    t =    56.47s Find the "3 proposals to review · 2 in wikova" Button
+    t =    56.77s Waiting 20.0s for Any (First Match) to exist
+    t =    57.82s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    57.83s         Checking existence of `Any (First Match)`
+    t =    58.10s Checking existence of `Any (First Match)`
+    t =    58.38s Find the Any (First Match)
+    t =    58.66s Find the "Writing documents · 5 of 35" Button
+    t =    58.93s Find the "Writing documents · 5 of 35" Button
+    t =    59.31s Find the "Writing documents · 5 of 35" Button
+    t =    59.99s Find the "Writing documents · 5 of 35" Button
+    t =    61.06s Waiting 20.0s for Any (First Match) to exist
+    t =    62.11s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    62.11s         Checking existence of `Any (First Match)`
+    t =    62.40s Checking existence of `Any (First Match)`
+    t =    62.72s Find the Any (First Match)
+    t =    63.03s Find the "Plan draft ready to confirm · in wikova" Button
+    t =    63.38s Find the "Plan draft ready to confirm · in wikova" Button
+    t =    63.93s Find the "Plan draft ready to confirm · in wikova" Button
+    t =    64.38s Find the "Plan draft ready to confirm · in wikova" Button
+    t =    66.94s Added attachment named '14-three-activity'
+    t =    66.95s Requesting snapshot of accessibility hierarchy for app with pid 26136
+    t =    67.54s Requesting snapshot of accessibility hierarchy for app with pid 26136
+    t =    67.65s Waiting 10.0s for Button (First Match) to exist
+    t =    68.68s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    68.68s         Checking existence of `Button (First Match)`
+    t =    69.14s Tap Button (First Match)
+    t =    69.14s     Wait for io.orbitd.wikiprobe to idle
+    t =    69.15s     Find the Button (First Match)
+    t =    69.81s     Check for interrupting elements affecting "3 proposals to review · 2 in wikova" Button
+    t =    69.93s     Synthesize event
+    t =    70.27s     Wait for io.orbitd.wikiprobe to idle
+    t =    70.69s Waiting 20.0s for Any (First Match) to exist
+    t =    71.69s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    71.69s         Checking existence of `Any (First Match)`
+    t =    71.90s Checking existence of `Any (First Match)`
+    t =    72.13s Find the Any (First Match)
+    t =    72.43s Find the "3 proposals from 2 sessions · oldest 2h ago" StaticText
+    t =    72.67s Find the "3 proposals from 2 sessions · oldest 2h ago" StaticText
+    t =    72.94s Find the "3 proposals from 2 sessions · oldest 2h ago" StaticText
+    t =    73.26s Find the "3 proposals from 2 sessions · oldest 2h ago" StaticText
+    t =    75.75s Added attachment named '15-three-review'
+    t =    75.75s Requesting snapshot of accessibility hierarchy for app with pid 26136
+    t =    76.21s Requesting snapshot of accessibility hierarchy for app with pid 26136
+    t =    76.36s Tear Down
+Test Case '-[WikiProbeUITests.WikiShotsTests testThreeSpaces]' passed (76.815 seconds).
+Test Suite 'WikiShotsTests' passed at 2026-10-06 19:05:35.715.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 212.677 (212.686) seconds
+Test Suite 'WikiProbeUITests.xctest' passed at 2026-10-06 19:05:35.717.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 212.677 (212.687) seconds
+Test Suite 'All tests' passed at 2026-10-06 19:05:35.717.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 212.677 (212.690) seconds
+2026-10-06 19:06:19.462 xcodebuild[4314:18556] [MT] IDETestOperationsObserverDebug: 321.078 elapsed -- Testing started completed.
+2026-10-06 19:06:19.463 xcodebuild[4314:18556] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-06 19:06:19.463 xcodebuild[4314:18556] [MT] IDETestOperationsObserverDebug: 321.078 sec, +321.078 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.wiki-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

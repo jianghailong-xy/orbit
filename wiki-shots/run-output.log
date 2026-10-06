@@ -1,0 +1,43 @@
+==> stubs ready after 2s
+iPhone 17 Pro com.apple.CoreSimulator.SimRuntime.iOS-26-5
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+Test Case '-[WikiProbeUITests.WikiShotsTests testOneSpace]' started.
+Test Case '-[WikiProbeUITests.WikiShotsTests testOneSpace]' passed (135.862 seconds).
+Test Case '-[WikiProbeUITests.WikiShotsTests testThreeSpaces]' started.
+Test Case '-[WikiProbeUITests.WikiShotsTests testThreeSpaces]' passed (76.815 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 212.677 (212.686) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 212.677 (212.687) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 212.677 (212.690) seconds
+** TEST SUCCEEDED **
+.wiki-probe/run.sh: line 49:  1702 Terminated: 15          python3 -u stub.py 8765 "$OUT/requests-one.log" one > "$OUT/stub-one.out" 2>&1
+.wiki-probe/run.sh: line 49:  1703 Terminated: 15          python3 -u stub.py 8766 "$OUT/requests-three.log" three > "$OUT/stub-three.out" 2>&1
+total 7560
+drwxr-xr-x  29 runner  staff     928 Oct  6 19:06 .
+drwxr-xr-x  13 runner  staff     416 Oct  6 18:53 ..
+-rw-r--r--   1 runner  staff  563771 Oct  6 19:03 01-one-drawer.png
+-rw-r--r--   1 runner  staff  294438 Oct  6 19:03 02-one-home-head.png
+-rw-r--r--   1 runner  staff  308239 Oct  6 19:04 03-one-activity.png
+-rw-r--r--   1 runner  staff  362069 Oct  6 19:04 04-one-activity-scrolled.png
+-rw-r--r--   1 runner  staff  234857 Oct  6 19:04 05-one-review.png
+-rw-r--r--   1 runner  staff  563667 Oct  6 19:04 11-three-drawer.png
+-rw-r--r--   1 runner  staff  295203 Oct  6 19:04 12-three-home-head.png
+-rw-r--r--   1 runner  staff  442358 Oct  6 19:05 13-three-space-menu.png
+-rw-r--r--   1 runner  staff  316478 Oct  6 19:05 14-three-activity.png
+-rw-r--r--   1 runner  staff  244592 Oct  6 19:05 15-three-review.png
+drwxr-xr-x  15 runner  staff     480 Oct  6 19:06 attachments
+-rw-r--r--   1 runner  staff     168 Oct  6 19:06 not-served.txt
+-rw-r--r--   1 runner  staff    4197 Oct  6 19:04 requests-one.log
+-rw-r--r--   1 runner  staff    4272 Oct  6 19:05 requests-three.log
+-rw-r--r--   1 runner  staff      55 Oct  6 18:49 stub-one.out
+-rw-r--r--   1 runner  staff      57 Oct  6 18:49 stub-three.out
+-rw-r--r--@  1 runner  staff   12509 Oct  6 19:03 tree-drawer-01-one-drawer.txt
+-rw-r--r--@  1 runner  staff   12509 Oct  6 19:04 tree-drawer-11-three-drawer.txt
+-rw-r--r--@  1 runner  staff   21243 Oct  6 19:04 tree-one-activity.txt
+-rw-r--r--@  1 runner  staff   21110 Oct  6 19:03 tree-one-home.txt
+-rw-r--r--@  1 runner  staff   12472 Oct  6 19:04 tree-one-review.txt
+-rw-r--r--@  1 runner  staff   20985 Oct  6 19:05 tree-three-activity.txt
+-rw-r--r--@  1 runner  staff   21462 Oct  6 19:04 tree-three-home.txt
+-rw-r--r--@  1 runner  staff   13258 Oct  6 19:05 tree-three-review.txt
+-rw-r--r--@  1 runner  staff   24542 Oct  6 19:05 tree-three-space-menu.txt
+-rw-r--r--@  1 runner  staff     812 Oct  6 19:04 WikiShotsTeststestOneSpace-notes.txt
+-rw-r--r--@  1 runner  staff    1110 Oct  6 19:05 WikiShotsTeststestThreeSpaces-notes.txt

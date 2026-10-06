@@ -1,0 +1,8 @@
+Test Case '-[WikiProbeUITests.WikiShotsTests testOneSpace]' started.
+Test Case '-[WikiProbeUITests.WikiShotsTests testOneSpace]' passed (135.862 seconds).
+Test Case '-[WikiProbeUITests.WikiShotsTests testThreeSpaces]' started.
+Test Case '-[WikiProbeUITests.WikiShotsTests testThreeSpaces]' passed (76.815 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 212.677 (212.686) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 212.677 (212.687) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 212.677 (212.690) seconds
+** TEST SUCCEEDED **
