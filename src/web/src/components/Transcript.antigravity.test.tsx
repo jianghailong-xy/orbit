@@ -18,8 +18,8 @@ const renderError = (message: string, context = help) => renderToStaticMarkup(
 describe('Antigravity session remedies', () => {
   it('connects an encrypted Gemini key and offers the same-runtime switch', () => {
     const html = renderError('Failed to authenticate: Antigravity needs GEMINI_API_KEY');
-    expect(html).toContain('Antigravity needs a Gemini API key');
-    expect(html).toContain('Connect Gemini in Providers. Orbit stores the key encrypted, and this conversation can continue on it.');
+    expect(html).toContain('Antigravity needs authentication');
+    expect(html).toContain('Sign in with Google on this runner, or connect a Gemini API key in Providers.');
     expect(html).toContain('Connect Gemini</button>');
     expect(html).toContain('Switch to Gemini</button>');
     expect(html).not.toContain('environment variables');
@@ -43,7 +43,7 @@ describe('Antigravity session remedies', () => {
     expect(antigravityRepair(error)).toBe('needsKey');
     const context = { ...help, provider: 'gemini-key' };
     const html = renderError(error, context);
-    expect(html).toContain('Antigravity needs a Gemini API key');
+    expect(html).toContain('Antigravity needs authentication');
     expect(html).not.toContain('workspace environment');
     expect(html).not.toContain('Provider authentication failed');
     expect(renderError('Failed to authenticate: invalid API key', context)).toContain('Provider authentication failed');

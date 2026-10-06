@@ -944,7 +944,7 @@ test('one session’s message to another is signed, delivered as such, and bound
       });
 
       const steersBefore = steers.length;
-      const resent = await door.resendRetryMessage(user, recipient);
+      const resent = await door.resendRetryMessage(user, recipient, {});
       const resentTurn = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: resent.turnId } });
       assert.equal(await senderOf(recipient, resentTurn.clientTurnId), worker, 'the re-send went out in the owner’s name');
       assert.equal((await prisma.sessionRequest.findUniqueOrThrow({ where: { id: request.id } })).turnId, resent.turnId,
@@ -997,7 +997,7 @@ test('one session’s message to another is signed, delivered as such, and bound
       const recipient = await session('the conversation a provider error failed on the request');
       const request = await ask(worker, recipient, 'cut the release branch?', 'card-revive-1');
       await failAndArm(recipient, RunStatus.FAILED);
-      const resent = await door.resendRetryMessage(user, recipient);
+      const resent = await door.resendRetryMessage(user, recipient, {});
       assert.equal(resent.revived, true, 'the failed run was not revived');
       const resentTurn = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: resent.turnId } });
       assert.equal(await senderOf(recipient, resentTurn.clientTurnId), worker);
@@ -1046,7 +1046,7 @@ test('one session’s message to another is signed, delivered as such, and bound
         result: `message not delivered to the engine: ${why}`,
       });
     }
-    const press = (recipient: string) => door.resendRetryMessage(user, recipient);
+    const press = (recipient: string) => door.resendRetryMessage(user, recipient, {});
     const copiesOf = async (sessionId: string, words: string) =>
       (await turnsOf(sessionId)).filter((turn) => turn.content === words);
 
@@ -1146,5 +1146,25 @@ test('one session’s message to another is signed, delivered as such, and bound
         return true;
       }, `the door answered something else for ${JSON.stringify(extra)}`);
     }
+  });
+  await t.test('a Retry pressed with a provider picked carries it into the resume', async () => {
+    const recipient = await session('the conversation retried onto a picked provider');
+    await ownerSend(recipient, 'retry this on the other one?');
+    await failAndArm(recipient, RunStatus.FAILED);
+    const door = new SessionsController(
+      sessions, prisma as unknown as PrismaService, realtime as never, {} as never, {} as never, autoRetry,
+    );
+    const user = { userId: ownerId } as never;
+
+    // A session keeps its runtime (sessions.service.resolveProviderSwitch), so a pick that rule
+    // refuses comes back as that refusal — and the refusal is the proof the pick reached the resume.
+    // Before, this door took no body at all: nothing was ever sent, so nothing could be refused, and
+    // the re-send ran on the provider the session was already on — which is how "choose the pool,
+    // press Retry" came out on the account the person was trying to leave (2026-10-05).
+    await assert.rejects(
+      () => door.resendRetryMessage(user, recipient, { provider: 'codex' }),
+      /cannot switch to a provider that runs on/,
+      'the pick the composer had did not reach the resume',
+    );
   });
 });

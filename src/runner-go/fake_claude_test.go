@@ -165,6 +165,14 @@ type fakeSpawn struct {
 
 func runFakeClaude(dir string) int {
 	argv := os.Args[1:]
+	// A `--version` is not a spawn. The runner asks an engine it is about to use whether it can run
+	// at all (engineRunnable), every session engine is spawned with a flag never bare, and
+	// recording this would make "did the engine spawn twice?" answer yes for a machine that only
+	// asked its name.
+	if len(argv) == 1 && argv[0] == "--version" {
+		_, _ = os.Stdout.WriteString("0.0.0 (Fake Claude)\n")
+		return 0
+	}
 	cwd, _ := os.Getwd()
 	appendJSONL(filepath.Join(dir, "spawns.jsonl"), fakeSpawn{PID: os.Getpid(), Argv: argv, Cwd: cwd})
 

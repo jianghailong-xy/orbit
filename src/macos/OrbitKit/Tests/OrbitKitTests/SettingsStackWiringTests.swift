@@ -166,6 +166,11 @@ final class SettingsStackWiringTests: XCTestCase {
         // it is written the moment it flips.
         XCTAssertTrue(rows.contains("Toggle(isOn: $orchestration) { label }"))
         XCTAssertTrue(list.contains("UpdatePreferencesRequest(enableOrchestration: value)"))
+        // So is smart model selection, with the web's hint under its name; absent reads as off.
+        XCTAssertTrue(rows.contains("Toggle(isOn: $modelRouting) {"))
+        XCTAssertTrue(rows.contains("Text(SettingsCopy.smartModelSelectionHint)"))
+        XCTAssertTrue(list.contains("UpdatePreferencesRequest(modelRouting: value)"))
+        XCTAssertTrue(list.contains("modelRouting = p?.smartModelSelection ?? false"))
         // Signing out asks first.
         XCTAssertTrue(list.contains("Button(role: .destructive) { confirmingSignOut = true }"))
         XCTAssertTrue(list.contains("Button(SettingsCopy.signOut, role: .destructive) { model.logout() }"))

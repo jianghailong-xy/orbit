@@ -8,6 +8,7 @@ import {
   type RunnerEngineAccount,
   type RunnerEngineHealth,
   type RunnerEngineUpdate,
+  type DshRuntimeHealth,
 } from '@orbit/shared';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import { runnerAccountPausedUntil } from './account-pause';
@@ -37,7 +38,7 @@ export function isLoginEngine(value: unknown): value is LoginEngine {
 }
 
 export function isInstallEngine(value: unknown): value is InstallEngine {
-  return isLoginEngine(value);
+  return isLoginEngine(value) || value === 'dsh';
 }
 
 /**
@@ -55,6 +56,7 @@ export const REPORTED_ENGINES: readonly ReportedEngine[] = [
   'kimi',
   'opencode',
   'antigravity',
+  'dsh',
 ];
 
 export function isReportedEngine(value: unknown): value is ReportedEngine {
@@ -76,10 +78,12 @@ export function sanitizeRunnerEngines(value: unknown): RunnerEngineHealth[] | nu
     if (!raw || typeof raw !== 'object') continue;
     const entry = raw as Record<string, unknown>;
     if (!isReportedEngine(entry.engine) || byEngine.has(entry.engine)) continue;
-    const version =
+    const rawVersion =
       typeof entry.version === 'string' && entry.version.trim()
         ? entry.version.trim().slice(0, 120)
         : undefined;
+    const version = entry.engine === 'dsh' && rawVersion && !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(rawVersion)
+      ? undefined : rawVersion;
     const update = sanitizeEngineUpdate(entry.update);
     // Only the engines whose CLI keeps a login per directory sign in more than one account.
     const accounts = engineKeepsAccounts(entry.engine)
@@ -87,7 +91,9 @@ export function sanitizeRunnerEngines(value: unknown): RunnerEngineHealth[] | nu
       : undefined;
     // Only the CLI's own yes/no counts; everything else is the third state, which exists so
     // an engine that wouldn't answer is never shown as signed in.
-    const auth = entry.auth === 'yes' || entry.auth === 'no' ? entry.auth : 'unknown';
+    const auth = entry.engine !== 'dsh' && (entry.auth === 'yes' || entry.auth === 'no') ? entry.auth : 'unknown';
+    const dsh = entry.engine === 'dsh' ? sanitizeDshHealth(entry.dsh) : undefined;
+    const installationError = entry.engine === 'dsh' ? dshDiagnosticCode(entry.installationError) : undefined;
     // Antigravity alone says which credential `auth` is about, and carries the quota its Google
     // sign-in reads (docs/antigravity-runtime-contract.md §16.6).
     const authSource =
@@ -105,12 +111,44 @@ export function sanitizeRunnerEngines(value: unknown): RunnerEngineHealth[] | nu
       ...(accounts ? { accounts } : {}),
       ...(authSource ? { authSource } : {}),
       ...(planUsage ? { planUsage } : {}),
+      ...(dsh ? { dsh } : {}),
+      ...(installationError ? { installationError } : {}),
     });
   }
   if (!byEngine.size) return null;
   return REPORTED_ENGINES.map((engine) => byEngine.get(engine)).filter(
     (entry): entry is RunnerEngineHealth => !!entry,
   );
+}
+
+const DSH_DIAGNOSTIC_CODES = [
+  'DSH_CREDENTIAL_MISSING', 'DSH_CREDENTIAL_INVALID', 'DSH_REQUEST_FAILED',
+  'DSH_SANDBOX_UNAVAILABLE', 'DSH_CATALOG_STARTUP_FAILED', 'DSH_VERSION_INCOMPATIBLE',
+  'DSH_PLATFORM_UNSUPPORTED', 'DSH_NODE_UNSUPPORTED', 'DSH_NOT_INSTALLED', 'DSH_INSTALL_FAILED',
+];
+
+function dshDiagnosticCode(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const code = value.split(':', 1)[0];
+  return DSH_DIAGNOSTIC_CODES.includes(code) ? code : undefined;
+}
+
+function sanitizeDshHealth(value: unknown): DshRuntimeHealth | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  const requestValidation = raw.requestValidation === 'valid' || raw.requestValidation === 'invalid'
+    ? raw.requestValidation : 'unknown';
+  const sandboxEnforcement = raw.sandboxEnforcement === 'full' || raw.sandboxEnforcement === 'partial' || raw.sandboxEnforcement === 'unavailable'
+    ? raw.sandboxEnforcement : 'unknown';
+  const diagnostic = dshDiagnosticCode(raw.diagnostic);
+  return {
+    versionCompatible: raw.versionCompatible === true,
+    credentialPresent: raw.credentialPresent === true,
+    modelCatalogReadable: raw.modelCatalogReadable === true,
+    requestValidation,
+    sandboxEnforcement,
+    ...(diagnostic ? { diagnostic } : {}),
+  };
 }
 
 /** How many accounts one report may carry. Each is a sign-in somebody made by hand, so a real

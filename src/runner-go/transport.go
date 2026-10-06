@@ -368,6 +368,18 @@ func (t *Transport) claimSession(ctx context.Context) (*ClaimedSession, error) {
 	return &r, nil
 }
 
+// waitForWake long-polls GET /runner/wake: true once the control plane has something this runner's
+// heartbeat carries waiting for it (see runWakeLoop), false when the poll times out.
+func (t *Transport) waitForWake(ctx context.Context) (bool, error) {
+	var r struct {
+		Wake bool `json:"wake"`
+	}
+	if err := t.do(ctx, "GET", "/runner/wake", nil, &r, 35*time.Second); err != nil {
+		return false, err
+	}
+	return r.Wake, nil
+}
+
 // reclaim lists every open session assigned to this runner so its lightweight
 // supervisor and checkout survive a runner restart. Only entries whose status is
 // RUNNING start active; other open states stay cold until a normal claim arrives.

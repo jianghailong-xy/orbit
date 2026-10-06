@@ -16,6 +16,10 @@ export const ENGINE_NAME: Record<LoginEngine, string> = {
   antigravity: 'Antigravity',
 };
 
+export function GoogleSignInTerms() {
+  return <div className="rsi-hint"><a href="https://antigravity.google/terms" target="_blank" rel="noreferrer">Google terms</a> restrict personal account sign-in through third-party tools; your account may be suspended.</div>;
+}
+
 /** A sign-in still under way: the card polls while one of these is current, and seeing one is
  *  what makes the outcome that follows this card's own news rather than a leftover (see below). */
 const inFlight = (s: RunnerLoginState['status'] | null | undefined) =>
@@ -53,7 +57,7 @@ export function probeReportsSignedIn(
     // heartbeat. Default is the one exception because the engine bit is its own answer.
     if (accountName || account !== 'default') return false;
   }
-  return health?.auth === 'yes';
+  return health?.auth === 'yes' && (engine !== 'antigravity' || health.authSource === 'google');
 }
 
 /** How often the runner list is re-read while waiting for that probe, and for how long: the
@@ -188,7 +192,7 @@ export function RunnerSignIn({
     // not — it asks for the one-time code that arrives *with* the URL and is shown on this card,
     // so opening it first strands the user on a code prompt with no code, after half a minute
     // watching a blank tab. Those wait here and open the page from the card instead.
-    if (engine === 'claude') {
+    if (engine === 'claude' || engine === 'antigravity') {
       tab.current = window.open('', '_blank');
       tab.current?.document.write(WAITING_PAGE);
     }
@@ -419,6 +423,7 @@ export function RunnerSignIn({
   // they are shown as a choice, with the one that needs nothing new leading.
   return (
     <div className="rsi">
+      {engine === 'antigravity' && <GoogleSignInTerms />}
       {status === 'failed' && s?.message && <div className="rsi-warn">{s.message}</div>}
       {err && <div className="rsi-warn">{err.message}</div>}
       <div className="rsi-actions">
@@ -432,7 +437,7 @@ export function RunnerSignIn({
             ? 'Starting…'
             : status === 'failed'
               ? `Try signing in to ${ENGINE_NAME[engine]} again`
-              : `Sign in to ${ENGINE_NAME[engine]}`}
+              : engine === 'antigravity' ? 'Sign in with Google' : `Sign in to ${ENGINE_NAME[engine]}`}
         </button>
         {onUseApiKey && (
           <button className="rsi-btn-alt" onClick={onUseApiKey} type="button">

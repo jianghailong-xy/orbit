@@ -1,7 +1,14 @@
 // Project rows in the session list (docs/session-list-projects-design.md §4, §6, §7).
 // Session readings come from the same functions the ordinary rows use.
-import type { CoordinatorLeadKind, ProjectSidebarTaskCounts, SessionProjectMembership } from '@orbit/shared';
+import {
+  INTEGRATION_CLAIM_STALE_MS,
+  type CoordinatorLeadKind,
+  type ProjectListIntegration,
+  type ProjectSidebarTaskCounts,
+  type SessionProjectMembership,
+} from '@orbit/shared';
 import type { SessionFolder } from '../api';
+import { JOB_PHASES, JOB_WORDS } from '../components/ProjectPanoramaHeader';
 import { elapsedLabel, type SidebarProject } from './projectAttention';
 import type { SessionListView } from './queries';
 import { sessionFolderListing, type FolderSessionReadings, type SessionFolderRow } from './sessionFolders';
@@ -76,6 +83,29 @@ export const SESSION_PROJECT_COORDINATOR_COPY: Record<CoordinatorLeadKind, strin
   TASK_FAILED: 'Handling a failed task',
   DELIVERY_REVIEW: 'Reviewing a delivery',
 };
+
+/** The project page's landing line, shortened for a row that is not redrawn every second:
+ *  "Merge to main · queued · 13m", "Landing · checking · 4m · <task>". Null when nothing is in
+ *  flight; a server that sends only the count gets "Landing · N jobs". */
+export function sessionProjectLandingLine(
+  integration: ProjectListIntegration | null | undefined,
+  now: number,
+): SessionProjectLine | null {
+  const count = integration?.activeJobCount ?? 0;
+  const job = integration?.inFlight;
+  if (!job) return count > 0 ? { text: `Landing · ${count} ${count === 1 ? 'job' : 'jobs'}`, tone: 'queued' } : null;
+  const heartbeat = Date.parse(job.heartbeatAt ?? '');
+  const running = job.state === 'RUNNING' && !(now - heartbeat > INTEGRATION_CLAIM_STALE_MS);
+  const word = (job.kind && JOB_WORDS[job.kind as keyof typeof JOB_WORDS]) || 'Integration';
+  const state = job.state === 'RUNNING'
+    ? (job.phase && JOB_PHASES[job.phase as keyof typeof JOB_PHASES]) || 'running'
+    : 'queued';
+  return {
+    text: [count > 1 ? `${word} ${count} jobs` : word, state, elapsedLabel(job.startedAt, now),
+      count > 1 ? null : job.taskTitle].filter(Boolean).join(' · '),
+    tone: running ? 'running' : 'queued',
+  };
+}
 
 const instant = (at: string | null | undefined): number => {
   const ms = Date.parse(at ?? '');
@@ -166,6 +196,7 @@ export function sessionProjectListing<T extends SessionProjectSession>(
       }
       return a.id.localeCompare(b.id);
     });
+    const landing = sessionProjectLandingLine(summary?.integration, opts.now ?? Date.now());
     let line: SessionProjectLine;
     let target: SessionProjectRow<T>['target'];
     if (coordinatorLine?.tone === 'approval') {
@@ -180,6 +211,12 @@ export function sessionProjectListing<T extends SessionProjectSession>(
       const copy = SESSION_PROJECT_COORDINATOR_COPY[held.leadKind];
       line = { text: [copy, elapsedLabel(held.oldestWaitingSince, opts.now ?? Date.now())].filter(Boolean).join(' · '), tone: 'running' };
       target = { kind: 'session', id: coordinator.id };
+    } else if (coordinator && coordinatorLine && !opts.runnerOffline && opts.motion(coordinator) === 'spinner') {
+      line = coordinatorLine;
+      target = { kind: 'session', id: coordinator.id };
+    } else if (landing) {
+      line = landing;
+      target = coordinator ? { kind: 'session', id: coordinator.id } : { kind: 'project', id: projectId };
     } else if (coordinatorLine) {
       line = coordinatorLine;
       target = { kind: 'session', id: coordinator!.id };

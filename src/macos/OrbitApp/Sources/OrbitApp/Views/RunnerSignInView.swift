@@ -1,6 +1,17 @@
 import SwiftUI
 import OrbitKit
 
+struct GoogleSignInTermsView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(EngineAuth.googleTermsWarning)
+            Link("Google terms", destination: EngineAuth.googleTermsURL)
+        }
+        .font(.orbitLabel)
+        .foregroundStyle(Color.secondary)
+    }
+}
+
 // Signing an engine CLI back in on the runner's own machine, from here. Two views:
 //
 //   • RunnerSignInView — the relay itself (start → open the page → paste the code / enter the
@@ -148,6 +159,7 @@ struct RunnerSignInView: View {
     @ViewBuilder
     private func idle(_ model: RunnerSignInModel) -> some View {
         VStack(alignment: .leading, spacing: 6) {
+            if engine == .antigravity { GoogleSignInTermsView() }
             if model.status == .failed, let m = model.relayMessage {
                 Text(m).font(.orbitLabel).foregroundStyle(.orange)
             }
@@ -158,7 +170,7 @@ struct RunnerSignInView: View {
                      ? "Starting…"
                      : model.status == .failed
                        ? "Try signing in to \(engine.displayName) again"
-                       : "Sign in to \(engine.displayName)")
+                       : engine == .antigravity ? "Sign in with Google" : "Sign in to \(engine.displayName)")
             }
             .buttonStyle(.borderedProminent)
             .disabled(model.busy || !nameReady)
@@ -249,12 +261,11 @@ struct AuthErrorCardView: View {
     let console: ConsoleModel
     let message: String
 
-    private var remedy: EngineAuth.Remedy { EngineAuth.remedy(forProvider: console.provider) }
+    private var remedy: EngineAuth.Remedy { EngineAuth.remedy(forProvider: console.provider, googleLogin: console.runnerAntigravity?.googleLogin) }
     private var retryText: String { console.lastUserMessageText }
 
     var body: some View {
-        if console.executesAntigravity,
-           remedy == .connectGemini || EngineAuth.antigravityRepair(message) == .needsKey {
+        if console.provider == "antigravity" || (console.executesAntigravity && EngineAuth.antigravityRepair(message) == .needsKey) {
             AntigravityRepairCardView(console: console, repair: .needsKey)
         } else {
             ordinaryCard
@@ -350,6 +361,14 @@ struct AntigravityRepairCardView: View {
             Text(EngineAuth.antigravityBody(repair, runnerName: console.runnerName,
                                            runnerVersion: console.runnerVersion))
                 .font(.orbitLabel).foregroundStyle(.secondary)
+            if repair == .needsKey, console.provider == "antigravity" {
+                if console.runnerAntigravity?.googleLogin == .available, let runnerID = console.runnerID {
+                    RunnerSignInView(runnerID: runnerID, engine: .antigravity,
+                                     onDone: { await console.retryLastMessage() })
+                } else if let hint = EngineAuth.antigravityLoginHint(console.runnerAntigravity?.googleLogin) {
+                    Text(hint).font(.orbitLabel).foregroundStyle(.secondary)
+                }
+            }
             HStack {
                 if repair == .needsKey {
                     Button("Connect Gemini") { Task { openURL(await console.connectGeminiURL()) } }

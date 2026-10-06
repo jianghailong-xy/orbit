@@ -45,6 +45,7 @@ import {
   type TransactionRetryOptions,
 } from '../common/transaction-retry';
 import { SingleFlight } from '../common/single-flight';
+import { modelRoutingEnabledSql } from '../common/model-routing-switch';
 import {
   DEFAULT_AGENT_PROVIDER,
   agentProviderSeed,
@@ -259,7 +260,7 @@ import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { accountEnvVar } from '../providers/account';
 import { readOwnerConfirmationRows } from './owner-confirmation-read';
-import { accountPoolRuntime } from '../providers/custom-provider';
+import { accountPoolRuntime, isBuiltinProvider } from '../providers/custom-provider';
 import {
   criterionNeedsProjectRefusal,
   deriveTaskCompletionStatus,
@@ -1208,8 +1209,8 @@ interface EndedAutoRunMoment {
   deletedAt: Date | null;
   /** The run's own automatic retry (AutoRetryService), when one is armed. */
   retryAt: Date | null;
-  /** The task's provider pin and its Agent's smart selection switch: which engine a re-run would
-   *  start on, and so which quota holds it (dispatchEngines). */
+  /** The task's provider pin and whether smart selection is on for it (its Agent's switch and its
+   *  account's): which engine a re-run would start on, and so which quota holds it (dispatchEngines). */
   taskProvider: string | null;
   modelRouting: boolean;
 }
@@ -10223,8 +10224,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // only to discard them dwarfs the dispatch it exists to do.
     // freeBytes/minFreeDiskMb ride along on the joins this scan already needs, so the disk gate
     // below costs no extra round trip. They arrive as bigint (BIGINT column) and number. So do the
-    // task's provider pin and its Agent's smart selection switch, which say which engine the quota
-    // gate judges (dispatchEngines).
+    // task's provider pin and whether smart selection is on for its run — its Agent's switch, and
+    // its account's above it — which say which engine the quota gate judges (dispatchEngines).
     const rows = await this.prisma.$queryRaw<
       {
         id: string;
@@ -10244,7 +10245,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
              t.list_id AS "listId", e.epoch AS "dispatchEpoch", t.priority AS "priority",
-             t.project_id AS "projectId", t.provider AS "taskProvider", a.model_routing AS "modelRouting"
+             t.project_id AS "projectId", t.provider AS "taskProvider",
+             a.model_routing AND ${modelRoutingEnabledSql('t.owner_id')} AS "modelRouting"
       FROM task t
       LEFT JOIN workspace a ON a.id = t.assignee_id
       LEFT JOIN runner r ON r.id = a.runner_id
@@ -10302,7 +10304,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       SELECT c.id, c.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
              c.list_id AS "listId", e.epoch AS "dispatchEpoch", c.priority AS "priority",
-             c.project_id AS "projectId", c.provider AS "taskProvider", a.model_routing AS "modelRouting"
+             c.project_id AS "projectId", c.provider AS "taskProvider",
+             a.model_routing AND ${modelRoutingEnabledSql('c.owner_id')} AS "modelRouting"
       FROM (
         SELECT t.id, t.owner_id, t.assignee_id, t.list_id, t.created_at, t.priority, t.project_id,
                t.provider,
@@ -10918,10 +10921,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * on and routing applies; otherwise the task's provider pin, else the Agent's seed (the project's
    * last interactive session, migration 0088), which `sessions.create` falls back to.
    *
-   * The pin and the switch ride on the scan that found the candidates. Routing is planned only for
-   * the Agents with the switch on: anywhere else a route is never applied, so it could not move the
-   * engine, and nothing more is read. A route that cannot be worked out leaves the run on the pins,
-   * exactly as dispatch does (routeFreshRun).
+   * The pin and the switch ride on the scan that found the candidates — on only where both the
+   * Agent's switch and its account's are (common/model-routing-switch.ts). Routing is planned only
+   * there: anywhere else a route is never applied, so it could not move the engine, and nothing more
+   * is read. A route that cannot be worked out leaves the run on the pins, exactly as dispatch does
+   * (routeFreshRun).
    */
   private async dispatchEngines(
     candidates: Array<{
@@ -11219,7 +11223,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
              receipt.result->>'sessionId' AS "sessionId", run.status AS "sessionStatus",
              run.end_reason AS "endReason", run.completed_at AS "completedAt",
              run.archived_at AS "archivedAt", run.deleted_at AS "deletedAt",
-             run.retry_at AS "retryAt", t.provider AS "taskProvider", a.model_routing AS "modelRouting"
+             run.retry_at AS "retryAt", t.provider AS "taskProvider",
+             a.model_routing AND ${modelRoutingEnabledSql('t.owner_id')} AS "modelRouting"
         FROM task t
         JOIN workspace a ON a.id = t.assignee_id
         JOIN task_dispatch_epoch current_moment ON current_moment.task_id = t.id
@@ -12816,7 +12821,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // agent's name, which is a worse outcome than waiting.
     //
     // Availability, so the delivery budget is untouched: re-enabling the provider clears it.
-    if (!Object.values(AgentProvider).includes(seed.provider as AgentProvider)) {
+    if (!isBuiltinProvider(seed.provider, seed.providerBuiltin)) {
       const configured = await this.prisma.modelProvider.findFirst({
         where: {
           slug: seed.provider, enabled: true,
@@ -13681,7 +13686,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Routed for a fresh run only (docs/model-routing-design.md §8.1). The decision is frozen and
     // recorded either way; only an Agent with smart selection on is dispatched with it — any other
     // run keeps the task's pins and names no effort, as before routing. A RESUME or ADOPT is never
-    // routed: that run has already started.
+    // routed: that run has already started. With the account's switch off there is no decision at
+    // all (planTaskRunRoute), and the run is planned as before routing existed.
     const route = planned.kind === 'CREATE'
       ? await this.routeFreshRun(
         taskRouteReads(this.prisma, ownerId, this.now()),
@@ -13815,8 +13821,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * The route for one fresh run, or null when it could not be worked out. Routing never refuses
-   * (contract §7.2 P7): a failure here is logged and the run is planned exactly as without it.
+   * The route for one fresh run, or null when it could not be worked out — or when the account has
+   * smart model selection off, which routes nothing. Routing never refuses (contract §7.2 P7): a
+   * failure here is logged and the run is planned exactly as without it.
    */
   private async routeFreshRun(
     reads: TaskRouteReads,

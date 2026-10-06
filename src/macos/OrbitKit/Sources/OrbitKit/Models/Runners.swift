@@ -185,19 +185,30 @@ public struct RotateTokenResponse: Codable, Equatable, Sendable {
     public let token: String
 }
 
-/// Server-resolved Antigravity support, CLI readiness, and runner-environment key availability.
+public enum AntigravityGoogleLogin: String, Codable, Equatable, Sendable {
+    case available
+    case needsUpdate = "needs_update"
+    case unsupportedPlatform = "unsupported_platform"
+}
+
+/// Server-resolved Antigravity support, CLI readiness, and credential availability.
 public struct RunnerAntigravityState: Codable, Equatable, Sendable {
     public let supported: Bool
     public let installed: Bool?
     public let version: String?
     public let envKeyAvailable: Bool
+    public let authSource: String?
+    public let googleLogin: AntigravityGoogleLogin?
 
     public init(supported: Bool, installed: Bool? = nil, version: String? = nil,
-                envKeyAvailable: Bool = false) {
+                envKeyAvailable: Bool = false, authSource: String? = nil,
+                googleLogin: AntigravityGoogleLogin? = nil) {
         self.supported = supported
         self.installed = installed
         self.version = version
         self.envKeyAvailable = envKeyAvailable
+        self.authSource = authSource
+        self.googleLogin = googleLogin
     }
 }
 
@@ -215,19 +226,24 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     /// whose CLI keeps a login per directory (Codex, Claude). Absent from an older runner.
     public let accounts: [RunnerEngineAccount]?
     public let update: RunnerEngineUpdate?
+    public let authSource: String?
+    public let planUsage: PlanUsageSnapshot?
     public var id: String { engine }
     /// Only the CLI's own "yes" counts — the third state exists precisely so an engine that
     /// wouldn't answer is never shown as signed in (web's `rowKindOf`).
     public var signedIn: Bool { auth == "yes" }
 
     public init(engine: String, installed: Bool? = nil, version: String? = nil, auth: String? = nil,
-                accounts: [RunnerEngineAccount]? = nil, update: RunnerEngineUpdate? = nil) {
+                accounts: [RunnerEngineAccount]? = nil, update: RunnerEngineUpdate? = nil,
+                authSource: String? = nil, planUsage: PlanUsageSnapshot? = nil) {
         self.engine = engine
         self.installed = installed
         self.version = version
         self.auth = auth
         self.accounts = accounts
         self.update = update
+        self.authSource = authSource
+        self.planUsage = planUsage
     }
 }
 
@@ -553,6 +569,21 @@ public struct PlanUsageRateLimitReset: Codable, Equatable, Sendable {
     public var isSupported: Bool { support == "SUPPORTED" }
 }
 
+/// Antigravity's remaining quota for one weekly or 5-hour bucket.
+public struct PlanUsageBucket: Codable, Equatable, Sendable {
+    public let id: String
+    public let window: String
+    public let remainingFraction: Double
+    public let resetTime: String?
+
+    public init(id: String, window: String, remainingFraction: Double, resetTime: String? = nil) {
+        self.id = id
+        self.window = window
+        self.remainingFraction = remainingFraction
+        self.resetTime = resetTime
+    }
+}
+
 /// One provider's usage snapshot. Claude fills fiveHour/sevenDay; Codex fills primary/secondary.
 public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
     public let provider: String?
@@ -574,6 +605,7 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
     /// The runner's other accounts of this engine, by account id, each as its own windows: this
     /// snapshot's windows are Default's (web `codexAccountSnapshot`).
     public var accounts: [String: PlanUsageSnapshot]? = nil
+    public let buckets: [PlanUsageBucket]?
 
     public init(provider: String? = nil, fiveHour: PlanUsageWindow? = nil,
                 sevenDay: PlanUsageWindow? = nil, sevenDayOpus: PlanUsageWindow? = nil,
@@ -583,7 +615,8 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
                 rateLimitReachedType: String? = nil, credits: PlanUsageCredits? = nil,
                 rateLimits: [PlanUsageRateLimit]? = nil,
                 rateLimitReset: PlanUsageRateLimitReset? = nil,
-                fetchedAt: String? = nil, accounts: [String: PlanUsageSnapshot]? = nil) {
+                fetchedAt: String? = nil, accounts: [String: PlanUsageSnapshot]? = nil,
+                buckets: [PlanUsageBucket]? = nil) {
         self.provider = provider
         self.fiveHour = fiveHour
         self.sevenDay = sevenDay
@@ -600,6 +633,7 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
         self.rateLimitReset = rateLimitReset
         self.fetchedAt = fetchedAt
         self.accounts = accounts
+        self.buckets = buckets
     }
 }
 
@@ -664,10 +698,11 @@ public struct PlanUsageRow: Equatable, Sendable, Identifiable {
     public let label: String
     public let groupLabel: String?
     public let window: PlanUsageWindow
+    public var remaining: Bool = false
     public var id: String { key }
-    /// Orbit displays percent consumed for every provider.
+    /// Antigravity reports remaining quota; other providers report consumed quota.
     public var percent: Int {
-        min(100, max(0, Int(window.utilization.rounded())))
+        min(100, max(0, Int((remaining ? 100 - window.utilization : window.utilization).rounded())))
     }
     /// At or past 90% used, judged on the reading rather than its rounding: 89.6 shows as 90% and
     /// is not near the limit (web's `PlanUsageDisplayRow.nearLimit`).
@@ -693,6 +728,14 @@ private func codexWindowLabel(_ window: PlanUsageWindow, secondary: Bool) -> Str
 public extension PlanUsageSnapshot {
     /// Present windows in provider order, preserving every Codex TUI rate-limit bucket.
     var rows: [PlanUsageRow] {
+        if provider == "antigravity" {
+            return (buckets ?? []).map { bucket in
+                let label = bucket.window == "weekly" ? "Weekly" : bucket.window == "5h" ? "5-hour" : bucket.window
+                return PlanUsageRow(key: bucket.id, label: label, groupLabel: bucket.id,
+                                    window: PlanUsageWindow(utilization: (1 - bucket.remainingFraction) * 100,
+                                                            resetsAt: bucket.resetTime), remaining: true)
+            }
+        }
         let codex = provider == "codex" || primary != nil || secondary != nil || rateLimits?.isEmpty == false
         if codex {
             let buckets = (rateLimits?.isEmpty == false
@@ -735,6 +778,7 @@ public extension PlanUsageSnapshot {
     /// outlives it only on a reading that has stopped refreshing.
     func currentRows(at now: Date = Date()) -> [PlanUsageRow] {
         rows.map { row in
+            if row.remaining { return row }
             guard let resets = planUsageResetDate(row.window), resets <= now else { return row }
             return PlanUsageRow(key: row.key, label: row.label, groupLabel: row.groupLabel,
                                 window: PlanUsageWindow(utilization: 0, label: row.window.label,

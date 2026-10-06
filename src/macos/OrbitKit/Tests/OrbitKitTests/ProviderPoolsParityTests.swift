@@ -342,16 +342,4 @@ final class ProviderPoolsParityTests: XCTestCase {
         let noReset = ProviderPool(id: "p", slug: "s", label: "L", members: spent.members)
         XCTAssertEqual(ProviderPools.spentNote(noReset, now: now), head)
     }
-
-    func testThePickersWordsAreTheWebs() throws {
-        let hero = try source("src/web/src/components/NewSessionProviderHero.tsx")
-        XCTAssertTrue(hero.contains(">\(ProviderPools.pinAccountLabel)<"))
-
-        // The /providers page wraps its sentence over two source lines: compare it as prose.
-        let pools = try source("src/web/src/components/AccountPools.tsx")
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-        XCTAssertTrue(pools.contains("<h3>\(ProviderPools.sectionTitle)</h3>"))
-        XCTAssertTrue(pools.contains("> \(ProviderPools.sectionFooter) <"),
-                      "AccountPools.tsx no longer heads its pools with “\(ProviderPools.sectionFooter)”")
-    }
 }

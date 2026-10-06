@@ -253,7 +253,7 @@ export interface LandingLine {
   updated: string | null;
 }
 
-const JOB_WORDS = {
+export const JOB_WORDS = {
   LAND_TASK: 'Landing',
   CHECK_PROMOTION: 'Merge check',
   LAND_PROMOTION: 'Merge to main',

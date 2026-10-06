@@ -270,7 +270,7 @@ export interface SlashCommandInfo {
 /** One model option reported by a runner runtime. For Codex this is derived from
  *  `codex debug models`, so newly shipped model slugs do not require a web release. */
 export interface RunnerModelInfo {
-  /** Runtime model id / slug, e.g. `gpt-5.6`. */
+  /** Runtime model id / slug, e.g. `gpt-5.6`; dsh ACP values are opaque configOptions tokens. */
   value: string;
   /** Human display name shown in pickers. */
   label: string;
@@ -298,7 +298,9 @@ export interface RunnerModelInfo {
 /** Models a runner says its local runtimes can use. Keys are provider ids. Antigravity's rows
  *  come from `agy models`, whose slugs carry their level (`gemini-3.8-flash-high`): the runner
  *  folds them into one row per base model (`gemini-3.8-flash`) with its levels as
- *  `reasoningLevels`, and a session passes them back as `--model` and `--effort`. */
+ *  `reasoningLevels`, and a session passes them back as `--model` and `--effort`. DeepSeek
+ *  Harness reports opaque model and reasoning option values; preserve them for ACP
+ *  session/set_config_option without reconstructing ids or inventing context windows. */
 export type RunnerModelCatalog = Partial<Record<AgentProvider, RunnerModelInfo[]>>;
 
 /** Effective default model reported by each built-in runtime on one runner heartbeat. This is
@@ -976,7 +978,7 @@ export interface CodexRateLimitResetResultRefusal {
 export type LoginEngine = 'claude' | 'codex' | 'kimi' | 'antigravity';
 
 /** Engines with an install action in Providers: every engine a runner signs in with. */
-export type InstallEngine = LoginEngine;
+export type InstallEngine = LoginEngine | 'dsh';
 
 /**
  * Every engine CLI a runner reports on, which is a wider set than the ones it can sign into:
@@ -984,7 +986,7 @@ export type InstallEngine = LoginEngine;
  * is installed on the machine, updated by the same periodic pass, and its version drifts like any
  * other. Which of these a given page offers to sign in is that page's question.
  */
-export type ReportedEngine = LoginEngine | 'opencode';
+export type ReportedEngine = LoginEngine | 'opencode' | 'dsh';
 
 /** The credential a runner's built-in Antigravity runs on: its Google sign-in, or the
  *  `GEMINI_API_KEY` in its own environment. A Google sign-in wins when both exist. */
@@ -1126,6 +1128,10 @@ export interface RunnerEngineHealth {
   installed: boolean;
   /** Whatever `<engine> --version` printed. Absent when not installed or the CLI wouldn't say. */
   version?: string;
+  /** Fixed-version/platform admission failures, independent of installation presence. */
+  installationError?: string;
+  /** Harness session keys arrive with dispatch; the runner's own report leaves validation unknown. */
+  dsh?: DshRuntimeHealth;
   /** The CLI's own answer to "am I signed in", with `unknown` for anything ambiguous. */
   auth: 'yes' | 'no' | 'unknown';
   /** What the runner's updater last did to this engine. Absent from an older runner, and until
@@ -1144,6 +1150,16 @@ export interface RunnerEngineHealth {
    *  Carries `provider`, `fetchedAt` and `buckets`, nothing else; present only while that sign-in
    *  answers `yes`. */
   planUsage?: PlanUsageSnapshot;
+}
+
+export interface DshRuntimeHealth {
+  versionCompatible: boolean;
+  credentialPresent: boolean;
+  modelCatalogReadable: boolean;
+  requestValidation: 'unknown' | 'valid' | 'invalid';
+  sandboxEnforcement: 'unknown' | 'full' | 'partial' | 'unavailable';
+  /** A fixed diagnostic code, never upstream error text or credentials. */
+  diagnostic?: string;
 }
 
 /**

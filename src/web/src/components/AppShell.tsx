@@ -32,7 +32,7 @@ export function AppShell() {
         </button>
         <span className="app-topbar-name">Orbit</span>
       </header>
-      <TasksSidePanel open={navOpen} />
+      <TasksSidePanel open={navOpen} onNavigate={() => setNavOpen(false)} />
       {navOpen && <div className="app-nav-backdrop" onClick={() => setNavOpen(false)} />}
       {/* The ⌘K session palette. Mounted here (not in the workspace console) so the shortcut works
           from every route, including the task list and settings pages. */}

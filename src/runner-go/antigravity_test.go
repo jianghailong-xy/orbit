@@ -802,6 +802,8 @@ func TestAntigravityFreshInstallLeavesTheKeyToThePreflight(t *testing.T) {
 	t.Cleanup(func() { engineSpecs = saved })
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("GEMINI_API_KEY", "")
+	// Nor the Google sign-in this machine may keep: with one saved the preflight lets agy through.
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	configureEngineInstall(true, nil)
 	t.Cleanup(func() { configureEngineInstall(false, nil) })
 

@@ -58,10 +58,18 @@ export function coordinatorSessionTitle(projectTitle: string): string {
  * (`projectAwaitingStart`): a coordinator told only at the refusal has already said it is starting.
  * And it says how to ask for it — `project_request_start`, once every criterion has a task serving
  * it — because the owner's "Start this project?" card appears only once the coordinator has asked.
+ *
+ * The paragraph asking for a `modelHint` on every task is there only while the project owner has
+ * smart model selection on (`modelRouting`, common/model-routing-switch.ts): off, the feature is
+ * as if it did not exist. Like the Automatic switch it is part of the rendered text, and so of the
+ * delivery context key — every reader passes the same owner's switch, so turning it on or off
+ * re-delivers the instructions on the coordinator's next turn, and an opening rendered under the
+ * other value is not current (`coordinatorOpeningIsCurrent`). Absent is off.
  */
 function renderCoordinatorInstructions(
   projectIdentity: string,
   coordinatorEnabled: boolean,
+  modelRouting: boolean,
 ): string {
   return (
     `你是${projectIdentity}的协调会话。\n\n`
@@ -76,12 +84,14 @@ function renderCoordinatorInstructions(
       : '推进靠的是跟人对话：把现状说清楚，该问的问，商量下一步，然后动手。没有任何自动的环会替你决定什么时候动。\n\n')
     + '该动的时候你手上有工具：project_update 改这个项目的标题、目标、作业指导；'
     + 'task_create、task_update、task_start 管它下面的任务。\n\n'
-    + '给你创建的每个任务填 modelHint（S/M/L/XL）和一句 modelHintReason，看到项目里缺建议的任务也用 task_update 补上。'
-    + 'S：机械修改、改文案、升级版本（Sonnet · low）；M：需求清楚的功能或修复（Sonnet · medium）；'
-    + 'L：根因不明、并发、跨模块、迁移、改派发等核心路径（Opus · high）；'
-    + 'XL：架构设计、长时间无人值守、L 档反复失败（Opus · max）。'
-    + 'Codex 引擎在同一个默认模型上对应 low/medium/high/xhigh。理由写判断依据，不超过 500 字。'
-    + 'modelHint 是难度建议，失败后可以升档；model 是硬指定，优先于建议。引擎仍用 provider 字段指定。\n\n'
+    + (modelRouting
+      ? '给你创建的每个任务填 modelHint（S/M/L/XL）和一句 modelHintReason，看到项目里缺建议的任务也用 task_update 补上。'
+        + 'S：机械修改、改文案、升级版本（Sonnet · low）；M：需求清楚的功能或修复（Sonnet · medium）；'
+        + 'L：根因不明、并发、跨模块、迁移、改派发等核心路径（Opus · high）；'
+        + 'XL：架构设计、长时间无人值守、L 档反复失败（Opus · max）。'
+        + 'Codex 引擎在同一个默认模型上对应 low/medium/high/xhigh。理由写判断依据，不超过 500 字。'
+        + 'modelHint 是难度建议，失败后可以升档；model 是硬指定，优先于建议。引擎仍用 provider 字段指定。\n\n'
+      : '')
     + '项目开工之前 task_start 会被拒：任务可以先建好，别想办法绕开。开工由账号所有者来按，'
     + '由你来请求：计划写好、每条验收标准都有任务服务（task_create 带 criterionKey）之后，'
     + '用 project_request_start 请求启动，附上你建议的开工设置和一句理由。'
@@ -127,10 +137,12 @@ export function buildCoordinatorInstructions(
   title: string,
   projectId: string,
   coordinatorEnabled: boolean,
+  modelRouting = false,
 ): string {
   return renderCoordinatorInstructions(
     `项目「${title}」（id: ${uuidToBase62(projectId)}）`,
     coordinatorEnabled,
+    modelRouting,
   );
 }
 
@@ -165,23 +177,26 @@ export function buildDelegatedCoordinatorNotice(
 export function buildCoordinatorDeliveryInstructions(
   projectId: string,
   coordinatorEnabled: boolean,
+  modelRouting = false,
 ): string {
-  return renderCoordinatorInstructions(`项目（id: ${uuidToBase62(projectId)}）`, coordinatorEnabled);
+  return renderCoordinatorInstructions(`项目（id: ${uuidToBase62(projectId)}）`, coordinatorEnabled, modelRouting);
 }
 
 /**
  * Identity of one coordinator context inside one live engine context.
  *
  * Binding the exact rendered instructions means an instruction edit automatically invalidates an
- * old acknowledgement — and so does flipping the project's Automatic switch, since the text
- * depends on it. The lease generation invalidates it on process restart, and the durable
- * compaction event seq invalidates it when the provider drops history without restarting.
+ * old acknowledgement — and so does flipping the project's Automatic switch or its owner's smart
+ * model selection, since the text depends on both. The lease generation invalidates it on process
+ * restart, and the durable compaction event seq invalidates it when the provider drops history
+ * without restarting.
  */
 export function buildCoordinatorDeliveryContextKey(
   projectId: string,
   leaseGeneration: string,
   contextEpoch: number,
   coordinatorEnabled: boolean,
+  modelRouting = false,
 ): string {
   return createHash('sha256')
     .update([
@@ -189,7 +204,7 @@ export function buildCoordinatorDeliveryContextKey(
       projectId,
       leaseGeneration,
       String(contextEpoch),
-      buildCoordinatorDeliveryInstructions(projectId, coordinatorEnabled),
+      buildCoordinatorDeliveryInstructions(projectId, coordinatorEnabled, modelRouting),
     ].join('\0'))
     .digest('hex');
 }
@@ -199,8 +214,9 @@ export function buildCoordinatorOpening(
   title: string,
   projectId: string,
   coordinatorEnabled: boolean,
+  modelRouting = false,
 ): string {
-  return buildCoordinatorInstructions(title, projectId, coordinatorEnabled);
+  return buildCoordinatorInstructions(title, projectId, coordinatorEnabled, modelRouting);
 }
 
 /** Whether the immutable project id shows that this session already opened as its coordinator. */
@@ -217,14 +233,16 @@ export function hasCoordinatorOpening(prompt: string, projectId: string): boolea
  * The opening is rendered once, when the session is created, and on the initial turn it stands in
  * for the delivery block that the turn's context key says was delivered. That holds only while its
  * body — everything after the identity line, the one part a title changes — is the current
- * rendering: an opening written before the Automatic switch flipped is not that context.
+ * rendering: an opening written before the Automatic switch or the owner's smart model selection
+ * flipped is not that context.
  */
 export function coordinatorOpeningIsCurrent(
   prompt: string,
   projectId: string,
   coordinatorEnabled: boolean,
+  modelRouting = false,
 ): boolean {
-  const delivered = buildCoordinatorDeliveryInstructions(projectId, coordinatorEnabled);
+  const delivered = buildCoordinatorDeliveryInstructions(projectId, coordinatorEnabled, modelRouting);
   return (
     hasCoordinatorOpening(prompt, projectId)
     && prompt.includes(delivered.slice(delivered.indexOf('\n\n')))
@@ -236,8 +254,9 @@ export function wrapCoordinatorDeliveryContext(
   content: string | undefined,
   projectId: string,
   coordinatorEnabled: boolean,
+  modelRouting = false,
 ): string {
-  const coordinatorInstructions = buildCoordinatorDeliveryInstructions(projectId, coordinatorEnabled);
+  const coordinatorInstructions = buildCoordinatorDeliveryInstructions(projectId, coordinatorEnabled, modelRouting);
   // This deliberately remains user-level context, matching the project-page opening. Project
   // title is agent-writable data and must never be promoted into a system/developer instruction.
   return (
@@ -252,6 +271,7 @@ export function appendCoordinatorDeliveryContext(
   sessionPrompt: string,
   titleBeforeProjectManagement: string | null | undefined,
   project: { id: string; coordinatorEnabled: boolean } | null | undefined,
+  modelRouting = false,
 ): string | undefined {
   if (
     !project
@@ -263,5 +283,5 @@ export function appendCoordinatorDeliveryContext(
   // title is agent-writable data and must never be promoted into a system/developer instruction.
   // The stored ConversationTurn remains exactly what the person typed; this expansion is the same
   // delivery-time pattern used for #references and pending list events.
-  return wrapCoordinatorDeliveryContext(content, project.id, project.coordinatorEnabled);
+  return wrapCoordinatorDeliveryContext(content, project.id, project.coordinatorEnabled, modelRouting);
 }

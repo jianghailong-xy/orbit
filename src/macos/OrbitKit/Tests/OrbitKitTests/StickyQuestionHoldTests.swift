@@ -117,8 +117,9 @@ final class StickyQuestionHoldTests: XCTestCase {
         let body = source[start.lowerBound..<end.upperBound]
             .split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.hasPrefix("//") }.joined(separator: " ")
-        XCTAssertTrue(body.contains("found = StickyQuestionHold.named(found: found, anchor: anchor, showing: stuckID)"))
+        XCTAssertTrue(body.contains("found = StickyQuestionHold.named(found: questions.above(anchor), anchor: anchor, showing: stuckID)"))
         XCTAssertTrue(body.contains("StickyQuestionHold.fallbackNames(contentOffset: Double(ruler.contentOffset), showing: stuckID != nil)"))
         XCTAssertFalse(body.contains("ruler.contentOffset > 40"), "the bare threshold is back")
+        XCTAssertTrue(body.contains("found = questions.last"), "the fallback still names the last question")
     }
 }

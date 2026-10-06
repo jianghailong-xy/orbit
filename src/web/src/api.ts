@@ -10,6 +10,7 @@ import type {
   SessionMessageCard,
   SessionMoveTargets,
   SessionRequestView,
+  SessionProjectMembership,
   SessionTurnIntent,
   SessionTurnPlacement,
 } from '@orbit/shared';
@@ -917,8 +918,19 @@ export const getSessionRetryMessage = (sessionId: string) =>
 // request it was — instead of this page sending the words again in the owner's own name. It names no
 // key: the server derives one from the failed message, so a double tap or a response lost and clicked
 // again is the turn already queued rather than a second re-send (§2.1, §8 criterion 19).
-export const resendSessionRetryMessage = (sessionId: string) =>
-  api<{ turnId: string; placement?: string }>(`/sessions/${sessionId}/retry-message`, { method: 'POST' });
+// `identity` is the composer's pending pick, when Retry was pressed after choosing one. The re-send
+// is a resume, and what the person chose has to travel with it — without it, choosing a provider and
+// pressing Retry ran on the provider the session was already on. Omitted (or empty), the re-send
+// goes where the session is, which is what a Retry pressed with nothing chosen must do.
+export const resendSessionRetryMessage = (
+  sessionId: string,
+  identity: { provider?: string; account?: string } = {},
+) =>
+  api<{ turnId: string; placement?: string }>(`/sessions/${sessionId}/retry-message`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(identity),
+  });
 
 // Turn off / put back the retry armed on this session by a spent quota or a transient provider
 // error. Arming is automatic when one of those kills a turn; `armAutoRetry` exists so the card's
@@ -1360,6 +1372,9 @@ export interface SessionDetail {
   /** The Project this Session coordinates. Null for ordinary Sessions. */
   projectId?: string | null;
   projectTitle?: string | null;
+  projectMembership?: SessionProjectMembership | null;
+  /** The project's integration line, exposed for the existing worktree-bar display. */
+  projectIntegrationRef?: string | null;
   prompt?: string | null;
   createdAt?: string;
   lastTurnAt?: string | null;
@@ -1424,9 +1439,8 @@ export interface SessionDetail {
   mergeRecoveryAction?: MergeRecoveryAction | null;
   mergeRecoverySupported?: boolean;
   mergedAt?: string | null;
-  // The branch the user chose to merge into (status bar's branch dropdown). Null = the
-  // default (runner auto-detects main, else master). Shown on the merged ✓ chip + used by
-  // "Retry merge" to retry the same target.
+  // The server-resolved merge target: an explicit choice, a project integration line, or the
+  // workspace/runner default. Shown on the merged ✓ chip and used by Retry merge.
   mergeTarget?: string | null;
   // Candidate merge-target branches the runner reported for this session's repo (local
   // branches minus orbit/*), populating the dropdown. Empty for older runners → no dropdown.

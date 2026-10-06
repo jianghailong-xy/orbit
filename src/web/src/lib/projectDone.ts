@@ -1,4 +1,5 @@
-import type { CriterionLandingReason, DoneRequest, ProjectDoneBy } from '@orbit/shared';
+import type { CriterionLandingReason, DoneRequest, ProjectDoneBy, ProjectOpenItemRow } from '@orbit/shared';
+import { formatSpan } from './watches';
 
 /**
  * The owner-facing project-settlement copy.  Keep the words in this small module so the native
@@ -42,6 +43,8 @@ export const WHY_NOT_DONE_THIS_PROJECT_IS_DONE = 'This project is done';
 export const WHY_NOT_DONE_ASK_COORDINATOR = 'Ask the coordinator to handle it';
 export const WHY_NOT_DONE_WAITING_DETAIL = 'Goes to main after the merge check — the coordinator is handling it.';
 export const WHY_NOT_DONE_NEEDS_CALL_DETAIL = 'Orbit saw no merge for it. The coordinator checked main has it and asked you to record the project done.';
+export const WHY_NOT_DONE_NOT_MET_YET = 'Not met yet';
+export const WHY_NOT_DONE_NOT_MET_DETAIL = 'Its work has not met this criterion yet.';
 export const PROJECT_DONE_RECORDED_BY_YOU = 'recorded by you';
 export const PROJECT_DONE_RECORDED_BY_ORBIT = 'recorded by Orbit';
 export const READY_TO_CLOSE = 'Ready to close';
@@ -91,6 +94,8 @@ export const PROJECT_DONE_COPY = {
   askCoordinator: WHY_NOT_DONE_ASK_COORDINATOR,
   waitingDetail: WHY_NOT_DONE_WAITING_DETAIL,
   needsCallDetail: WHY_NOT_DONE_NEEDS_CALL_DETAIL,
+  notMetYet: WHY_NOT_DONE_NOT_MET_YET,
+  notMetDetail: WHY_NOT_DONE_NOT_MET_DETAIL,
   onMain: WHY_NOT_DONE_ON_MAIN,
   whyHeading: WHY_NOT_DONE_HEADING,
   landedOnMain: 'landed on main',
@@ -267,6 +272,28 @@ export function doneProvenance(project: Pick<ProjectDoneDocument, 'doneBy' | 'ac
     return `${PROJECT_DONE_COPY.recordedByYou} · ${n} ${PROJECT_DONE_COPY.gapsAccepted}`;
   }
   return PROJECT_DONE_COPY.recordedByOrbit;
+}
+
+/**
+ * The open items the card's Orbit checked row counts: every row the open-items read holds — the
+ * START_REQUEST kept beside the groups included — except the DONE_REQUEST the card is itself
+ * reviewing. Without a DONE_REQUEST (the owner opened it) nothing is left out.
+ */
+export function orbitCheckedOpenItemCount(view: {
+  needsYou?: readonly Pick<ProjectOpenItemRow, 'itemId'>[];
+  withCoordinator?: readonly Pick<ProjectOpenItemRow, 'itemId'>[];
+  startRequest?: Pick<ProjectOpenItemRow, 'itemId'> | null;
+  doneRequest?: Pick<ProjectOpenItemRow, 'itemId'> | null;
+} | null | undefined): number {
+  const reviewing = view?.doneRequest?.itemId ?? null;
+  return [...(view?.needsYou ?? []), ...(view?.withCoordinator ?? []), ...(view?.startRequest ? [view.startRequest] : [])]
+    .filter((row) => reviewing === null || row.itemId !== reviewing).length;
+}
+
+/** How long the coordinator's request has waited, from its own `waitingSince`. */
+export function doneRequestWaiting(waitingSince: string | null | undefined, now: number): string | null {
+  const at = waitingSince ? Date.parse(waitingSince) : Number.NaN;
+  return Number.isNaN(at) ? null : `waiting ${formatSpan(now - at)}`;
 }
 
 /** A stable reason label, used by the Why-not-done card and its compact project-page row. */

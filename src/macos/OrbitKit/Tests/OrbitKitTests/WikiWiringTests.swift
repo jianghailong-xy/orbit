@@ -82,8 +82,10 @@ final class WikiWiringTests: XCTestCase {
         XCTAssertTrue(wiki.contains(".accessibilityLabel(WikiCopy.proposalsToReview(waiting))"))
         XCTAssertTrue(wiki.contains("Image(systemName: AppSection.wiki.systemImage)"))
         XCTAssertTrue(wiki.contains("Text(AppSection.wiki.title)"))
-        // A press is the Projects row's own: the section, at its root, and the drawer closes.
-        assertOrder(wiki, ["model.selectedSection = .wiki", "model.nav.popToRoot()", "close()"], "the row's press")
+        // A press is the Projects row's own: the section's destination (its root, unless it is the
+        // one showing), and the drawer closes.
+        XCTAssertTrue(projects.contains("open(.section(.projects))"))
+        XCTAssertTrue(wiki.contains("open(.section(.wiki))"), "the row's press")
         let model = code(try source("WikiModel.swift"))
         XCTAssertTrue(model.contains("var proposalsToReview: Int { WikiLogic.proposalsToReview(spaces) }"))
     }

@@ -1,0 +1,1227 @@
+{
+  "approvalCards": [
+    {
+      "ID": "approval-1",
+      "Body": {
+        "backgroundJobId": "bgj_44753404ed25",
+        "input": {
+          "acceptanceCriteria": "synthetic",
+          "assigneeId": "p4-agent",
+          "completionCriterion": "EVIDENCE_JUDGMENT",
+          "description": "synthetic",
+          "title": "P4 confirmed late"
+        },
+        "toolName": "orbit_task_create"
+      },
+      "Status": "ALLOWED",
+      "Polls": 3256,
+      "LatePoll": true
+    },
+    {
+      "ID": "approval-2",
+      "Body": {
+        "backgroundJobId": "bgj_a2f793bda4c7",
+        "input": {
+          "acceptanceCriteria": "synthetic",
+          "assigneeId": "p4-agent",
+          "completionCriterion": "EVIDENCE_JUDGMENT",
+          "description": "synthetic",
+          "title": "P4 declined late"
+        },
+        "toolName": "orbit_task_create"
+      },
+      "Status": "DENIED",
+      "Polls": 3281,
+      "LatePoll": true
+    }
+  ],
+  "controlPlane": [
+    {
+      "agent": "",
+      "body": {
+        "backgroundJobId": "bgj_44753404ed25",
+        "input": {
+          "acceptanceCriteria": "synthetic",
+          "assigneeId": "p4-agent",
+          "completionCriterion": "EVIDENCE_JUDGMENT",
+          "description": "synthetic",
+          "title": "P4 confirmed late"
+        },
+        "toolName": "orbit_task_create"
+      },
+      "method": "POST",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "p4-agent",
+      "body": {
+        "acceptanceCriteria": "synthetic",
+        "assigneeId": "p4-agent",
+        "completionCriterion": "EVIDENCE_JUDGMENT",
+        "description": "synthetic",
+        "title": "P4 confirmed late"
+      },
+      "method": "POST",
+      "path": "/api/runner/tasks",
+      "session": "p4-orbit-session"
+    },
+    {
+      "agent": "",
+      "body": {
+        "backgroundJobId": "bgj_a2f793bda4c7",
+        "input": {
+          "acceptanceCriteria": "synthetic",
+          "assigneeId": "p4-agent",
+          "completionCriterion": "EVIDENCE_JUDGMENT",
+          "description": "synthetic",
+          "title": "P4 declined late"
+        },
+        "toolName": "orbit_task_create"
+      },
+      "method": "POST",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    }
+  ],
+  "facts": {
+    "confirmed": {
+      "ModelSaw": "Not done yet — handed to runner-hosted job bgj_44753404ed25. task_create waits for the owner's confirmation, which can take longer than this engine lets a tool call run (1m0s), so that job asks them and waits instead of this call. Nothing is written unless the owner confirms; if they do, the job performs the write itself. Do not call task_create again for the same thing. When the owner answers, the job exits and Orbit wakes this session with its output: the JSON-RPC reply carrying exactly what this call would have returned (what was created, or the refusal). If there is nothing else to do, end your turn; bg_output reads the job at any time.\n{\n  \"jobId\": \"bgj_44753404ed25\",\n  \"shellId\": \"bgj_44753404ed25\",\n  \"kind\": \"watch\",\n  \"command\": \"{ rm -f '/tmp/orbit-dsh-mcp-timeout-cDupKT/orbit-mcp-handoff-3539198121.json' \\u0026\\u0026 ORBIT_AGENT_ID='p4-agent' ORBIT_TASK_ID='p4-task' ORBIT_ALLOW_ORCHESTRATION=0 ORBIT_MCP_TOOLS='task_create' ORBIT_MCP_CALL_TIMEOUT_SECONDS= '/tmp/orbit-dsh-mcp-timeout-cDupKT/go-build3177946360/b001/orbit.test' mcp; } \\u003c '/tmp/orbit-dsh-mcp-timeout-cDupKT/orbit-mcp-handoff-3539198121.json'\",\n  \"description\": \"Orbit task_create: waiting for the owner's confirmation\",\n  \"status\": \"running\",\n  \"pid\": 3886834,\n  \"exitCode\": null,\n  \"outputPath\": \"/tmp/orbit-dsh-mcp-timeout-cDupKT/TestDshRealOrbitMCPConfirmationOutlastsTimeout51800778/002/bgj_44753404ed25.output\",\n  \"startedAt\": \"2026-10-05T14:43:39Z\",\n  \"holdsWorktree\": true,\n  \"wakeOnExit\": true\n}",
+      "ToolStatus": "completed",
+      "JobID": "bgj_44753404ed25",
+      "WakeOutput": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"content\":[{\"text\":\"{\\n  \\\"id\\\": \\\"p4-double-task\\\",\\n  \\\"title\\\": \\\"P4 confirmed late\\\"\\n}\",\"type\":\"text\"}],\"isError\":false}}\n",
+      "CardFiledBy": "bgj_44753404ed25",
+      "TurnSeconds": 0,
+      "CardAnsweredAfterSeconds": 65,
+      "TasksCreated": 1
+    },
+    "declined": {
+      "ModelSaw": "Not done yet — handed to runner-hosted job bgj_a2f793bda4c7. task_create waits for the owner's confirmation, which can take longer than this engine lets a tool call run (1m0s), so that job asks them and waits instead of this call. Nothing is written unless the owner confirms; if they do, the job performs the write itself. Do not call task_create again for the same thing. When the owner answers, the job exits and Orbit wakes this session with its output: the JSON-RPC reply carrying exactly what this call would have returned (what was created, or the refusal). If there is nothing else to do, end your turn; bg_output reads the job at any time.\n{\n  \"jobId\": \"bgj_a2f793bda4c7\",\n  \"shellId\": \"bgj_a2f793bda4c7\",\n  \"kind\": \"watch\",\n  \"command\": \"{ rm -f '/tmp/orbit-dsh-mcp-timeout-cDupKT/orbit-mcp-handoff-2002607894.json' \\u0026\\u0026 ORBIT_AGENT_ID='p4-agent' ORBIT_TASK_ID='p4-task' ORBIT_ALLOW_ORCHESTRATION=0 ORBIT_MCP_TOOLS='task_create' ORBIT_MCP_CALL_TIMEOUT_SECONDS= '/tmp/orbit-dsh-mcp-timeout-cDupKT/go-build3177946360/b001/orbit.test' mcp; } \\u003c '/tmp/orbit-dsh-mcp-timeout-cDupKT/orbit-mcp-handoff-2002607894.json'\",\n  \"description\": \"Orbit task_create: waiting for the owner's confirmation\",\n  \"status\": \"running\",\n  \"pid\": 3943544,\n  \"exitCode\": null,\n  \"outputPath\": \"/tmp/orbit-dsh-mcp-timeout-cDupKT/TestDshRealOrbitMCPConfirmationOutlastsTimeout51800778/002/bgj_a2f793bda4c7.output\",\n  \"startedAt\": \"2026-10-05T14:44:44Z\",\n  \"holdsWorktree\": true,\n  \"wakeOnExit\": true\n}",
+      "ToolStatus": "completed",
+      "JobID": "bgj_a2f793bda4c7",
+      "WakeOutput": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"content\":[{\"text\":\"the human rejected this task: denied by the user\",\"type\":\"text\"}],\"isError\":false}}\n",
+      "CardFiledBy": "bgj_a2f793bda4c7",
+      "TurnSeconds": 0,
+      "CardAnsweredAfterSeconds": 65,
+      "TasksCreated": 0
+    }
+  },
+  "modelRequests": 4,
+  "orbitEvents": [
+    {
+      "payload": {
+        "argv": [
+          "--profile",
+          "acp",
+          "--patch",
+          "/tmp/orbit-dsh-mcp-timeout-cDupKT/TestDshRealOrbitMCPConfirmationOutlastsTimeout51800778/001/dsh-home/orbit.patch.json",
+          "--patch",
+          "/tmp/orbit-dsh-mcp-timeout-cDupKT/TestDshRealOrbitMCPConfirmationOutlastsTimeout51800778/001/dsh-home/orbit-agent.patch.json"
+        ],
+        "cliVersion": "0.2.0-rc.2",
+        "configHash": "cb8e1f92b9b669586776e932a9d58422e057d183e860ce0816c72b6780460b84",
+        "dshHome": "/tmp/orbit-dsh-mcp-timeout-cDupKT/TestDshRealOrbitMCPConfirmationOutlastsTimeout51800778/001/dsh-home",
+        "executable": "/tmp/orbit-dsh-mcp-timeout-cDupKT/install/node_modules/.bin/dsh",
+        "provider": "dsh",
+        "runtime": "acp",
+        "subtype": "launch"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "cliVersion": "0.2.0-rc.2",
+        "provider": "dsh",
+        "resumed": false,
+        "runtime": "acp",
+        "runtimeSessionId": "73c5f334-e909-4328-8a64-6373016e6459",
+        "sessionId": "73c5f334-e909-4328-8a64-6373016e6459",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "runtimeSessionId": "73c5f334-e909-4328-8a64-6373016e6459",
+        "text": "File a task."
+      },
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "payload": {
+        "contextTokens": 45963,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "73c5f334-e909-4328-8a64-6373016e6459",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_1",
+        "input": {
+          "acceptanceCriteria": "synthetic",
+          "completionCriterion": "EVIDENCE_JUDGMENT",
+          "description": "synthetic",
+          "title": "P4 confirmed late"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "mcpServer": "orbit",
+        "mcpTool": "task_create",
+        "name": "mcp__orbit__task_create",
+        "runtimeSessionId": "73c5f334-e909-4328-8a64-6373016e6459",
+        "status": "in_progress",
+        "toolCallId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "Not done yet — handed to runner-hosted job bgj_44753404ed25. task_create waits for the owner's confirmation, which can take longer than this engine lets a tool call run (1m0s), so that job asks them and waits instead of this call. Nothing is written unless the owner confirms; if they do, the job performs the write itself. Do not call task_create again for the same thing. When the owner answers, the job exits and Orbit wakes this session with its output: the JSON-RPC reply carrying exactly what this call would have returned (what was created, or the refusal). If there is nothing else to do, end your turn; bg_output reads the job at any time.\n{\n  \"jobId\": \"bgj_44753404ed25\",\n  \"shellId\": \"bgj_44753404ed25\",\n  \"kind\": \"watch\",\n  \"command\": \"{ rm -f '/tmp/orbit-dsh-mcp-timeout-cDupKT/orbit-mcp-handoff-3539198121.json' \\u0026\\u0026 ORBIT_AGENT_ID='p4-agent' ORBIT_TASK_ID='p4-task' ORBIT_ALLOW_ORCHESTRATION=0 ORBIT_MCP_TOOLS='task_create' ORBIT_MCP_CALL_TIMEOUT_SECONDS= '/tmp/orbit-dsh-mcp-timeout-cDupKT/go-build3177946360/b001/orbit.test' mcp; } \\u003c '/tmp/orbit-dsh-mcp-timeout-cDupKT/orbit-mcp-handoff-3539198121.json'\",\n  \"description\": \"Orbit task_create: waiting for the owner's confirmation\",\n  \"status\": \"running\",\n  \"pid\": 3886834,\n  \"exitCode\": null,\n  \"outputPath\": \"/tmp/orbit-dsh-mcp-timeout-cDupKT/TestDshRealOrbitMCPConfirmationOutlastsTimeout51800778/002/bgj_44753404ed25.output\",\n  \"startedAt\": \"2026-10-05T14:43:39Z\",\n  \"holdsWorktree\": true,\n  \"wakeOnExit\": true\n}",
+        "isError": false,
+        "localTurnId": "t1",
+        "runtimeSessionId": "73c5f334-e909-4328-8a64-6373016e6459",
+        "status": "completed",
+        "toolCallId": "call_p4_1",
+        "toolUseId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "messageId": "acd38777-e2d1-4c11-8412-ef4095efcf72",
+        "runtimeSessionId": "73c5f334-e909-4328-8a64-6373016e6459",
+        "text": "P4 handed off"
+      },
+      "turn": "t1",
+      "type": "assistant"
+    },
+    {
+      "payload": {
+        "contextTokens": 46357,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "73c5f334-e909-4328-8a64-6373016e6459",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "contextTokens": 46357,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "numTurns": 1,
+        "runtimeSessionId": "73c5f334-e909-4328-8a64-6373016e6459",
+        "stopReason": "end_turn",
+        "subtype": "completed"
+      },
+      "turn": "t1",
+      "type": "turn_end"
+    },
+    {
+      "payload": {
+        "localTurnId": "t2",
+        "runtimeSessionId": "73c5f334-e909-4328-8a64-6373016e6459",
+        "text": "File a task."
+      },
+      "turn": "t2",
+      "type": "user"
+    },
+    {
+      "payload": {
+        "contextTokens": 46415,
+        "contextWindow": 1000000,
+        "localTurnId": "t2",
+        "runtimeSessionId": "73c5f334-e909-4328-8a64-6373016e6459",
+        "subtype": "context"
+      },
+      "turn": "t2",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_3",
+        "input": {
+          "acceptanceCriteria": "synthetic",
+          "completionCriterion": "EVIDENCE_JUDGMENT",
+          "description": "synthetic",
+          "title": "P4 declined late"
+        },
+        "kind": "other",
+        "localTurnId": "t2",
+        "mcpServer": "orbit",
+        "mcpTool": "task_create",
+        "name": "mcp__orbit__task_create",
+        "runtimeSessionId": "73c5f334-e909-4328-8a64-6373016e6459",
+        "status": "in_progress",
+        "toolCallId": "call_p4_3"
+      },
+      "turn": "t2",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "Not done yet — handed to runner-hosted job bgj_a2f793bda4c7. task_create waits for the owner's confirmation, which can take longer than this engine lets a tool call run (1m0s), so that job asks them and waits instead of this call. Nothing is written unless the owner confirms; if they do, the job performs the write itself. Do not call task_create again for the same thing. When the owner answers, the job exits and Orbit wakes this session with its output: the JSON-RPC reply carrying exactly what this call would have returned (what was created, or the refusal). If there is nothing else to do, end your turn; bg_output reads the job at any time.\n{\n  \"jobId\": \"bgj_a2f793bda4c7\",\n  \"shellId\": \"bgj_a2f793bda4c7\",\n  \"kind\": \"watch\",\n  \"command\": \"{ rm -f '/tmp/orbit-dsh-mcp-timeout-cDupKT/orbit-mcp-handoff-2002607894.json' \\u0026\\u0026 ORBIT_AGENT_ID='p4-agent' ORBIT_TASK_ID='p4-task' ORBIT_ALLOW_ORCHESTRATION=0 ORBIT_MCP_TOOLS='task_create' ORBIT_MCP_CALL_TIMEOUT_SECONDS= '/tmp/orbit-dsh-mcp-timeout-cDupKT/go-build3177946360/b001/orbit.test' mcp; } \\u003c '/tmp/orbit-dsh-mcp-timeout-cDupKT/orbit-mcp-handoff-2002607894.json'\",\n  \"description\": \"Orbit task_create: waiting for the owner's confirmation\",\n  \"status\": \"running\",\n  \"pid\": 3943544,\n  \"exitCode\": null,\n  \"outputPath\": \"/tmp/orbit-dsh-mcp-timeout-cDupKT/TestDshRealOrbitMCPConfirmationOutlastsTimeout51800778/002/bgj_a2f793bda4c7.output\",\n  \"startedAt\": \"2026-10-05T14:44:44Z\",\n  \"holdsWorktree\": true,\n  \"wakeOnExit\": true\n}",
+        "isError": false,
+        "localTurnId": "t2",
+        "runtimeSessionId": "73c5f334-e909-4328-8a64-6373016e6459",
+        "status": "completed",
+        "toolCallId": "call_p4_3",
+        "toolUseId": "call_p4_3"
+      },
+      "turn": "t2",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "localTurnId": "t2",
+        "messageId": "1d2d3cf6-ba1e-4944-a943-7993f208c9fb",
+        "runtimeSessionId": "73c5f334-e909-4328-8a64-6373016e6459",
+        "text": "P4 handed off again"
+      },
+      "turn": "t2",
+      "type": "assistant"
+    },
+    {
+      "payload": {
+        "contextTokens": 46810,
+        "contextWindow": 1000000,
+        "localTurnId": "t2",
+        "runtimeSessionId": "73c5f334-e909-4328-8a64-6373016e6459",
+        "subtype": "context"
+      },
+      "turn": "t2",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "contextTokens": 46810,
+        "contextWindow": 1000000,
+        "localTurnId": "t2",
+        "numTurns": 1,
+        "runtimeSessionId": "73c5f334-e909-4328-8a64-6373016e6459",
+        "stopReason": "end_turn",
+        "subtype": "completed"
+      },
+      "turn": "t2",
+      "type": "turn_end"
+    }
+  ],
+  "permissionMode": "default",
+  "scenario": "TestDshRealOrbitMCPConfirmationOutlastsTimeout"
+}

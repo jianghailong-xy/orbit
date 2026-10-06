@@ -1,0 +1,133 @@
+{
+  "browser": "153.0.8010.12",
+  "captures": [
+    {
+      "name": "1280-runner-signed-out",
+      "viewport": {
+        "width": 1280,
+        "height": 1000
+      },
+      "text": "Antigravity\n1.2.16\nSigned out\nSign in to see quota\nSign in with Google\nGoogle terms restrict personal account sign-in through third-party tools; your account may be suspended."
+    },
+    {
+      "name": "1280-runner-google",
+      "viewport": {
+        "width": 1280,
+        "height": 1000
+      },
+      "text": "Antigravity\n1.2.16 · Google account\nAvailable\ngemini-weekly\nWeekly\n72% remaining\nresets Fri 03:00\n3p-5h\n5-hour\n18% remaining\nresets 08:00\nGoogle terms restrict personal account sign-in through third-party tools; your account may be suspended."
+    },
+    {
+      "name": "1280-runner-macos",
+      "viewport": {
+        "width": 1280,
+        "height": 1000
+      },
+      "text": "Antigravity\n1.2.16\nSigned out\nSign in to see quota\nGoogle sign-in is not supported on macOS runners yet. Use a Gemini API key."
+    },
+    {
+      "name": "1280-runner-old",
+      "viewport": {
+        "width": 1280,
+        "height": 1000
+      },
+      "text": "Antigravity\n1.2.16\nSigned out\nSign in to see quota\nUpdate this runner to sign in with Google."
+    },
+    {
+      "name": "1280-runner-env-key",
+      "viewport": {
+        "width": 1280,
+        "height": 1000
+      },
+      "text": "Antigravity\n1.2.16\nSigned in\nenv key · runs on your Gemini key\nSign in with Google\nGoogle terms restrict personal account sign-in through third-party tools; your account may be suspended."
+    },
+    {
+      "name": "1280-runner-unknown",
+      "viewport": {
+        "width": 1280,
+        "height": 1000
+      },
+      "text": "Antigravity\n1.2.16 · the CLI wouldn't say\nUnknown\n—\nSign in with Google\nGoogle terms restrict personal account sign-in through third-party tools; your account may be suspended."
+    },
+    {
+      "name": "1280-selector",
+      "viewport": {
+        "width": 1280,
+        "height": 1000
+      },
+      "text": "Claude\nclaude-opus-5\nCodex\ngpt-5.6-sol\nAntigravityGoogle account\nGemini 3.8 Flash\nKimi\nKimi for Coding\n+\nConnect a provider…"
+    },
+    {
+      "name": "1280-auth-error",
+      "viewport": {
+        "width": 1280,
+        "height": 1000
+      },
+      "text": "Antigravity needs authentication\nSign in with Google on this runner, or connect a Gemini API key in Providers.\nGoogle terms restrict personal account sign-in through third-party tools; your account may be suspended.\nSign in with Google\nConnect Gemini\nSwitch to Gemini"
+    },
+    {
+      "name": "443-runner-signed-out",
+      "viewport": {
+        "width": 443,
+        "height": 1000
+      },
+      "text": "Antigravity\n1.2.16\nSigned out\nSign in to see quota\nSign in with Google\nGoogle terms restrict personal account sign-in through third-party tools; your account may be suspended."
+    },
+    {
+      "name": "443-runner-google",
+      "viewport": {
+        "width": 443,
+        "height": 1000
+      },
+      "text": "Antigravity\n1.2.16 · Google account\nAvailable\ngemini-weekly\nWeekly\n72% remaining\nresets Fri 03:00\n3p-5h\n5-hour\n18% remaining\nresets 08:00\nGoogle terms restrict personal account sign-in through third-party tools; your account may be suspended."
+    },
+    {
+      "name": "443-runner-macos",
+      "viewport": {
+        "width": 443,
+        "height": 1000
+      },
+      "text": "Antigravity\n1.2.16\nSigned out\nSign in to see quota\nGoogle sign-in is not supported on macOS runners yet. Use a Gemini API key."
+    },
+    {
+      "name": "443-runner-old",
+      "viewport": {
+        "width": 443,
+        "height": 1000
+      },
+      "text": "Antigravity\n1.2.16\nSigned out\nSign in to see quota\nUpdate this runner to sign in with Google."
+    },
+    {
+      "name": "443-runner-env-key",
+      "viewport": {
+        "width": 443,
+        "height": 1000
+      },
+      "text": "Antigravity\n1.2.16\nSigned in\nenv key · runs on your Gemini key\nSign in with Google\nGoogle terms restrict personal account sign-in through third-party tools; your account may be suspended."
+    },
+    {
+      "name": "443-runner-unknown",
+      "viewport": {
+        "width": 443,
+        "height": 1000
+      },
+      "text": "Antigravity\n1.2.16 · the CLI wouldn't say\nUnknown\n—\nSign in with Google\nGoogle terms restrict personal account sign-in through third-party tools; your account may be suspended."
+    },
+    {
+      "name": "443-selector",
+      "viewport": {
+        "width": 443,
+        "height": 1000
+      },
+      "text": "Claude\nclaude-opus-5\nCodex\ngpt-5.6-sol\nAntigravityGoogle account\nGemini 3.8 Flash\nKimi\nKimi for Coding\n+\nConnect a provider…"
+    },
+    {
+      "name": "443-auth-error",
+      "viewport": {
+        "width": 443,
+        "height": 1000
+      },
+      "text": "Antigravity needs authentication\nSign in with Google on this runner, or connect a Gemini API key in Providers.\nGoogle terms restrict personal account sign-in through third-party tools; your account may be suspended.\nSign in with Google\nConnect Gemini\nSwitch to Gemini"
+    }
+  ]
+}
