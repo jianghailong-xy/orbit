@@ -2796,11 +2796,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   private async preLockCreatorSessions(
     tx: Prisma.TransactionClient,
+    ownerId: string,
     sessionIds: ReadonlyArray<string | null | undefined>,
     taskIds: ReadonlyArray<string | null | undefined> = [],
   ): Promise<void> {
-    const fromTasks = await creatorSessionsOf(tx, taskIds);
-    await lockCreatorSessions(tx, [...sessionIds, ...fromTasks]);
+    const fromTasks = await creatorSessionsOf(tx, ownerId, taskIds);
+    await lockCreatorSessions(tx, ownerId, [...sessionIds, ...fromTasks]);
   }
 
   /**
@@ -3321,10 +3322,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   private async lockTaskForSupersessionWrite(
     tx: Prisma.TransactionClient,
+    ownerId: string,
     taskId: string,
   ): Promise<void> {
     try {
-      await tx.$queryRaw`SELECT 1 FROM "task" WHERE "id" = ${taskId}::uuid FOR UPDATE NOWAIT`;
+      // The caller's own task only: a predecessor named from another account is not taken — not even
+      // for the moment before the read that refuses it — and is refused as not found below.
+      await tx.$queryRaw`SELECT 1 FROM "task" WHERE "id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE NOWAIT`;
     } catch (error) {
       // 55P03 from either side of the fence: this statement's own NOWAIT, or 0130's
       // `task_supersession_project_lock_order` refusing because the project is being reconciled.
@@ -3379,7 +3383,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     now: Date,
   ): Promise<void> {
     // NOWAIT, then read. See `lockTaskForSupersessionWrite` for the cycle this refuses to join.
-    await this.lockTaskForSupersessionWrite(tx, predecessorId);
+    await this.lockTaskForSupersessionWrite(tx, ownerId, predecessorId);
     const [predecessor] = await tx.$queryRaw<Array<{
       id: string; status: string; projectId: string | null;
       supersededByTaskId: string | null; terminalReason: string | null;
@@ -3811,7 +3815,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           // same ordered rank-30 statement (lock-order.ts, I2): a task row written twice in one
           // transaction re-runs `task_creator_session_id_fkey` and takes FOR KEY SHARE on it.
           await lockTaskLists(tx, [dto.listId]);
-          await this.preLockCreatorSessions(tx, [sessionId], [dto.supersedesTaskId]);
+          await this.preLockCreatorSessions(tx, ownerId, [sessionId], [dto.supersedesTaskId]);
           // §13.6 SU7 + AE6-a's lock order, stated rather than left to the triggers.
           //
           // Two things in this transaction reach `project_acceptance_reopen`, and both take the
@@ -4894,6 +4898,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await lockTaskLists(tx, items.map((item) => item.listId));
       await this.preLockCreatorSessions(
         tx,
+        ownerId,
         [sessionId],
         items.map((item) => item.supersedesTaskId),
       );
@@ -9895,7 +9900,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // writes the task row and the supersession statement writes it a second time, which
             // re-runs every one of its foreign keys.
             await lockTaskLists(tx, [dto.listId]);
-            if (rewritesTaskRow) await this.preLockCreatorSessions(tx, [], [id]);
+            if (rewritesTaskRow) await this.preLockCreatorSessions(tx, ownerId, [], [id]);
             // Compatibility pre-lock for the task/acceptance triggers retired by 0178. It remains
             // during the rolling-upgrade window and preserves the established rank-40 ordering,
             // but it no longer expresses acceptance semantics: no task column below enters the
@@ -9975,7 +9980,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // this row with an ordinary blocking lock, so a move that skipped this would hold two
             // projects and then WAIT for a task — the cycle, assembled out of the very locks taken
             // to avoid it.
-            if (supersession || movesProject) await this.lockTaskForSupersessionWrite(tx, id);
+            if (supersession || movesProject) await this.lockTaskForSupersessionWrite(tx, ownerId, id);
             // A verifier request decides two Task rows: its own verdict carrier and its subject.
             // Lock both at rank 50 in UUID order before reading the rank-60 request, so concurrent
             // verdicts and evidence supersession cannot take the same pair backwards.
