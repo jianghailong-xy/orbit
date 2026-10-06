@@ -672,6 +672,15 @@ export class ProjectOpenItemService {
       if (error instanceof QuestionNotAskable) throw new BadRequestException(error.message);
       throw error;
     }
+    // The tasks a question blocks are the account's own. Any other id is refused as one that names
+    // nothing — and is never stored on the question, from where every coordinator rotation would read
+    // whether that task is still open (`blocksUnsettledWork`).
+    if (question.blocksTaskIds.length > 0) {
+      const own = await this.prisma.task.count({ where: { id: { in: question.blocksTaskIds }, ownerId } });
+      if (own !== question.blocksTaskIds.length) {
+        throw new NotFoundException('blocksTaskIds names a task this account does not have');
+      }
+    }
     // The caller's own key for this question, so a tool call retried after a lost response files
     // one question rather than asking the owner the same thing twice.
     const dedupeKey = `CQ:${asked.clientQuestionId?.trim() || randomKey()}`;
@@ -1953,10 +1962,10 @@ export class ProjectOpenItemService {
   ): Promise<void> {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
-      select: { coordinatorSessionId: true },
+      select: { coordinatorSessionId: true, ownerId: true },
     });
     const sessionId = project?.coordinatorSessionId ?? null;
-    if (!sessionId) return;
+    if (!project || !sessionId) return;
     const answered = await this.prisma.projectOpenItem.findMany({
       where: {
         projectId,
@@ -1972,17 +1981,17 @@ export class ProjectOpenItemService {
     for (const item of answered.reverse()) {
       const replaced = !!replacedSessionId && item.askedBySessionId === replacedSessionId;
       const question = item.payload as unknown as CoordinatorQuestion;
-      if (!replaced && !(await this.blocksUnsettledWork(question.blocksTaskIds))) continue;
+      if (!replaced && !(await this.blocksUnsettledWork(project.ownerId, question.blocksTaskIds))) continue;
       await this.deliverAnswer(item.id);
     }
   }
 
-  /** Whether any of these tasks is still somebody's to do. */
-  private async blocksUnsettledWork(taskIds: ReadonlyArray<string> | undefined): Promise<boolean> {
+  /** Whether any of these tasks of the account's is still somebody's to do. */
+  private async blocksUnsettledWork(ownerId: string, taskIds: ReadonlyArray<string> | undefined): Promise<boolean> {
     const ids = unique(taskIds ?? []);
     if (ids.length === 0) return false;
     return (await this.prisma.task.count({
-      where: { id: { in: ids }, status: { notIn: ['DONE', 'CANCELLED'] } },
+      where: { id: { in: ids }, ownerId, status: { notIn: ['DONE', 'CANCELLED'] } },
     })) > 0;
   }
 
