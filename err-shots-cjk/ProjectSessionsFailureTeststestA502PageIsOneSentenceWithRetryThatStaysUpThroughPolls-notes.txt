@@ -1,0 +1,4 @@
+title: 48 label="Couldn't load sessions" id="" frame=(85.16666412353516, 403.6666564941406, 231.66668701171875, 93.16668701171875) hittable=true
+reason: 48 label="The server returned 502." id="" frame=(115.50000000000001, 499.8333333333333, 171.0, 17.999999999999943) hittable=true
+retry: 9 label="Retry" id="" frame=(182.66666666666666, 537.6666666666666, 36.666666666666686, 18.0) hittable=true
+failure missing in 0 of 29 samples over 12 s

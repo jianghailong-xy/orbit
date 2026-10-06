@@ -1,0 +1,34 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "1003C009-8646-4704-AF79-B7599667D43E.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "02-after-retry_0_18716AF4-72E9-4CAB-8E62-E2360941DDD9.png",
+        "timestamp" : 1791280059.545
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "CCE8F4B9-2F42-4B5F-97F4-D54A694D64D3.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "01-failed-read_0_20A57A06-8E1B-4378-905F-69EECC2790BF.png",
+        "timestamp" : 1791280037.255
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "241977B6-4E9F-482D-87E0-E6C0F4569694.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "ProjectSessionsFailureTests/testA502PageIsOneSentenceWithRetryThatStaysUpThroughPolls()",
+    "testIdentifierURL" : "test://com.apple.xcode/SwipeProbe/SwipeProbeUITests/ProjectSessionsFailureTests/testA502PageIsOneSentenceWithRetryThatStaysUpThroughPolls"
+  }
+]

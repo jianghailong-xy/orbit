@@ -1,0 +1,190 @@
+Attributes: Application, 0x114357e80, pid: 18181, label: 'SwipeProbe'
+Element subtree:
+ →Application, 0x114357e80, pid: 18181, label: 'SwipeProbe'
+    Window (Main), 0x1143575c0, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x114357700, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x114357840, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x114357980, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x114356f80, {{0.0, 0.0}, {402.0, 874.0}}
+              StaticText, 0x1143570c0, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x114357200, {{251.7, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              CollectionView, 0x114356e40, {{0.0, 128.0}, {305.7, 746.0}}
+                Other, 0x114357480, {{0.0, -1364.0}, {305.7, 3330.7}}
+                Cell, 0x114356bc0, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x114356d00, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x11436aa80, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x11436abc0, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x114369e00, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x114369f40, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x11436a080, {{0.0, 128.0}, {305.3, 44.3}}
+                        Button, 0x11436a1c0, {{0.0, 128.0}, {305.3, 44.3}}, label: 'Projects'
+                          Image, 0x11436a300, {{26.3, 142.3}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x11436a440, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                Cell, 0x11436a580, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x11436a6c0, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x11436a800, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x11436a940, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x106e583c0, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x106e5a1c0, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x106e58000, {{0.0, 172.3}, {305.3, 44.3}}
+                        Button, 0x106e58280, {{0.0, 172.3}, {305.3, 44.3}}, label: 'Tasks'
+                          Image, 0x106e5a300, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x106e5a440, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x106e5a580, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x106e5a6c0, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x106e58500, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x106e58640, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x106e58780, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x106e5a080, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x1143f4000, {{0.0, 216.7}, {305.3, 44.3}}
+                        Button, 0x1143f4140, {{0.0, 216.7}, {305.3, 44.3}}, label: 'Wiki'
+                          Image, 0x1143f4280, {{27.0, 230.0}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x1143f43c0, {{58.0, 228.7}, {32.7, 20.3}}, label: 'Wiki'
+                Cell, 0x1143f4500, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x1143f4640, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x1143f4780, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x1143f48c0, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x1143f4a00, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x1143f4b40, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x1143f4c80, {{0.0, 261.0}, {305.3, 44.7}}
+                        StaticText, 0x1143f4dc0, {{0.0, 261.0}, {305.3, 44.7}}, label: 'Workspaces'
+                Cell, 0x1143f4f00, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x1143f5040, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x1143f5180, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x1143f52c0, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x1143f5400, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x1143f5540, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x1143f5680, {{0.0, 305.7}, {305.3, 44.3}}
+                        Button, 0x1143f57c0, {{0.0, 305.7}, {305.3, 44.3}}, label: 'orbit-develop,  · hpc'
+                          Other, 0x1143f5900, {{24.7, 320.0}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x1143f5a40, {{24.7, 320.0}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x1143f5b80, {{58.0, 317.7}, {103.0, 20.3}}, label: 'orbit-develop'
+                          StaticText, 0x1143f5cc0, {{161.0, 317.7}, {42.0, 20.3}}, label: ' · hpc'
+                Cell, 0x1143f5e00, {{0.0, 350.0}, {305.3, 44.3}}
+                  Other, 0x1143f5f40, {{0.0, 350.0}, {305.3, 44.3}}
+                    Other, 0x1143f6080, {{0.0, 350.0}, {305.3, 44.3}}
+                      Other, 0x1143f61c0, {{0.0, 350.0}, {305.3, 44.3}}
+                  Other, 0x1143f6300, {{0.0, 350.0}, {305.3, 44.3}}
+                    Other, 0x1143f6440, {{0.0, 350.0}, {305.3, 44.3}}
+                      Other, 0x1143f6580, {{0.0, 350.0}, {305.3, 44.3}}
+                        Button, 0x1143f66c0, {{0.0, 350.0}, {305.3, 44.3}}, label: 'orbit-macos,  · mac-mini'
+                          Other, 0x1143f6800, {{24.7, 364.3}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x1143f6940, {{24.7, 364.3}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x1143f6a80, {{58.0, 362.0}, {93.0, 20.3}}, label: 'orbit-macos'
+                          StaticText, 0x1143f6bc0, {{151.0, 362.0}, {85.0, 20.3}}, label: ' · mac-mini'
+                Cell, 0x1143f6d00, {{0.0, 394.3}, {305.3, 36.0}}
+                  Other, 0x1143f6e40, {{0.0, 394.3}, {305.3, 36.0}}
+                    Other, 0x1143f6f80, {{0.0, 394.3}, {305.3, 36.0}}
+                      Other, 0x1143f70c0, {{0.0, 394.3}, {305.3, 36.0}}
+                  Other, 0x1143f7200, {{0.0, 394.3}, {305.3, 36.0}}
+                    Other, 0x1143f7340, {{0.0, 394.3}, {305.3, 36.0}}
+                      Other, 0x1143f7480, {{0.0, 394.3}, {305.3, 36.0}}
+                        StaticText, 0x1143f75c0, {{22.0, 408.3}, {59.0, 18.0}}, label: 'Projects'
+                        StaticText, 0x1143f7700, {{89.0, 410.7}, {5.3, 13.3}}, label: '1'
+                Cell, 0x1143f7840, {{0.0, 430.3}, {305.3, 44.3}}
+                  Other, 0x1143f7980, {{0.0, 430.3}, {305.3, 44.3}}
+                    Other, 0x1143f7ac0, {{0.0, 430.3}, {305.3, 44.3}}
+                      Other, 0x1143f7c00, {{0.0, 430.3}, {305.3, 44.3}}
+                  Other, 0x1143f7d40, {{0.0, 430.3}, {305.3, 44.3}}
+                    Other, 0x1143f7e80, {{0.0, 430.3}, {305.3, 44.3}}
+                      Other, 0x1143f8000, {{0.0, 430.3}, {305.3, 44.3}}
+                        Button, 0x1143f8140, {{0.0, 430.3}, {305.3, 44.3}}, label: 'DeepSeek Harness 首版后续'
+                Other, 0x1143f8280, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x1143f83c0, {{299.3, 605.3}, {3.0, 265.7}}
+                Other, 0x1143f8500, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x1143f8640, {{299.3, 605.3}, {3.0, 265.7}}
+              Button, 0x1143f8780, {{10.0, 788.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x1143f88c0, {{31.0, 801.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x1143f8a00, {{57.0, 799.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x1143f8b40, {{251.7, 788.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x1143f8c80, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x1143f8dc0, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+                  Button, 0x1143f8f00, {{16.0, 62.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Back'
+                  Other, 0x1143f9040, {{89.7, 66.0}, {222.7, 36.0}}
+                    Other, 0x1143f9180, {{89.7, 66.0}, {222.7, 36.0}}
+                      StaticText, 0x1143f92c0, {{89.7, 66.3}, {222.7, 35.3}}, label: 'DeepSeek Harness 首版后续, Project · 3 sessions'
+                        StaticText, 0x1143f9400, {{89.7, 66.2}, {222.7, 20.3}}, label: 'DeepSeek Harness 首版后续'
+                        StaticText, 0x1143f9540, {{145.8, 87.5}, {110.3, 14.3}}, label: 'Project · 3 sessions'
+                  Other, 0x1143f9680, {{346.0, 66.0}, {36.0, 36.0}}, identifier: 'square.grid.2x2', label: 'Open Project'
+                    Other, 0x1143f97c0, {{346.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x1143f9900, {{349.3, 66.0}, {29.3, 36.0}}, identifier: 'square.grid.2x2', label: 'Open Project'
+                Other, 0x1143f9a40, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x1143f9b80, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x1143f9cc0, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x1143f9e00, {{0.0, 0.0}, {402.0, 874.0}}
+                        CollectionView, 0x1143f9f40, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x1143fa080, {{0.0, -1632.0}, {402.0, 1823.3}}
+                          Other, 0x1143fa1c0, {{0.0, 0.0}, {402.0, 874.0}}
+                            Other, 0x1143fa300, {{0.0, 0.0}, {402.0, 170.8}}
+                          Other, 0x1143fa440, {{0.0, 0.0}, {402.0, 874.0}}
+                          Cell, 0x1143fa580, {{0.0, 116.0}, {402.0, 75.3}}
+                            Other, 0x1143fa6c0, {{0.0, 116.0}, {402.0, 75.3}}
+                              Other, 0x1143fa800, {{0.0, 116.0}, {402.0, 75.3}}
+                            Other, 0x1143fa940, {{0.0, 116.0}, {402.0, 75.3}}
+                              Other, 0x1143faa80, {{0.0, 116.0}, {402.0, 75.3}}
+                                Other, 0x1143fabc0, {{0.0, 116.0}, {402.0, 75.3}}
+                                  Other, 0x1143fad00, {{28.0, 151.7}, {66.0, 4.0}}
+                                  StaticText, 0x1143fae40, {{0.0, 116.0}, {402.0, 75.3}}, label: '1/3 done · 0 running'
+                          Other, 0x1143faf80, {{0.0, 191.3}, {402.0, 137.7}}
+                          Cell, 0x1143fb0c0, {{0.0, 213.3}, {402.0, 40.3}}
+                            Other, 0x1143fb200, {{0.0, 213.3}, {402.0, 40.3}}
+                            Other, 0x1143fb340, {{0.0, 213.3}, {402.0, 40.3}}
+                              Other, 0x1143fb480, {{0.0, 213.3}, {402.0, 40.3}}
+                                Other, 0x1143fb5c0, {{0.0, 213.3}, {402.0, 40.3}}
+                                  StaticText, 0x1143fb700, {{0.0, 213.3}, {402.0, 40.3}}, label: 'Coordinator'
+                          Cell, 0x1143fb840, {{0.0, 253.7}, {402.0, 75.3}}
+                            Other, 0x1143fb980, {{0.0, 253.7}, {402.0, 75.3}}
+                              Other, 0x1143fbac0, {{0.0, 253.7}, {402.0, 75.3}}
+                            Other, 0x1143fbc00, {{0.0, 253.7}, {402.0, 75.3}}
+                              Other, 0x1143fbd40, {{0.0, 253.7}, {402.0, 75.3}}
+                                Other, 0x1143fbe80, {{0.0, 253.7}, {402.0, 75.3}}
+                                  Other, 0x1143fc000, {{0.0, 258.0}, {150.0, 66.7}}
+                                  Other, 0x1143fc140, {{182.0, 258.0}, {220.0, 66.7}}
+                                  Button, 0x1143fc280, {{0.0, 253.7}, {402.0, 75.3}}, label: 'Coordinate the swipe probe, 14m ago, Watching the member.', value: Waiting for your r...
+                                    StaticText, 0x1143fc3c0, {{16.0, 270.7}, {210.3, 20.3}}, label: 'Coordinate the swipe probe'
+                                    StaticText, 0x1143fc500, {{341.3, 274.2}, {44.7, 13.3}}, label: '14m ago'
+                                    StaticText, 0x1143fc640, {{16.0, 294.0}, {154.7, 18.0}}, label: 'Watching the member.'
+                          Other, 0x1143fc780, {{0.0, 329.0}, {402.0, 1961.0}}
+                          Cell, 0x1143fc8c0, {{0.0, 351.0}, {402.0, 40.3}}
+                            Other, 0x1143fca00, {{0.0, 351.0}, {402.0, 40.3}}
+                            Other, 0x1143fcb40, {{0.0, 351.0}, {402.0, 40.3}}
+                              Other, 0x1143fcc80, {{0.0, 351.0}, {402.0, 40.3}}
+                                Other, 0x1143fcdc0, {{0.0, 351.0}, {402.0, 40.3}}
+                                  StaticText, 0x1143fcf00, {{0.0, 351.0}, {402.0, 40.3}}, label: 'Today'
+                          Cell, 0x1143fd040, {{0.0, 391.3}, {402.0, 75.3}}
+                            Other, 0x1143fd180, {{0.0, 391.3}, {402.0, 75.3}}
+                              Other, 0x1143fd2c0, {{0.0, 391.3}, {402.0, 75.3}}
+                            Other, 0x1143fd400, {{0.0, 391.3}, {402.0, 75.3}}
+                              Other, 0x1143fd540, {{0.0, 391.3}, {402.0, 75.3}}
+                                Other, 0x1143fd680, {{0.0, 391.3}, {402.0, 75.3}}
+                                  Other, 0x1143fd7c0, {{0.0, 395.7}, {150.0, 66.7}}
+                                  Other, 0x1143fd900, {{252.0, 395.7}, {150.0, 66.7}}
+                                  Button, 0x1143fda40, {{0.0, 391.3}, {402.0, 75.3}}, label: 'Member task of the probe, 15m ago, Member reply.', value: Waiting for your r...
+                                    StaticText, 0x1143fdb80, {{16.0, 408.3}, {197.3, 20.3}}, label: 'Member task of the probe'
+                                    StaticText, 0x1143fdcc0, {{341.7, 411.8}, {44.3, 13.3}}, label: '15m ago'
+                                    StaticText, 0x1143fde00, {{16.0, 431.7}, {98.0, 18.0}}, label: 'Member reply.'
+                          Cell, 0x1143fdf40, {{0.0, 466.7}, {402.0, 75.3}}
+                            Other, 0x1143fe080, {{0.0, 466.7}, {402.0, 75.3}}
+                              Other, 0x1143fe1c0, {{0.0, 466.7}, {402.0, 75.3}}
+                            Other, 0x1143fe300, {{0.0, 466.7}, {402.0, 75.3}}
+                              Other, 0x1143fe440, {{0.0, 466.7}, {402.0, 75.3}}
+                                Other, 0x1143fe580, {{0.0, 466.7}, {402.0, 75.3}}
+                                  Other, 0x1143fe6c0, {{0.0, 471.0}, {150.0, 66.7}}
+                                  Other, 0x1143fe800, {{252.0, 471.0}, {150.0, 66.7}}
+                                  Button, 0x1143fe940, {{0.0, 466.7}, {402.0, 75.3}}, label: 'Member in orbit-macos, 16m ago, A member that lives in the other workspace.', value: Waiting for your r...
+                                    StaticText, 0x1143fea80, {{16.0, 483.7}, {178.3, 20.3}}, label: 'Member in orbit-macos'
+                                    StaticText, 0x1143febc0, {{341.3, 487.2}, {44.7, 13.3}}, label: '16m ago'
+                                    StaticText, 0x1143fed00, {{16.0, 507.0}, {300.7, 18.0}}, label: 'A member that lives in the other workspace.'
+                          Other, 0x1143fee40, {{369.0, 116.0}, {30.0, 696.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x1143fef80, {{396.0, 767.7}, {3.0, 41.3}}
+                          Other, 0x1143ff0c0, {{369.0, 116.0}, {30.0, 696.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x1143ff200, {{396.0, 767.7}, {3.0, 41.3}}
+                Other, 0x1143ff340, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x1143ff480, {{0.0, 0.0}, {402.0, 874.0}}
+Path to element:
+ →Application, 0x114357e80, pid: 18181, label: 'SwipeProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.swipeprobe'
+  Output: {
+    Application, 0x1143ff5c0, pid: 18181, label: 'SwipeProbe'
+  }

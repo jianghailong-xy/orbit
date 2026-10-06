@@ -1,0 +1,7 @@
+Test Case '-[SwipeProbeUITests.ProjectSessionsFailureTests testA502PageIsOneSentenceWithRetryThatStaysUpThroughPolls]' started.
+    t =    35.10s Added attachment named '01-failed-read'
+Test Case '-[SwipeProbeUITests.ProjectSessionsFailureTests testA502PageIsOneSentenceWithRetryThatStaysUpThroughPolls]' passed (57.539 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 57.539 (57.543) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 57.539 (57.544) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 57.539 (57.545) seconds
+** TEST SUCCEEDED **

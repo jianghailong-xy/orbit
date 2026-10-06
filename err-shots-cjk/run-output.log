@@ -1,0 +1,24 @@
+==> stub ready after 2s
+iPhone 17 Pro com.apple.CoreSimulator.SimRuntime.iOS-26-5
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+Test Case '-[SwipeProbeUITests.ProjectSessionsFailureTests testA502PageIsOneSentenceWithRetryThatStaysUpThroughPolls]' started.
+Test Case '-[SwipeProbeUITests.ProjectSessionsFailureTests testA502PageIsOneSentenceWithRetryThatStaysUpThroughPolls]' passed (76.280 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 76.280 (76.282) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 76.280 (76.283) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 76.280 (76.287) seconds
+** TEST SUCCEEDED **
+.err-probe/run.sh: line 60:  2611 Terminated: 15          python3 -u stub.py 8765 "$OUT/requests.log" "$OUT/server-up" > "$OUT/stub.out" 2>&1
+total 672
+drwxr-xr-x  13 runner  staff     416 Oct  6 09:48 .
+drwxr-xr-x  13 runner  staff     416 Oct  6 09:38 ..
+-rw-r--r--   1 runner  staff  123495 Oct  6 09:47 01-failed-read.png
+-rw-r--r--   1 runner  staff  161700 Oct  6 09:47 02-after-retry.png
+drwxr-xr-x   6 runner  staff     192 Oct  6 09:48 attachments
+-rw-r--r--   1 runner  staff     389 Oct  6 09:48 not-served.txt
+-rw-r--r--@  1 runner  staff     441 Oct  6 09:47 ProjectSessionsFailureTeststestA502PageIsOneSentenceWithRetryThatStaysUpThroughPolls-notes.txt
+-rw-r--r--   1 runner  staff    4057 Oct  6 09:47 requests.log
+-rw-r--r--   1 runner  staff     120 Oct  6 09:48 sample-app.out
+-rw-r--r--@  1 runner  staff       2 Oct  6 09:47 server-up
+-rw-r--r--   1 runner  staff      49 Oct  6 09:35 stub.out
+-rw-r--r--@  1 runner  staff   15828 Oct  6 09:47 tree-after-retry.txt
+-rw-r--r--@  1 runner  staff   11540 Oct  6 09:47 tree-failed-read.txt
