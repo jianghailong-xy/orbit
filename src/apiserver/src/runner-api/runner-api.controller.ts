@@ -337,6 +337,7 @@ import {
   PROVIDER_UNAVAILABLE_ERROR,
   SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
   advertisedRunnerProviders,
+  dshRuntimeUnavailable,
   runnerAdvertisesProvider,
   withProviderDeclarations,
 } from './runner-provider-support';
@@ -539,6 +540,20 @@ async function persistedDshSupport(db: Prisma.TransactionClient, runnerId: strin
     where: { id: runnerId }, select: { capabilities: true, capabilitiesReportedAt: true },
   });
   return !!snapshot?.capabilitiesReportedAt && snapshot.capabilities.includes('provider:dsh');
+}
+
+/**
+ * What a claim from a runner whose request names dsh must withhold dsh sessions for: the upgrade
+ * notice when its persisted heartbeat does not declare dsh (P1b), else the install state its engine
+ * report gives (dshRuntimeUnavailable), null when it can start one. Reclaim and lease takeover ask
+ * only persistedDshSupport: they hand back sessions this runner already runs.
+ */
+async function persistedDshRefusal(db: Prisma.TransactionClient, runnerId: string): Promise<string | null> {
+  const snapshot = await db.runner.findUnique({
+    where: { id: runnerId }, select: { capabilities: true, capabilitiesReportedAt: true, engines: true },
+  });
+  if (!snapshot?.capabilitiesReportedAt || !snapshot.capabilities.includes('provider:dsh')) return DSH_RUNNER_UPGRADE_ERROR;
+  return dshRuntimeUnavailable(snapshot.engines);
 }
 
 async function assertDshLeaseSupport(
@@ -2145,9 +2160,16 @@ export class RunnerApiController {
     const supportsTerminalHandoff = runnerSupportsCapability(capabilities, SESSION_TERMINAL_HANDOFF_V1);
     const supportsSourcePin = runnerSupportsCapability(capabilities, SESSION_SOURCE_PIN_V1);
     const supportedProviders = advertisedRunnerProviders(providerHeader);
-    if (supportedProviders.includes(AgentProvider.DSH) && !await persistedDshSupport(this.prisma, runner.id)) {
+    const dshRefusal = supportedProviders.includes(AgentProvider.DSH)
+      ? await persistedDshRefusal(this.prisma, runner.id)
+      : null;
+    if (dshRefusal === DSH_RUNNER_UPGRADE_ERROR) {
       supportedProviders.splice(supportedProviders.indexOf(AgentProvider.DSH), 1);
     }
+    // Declared but not startable on this machine (not installed, or a platform or version the
+    // runner rejects). The declaration stays as sent; the queue holds the dsh rows instead, and
+    // they wait with that notice until a heartbeat reports the CLI ready, rather than failing.
+    const dshUnavailable = dshRefusal === DSH_RUNNER_UPGRADE_ERROR ? null : dshRefusal;
     for (const { provider, upgradeError } of ADVERTISED_RUNTIMES) {
       if (supportedProviders.includes(provider)) continue;
       // Explain the stall on the OpenCode/Antigravity rows themselves — a Gemini key's included,
@@ -2166,7 +2188,7 @@ export class RunnerApiController {
       await this.markSourceProtocolUnsupported(runner.id);
     }
     const job = await this.queue.claimSessionForRunner(
-      { id: runner.id, supportedProviders },
+      { id: runner.id, supportedProviders, ...(dshUnavailable ? { dshUnavailable } : {}) },
       LONG_POLL_MS,
       supportsTerminalHandoff,
       supportsSourcePin,
