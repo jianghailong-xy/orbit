@@ -3585,7 +3585,10 @@ export class SessionsService {
           FROM "session" s LEFT JOIN "task" t ON t."id" = s."task_id"
          WHERE s."id" = ${id}::uuid AND s."owner_id" = ${ownerId}::uuid
       `);
-      if (target?.taskId) {
+      // Another account's session, or none: not found, as disarming answers it — not "not waiting
+      // on a retry", which describes a session the caller has.
+      if (!target) throw new NotFoundException('session not found');
+      if (target.taskId) {
         if (target.projectId) {
           await tx.$queryRaw(Prisma.sql`
             SELECT 1 FROM "project" p WHERE p."id" = ${target.projectId}::uuid FOR NO KEY UPDATE
@@ -3623,8 +3626,8 @@ export class SessionsService {
           completedAt: null,
           // The role the refusal above was decided against, so a demotion or promotion landing
           // inside this transaction cannot leave the two disagreeing.
-          startsTaskWork: target?.startsTaskWork ?? false,
-          taskId: target?.taskId ?? null,
+          startsTaskWork: target.startsTaskWork,
+          taskId: target.taskId,
           OR: [
             { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
             { status: RunStatus.FAILED },

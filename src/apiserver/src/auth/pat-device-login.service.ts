@@ -119,7 +119,7 @@ export class PatDeviceLoginService {
    */
   async lookup(userId: string, userCode: string) {
     this.throttle(userId);
-    const row = await this.open(userCode);
+    const row = await this.open(userId, userCode);
     return {
       userCode: row.userCode,
       name: row.name,
@@ -140,7 +140,7 @@ export class PatDeviceLoginService {
    */
   async approve(userId: string, userCode: string) {
     this.throttle(userId);
-    const row = await this.open(userCode);
+    const row = await this.open(userId, userCode);
     if (row.status === 'PENDING') {
       await this.pats.assertIssuable(userId, row.name);
       const now = new Date();
@@ -149,7 +149,7 @@ export class PatDeviceLoginService {
         data: { status: 'APPROVED', decidedById: userId, decidedAt: now },
       });
       if (decided.count === 1) return { status: 'APPROVED', name: row.name };
-      return this.decidedAlready(userId, await this.open(userCode), 'APPROVED');
+      return this.decidedAlready(userId, await this.open(userId, userCode), 'APPROVED');
     }
     return this.decidedAlready(userId, row, 'APPROVED');
   }
@@ -157,7 +157,7 @@ export class PatDeviceLoginService {
   /** Deny a request: the CLI is told so, and no token is issued for it. Idempotent as `approve` is. */
   async deny(userId: string, userCode: string) {
     this.throttle(userId);
-    const row = await this.open(userCode);
+    const row = await this.open(userId, userCode);
     if (row.status === 'PENDING') {
       const now = new Date();
       const decided = await this.prisma.patDeviceLogin.updateMany({
@@ -165,15 +165,20 @@ export class PatDeviceLoginService {
         data: { status: 'DENIED', decidedById: userId, decidedAt: now },
       });
       if (decided.count === 1) return { status: 'DENIED', name: row.name };
-      return this.decidedAlready(userId, await this.open(userCode), 'DENIED');
+      return this.decidedAlready(userId, await this.open(userId, userCode), 'DENIED');
     }
     return this.decidedAlready(userId, row, 'DENIED');
   }
 
-  /** A request still open to a decision or to its page, or 404 — gone, or past its ten minutes. */
-  private async open(userCode: string): Promise<Row> {
+  /**
+   * A request still open to `userId`'s decision or page, or 404 — gone, past its ten minutes, or
+   * decided by another account. Until somebody decides it, a request is open to whoever holds its
+   * code (that is the device flow); once decided it is its decider's, and every other account is
+   * answered as for a code that names nothing — not shown its name, scopes or host.
+   */
+  private async open(userId: string, userCode: string): Promise<Row> {
     const row = await this.prisma.patDeviceLogin.findUnique({ where: { userCode } });
-    if (!row || row.expiresAt.getTime() <= Date.now()) {
+    if (!row || row.expiresAt.getTime() <= Date.now() || (row.decidedById !== null && row.decidedById !== userId)) {
       throw new NotFoundException('login request not found or expired — run `orbit login` again');
     }
     return row;
@@ -190,9 +195,7 @@ export class PatDeviceLoginService {
       code: 'PAT_DEVICE_LOGIN_DECIDED',
       message: decision === 'DENIED'
         ? 'This login request was already denied — run `orbit login` again'
-        : row.decidedById === userId
-          ? 'This login request was already approved'
-          : 'This login request was already approved from another account',
+        : 'This login request was already approved',
     });
   }
 
