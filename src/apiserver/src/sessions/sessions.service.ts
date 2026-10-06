@@ -209,7 +209,7 @@ import {
 } from './transcript-around';
 import { EngineSignedOutConflict, engineSignInAction, signedOutEngineRefusal } from './engine-signin-preflight';
 import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
-import { DSH_RUNNER_UPGRADE_ERROR } from '../runner-api/runner-provider-support';
+import { DSH_RUNNER_UPGRADE_ERROR, dshRuntimeUnavailable } from '../runner-api/runner-provider-support';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import {
   accountLabel,
@@ -1127,6 +1127,10 @@ export class SessionsService {
         dto.model ?? '',
         resolvePermissionMode(dto.permissionMode ?? accountPermissionMode, null),
       );
+      // Declaring dsh does not install it. Refused here like the upgrade, rather than creating a
+      // session the runner would claim only to fail at launch (dshRuntimeUnavailable).
+      const unavailable = dshRuntimeUnavailable(targetRunner.engines);
+      if (unavailable) throw new ConflictException(unavailable);
     }
     // The Codex or Claude account this session runs on: the one picked for it — which pins it there —
     // else, when its workspace leaves the account to Orbit, the runner's account whose quota resets
@@ -7446,7 +7450,7 @@ export class SessionsService {
       const current = await tx.session.findUniqueOrThrow({
         where: { id },
         include: {
-          assignedRunner: { select: { id: true, status: true, lastHeartbeatAt: true, capabilities: true, capabilitiesReportedAt: true } },
+          assignedRunner: { select: { id: true, status: true, lastHeartbeatAt: true, capabilities: true, capabilitiesReportedAt: true, engines: true } },
         },
       });
       // Everything was locked in the order project → task → session, but the SESSION was the last
@@ -7585,6 +7589,9 @@ export class SessionsService {
           dto.model ?? current.model ?? '',
           resolvePermissionMode(dto.permissionMode ?? current.permissionMode, null),
         );
+        // Nothing is written: the session stays as it was and revives once the CLI is installed.
+        const unavailable = dshRuntimeUnavailable(current.assignedRunner.engines);
+        if (unavailable) throw new ConflictException(unavailable);
       }
       // The orchestration charge, in the same place createTurn puts it: past idempotency and
       // every refusal above, before the row it is paying for. A revive that is refused after
