@@ -328,6 +328,22 @@ v1 的落地。最初设想由各 service 的读写入口过滤；实际做法�
   `actor_id = userId`。runner 通道建任务不记。其余用户写路由都不产生 activity，v1 不补。
   落地时共 186 条：PAT 可达 111 条，PAT 一律 403 的 75 条；逐条清单在落地任务的评论里。
   之后第 5 节把 `PATCH /projects/:id/integration` 改为对 PAT 一律 403，两数变为 110 与 76。
+- **请求级审计**补上了 PAT 一侧的缺口：经 PAT 的每个写请求（POST / PUT / PATCH / DELETE）在应答发出之后
+  写一行 activity，`actor_id = userId`、`credential_kind = 'PAT'`、`credential_id` = 令牌 id。
+  - `type = 'pat.request'`：JwtAuthGuard 放行的请求。`payload = {method, route, status, params}`。
+    `route` 是路由模板，写法同 §6.2 普查（`/tasks/:id`，不带 `/api`，不是带具体 id 的实际路径）。
+    `status` 是应答的状态码，handler 答的 4xx、5xx 也照写。`params` 只取路径参数里指向行的那些
+    （`:id` 和以 `Id` 结尾的），一律写成公开 id；`:token`、`:slug`、`:engine` 之类不记。
+  - `type = 'pat.request.denied'`：因令牌无权而被拒的请求，即抛出 `PatRefusal` 的那些。包括 JwtAuthGuard 拒的
+    （`@PatForbidden`、未声明、缺 scope、workspace 限定），也包括 §5 只有所有者能设的字段：这种请求已经过了 guard，
+    是在 service 里被拒的。payload 在上面四项之外带拒绝码 `code`；拒绝体里有 `reason`、`scope`、`fields` 时一并带上，
+    不带 `message`。其他拒绝，例如业务规则的 403、wiki 未开放的 404，不算越权，照样记 `pat.request` 和状态码。
+  - 不记：读请求（GET 等），放行和被拒都不记；LOGIN 凭证的请求；401，那时令牌还没解析出来，不知道是谁的。
+    请求体一律不读，正文、密钥这类内容不进审计。
+  - 建任务的两条路由照常保留事务内的 `task.created`，请求级记录照样再写一行。两者用途不同，不去重。
+  - 记录不属于请求本身：应答发出之后用一条单独的语句写入（autocommit INSERT，已登记 db-write-inventory）。
+    写入失败只记一行日志，不重试，也改不了已经发出的应答。调用方不等应答就断开时同样记一行，`status` 为 null。
+  - LOGIN 一侧不变：仍然只有建任务记 activity，上一条列的缺口在 LOGIN 一侧照旧。
 - 设置页的令牌详情显示「最近使用」与最近 N 条经该令牌的 activity。
 
 ### 6.5 签发接口

@@ -29,7 +29,8 @@
  *       user's id, as from the Web — and the `activity` row it gets (0384, §6.4) names the door: PAT
  *       and the token's id, or LOGIN and no id. Every user door that creates tasks — the single
  *       create, the batch, the paired create — records each task it inserts once; a dry run and a
- *       write the token was not granted record nothing.
+ *       write the token was not granted record no task. (The `pat.request` row each of the token's
+ *       requests also leaves is `pat-request-audit.pg.spec.ts`'s.)
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/auth/personal-access-token.pg.spec.ts
  *
@@ -604,7 +605,7 @@ test('(10) the production apiserver: a token reaches a route holding the scope i
 
 // ── (11) whose write it is, and which door it came through ────────────────────────────────────
 
-test("(11) the production apiserver: a task created through a token is its user's and its activity row names the token; through a login the row says LOGIN; every user door that creates tasks records each task it inserts, and nothing else is recorded", {
+test("(11) the production apiserver: a task created through a token is its user's and its activity row names the token; through a login the row says LOGIN; every user door that creates tasks records each task it inserts, and no other task is recorded", {
   skip: !URL, concurrency: 1, timeout: 300_000,
 }, async (t) => {
   const url = URL!;
@@ -745,7 +746,7 @@ test("(11) the production apiserver: a task created through a token is its user'
   const refused = await call(server, 'POST', '/api/tasks', reader.token, task('refused its scope'));
   assert.equal(refused.status, 403, refused.text);
 
-  // Six tasks, six rows: one each, nothing recorded twice, nothing for the preview or the refusal.
+  // Six tasks, six rows: one each, nothing recorded twice, no task for the preview or the refusal.
   const titles = await sql.query('SELECT title FROM task WHERE owner_id = $1 ORDER BY title', [userId]);
   assert.deepEqual(titles.rows.map((row) => row.title), [
     '[VERIFY] a subject',
@@ -759,7 +760,7 @@ test("(11) the production apiserver: a task created through a token is its user'
     `SELECT credential_kind, credential_id, count(*)::int AS rows,
             count(DISTINCT payload->>'taskId')::int AS tasks,
             bool_and(payload->>'taskId' IN (SELECT id::text FROM task WHERE owner_id = $1)) AS all_theirs
-       FROM activity WHERE actor_id = $1 GROUP BY 1, 2 ORDER BY 1`,
+       FROM activity WHERE actor_id = $1 AND type = 'task.created' GROUP BY 1, 2 ORDER BY 1`,
     [userId],
   );
   assert.deepEqual(recorded.rows, [

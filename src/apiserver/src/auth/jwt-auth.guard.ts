@@ -1,7 +1,6 @@
 import {
   CanActivate,
   ExecutionContext,
-  ForbiddenException,
   Injectable,
   Optional,
   UnauthorizedException,
@@ -12,7 +11,9 @@ import { PUBLIC_ID_FIELDS, toUuid } from '@orbit/shared';
 import type { AuthUser } from '../common/current-user.decorator';
 import { visitorAddress } from '../shared/public-surface.guard';
 import { ALLOW_QUERY_TOKEN } from './allow-query-token.decorator';
+import { PatRequestAudit, noteRefusal } from './pat-request-audit';
 import {
+  PatRefusal,
   type PatWorkspaceConfinable,
   type PatWorkspaceObject,
   patDeclaration,
@@ -32,6 +33,8 @@ export class JwtAuthGuard implements CanActivate {
     // AuthModule provides it everywhere. A module that does not (a test harness) has no personal
     // access tokens: every one is answered 401, as an unknown token is.
     @Optional() private readonly pats?: PatService,
+    // Provided alongside PatService. Without it a token's writes go unrecorded, and nothing else changes.
+    @Optional() private readonly audit?: PatRequestAudit,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -77,8 +80,15 @@ export class JwtAuthGuard implements CanActivate {
         },
       };
       req.user = user;
-      const workspaceConfinable = this.admitToken(context, grant.scopes);
-      if (grant.workspaceIds.length > 0) await this.confine(req, workspaceConfinable, grant);
+      // Every write a token makes is recorded once it is answered, the ones refused here included (§6.4).
+      this.audit?.watch(req, context.switchToHttp().getResponse(), grant);
+      try {
+        const workspaceConfinable = this.admitToken(context, grant.scopes);
+        if (grant.workspaceIds.length > 0) await this.confine(req, workspaceConfinable, grant);
+      } catch (error) {
+        noteRefusal(req, error);
+        throw error;
+      }
       return true;
     }
 
@@ -101,15 +111,15 @@ export class JwtAuthGuard implements CanActivate {
    */
   private admitToken(context: ExecutionContext, scopes: string[]): PatWorkspaceConfinable | undefined {
     const declared = patDeclaration(this.reflector, context.getHandler(), context.getClass());
-    if (declared.kind === 'FORBIDDEN') throw new ForbiddenException(patForbiddenBody(declared.reason));
+    if (declared.kind === 'FORBIDDEN') throw new PatRefusal(patForbiddenBody(declared.reason));
     if (declared.kind === 'UNDECLARED') {
-      throw new ForbiddenException({
+      throw new PatRefusal({
         code: 'PAT_ROUTE_UNDECLARED',
         message: 'This route declares no access token scope, so a personal access token cannot call it',
       });
     }
     if (!scopes.includes(declared.scope)) {
-      throw new ForbiddenException({
+      throw new PatRefusal({
         code: 'PAT_SCOPE_MISSING',
         scope: declared.scope,
         message: `This access token was not granted the ${declared.scope} scope this route needs`,
@@ -135,7 +145,7 @@ export class JwtAuthGuard implements CanActivate {
     if (confinable === 'LIST') return;
     // A declaration that names nothing (only the census keeps one from being written) judges nothing.
     if (!confinable || (!confinable.params && !confinable.requires)) {
-      throw new ForbiddenException({
+      throw new PatRefusal({
         code: 'PAT_ROUTE_NOT_WORKSPACE_CONFINABLE',
         message:
           'This access token is confined to workspaces, and this route cannot be confined to one; '
@@ -174,7 +184,7 @@ export class JwtAuthGuard implements CanActivate {
     }
     if (outside.size > 0) {
       const fields = [...outside];
-      throw new ForbiddenException({
+      throw new PatRefusal({
         code: 'PAT_WORKSPACE_OUT_OF_SCOPE',
         fields,
         message:
