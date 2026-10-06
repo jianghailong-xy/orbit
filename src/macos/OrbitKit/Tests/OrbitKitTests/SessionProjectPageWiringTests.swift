@@ -328,9 +328,10 @@ final class SessionProjectPageWiringTests: XCTestCase {
         ]
         XCTAssertEqual(order, order.sorted())
         XCTAssertTrue(page.contains("$0.projectMembership?.role != .coordinator"))
-        let sections = try slice(page, from: "private var timeSections: [SessionTimeSection] {", to: "\n    }")
-        XCTAssertTrue(sections.contains("SessionTimeGrouping.sections(sessions.filter"))
-        XCTAssertTrue(sections.contains("pinnedFirst: false"))
+        let sections = try slice(page, from: "private var timeSections: [ProjectTimelineSection] {", to: "\n    }")
+        XCTAssertTrue(sections.contains("ProjectTimeline.sections(sessions: sessions.filter"),
+                      "the page's recency sections are the session grouping's, merges drawn among them")
+        XCTAssertTrue(sections.contains("merges: merge?.receipts ?? []"))
         XCTAssertTrue(page.contains(".task(id: address)"))
         XCTAssertTrue(page.contains("await app.loadProjectSessions(address)"))
         let progress = try slice(page, from: "private var progressLine: some View {", to: "\n    }")
@@ -373,7 +374,9 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let landing = try slice(page, from: "@ViewBuilder private var landingLine: some View {", to: "\n    }")
         XCTAssertTrue(landing.contains("integration.inFlight != nil"), "no landing in flight leaves the card as it was")
         XCTAssertTrue(landing.contains("TimelineView(.periodic(from: .now, by: 1))"))
-        XCTAssertTrue(landing.contains("ProjectPage.landingLine(integration, now: context.date,"))
+        XCTAssertTrue(landing.contains("ProjectMergeCard.progressLandingLine(integration, now: context.date,"),
+                      "a merge job's live line is the merge card's, not the progress card's")
+        XCTAssertTrue(landing.contains("!ProjectMergeCard.isMergeJob(integration.inFlight)"))
         XCTAssertTrue(landing.contains("updatedAt: app.projectSessionsIntegrationReadAt"))
         XCTAssertTrue(landing.contains("refreshFailed: app.projectSessionsIntegrationReadFailed"))
         XCTAssertTrue(landing.contains("ProjectLandingRow(line: line)"), "the same row the project page draws")
@@ -387,6 +390,50 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let guardRange = try XCTUnwrap(load.range(of: "guard projectSessionsAddress == address, !Task.isCancelled else { return }\n        if let integration"))
         XCTAssertLessThan(guardRange.lowerBound, store.lowerBound)
         XCTAssertTrue(load.contains("projectSessionsIntegrationReadFailed = true"))
+    }
+
+    /// The merge into main lives on this page (owner decision 2026-10-06): its card under the
+    /// progress card, its records on the timeline, and both sheets hosted by the page itself.
+    func testThePageCarriesTheMergeIntoMainUnderTheProgressCardAndOnItsTimeline() throws {
+        let source = code(try appSource("Views/SessionProjectPage.swift"))
+        let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
+        let order = try [
+            XCTUnwrap(page.range(of: "            progressCard")?.lowerBound),
+            XCTUnwrap(page.range(of: "            mergeCard")?.lowerBound),
+            XCTUnwrap(page.range(of: "Section(SessionProjectCopy.coordinatorSection)")?.lowerBound),
+        ]
+        XCTAssertEqual(order, order.sorted(), "the merge card sits between the progress card and the coordinator")
+        let merge = try slice(page, from: "private var merge: ProjectMergeModel? {", to: "\n    }")
+        XCTAssertTrue(merge.contains("$0.projectID == address.projectID"),
+                      "another project's merge must never show on this page")
+        let card = try slice(page, from: "@ViewBuilder private var mergeCard: some View {", to: "\n    }\n")
+        XCTAssertTrue(card.contains("ProjectMergeCard.shape(promotion: merge.current,"))
+        XCTAssertTrue(card.contains("ProjectMergeCard.mergeLandingLine($0, now: context.date,"))
+        XCTAssertTrue(card.contains("promotionReview = PromotionReviewTarget(id: $0)"))
+        XCTAssertTrue(page.contains("case .merge(let receipt): mergeRow(receipt)"))
+        XCTAssertTrue(page.contains("case .session(let session): sessionRow(session)"))
+        XCTAssertTrue(page.contains("PromotionReviewSheet(source: merge, promotionID: target.id)"),
+                      "the page opens the conversation's own review, reading the page's model")
+        XCTAssertTrue(page.contains(".sheet(item: $promotionReceipt) { PromotionReceiptSheet(promotion: $0.promotion) }"))
+        let task = try slice(page, from: ".task(id: address) {", to: "\n        }")
+        XCTAssertEqual(task.components(separatedBy: "await app.loadProjectMerge(address)").count - 1, 2,
+                       "the merge is read on arrival and on every poll")
+
+        let app = code(try appSource("AppModel.swift"))
+        let load = try slice(app, from: "func loadProjectMerge(_ address: SessionProjectAddress, force: Bool = false) async {",
+                             to: "\n    }")
+        XCTAssertTrue(load.contains("projectSessionsMerge?.projectID != address.projectID"))
+        XCTAssertTrue(load.contains("ProjectMergeModel(projectID: address.projectID, api: api)"))
+        XCTAssertFalse(load.contains("async let"))
+        let model = try appSource("ProjectMergeModel.swift")
+        XCTAssertFalse(code(model).contains("async let"), "the model's reads follow loadProjectSessions' rule")
+        XCTAssertEqual(try branches(of: "final class ProjectMergeModel: PromotionReviewSource", in: model), ["os(iOS)"])
+
+        // The banner's press on a merge waiting for the owner opens this page, not the conversation.
+        let banner = try slice(app, from: "func openNeedsYouItem(_ s: Session, _ item: SessionOwnerItem, projectInColumn: Bool = false) {",
+                               to: "\n    }")
+        XCTAssertTrue(banner.contains("if item.kind == .promotionApproval, let projectID = s.projectMembership?.projectId {"))
+        XCTAssertTrue(banner.contains("return openProjectSessions(projectID, inColumn: projectInColumn)"))
     }
 
     func testTheProjectUILayerIsCompiledForIOSOnly() throws {

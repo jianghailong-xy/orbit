@@ -1910,7 +1910,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // pool_api_key, written by the pool gateways when a 429 outlasts the wait they may hold open.
       // Two ADD COLUMN of a nullable timestamp and nothing else — no task, project, acceptance, DONE
       // fence, trigger or function is touched, and no existing row is backfilled.
-      '0382_pool_credential_throttle'],
+      '0382_pool_credential_throttle',
+      // Personal access tokens (0383): one new table, personal_access_token, with its own CHECKs,
+      // indexes and one foreign key to `user` (ON DELETE CASCADE). No existing table, column,
+      // constraint, function, trigger or type is altered or dropped; no task, project, acceptance
+      // or DONE fence object is named, and no row is written.
+      '0383_personal_access_token'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

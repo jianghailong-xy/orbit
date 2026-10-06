@@ -49,7 +49,9 @@ function createFixture(
       workspace_id: 'workspace-1', provider: options.seed ?? 'claude',
       provider_builtin: !options.seed || options.seed === 'claude',
     }],
-    runner: { findFirst: async () => ({ id: 'runner-1', capabilities: ['provider:dsh'], capabilitiesReportedAt: new Date() }) },
+    // A runner that can start Harness: it declares dsh and its engine report shows the pinned CLI ready.
+    runner: { findFirst: async () => ({ id: 'runner-1', capabilities: ['provider:dsh'], capabilitiesReportedAt: new Date(),
+      engines: [{ engine: 'dsh', installed: true, version: '0.2.0-rc.2', auth: 'unknown', dsh: { versionCompatible: true } }] }) },
     user: { findUnique: async () => ({ preferences: options.preferences ?? {} }) },
     task: { findFirst: async () => ({
       id: 'task-1', projectId: null, verifiesTaskId: null, pinnedRevision: null,
