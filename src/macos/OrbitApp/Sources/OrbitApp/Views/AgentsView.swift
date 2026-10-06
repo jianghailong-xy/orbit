@@ -1287,9 +1287,8 @@ struct NewSessionView: View {
                 VStack(spacing: 18) {
                     // Which engine runs this session is the hero — the native port of web's
                     // `NewSessionProviderHero`: the vendor's own mark, then the engine's name as the
-                    // one tappable identity, with the provider it spends when that is not its own
-                    // sign-in ("via DeepSeek") — picked in the composer's Provider menu. The
-                    // workspace name sits in the iOS navigation bar; macOS keeps its workspace
+                    // one tappable identity. Which provider of it the session spends is the
+                    // composer's Provider menu's to pick and to say. The workspace name sits in the iOS navigation bar; macOS keeps its workspace
                     // switcher below the hero.
                     VStack(spacing: 14) {
                         ProviderMark(provider: currentEngine.slug, size: 68,
@@ -1468,18 +1467,18 @@ struct NewSessionView: View {
     /// this workspace last ran there (web parity).
     private var engines: [EngineChoice] {
         SessionProviderChoices.engines(providerChoices, configured: draft.configuredProviders,
-                                       preferred: [draft.provider, agent.defaultProvider])
+                                       preferred: [draft.providerChoice, agent.defaultProvider])
     }
 
     /// The engine of the draft's pick — synthesized when no group holds it (`opencode`, a removed
     /// provider) or holds it but cannot run it, so the hero still names what it would run.
     private var currentEngine: EngineChoice {
-        engines.first { $0.provider.slug == draft.provider }
+        engines.first { $0.provider.slug == draft.providerChoice }
             ?? SessionProviderChoices.engine(for: currentProviderChoice, configured: draft.configuredProviders)
     }
 
     private var currentProviderChoice: ProviderChoice {
-        SessionProviderChoices.current(draft.provider, in: providerChoices,
+        SessionProviderChoices.current(draft.providerChoice, in: providerChoices,
                                        configured: draft.configuredProviders,
                                        catalog: draft.modelCatalog,
                                        antigravity: draft.runnerAntigravity)
@@ -1492,7 +1491,7 @@ struct NewSessionView: View {
     /// No account either (web parity): the composer's quota gauge names it in its detail.
     private var heroSubtitle: String {
         draft.providerCapabilitiesResolved
-            ? AgentDefaults.friendlyName(draft.modelID, for: draft.provider,
+            ? AgentDefaults.friendlyName(draft.modelID, for: draft.providerChoice,
                                          catalog: draft.modelCatalog,
                                          configured: draft.configuredProviders)
             : "Runtime default"

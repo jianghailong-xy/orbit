@@ -1,0 +1,40 @@
+{
+  "region": {
+    "x": 904,
+    "y": 16,
+    "width": 360,
+    "height": 146,
+    "top": 16,
+    "right": 1264,
+    "bottom": 162,
+    "left": 904
+  },
+  "viewport": {
+    "width": 1280,
+    "height": 900
+  },
+  "style": {
+    "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+    "fontSize": "16px",
+    "lineHeight": "18.4px",
+    "zIndex": "2050"
+  },
+  "card": [
+    {
+      "rect": {
+        "x": 904,
+        "y": 16,
+        "width": 360,
+        "height": 146,
+        "top": 16,
+        "right": 1264,
+        "bottom": 162,
+        "left": 904
+      },
+      "background": "linear-gradient(rgb(253, 236, 235), rgb(253, 236, 235)) repeat scroll 0% 0% / auto padding-box border-box, rgb(255, 255, 255) none repeat scroll 0% 0% / auto padding-box border-box",
+      "border": "1px solid rgb(255, 204, 199)",
+      "shadow": "rgba(15, 23, 42, 0.12) 0px 8px 22px 0px",
+      "color": "rgb(31, 35, 41)"
+    }
+  ]
+}

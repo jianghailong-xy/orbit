@@ -21,6 +21,7 @@ import {
 } from './pool-admission';
 import { selectPoolMember, spentUntil } from './pool-select';
 import { withPreset } from './preset-overlay';
+import { runsOnOpenCode } from './custom-provider';
 import { pickFreeSlug, slugBase } from './provider-slug';
 
 /**
@@ -263,6 +264,9 @@ export class ProvidersService {
     return rows.map(({ id, ownerId, baseUrl, apiKeyEnc, ...picker }) => ({
       ...withPreset(picker),
       planUsage: this.planUsage.snapshot({ id, ownerId, runtime: picker.runtime, baseUrl, apiKeyEnc }),
+      // Whether an OpenCode session may spend this key as well as its own engine (shared
+      // `openCodeKeys`): the clients list it under OpenCode on this, and only this.
+      runsOnOpenCode: runsOnOpenCode({ runtime: picker.runtime, enabled: true, apiKeyEnc }),
     }));
   }
 

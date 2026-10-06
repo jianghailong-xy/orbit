@@ -1,0 +1,114 @@
+Auto-merging src/web/src/index.css
+Merge made by the 'ort' strategy.
+ .../evidence/session-list-projects/validation.json |  35 +
+ docs/evidence/session-list-projects/web.json       |  65 ++
+ docs/evidence/session-list-projects/web.png        | Bin 0 -> 122115 bytes
+ .../04-web-project-sessions-actual.html            |   1 +
+ .../04-web-project-sessions-actual.json            |  50 ++
+ .../04-web-project-sessions-actual.mjs             | 157 +++++
+ .../04-web-project-sessions-actual.png             | Bin 0 -> 797696 bytes
+ .../04-web-project-sessions-list.png               | Bin 0 -> 171676 bytes
+ .../04-web-project-sessions-menu.png               | Bin 0 -> 186030 bytes
+ .../04-web-project-sessions-page-column.png        | Bin 0 -> 121306 bytes
+ .../04-web-project-sessions-page-menu.png          | Bin 0 -> 254159 bytes
+ .../04-web-project-sessions-page.png               | Bin 0 -> 241701 bytes
+ .../04-web-project-sessions-phone.png              | Bin 0 -> 122632 bytes
+ .../session-project-navigation/project-node22.log  |  12 +
+ .../session-project-navigation/project-node26.log  |  12 +
+ .../session-project-navigation/verification.json   |  76 +++
+ .../src/projects/project-list-rollup.pg.spec.ts    |  38 ++
+ src/apiserver/src/projects/project-list-rollup.ts  |  30 +-
+ .../projects/project-sidebar-route.http.spec.ts    |   4 +-
+ .../src/projects/projects.service.spec.ts          |  30 +
+ src/apiserver/src/projects/projects.service.ts     |  17 +-
+ src/apiserver/src/realtime/realtime.service.ts     |   2 +
+ src/apiserver/src/realtime/stream-for-user.spec.ts |  17 +
+ .../sessions/session-capabilities-payload.spec.ts  |  12 +-
+ .../sessions/session-coordinator-project.spec.ts   |  15 +
+ .../sessions/session-project-membership.pg.spec.ts | 402 +++++++++++
+ .../src/sessions/session-project-membership.ts     |  58 ++
+ src/apiserver/src/sessions/sessions.controller.ts  |   2 +
+ src/apiserver/src/sessions/sessions.service.ts     |  16 +-
+ .../src/sessions/system-view-compat.spec.ts        |   5 +-
+ .../OrbitApp/Sources/OrbitApp/AgentsModel.swift    |  10 +
+ src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift |  66 +-
+ .../OrbitApp/Sources/OrbitApp/ProjectsModel.swift  |  10 +-
+ .../Sources/OrbitApp/Views/AgentsView.swift        |  76 ++-
+ .../Sources/OrbitApp/Views/CompactShell.swift      |   1 +
+ .../Sources/OrbitApp/Views/SessionFolderPage.swift |  60 +-
+ .../OrbitApp/Views/SessionProjectListSupport.swift |  18 +
+ .../OrbitApp/Views/SessionProjectPage.swift        | 513 ++++++++++++++
+ .../Sources/OrbitApp/Views/SessionRowActions.swift |   1 +
+ .../OrbitKit/Sources/OrbitKit/App/Navigation.swift |  56 +-
+ .../Sources/OrbitKit/App/ProjectAttention.swift    |   3 +-
+ .../OrbitKit/App/SessionFolderGrouping.swift       |  12 +-
+ .../Sources/OrbitKit/App/SessionProjectCopy.swift  |  39 ++
+ .../OrbitKit/App/SessionProjectGrouping.swift      | 210 ++++++
+ .../Sources/OrbitKit/App/SessionUpsert.swift       |   8 +-
+ .../Sources/OrbitKit/App/WorkspaceActivity.swift   |  12 +-
+ .../Sources/OrbitKit/Models/ControlEvent.swift     |   7 +
+ .../OrbitKit/Sources/OrbitKit/Models/DTOs.swift    |   8 +-
+ .../Sources/OrbitKit/Models/Projects.swift         |  26 +-
+ .../OrbitKit/Models/SessionProjectMembership.swift |  32 +
+ .../OrbitKit/Sources/OrbitKit/Net/APIClient.swift  |  14 +-
+ .../OrbitKitTests/SessionMoveWiringTests.swift     |  16 +-
+ .../OrbitKitTests/SessionProjectCodableTests.swift | 221 +++++++
+ .../SessionProjectCopyParityTests.swift            |  97 +++
+ .../OrbitKitTests/SessionProjectCopyTests.swift    |  20 +
+ .../SessionProjectGroupingTests.swift              | 375 +++++++++++
+ .../SessionProjectNavigationTests.swift            | 135 ++++
+ .../SessionProjectPageWiringTests.swift            | 294 +++++++++
+ .../SessionProjectSessionsAPIClientTests.swift     | 115 ++++
+ src/shared/src/project-progress.ts                 |   8 +
+ src/shared/src/realtime.ts                         |  11 +
+ src/web/src/components/SessionMoveModal.tsx        |   2 +
+ .../WorkspaceView.projectSessions.test.tsx         | 733 +++++++++++++++++++++
+ .../WorkspaceView.sessionProjects.test.tsx         | 482 ++++++++++++++
+ src/web/src/components/WorkspaceView.tsx           | 507 +++++++++++---
+ src/web/src/index.css                              |  90 +++
+ src/web/src/lib/projectAttention.ts                |  10 +-
+ src/web/src/lib/queries.ts                         |  28 +-
+ src/web/src/lib/sessionProjects.test.ts            | 282 ++++++++
+ src/web/src/lib/sessionProjects.ts                 | 227 +++++++
+ src/web/src/lib/useControlPlane.projects.test.tsx  | 211 ++++++
+ src/web/src/lib/useControlPlane.tsx                |  62 +-
+ src/web/src/lib/useSessionProjectData.test.tsx     | 180 +++++
+ src/web/src/lib/useSessionProjectData.ts           |  66 ++
+ 74 files changed, 6263 insertions(+), 147 deletions(-)
+ create mode 100644 docs/evidence/session-list-projects/validation.json
+ create mode 100644 docs/evidence/session-list-projects/web.json
+ create mode 100644 docs/evidence/session-list-projects/web.png
+ create mode 100644 docs/evidence/session-project-navigation/04-web-project-sessions-actual.html
+ create mode 100644 docs/evidence/session-project-navigation/04-web-project-sessions-actual.json
+ create mode 100644 docs/evidence/session-project-navigation/04-web-project-sessions-actual.mjs
+ create mode 100644 docs/evidence/session-project-navigation/04-web-project-sessions-actual.png
+ create mode 100644 docs/evidence/session-project-navigation/04-web-project-sessions-list.png
+ create mode 100644 docs/evidence/session-project-navigation/04-web-project-sessions-menu.png
+ create mode 100644 docs/evidence/session-project-navigation/04-web-project-sessions-page-column.png
+ create mode 100644 docs/evidence/session-project-navigation/04-web-project-sessions-page-menu.png
+ create mode 100644 docs/evidence/session-project-navigation/04-web-project-sessions-page.png
+ create mode 100644 docs/evidence/session-project-navigation/04-web-project-sessions-phone.png
+ create mode 100644 docs/evidence/session-project-navigation/project-node22.log
+ create mode 100644 docs/evidence/session-project-navigation/project-node26.log
+ create mode 100644 docs/evidence/session-project-navigation/verification.json
+ create mode 100644 src/apiserver/src/sessions/session-project-membership.pg.spec.ts
+ create mode 100644 src/apiserver/src/sessions/session-project-membership.ts
+ create mode 100644 src/macos/OrbitApp/Sources/OrbitApp/Views/SessionProjectListSupport.swift
+ create mode 100644 src/macos/OrbitApp/Sources/OrbitApp/Views/SessionProjectPage.swift
+ create mode 100644 src/macos/OrbitKit/Sources/OrbitKit/App/SessionProjectCopy.swift
+ create mode 100644 src/macos/OrbitKit/Sources/OrbitKit/App/SessionProjectGrouping.swift
+ create mode 100644 src/macos/OrbitKit/Sources/OrbitKit/Models/SessionProjectMembership.swift
+ create mode 100644 src/macos/OrbitKit/Tests/OrbitKitTests/SessionProjectCodableTests.swift
+ create mode 100644 src/macos/OrbitKit/Tests/OrbitKitTests/SessionProjectCopyParityTests.swift
+ create mode 100644 src/macos/OrbitKit/Tests/OrbitKitTests/SessionProjectCopyTests.swift
+ create mode 100644 src/macos/OrbitKit/Tests/OrbitKitTests/SessionProjectGroupingTests.swift
+ create mode 100644 src/macos/OrbitKit/Tests/OrbitKitTests/SessionProjectNavigationTests.swift
+ create mode 100644 src/macos/OrbitKit/Tests/OrbitKitTests/SessionProjectPageWiringTests.swift
+ create mode 100644 src/macos/OrbitKit/Tests/OrbitKitTests/SessionProjectSessionsAPIClientTests.swift
+ create mode 100644 src/web/src/components/WorkspaceView.projectSessions.test.tsx
+ create mode 100644 src/web/src/components/WorkspaceView.sessionProjects.test.tsx
+ create mode 100644 src/web/src/lib/sessionProjects.test.ts
+ create mode 100644 src/web/src/lib/sessionProjects.ts
+ create mode 100644 src/web/src/lib/useControlPlane.projects.test.tsx
+ create mode 100644 src/web/src/lib/useSessionProjectData.test.tsx
+ create mode 100644 src/web/src/lib/useSessionProjectData.ts

@@ -1,0 +1,27 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --project=chromium-light-desktop --grep normal entrance
+
+[WebServer] (node:2870168) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 6 tests using 1 worker
+
+(node:2870298) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:45:3 › normal entrance and exit motion matches attachment (4.2s)
+  ✓  2 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:45:3 › normal entrance and exit motion matches expiry (3.5s)
+  ✓  3 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:45:3 › normal entrance and exit motion matches search (3.6s)
+  ✓  4 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:45:3 › normal entrance and exit motion matches multiple (3.3s)
+  ✓  5 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:45:3 › normal entrance and exit motion matches popover (3.7s)
+  ✓  6 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:45:3 › normal entrance and exit motion matches tooltip (3.4s)
+
+  6 passed (23.8s)

@@ -425,9 +425,45 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     await render(() => document.querySelector('.np-list'));
     await click([...document.querySelectorAll('.np-list .np-row')].find((row) => row.textContent?.startsWith('Claude')));
     await click(await draftRow('orbitd@Claude'));
-    expect(mounted().querySelector('.np-card')?.getAttribute('aria-label')).toBe('Engine: Claude via orbitd@Claude');
+    expect(mounted().querySelector('.np-card')?.getAttribute('aria-label')).toBe('Engine: Claude');
     await sendMessage('fix the flaky test');
     expect(creates[0]).toMatchObject({ provider: 'orbitd' });
+  });
+
+  it('runs a new session on OpenCode with a configured key, picked in the composer under OpenCode', async () => {
+    runner = {
+      ...RUNNER,
+      engines: [...(RUNNER.engines ?? []), { engine: 'opencode', installed: true, auth: 'unknown' }],
+    } as unknown as Runner;
+    const served = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(((p: string, ...rest: unknown[]) =>
+      p === '/providers'
+        ? (Promise.resolve([
+            {
+              slug: 'deepseek',
+              label: 'DeepSeek',
+              runtime: 'claude',
+              presetSlug: 'deepseek',
+              defaultModel: 'deepseek-v4-pro',
+              models: [{ value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' }],
+              runsOnOpenCode: true,
+            },
+          ]) as Promise<never>)
+        : (served as (...args: unknown[]) => Promise<never>)(p, ...rest)) as never);
+    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
+    await click(mounted().querySelector('.np-card'));
+    await render(() => document.querySelector('.np-list'));
+    await click(
+      [...document.querySelectorAll('.np-list .np-row')].find((row) => row.querySelector('.np-row-name')?.textContent === 'OpenCode'),
+    );
+    // OpenCode's own config picks its model itself: the draft leaves Codex's model behind.
+    expect(mounted().querySelector('button.composer-model-chip')?.textContent).toContain('Managed by OpenCode');
+    // Under OpenCode: its own config, and the key — which is listed under Claude as well.
+    expect((await providerMenuRows())!.map(rowText)).toEqual(['OpenCode ✓', 'DeepSeek']);
+    await click(await draftRow('DeepSeek'));
+    expect(mounted().querySelector('.np-card')?.getAttribute('aria-label')).toBe('Engine: OpenCode');
+    await sendMessage('fix the flaky test');
+    expect(creates[0]).toMatchObject({ provider: 'opencode', model: 'orbit-deepseek/deepseek-v4-pro' });
   });
 
   /** The composer's model menu, opened, with its Provider submenu open: that submenu's rows. */
@@ -532,6 +568,42 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     await click(rows.find((row) => row.textContent?.startsWith('Work')));
     expect(vi.mocked(updateSessionConfig)).toHaveBeenCalledWith(SESSION, expect.objectContaining({ provider: 'claude', account: WORK }));
     expect(vi.mocked(switchSessionAccount)).not.toHaveBeenCalled();
+  });
+
+  it('a live OpenCode session on a key is ticked there, and moving to OpenCode’s own config is a model change', async () => {
+    runner = {
+      ...RUNNER,
+      engines: [...(RUNNER.engines ?? []), { engine: 'opencode', installed: true, auth: 'unknown' }],
+    } as unknown as Runner;
+    detail = { ...session(null, null), provider: 'opencode', model: 'orbit-deepseek/deepseek-v4-pro' };
+    const served = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(((p: string, ...rest: unknown[]) =>
+      p === '/providers'
+        ? (Promise.resolve([
+            {
+              slug: 'deepseek',
+              label: 'DeepSeek',
+              runtime: 'claude',
+              presetSlug: 'deepseek',
+              defaultModel: 'deepseek-v4-pro',
+              models: [{ value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' }],
+              runsOnOpenCode: true,
+            },
+          ]) as Promise<never>)
+        : (served as (...args: unknown[]) => Promise<never>)(p, ...rest)) as never);
+    vi.mocked(updateSessionConfig).mockResolvedValue({ ok: true } as never);
+    await mount(`/sessions/${SESSION}`, '.composer-box textarea');
+    await act(async () => {
+      await vi.waitFor(() => expect(mounted().querySelector('button.composer-model-chip')?.textContent).toContain('DeepSeek V4 Pro'), {
+        timeout: 20_000,
+        interval: 20,
+      });
+    });
+    const rows = (await providerMenuRows())!;
+    expect(rows.map(rowText)).toEqual(['OpenCode', 'DeepSeek ✓']);
+    await click(rows.find((row) => row.textContent === 'OpenCode'));
+    expect(vi.mocked(updateSessionConfig)).toHaveBeenCalledWith(SESSION, expect.objectContaining({ model: '' }));
+    expect(vi.mocked(updateSessionConfig)).not.toHaveBeenCalledWith(SESSION, expect.objectContaining({ provider: expect.anything() }));
   });
 
   it("a live Claude session lists its runner's Claude accounts under Claude", async () => {

@@ -1,0 +1,112 @@
+[
+  {
+    "label": "original-reproduction",
+    "id": "exec-f096faac-0478-4bde-a298-a6911971e8e4",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "NO_COLOR=1 python3 /tmp/orbit-p23-check.py reproduce-modal-notifications npm run test:ui-toasts -w @orbit/web -- --project=chromium-light-desktop --project=webkit-dark-phone"
+    ],
+    "exit_code": 1,
+    "status": "failed"
+  },
+  {
+    "label": "notification-matrix",
+    "id": "exec-0669c1ef-edc0-4901-b39b-7cc04f85ad1f",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "cp -a src/web/.toasts-results docs/evidence/base-ui-migration/p2.3/diagnostics/viewport-and-retained && python3 - <<'PY'\nfrom pathlib import Path\np=Path('src/web/ui-migration/toasts.browser.mjs');s=p.read_text();s=s.replace(\"await dialog.getByRole('button', { name: 'Error notice', exact: true }).click();\\n  await finishAnimations();\", \"await dialog.getByRole('button', { name: 'Warning notice', exact: true }).click();\\n  await finishAnimations();\");p.write_text(s)\nPY\nNO_COLOR=1 python3 /tmp/orbit-p23-check.py toasts-matrix npm run test:ui-toasts -w @orbit/web"
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "label": "full-web-tests-and-types",
+    "id": "exec-b69cc4f1-9431-45c0-aded-3b852524693e",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "cat > src/web/ui-migration/toasts-tests.tsconfig.json <<'EOF'\n{\n  \"extends\": \"../tsconfig.json\",\n  \"compilerOptions\": { \"types\": [\"vite/client\", \"node\"] },\n  \"include\": [\"../src/lib/toast.test.tsx\", \"../src/lib/toastFeed.test.ts\"],\n  \"exclude\": []\n}\nEOF\nNO_COLOR=1 python3 /tmp/orbit-p23-check.py notification-test-types node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts-tests.tsconfig.json --noEmit && NO_COLOR=1 python3 /tmp/orbit-p23-check.py final-web-build npm run build -w @orbit/web && NO_COLOR=1 python3 /tmp/orbit-p23-check.py full-web-test npm run test -w @orbit/web"
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "label": "production-notifications",
+    "id": "exec-4a419b23-f877-43b2-b367-1f89c2dbe49c",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "NO_COLOR=1 python3 /tmp/orbit-p23-check.py production-notifications npm run test:ui-migration -w @orbit/web -- feedback-production.browser.mjs"
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "label": "overlay-regression",
+    "id": "exec-ff8c2f82-b6aa-4b9f-87e3-209559f0abc4",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 docs/evidence/base-ui-migration/p2.3/collect.py src/web/.toasts-results docs/evidence/base-ui-migration/p2.3/toasts-run && NO_COLOR=1 python3 /tmp/orbit-p23-check.py overlay-regression npm run test:ui-overlays -w @orbit/web"
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "label": "reference-production",
+    "id": "exec-5aeb3e89-967e-4081-b594-f7e071306d72",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "cp src/web/ui-migration/feedback-production.browser.mjs /tmp/orbit-p23-reference/src/web/ui-migration/ && cat > /tmp/orbit-p23-reference/src/web/ui-migration/production-reference.config.mjs <<'EOF'\nimport baseline from './playwright.config.mjs';\nexport default {\n  ...baseline,\n  testMatch: 'feedback-production.browser.mjs',\n  use: { ...baseline.use, baseURL: 'http://127.0.0.1:14379' },\n  webServer: { ...baseline.webServer,\n    command: 'npm run preview -- --host 127.0.0.1 --port 14379 --strictPort',\n    url: 'http://127.0.0.1:14379',\n  },\n};\nEOF\nNO_COLOR=1 python3 /tmp/orbit-p23-check.py production-reference-build npm --prefix /tmp/orbit-p23-reference/src/web run build && NO_COLOR=1 python3 /tmp/orbit-p23-check.py production-reference-run node node_modules/@playwright/test/cli.js test --config /tmp/orbit-p23-reference/src/web/ui-migration/production-reference.config.mjs"
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "label": "evidence-audit",
+    "id": "exec-b7b6fc54-3f88-482d-8497-2ca5df73d364",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 docs/evidence/base-ui-migration/p2.3/collect.py src/web/.overlays-results docs/evidence/base-ui-migration/p2.3/overlays-regression && python3 docs/evidence/base-ui-migration/p2.3/collect.py /tmp/orbit-p23-reference/src/web/.ui-migration-results docs/evidence/base-ui-migration/p2.3/production-reference-run && NO_COLOR=1 python3 /tmp/orbit-p23-check.py evidence-audit python3 docs/evidence/base-ui-migration/p2.3/audit.py"
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "label": "implementation-commit",
+    "id": "exec-cd94f44e-af82-44ad-b5e0-79150551cc86",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "git add src/web && git commit -m \"fix(web): keep Orbit notifications accessible inside modal overlays\" && git rev-parse HEAD"
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "label": "reproducibility-verified",
+    "id": "exec-7e3bcb2c-7121-4be8-b007-6fb10f947145",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 - <<'PY'\nfrom pathlib import Path\np=Path('docs/evidence/base-ui-migration/p2.3/prepare-reference.py');s=p.read_text().replace(\"'src/shared','package.json','package-lock.json'\",\"'src/shared','package.json','package-lock.json','tsconfig.base.json'\");p.write_text(s)\nPY\nNO_COLOR=1 python3 /tmp/orbit-p23-check.py reference-preparation-fixed python3 docs/evidence/base-ui-migration/p2.3/prepare-reference.py /tmp/orbit-p23-repro-check-2 && python3 - <<'PY'\nimport pathlib,hashlib,json,re,subprocess\nroot=pathlib.Path.cwd();doc=root/'docs/evidence/base-ui-migration/p2.3'\nfor name,expected in json.loads((doc/'tested-source-hashes.json').read_text()).items():\n assert hashlib.sha256((root/name).read_bytes()).hexdigest()==expected,name\nfor target in re.findall(r'\\]\\(([^)]+)\\)',(doc/'README.md').read_text()):\n if not ':' in target: assert (doc/target).exists(),target\nfor p in (pathlib.Path('/tmp/orbit-p23-repro-check-2/src/web/src')).rglob('*'):\n if p.is_file() and p.suffix in ['.ts','.tsx','.css'] and p.name!='ToastsFixture.tsx':\n  rel=p.relative_to('/tmp/orbit-p23-repro-check-2').as_posix()\n  assert p.read_bytes()==subprocess.check_output(['git','show','67e62c0b4028eefe2c619dac80d3fac312cea601:'+rel]),rel\nprint('18 tested web files unchanged; documentation links resolve; reference source matches the original tree.')\nPY\ngit diff --check"
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "label": "evidence-commit",
+    "id": "exec-7da50721-4b4a-4bec-bd57-36a425ed8a84",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "git add docs/evidence/base-ui-migration/p2.3 && git commit -q -m \"test(web): archive P2.3 notification compatibility evidence\" && git log -2 --oneline && git status --short"
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  }
+]

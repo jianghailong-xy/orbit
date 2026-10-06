@@ -37,6 +37,9 @@ describe('levels', () => {
     expect(dwellOf(toast({ tone: 'error' }))).toBeNull();
     expect(dwellOf(toast({ detail: 'why', duration: 10 }))).toBe(10);
     expect(dwellOf(toast({ tone: 'error', duration: 10 }))).toBeNull();
+    expect(dwellOf(toast({ tone: 'warning', duration: 1 }))).toBeNull();
+    expect(dwellOf(toast({ inProgress: true }))).toBe(60);
+    expect(dwellOf(toast({ duration: 0 }))).toBeNull();
   });
 });
 

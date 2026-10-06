@@ -106,6 +106,17 @@ final class ConsoleModel {
     /// own. Non-nil means the create request carries it AND the pick is remembered on the agent
     /// once the session exists — so the next draft here opens on it without the override.
     private(set) var draftProviderOverride: String?
+    /// Draft only: the picker identity of that pick when it is not the provider itself — a configured
+    /// key run on OpenCode (`OpenCodeKeys.choice`), whose session is created on `opencode`. It is
+    /// the model space the draft seeds from, so a re-seed cannot drop the key for OpenCode's own.
+    private(set) var draftChoice: String?
+    /// The picker identity this draft or session is on (web `providerChoiceFor`): the provider,
+    /// except that OpenCode on a configured key is on that key — whose models the composer lists and
+    /// whose row the Provider menu ticks.
+    var providerChoice: String {
+        if isDraft, let draftChoice { return draftChoice }
+        return OpenCodeKeys.choice(provider: provider, model: modelID)
+    }
     /// Draft only: a Codex account picked under Codex in the composer's Provider menu (`default` or a slot
     /// id). Nil leaves it to the workspace: its own pick, else Automatic — the account with the most
     /// room, which the server chooses when it creates the session.
@@ -1781,6 +1792,7 @@ final class ConsoleModel {
         // coordinator asking to start its project lands on its row as a count (`waitingKind`
         // START_REQUEST), and the card that asks it is drawn from the read this kicks.
         let waiting = "\(session.pendingApprovals ?? 0)|\(session.waitingKind?.rawValue ?? "")"
+        sessionWaitingKind = session.waitingKind
         if waiting != waitingSignal {
             waitingSignal = waiting
             if projectID != nil {
@@ -1871,7 +1883,7 @@ final class ConsoleModel {
     var providerSwitchChoices: [ProviderChoice] {
         guard isDraft || isLive || availability != .blocked else { return [] }
         return SessionProviderChoices.sameRuntime(
-            provider,
+            providerChoice,
             in: SessionProviderChoices.choices(configured: configuredProviders,
                                                catalog: modelCatalog, engines: runnerEngines,
                                                pools: allPools,
@@ -1901,8 +1913,16 @@ final class ConsoleModel {
             else { pickDraftProvider(slug) }
             return
         }
-        if slug == provider {
+        if slug == providerChoice {
             if let account { await switchAccount(account) }
+            return
+        }
+        // Within OpenCode a key is part of the model (`OpenCodeKeys`), so moving between its own config
+        // and its keys is a model change, onto the default of the one picked (web parity).
+        if provider == "opencode", slug == "opencode" || OpenCodeKeys.choiceKey(slug) != nil {
+            let next = AgentDefaults.defaultModel(for: slug, catalog: modelCatalog, configured: configuredProviders)
+            let clamped = selectModel(next)
+            await applyConfig(model: next, permissionMode: clamped ? permissionMode.rawValue : nil)
             return
         }
         // Read before the assignment below, because what the note is ABOUT is the move from one to
@@ -1955,18 +1975,21 @@ final class ConsoleModel {
     /// marked pristine again on purpose: a model chosen for the outgoing provider is not a choice
     /// about this one, and keeping it would pin an id the new provider may not even offer.
     func pickDraftProvider(_ slug: String) {
-        guard isDraft, slug != provider else { return }
-        draftProviderOverride = slug
-        provider = slug
+        guard isDraft, slug != providerChoice else { return }
+        // A key run on OpenCode creates the session on `opencode`; the key rides in its model.
+        let engine = OpenCodeKeys.choiceKey(slug) == nil ? slug : "opencode"
+        draftChoice = engine == slug ? nil : slug
+        draftProviderOverride = engine
+        provider = engine
         modelID = draftModelSeed(AgentDefaults.defaultModel(
             for: slug, catalog: modelCatalog, configured: configuredProviders))
         modelSelectionRevision = ModelSelectionRevision()
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(
-                permissionMode, for: modelID, provider: slug, configured: configuredProviders,
+                permissionMode, for: modelID, provider: engine, configured: configuredProviders,
                 catalog: modelCatalog)
         }
-        effort = AgentDefaults.normalizedEffort(effort, for: slug, model: modelID,
+        effort = AgentDefaults.normalizedEffort(effort, for: engine, model: modelID,
                                                 catalog: modelCatalog,
                                                 configured: configuredProviders)
     }
@@ -1976,7 +1999,7 @@ final class ConsoleModel {
     /// picked. Like the provider, it binds the session being drafted and rewrites no workspace setting.
     func pickDraftAccount(_ slug: String, _ account: String?) {
         guard isDraft else { return }
-        if slug != provider { pickDraftProvider(slug) }
+        if slug != providerChoice { pickDraftProvider(slug) }
         draftCodexAccount = slug == "codex" ? account : nil
         draftClaudeAccount = slug == "claude" ? account : nil
     }
@@ -2039,7 +2062,7 @@ final class ConsoleModel {
             // resolve the picked provider's own default instead of dragging the agent's back in.
             let fallback = draftProviderOverride == nil
                 ? defaultModel
-                : AgentDefaults.defaultModel(for: provider, catalog: modelCatalog,
+                : AgentDefaults.defaultModel(for: providerChoice, catalog: modelCatalog,
                                              configured: configuredProviders)
             modelID = draftModelSeed(fallback)
         }
@@ -2056,7 +2079,7 @@ final class ConsoleModel {
 
     private func draftModelSeed(_ fallback: String, runtimeDefaults: [String: String]? = nil) -> String {
         AgentDefaults.newSessionModel(
-            for: provider, accountModels: accountDefaultModels(), fallback: fallback,
+            for: providerChoice, accountModels: accountDefaultModels(), fallback: fallback,
             catalog: modelCatalog, configured: configuredProviders, runtimeDefaults: runtimeDefaults)
     }
 
@@ -2742,6 +2765,7 @@ final class ConsoleModel {
             // The pick was this session's binding; nothing to write back. The next draft here
             // opens on it anyway, because the default is read from what the project last ran.
             draftProviderOverride = nil
+            draftChoice = nil
             draftCodexAccount = nil
             draftClaudeAccount = nil
             // The Mode pick is different: without a write-back it lived on this one session, while
@@ -3318,6 +3342,25 @@ final class ConsoleModel {
     /// `waitingKind`): a change is what makes the project's cards worth reading again — a
     /// coordinator asking to start its project lands on this row as a count before anything else.
     private var waitingSignal: String?
+    /// What that row says the owner is waiting on — `RECORD_AS_DONE` puts "Is this project done?" up
+    /// with no request behind it (`ProjectDone.slot`).
+    private var sessionWaitingKind: SessionWaitingKind?
+
+    // MARK: closing the project — "Is this project done?" and "Why is this project not done?"
+
+    /// The project as the closing cards read it — the projection of its facts, and its done record —
+    /// off the same document read as its criteria. Nil until that read answers; a read that fails
+    /// leaves the last answer standing.
+    private(set) var projectDone: ProjectDoneSubject?
+    /// The coordinator's open request to record the project done, while there is one
+    /// (`ProjectDone.live`).
+    private(set) var doneRequestRow: ProjectOpenItemRow?
+    /// What a press here recorded, before the document read catches up with it — the receipt the card
+    /// turns into in place (web's `doneReceipt`).
+    private(set) var doneRecord: ProjectDoneRecord?
+    /// When that press came back. A document read begun after it that still says the project is not
+    /// DONE means it was reopened since — here or at another end — and the press no longer stands.
+    private var doneRecordAt: Date?
 
     /// The task whose run this conversation is, adopted from the session payload. Nil for an
     /// ordinary conversation, and then nothing below ever asks about a confirmation: the card is
@@ -3405,6 +3448,12 @@ final class ConsoleModel {
             // is not pointed at.
             case .startProject(let itemID):
                 return waiting(StartProject.isOpen(startStanding(itemID)), question: true)
+            // "Is this project done?" while it is asking — not once it is its own receipt — and the
+            // card that explains why it is not done, which asks nothing.
+            case .projectDone:
+                return waiting(doneCardAsking, question: true)
+            case .projectNotDone:
+                return nil
             case .criteriaChange:
                 return waiting(CriteriaChanges.isOpen(acceptanceConfirmation), question: true)
             case .evidenceDecision(let taskID, let evidenceRevision):
@@ -3559,12 +3608,20 @@ final class ConsoleModel {
             acceptanceConfirmation = standing
             adoptAcceptanceReceipt()
         }
+        let documentAskedAt = Date()
         if let document = try? await api.projectCriteria(projectID: projectID) {
             projectCriteria = document.acceptanceCriteriaItems ?? []
             projectDocumentTitle = document.title
             projectStatus = document.status
             projectStarted = document.started
             projectTaskCount = document.taskCount
+            projectDone = document.doneSubject
+            // A read asked for after a press here, and still not DONE: the project was reopened, so
+            // the press's own record no longer makes the card a receipt (`ProjectDone.recorded`).
+            if document.status != "DONE", let at = doneRecordAt, documentAskedAt > at {
+                doneRecord = nil
+                doneRecordAt = nil
+            }
         }
         // The project's two owner cards. Same rule as the four above: each is independent, a read
         // that fails leaves the last answer standing, and neither may close a card.
@@ -3631,6 +3688,9 @@ final class ConsoleModel {
         // plan passed Orbit's ready check — the open START_REQUEST the open-items read above serves
         // — and never inferred from the project holding a task.
         adoptStartRequest()
+        // And the closing card: "Is this project done?" once the coordinator asks — or its receipt
+        // once the project is recorded done — and otherwise why it is not done yet.
+        adoptDoneSlot()
         if startRequestRow != nil, let graph = try? await api.projectDependencyGraph(projectID) {
             projectGraph = graph
         }
@@ -3695,6 +3755,102 @@ final class ConsoleModel {
 
     func setStartDraft(_ draft: StartSettingsDraft, for itemID: String) {
         startDrafts[itemID] = draft
+    }
+
+    /// Which closing card this conversation draws (`ProjectDone.slot`), adopted from the reads — one
+    /// at a time, the way the browser's `SessionProjectSettlementCard` switches between them: "Is
+    /// this project done?" while the coordinator's request stands (or the row says Record as done…),
+    /// its receipt once the project is recorded done, and otherwise "Why is this project not done?".
+    ///
+    /// Each card is re-derived from the reads on every render, so a request the coordinator filed
+    /// again is the same card with the new request in it. A read that has not answered changes
+    /// nothing on screen.
+    private func adoptDoneSlot() {
+        let live = ProjectDone.live(openItems: openItems, status: projectDone?.status)
+        doneRequestRow = live
+        switch ProjectDone.slot(subject: projectDone, request: live, waitingKind: sessionWaitingKind,
+                                record: doneRecord, started: projectStarted) {
+        case .none:
+            break
+        case .notDone:
+            decisionCards.removeAll { $0.kind == .projectDone }
+            deliver(.projectNotDone)
+        case .done:
+            decisionCards.removeAll { $0.kind == .projectNotDone }
+            deliver(.projectDone, placement: donePlacement(live))
+        }
+    }
+
+    /// Whether the done card is asking the owner right now: the project is not recorded done, and the
+    /// coordinator's request stands or the row says Record as done….
+    private var doneCardAsking: Bool {
+        guard let subject = projectDone, !ProjectDone.recorded(subject, record: doneRecord) else { return false }
+        return doneRequestRow != nil || sessionWaitingKind == .recordAsDone
+    }
+
+    /// Where the done card goes when it arrives: a request — the question — where it arrived, like
+    /// the start card; a project already recorded done, where that happened (`DeliveryAnchor`).
+    private func donePlacement(_ live: ProjectOpenItemRow?) -> DeliveredDecisionCard.Placement {
+        if live == nil, let subject = projectDone, ProjectDone.recorded(subject, record: doneRecord),
+           let at = doneRecord?.doneAt ?? subject.doneAt, ThinkingSummary.date(at) != nil {
+            return .at(at)
+        }
+        return .onArrival(afterItemID: DeliveryAnchor.onArrival(of: .projectDone, items: state.items))
+    }
+
+    /// Record the project done from its card (`POST /projects/:id/done`, `ProjectDone.body`): the
+    /// request the card answers and that request's own seal — or, unasked, the seal standing now —
+    /// and the gaps the card shows. The card turns into its receipt in place; a request superseded
+    /// meanwhile, or a seal that moved, is a 409 that writes nothing, said over the door's words.
+    func recordProjectDone() async {
+        guard let projectID, let subject = projectDone,
+              let body = ProjectDone.body(subject: subject, requestID: doneRequestRow?.itemId,
+                                          request: doneRequestRow?.doneRequest,
+                                          currentDigest: acceptanceConfirmation?.currentVersion.digest)
+        else { return }
+        do {
+            doneRecord = try await api.recordProjectDone(projectID: projectID, body)
+            doneRecordAt = Date()
+        } catch {
+            statusMessage = "\(ProjectDone.notRecorded) — \(APIClient.failureReason(error))."
+        }
+        await refreshRulerQuestions(force: true)
+    }
+
+    /// "Not yet…": the coordinator's request is ended with the owner's note, which reaches this
+    /// conversation's agent with the card's facts; the card gives way to why the project is not done.
+    /// Says whether the note went.
+    func declineDoneRequest(note: String) async -> Bool {
+        guard let projectID, let row = doneRequestRow else { return false }
+        do {
+            _ = try await api.declineDoneRequest(projectID: projectID, itemID: row.itemId, note: note)
+        } catch {
+            statusMessage = "\(ProjectDone.notDeclined) — \(APIClient.failureReason(error))."
+            return false
+        }
+        await refreshRulerQuestions(force: true)
+        return true
+    }
+
+    /// Reopen project, from the receipt — the same status door the project page's menu presses.
+    func reopenProject() async {
+        guard let projectID else { return }
+        do {
+            _ = try await api.updateProjectStatus(projectID, to: .open)
+            doneRecord = nil
+            doneRecordAt = nil
+        } catch {
+            statusMessage = "\(ProjectDone.notReopened) — \(APIClient.failureReason(error))."
+        }
+        await refreshRulerQuestions(force: true)
+    }
+
+    /// "Ask the coordinator to handle it": the card's own facts — the blocked criteria, what each is
+    /// waiting on and what would clear them — as one ordinary turn to this conversation's agent
+    /// (web's `delegateProjectSettlement`). The facts are the whole message; the card stays.
+    func askCoordinatorAboutDone() async {
+        guard let subject = projectDone else { return }
+        await send(overrideText: ProjectDone.settlementContext(subject))
     }
 
     /// Whether a STARTED project's criteria moved since the owner confirmed them, and the server

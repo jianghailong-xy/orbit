@@ -614,17 +614,10 @@ export const fetchAvatarDataUrl = async (): Promise<string> => {
 export const cancelQueuedTurn = (sessionId: string, turnId: string) =>
   api(`/sessions/${sessionId}/turns/${turnId}`, { method: 'DELETE' });
 
-export interface ActiveSessionTurn {
-  turnId: string;
-  kind: ConversationTurnKind;
-  placement: SessionTurnPlacement;
-  content: string;
-  createdAt: string;
-  targetTurnId?: string;
-  delivery?: 'failed' | 'unconfirmed';
-  deliveryCode?: string;
-  deliveryReason?: string;
-  attachments?: { id: string; mimeType: string }[];
+/** The cards a user turn is drawn as, under the names the runner's echo stores them by (apiserver
+ *  `TurnCards`, sessions/turn-cards.ts): a queued row carries the same fields its echo will, each
+ *  absent on every turn that is not that card. */
+export interface TurnCards {
   /** An exception item's delivery carries the item's own fields beside its words (`OpenItemDeliveryCard`),
    *  read by the same function the runner's echo is read by. Absent on every turn a person typed. */
   openItemDelivery?: OpenItemDeliveryCard;
@@ -644,6 +637,19 @@ export interface ActiveSessionTurn {
   /** The outcomes of this session's own requests a reply turn hands back (`SessionReplyCard`), as
    *  the runner's echo will carry them. Absent on every other turn. */
   sessionReplies?: SessionReplyCard[];
+}
+
+export interface ActiveSessionTurn extends TurnCards {
+  turnId: string;
+  kind: ConversationTurnKind;
+  placement: SessionTurnPlacement;
+  content: string;
+  createdAt: string;
+  targetTurnId?: string;
+  delivery?: 'failed' | 'unconfirmed';
+  deliveryCode?: string;
+  deliveryReason?: string;
+  attachments?: { id: string; mimeType: string }[];
   /** The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
    *  delivery — so nobody typed its words. Absent on every turn somebody sent. */
   authoredByOrbit?: true;

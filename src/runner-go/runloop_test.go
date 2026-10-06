@@ -158,7 +158,7 @@ func TestWaitForRunLoopStopUpdate(t *testing.T) {
 				t.Errorf("server = %q", server)
 			}
 			return "0.1.81", true
-		})
+		}, nil)
 	if reason != runLoopStopUpdate || remote != "0.1.81" {
 		t.Fatalf("stop = %v, %q; want update, 0.1.81", reason, remote)
 	}
@@ -172,7 +172,7 @@ func TestWaitForRunLoopStopSignalDoesNotRequestUpdate(t *testing.T) {
 		func(context.Context, string) (string, bool) {
 			checks++
 			return "99.0.0", true
-		})
+		}, nil)
 	if reason != runLoopStopSignal || remote != "" {
 		t.Fatalf("stop = %v, %q; want signal", reason, remote)
 	}
@@ -192,7 +192,7 @@ func TestWaitForRunLoopStopSignalWinsDuringUpdateCheck(t *testing.T) {
 				close(checkStarted)
 				<-finishCheck
 				return "0.1.81", true
-			})
+			}, nil)
 		result <- reason
 	}()
 
@@ -216,7 +216,7 @@ func TestWaitForRunLoopStopSignalWinsDuringUpdateCheck(t *testing.T) {
 func TestWaitForRunLoopStopContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	reason, remote := waitForRunLoopStop(ctx, nil, "https://control.example", time.Hour, nil)
+	reason, remote := waitForRunLoopStop(ctx, nil, "https://control.example", time.Hour, nil, nil)
 	if reason != runLoopStopNone || remote != "" {
 		t.Fatalf("stop = %v, %q; want context cancellation", reason, remote)
 	}

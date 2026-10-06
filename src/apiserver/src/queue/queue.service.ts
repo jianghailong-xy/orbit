@@ -7,6 +7,7 @@ import {
   ClaimedSession,
   PermissionMode,
   fastModeAvailable,
+  openCodeKeyOf,
   type PlanUsageSnapshot,
   type RunnerModelCatalog,
 } from '@orbit/shared';
@@ -14,7 +15,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { codexPoolUnavailableReason } from '../providers/codex-login';
 import { loginCanRun, loginPoolResumesAt, loginRunsAgainAt, type LoginAccount } from '../providers/pool-login-select';
 import { choosePoolCredential } from '../providers/pool-credential-select';
-import { accountPoolRuntime, isBuiltinProvider, resolveProviderExec, type ModelProviderRow } from '../providers/custom-provider';
+import { accountPoolRuntime, isBuiltinProvider, openCodeKeyRows, resolveProviderExec, runsOnOpenCode, type ModelProviderRow } from '../providers/custom-provider';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { isPoolCandidate, poolUnavailableReason } from '../providers/pool-admission';
 import { keyCanRun, keyRunsAgainAt, poolKeysResumeAt } from '../providers/pool-key-select';
@@ -160,10 +161,12 @@ export class QueueService {
           { providerBuiltin: false },
           { assignedRunner: { accountPauses: { not: Prisma.DbNull } } },
           ...(dshUnavailable ? [{ provider: AgentProvider.DSH, providerBuiltin: true }] : []),
+          // An OpenCode session on one of the owner's configured keys (shared `openCodeKeys`).
+          { provider: AgentProvider.OPENCODE, model: { startsWith: 'orbit-' } },
         ],
       },
       select: {
-        id: true, ownerId: true, provider: true, providerBuiltin: true, error: true,
+        id: true, ownerId: true, provider: true, providerBuiltin: true, error: true, model: true,
         codexAccount: true, codexAccountPinned: true, claudeAccount: true, claudeAccountPinned: true,
         workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
         assignedRunner: { select: { engines: true, accountPauses: true, planUsage: true, capabilities: true } },
@@ -205,6 +208,17 @@ export class QueueService {
         const key = `${session.ownerId}:${engine}`;
         if (!poolPauses.has(key)) poolPauses.set(key, await this.accountPoolPausedUntil(session.ownerId, engine, now));
         until = poolPauses.get(key) ?? null;
+      }
+      // The key an OpenCode model names has to be there to run it on: gone, disabled or not one
+      // OpenCode may spend, the session waits with the same reason a configured provider's does,
+      // rather than being claimed and refused by resolveProviderExec.
+      const openCodeKey = engine === AgentProvider.OPENCODE ? openCodeKeyOf(session.model) : null;
+      if (openCodeKey) {
+        const row = await this.prisma.modelProvider.findFirst({
+          where: { slug: openCodeKey.slug, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
+          select: { enabled: true, runtime: true, apiKeyEnc: true },
+        });
+        unavailable = !row || !runsOnOpenCode(row);
       }
       if (!until && !unavailable && !dshHeld) continue;
       blocked.push(session.id);
@@ -718,11 +732,14 @@ export class QueueService {
           : ((await this.resolveLoginPool(this.prisma, session, declared!, true)) ??
             (await this.resolvePoolMember(this.prisma, session, declared!, true)) ??
             (await this.resolveSharedPool(this.prisma, session, declared!, true)))));
+    // An OpenCode model may name one of the owner's configured keys, which the exec writes in.
+    const openCodeKeys = declared === AgentProvider.OPENCODE ? await openCodeKeyRows(this.prisma, session.ownerId) : undefined;
     const resolveExec = (sessionModel: string | null) =>
       resolveProviderExec({
         declaredProvider: declared,
         declaredProviderBuiltin,
         customRow,
+        openCodeKeys,
         sessionModel,
         usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
         runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,

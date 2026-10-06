@@ -121,6 +121,8 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
       enrolledAt: true,
       position: true,
       runsAsRoot: true,
+      // Why this machine is or isn't updating itself (runner-self-update.ts).
+      selfUpdate: true,
       minFreeDiskMb: true,
       reposRoot: true,
       capabilities: true,

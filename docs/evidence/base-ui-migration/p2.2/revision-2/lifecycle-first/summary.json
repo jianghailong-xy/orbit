@@ -1,0 +1,298 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T08:46:42.822Z",
+    "duration": 34379.283,
+    "expected": 10,
+    "skipped": 13,
+    "unexpected": 1,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3390
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+          "sha256": "28a07a00a36c7fea3301d7b3a0811d67e6a67482e6c503e88ea7f9cdcaf4a76f"
+        },
+        {
+          "file": "chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+          "sha256": "d251546b4340a7e275eb632bb9f374433a5ec206b7f155b1d4f2e664ee8a4b4b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1473
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+          "sha256": "77482020b32dd01dba5c5d9bc246ceb199bcb4f64f666debedde58397ac14650"
+        },
+        {
+          "file": "chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+          "sha256": "5977904c95b626e89ba16df02b89f8107489bc773a55c10f7faa6390c71de070"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--reduced-motion-attachment-has-no-transition-and-dismisses-cleanly",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 909
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--reduced-motion-attachment-has-no-transition-and-dismisses-cleanly--reduced-motion.json",
+          "sha256": "2ed078e263df459b0bbd47800d66637274da0cf2b565527752fc0f84eaee4aad"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--reduced-motion-expiry-has-no-transition-and-dismisses-cleanly",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1133
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--reduced-motion-expiry-has-no-transition-and-dismisses-cleanly--reduced-motion.json",
+          "sha256": "3ac55c530665855870a62e3ba73223bff9e071b816ecf6d857187142cd439214"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--reduced-motion-search-has-no-transition-and-dismisses-cleanly",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1086
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--reduced-motion-search-has-no-transition-and-dismisses-cleanly--reduced-motion.json",
+          "sha256": "7dd87db6f44689c4cfbd1a4e6f9417a499f2ae4af188476d791c911ef2337f99"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--reduced-motion-multiple-has-no-transition-and-dismisses-cleanly",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1328
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--reduced-motion-multiple-has-no-transition-and-dismisses-cleanly--reduced-motion.json",
+          "sha256": "f7305d38793c55724fb5f37d6730ac2315c2099de948b6b2f4f045ae8ce71e9a"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--reduced-motion-popover-has-no-transition-and-dismisses-cleanly",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1068
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--reduced-motion-popover-has-no-transition-and-dismisses-cleanly--reduced-motion.json",
+          "sha256": "0deab6f87166bc8e7100acbd10d07fded4c2b7d3911b1f0d4f66b4c96f68b53f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--reduced-motion-tooltip-has-no-transition-and-dismisses-cleanly",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 921
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--reduced-motion-tooltip-has-no-transition-and-dismisses-cleanly--reduced-motion.json",
+          "sha256": "f7a8c6fa875ca868b582f1cf266d402b49217453763be64a299a13a55f655555"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--normal-attachment-can-reopen-during-exit-without-stale-unmount",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1842
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--normal-attachment-can-reopen-during-exit-without-stale-unmount--reopen.json",
+          "sha256": "35e8f0c3dbb62ce76c860ba86a5efd84db85e5710e35b2d37261bf09f305bf65"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--normal-expiry-can-reopen-during-exit-without-stale-unmount",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2740
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--normal-expiry-can-reopen-during-exit-without-stale-unmount--reopen.json",
+          "sha256": "20d7a350bc6615c27d4572c02c55546b9c9a1e09286c3c7fa89fa8a74e184624"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--normal-search-can-reopen-during-exit-without-stale-unmount",
+      "expectedStatus": "passed",
+      "status": "unexpected",
+      "results": [
+        {
+          "status": "failed",
+          "duration": 16943
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--normal-search-can-reopen-during-exit-without-stale-unmount--error-context.md",
+          "sha256": "92359c261a72f9f725d1606e8fb02a24f1a3fff4b21c1c150d006976d172b3ad"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--normal-popover-can-reopen-during-exit-without-stale-unmount",
+      "expectedStatus": "passed",
+      "status": "skipped",
+      "results": [],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time",
+      "expectedStatus": "passed",
+      "status": "skipped",
+      "results": [],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time",
+      "expectedStatus": "passed",
+      "status": "skipped",
+      "results": [],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-dark-phone--reduced-motion-attachment-has-no-transition-and-dismisses-cleanly",
+      "expectedStatus": "passed",
+      "status": "skipped",
+      "results": [],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-dark-phone--reduced-motion-expiry-has-no-transition-and-dismisses-cleanly",
+      "expectedStatus": "passed",
+      "status": "skipped",
+      "results": [],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-dark-phone--reduced-motion-search-has-no-transition-and-dismisses-cleanly",
+      "expectedStatus": "passed",
+      "status": "skipped",
+      "results": [],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-dark-phone--reduced-motion-multiple-has-no-transition-and-dismisses-cleanly",
+      "expectedStatus": "passed",
+      "status": "skipped",
+      "results": [],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-dark-phone--reduced-motion-popover-has-no-transition-and-dismisses-cleanly",
+      "expectedStatus": "passed",
+      "status": "skipped",
+      "results": [],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-dark-phone--reduced-motion-tooltip-has-no-transition-and-dismisses-cleanly",
+      "expectedStatus": "passed",
+      "status": "skipped",
+      "results": [],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount",
+      "expectedStatus": "passed",
+      "status": "skipped",
+      "results": [],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-dark-phone--normal-expiry-can-reopen-during-exit-without-stale-unmount",
+      "expectedStatus": "passed",
+      "status": "skipped",
+      "results": [],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-dark-phone--normal-search-can-reopen-during-exit-without-stale-unmount",
+      "expectedStatus": "passed",
+      "status": "skipped",
+      "results": [],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-dark-phone--normal-popover-can-reopen-during-exit-without-stale-unmount",
+      "expectedStatus": "passed",
+      "status": "skipped",
+      "results": [],
+      "artifacts": []
+    }
+  ]
+}

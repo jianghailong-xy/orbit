@@ -173,6 +173,29 @@ final class ProjectPageTests: XCTestCase {
         XCTAssertEqual(mixed.subtitle, "2 items need you · 1 with the coordinator")
     }
 
+    /// The coordinator's request to record the project done is one of the owner's items while the
+    /// project is OPEN — the page's count and its reminder say so — and the owner's own Record as
+    /// done… is not, any more than their own Start… is. A server that also listed the request among
+    /// the owner's rows would not have it counted twice (the browser filters it the same way).
+    func testOpenItemsSummaryCountsTheRequestToRecordTheProjectDone() throws {
+        let request = ProjectOpenItemRow(itemId: "d", kind: .unknown, title: ProjectDone.heading,
+                                         waitingSince: iso(240),
+                                         doneRequest: DoneRequest(criteriaDigest: "c", judgment: "j"))
+        let asked = try XCTUnwrap(ProjectPage.openItemsSummary(
+            status: .open, started: true, items: .init(doneRequest: request)))
+        XCTAssertEqual(asked.needsYou, 1)
+        XCTAssertEqual(asked.attention, "1 item needs you")
+        let twice = try XCTUnwrap(ProjectPage.openItemsSummary(
+            status: .open, started: true, items: .init(needsYou: [request], doneRequest: request)))
+        XCTAssertEqual(twice.needsYou, 1, "the request has its own row and is counted once")
+        XCTAssertEqual(ProjectPage.needsYouRows(.init(needsYou: [request])), [])
+        let unasked = try XCTUnwrap(ProjectPage.openItemsSummary(status: .open, started: true, items: .init()))
+        XCTAssertEqual(unasked.needsYou, 0, "the owner's own Record as done… is waiting on nobody")
+        let done = try XCTUnwrap(ProjectPage.openItemsSummary(
+            status: .done, started: true, items: .init(doneRequest: request)))
+        XCTAssertEqual(done.needsYou, 0, "a project already done is asked nothing")
+    }
+
     func testOpenItemsSummaryDoesNotTurnAnUnreadInboxIntoAnEmptyOne() throws {
         XCTAssertNil(ProjectPage.openItemsSummary(status: .open, started: true, items: nil))
         let empty = try XCTUnwrap(ProjectPage.openItemsSummary(

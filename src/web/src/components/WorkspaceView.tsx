@@ -165,6 +165,8 @@ import {
   modelOptionsForProvider,
   newSessionEffortForProvider,
   newSessionModelForProvider,
+  openCodeChoiceKey,
+  providerChoiceFor,
   normalizeEffortForProvider,
   providerIdentityResolved,
   runtimeForProvider,
@@ -206,23 +208,15 @@ import {
 import { BackgroundShellsTray } from './BackgroundShellsTray';
 import { SessionCreatedTasksStrip } from './SessionCreatedTasksStrip';
 import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
-import { WatchWakeCard } from './WatchWakeCard';
-import { BackgroundWakeCard } from './BackgroundWakeCard';
-import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
 import { OrbitLinkCardsProvider } from './OrbitLinkCard';
-import { ProjectStartedCard } from './ProjectStartedCard';
-import { SessionMessageCard } from './SessionMessageCard';
-import { SessionReplyCards } from './SessionReplyCard';
 import {
-  parseWatchWake,
   sessionWatching,
   watchingCountWord,
   watchingSessions,
   watchingWord,
   type SessionWatching,
 } from '../lib/watches';
-import { parseBackgroundWake } from '../lib/backgroundWake';
-import { returnsToComposer } from '../lib/queuedTurnRestore';
+import { isQueuedWatchWake, returnsToComposer } from '../lib/queuedTurnRestore';
 import type { BgShell } from '../lib/backgroundShells';
 import { deriveBackgroundShells, mergeBackgroundShells } from '../lib/backgroundShells';
 import {
@@ -277,11 +271,12 @@ import {
   unpinSession,
   updateSessionConfig,
   switchSessionAccount,
+  type TurnCards,
   uploadAttachment,
 } from '../api';
 import { DshRepairCard } from './Transcript';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
-import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
+import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, EventFullCtx, LiveToolOutputsCtx, QueuedUserTurn, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
 import {
@@ -373,7 +368,6 @@ import {
 } from './OwnerConfirmationCard';
 import { OwnerConfirmationReopen } from './OwnerConfirmationReopen';
 import { UNDER_REVIEW, underReviewLine } from './OwnerConfirmationReview';
-import { ReviewRequestedCard, SentBackByReviewerCard } from './ConfirmationReviewTurnCards';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
@@ -381,12 +375,6 @@ import type { Runner } from './TasksSidePanel';
 import { accountsOf } from './AccountSelect';
 import { PlanUsageIndicator } from './PlanUsageIndicator';
 import type {
-  ConfirmationReturnCard,
-  ConfirmationReviewRequestCard,
-  OpenItemDeliveryCard as OpenItemDelivery,
-  ProjectStartedCard as ProjectStarted,
-  SessionMessageCard as SessionMessage,
-  SessionReplyCard as SessionReply,
   SessionTurnIntent,
   SessionTurnPlacement,
   WatchView,
@@ -438,10 +426,12 @@ import {
   acceptedUserTurnLanded,
   clearAcceptedUserTurnsForSession,
   clearAcceptedUserTurnsForTurn,
+  queuedTurnEvent,
   queuedTurnsOutsideTranscript,
   reconcileAcceptedUserTurnSnapshot,
   reconcileQueuedTurnSnapshot,
   transcriptEventsWithDurableDeliveryReceipts,
+  turnCardsOf,
   type AcceptedUserTurn,
 } from '../lib/acceptedUserTurn';
 import { turnPlacementOf } from '../lib/turnPlacement';
@@ -505,7 +495,11 @@ interface RunEvent {
 // until the current turn finishes. Tracked locally so the composer can show it and
 // offer to withdraw it before the runner picks it up. A `!cmd` shell turn queues the
 // same way, so it gets a bubble too — rendered as the command it will run.
-export interface QueuedTurn {
+//
+// The cards it is drawn as (`TurnCards`) are the ones the active snapshot carried, exactly as the
+// accepted-turn placeholder holds them: the queued tail draws the card the transcript will, rather
+// than a bubble it replaces when the runner takes the turn.
+export interface QueuedTurn extends TurnCards {
   turnId: string;
   content: string;
   shell?: boolean;
@@ -521,22 +515,6 @@ export interface QueuedTurn {
   attachments?: { id: string; mimeType: string }[];
   /** When the server queued it — the receipt's own timestamp, as an accepted turn's `acceptedAt`. */
   createdAt?: string;
-  /** An exception item's delivery carries the item's own fields beside its words, exactly as the
-   *  accepted-turn placeholder does (`AcceptedUserTurn.openItemDelivery`): the queued tail draws the
-   *  card the transcript will, rather than a bubble it replaces when the runner takes the turn. */
-  openItemDelivery?: OpenItemDelivery;
-  /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
-  projectStarted?: ProjectStarted;
-  /** And for a confirmation review's two turns: the request a reviewer is handed, and the reviewer's
-   *  return handed to the run (`ActiveSessionTurn.confirmationReviewRequest` / `confirmationReturn`). */
-  confirmationReviewRequest?: ConfirmationReviewRequestCard;
-  confirmationReturn?: ConfirmationReturnCard;
-  /** Another Orbit session's message, and who sent it (`ActiveSessionTurn.sessionMessage`): drawn as
-   *  the "From [that session]" card its echo will be, and never handed back to the reader's composer. */
-  sessionMessage?: SessionMessage;
-  /** The outcomes a reply turn hands back (`ActiveSessionTurn.sessionReplies`): drawn as the reply
-   *  cards its echo will be, rather than as the blocks it is delivered with in the reader's bubble. */
-  sessionReplies?: SessionReply[];
   /** The control plane wrote this turn itself, so nobody typed it (`ActiveSessionTurn.authoredByOrbit`). */
   authoredByOrbit?: true;
 }
@@ -3173,14 +3151,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     workspaceId?: string;
     provider: string;
   } | null>(null);
-  const draftProvider =
+  // What was picked, as the Provider menu names it — which for a key run on OpenCode is
+  // `opencode/<slug>` (openCodeKeyChoice) — and the provider that pick creates the session with.
+  const draftChoice =
     draftProviderPick && draftProviderPick.workspaceId === workspaceId ? draftProviderPick.provider : null;
+  const draftProvider = draftChoice && openCodeChoiceKey(draftChoice) ? AgentProvider.OPENCODE : draftChoice;
   // The provider a NEW session would run: an explicit pick, else what this project last ran on.
   // `lastProvider` is derived server-side from the workspace's most recent interactive session — an
   // workspace holds no provider of its own (apiserver workspaces/workspace-provider.ts). `provider` is the
   // deprecated alias of the same derived value, still served for older native builds.
-  const pickedProvider: string =
-    draftProvider ?? pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? 'claude';
+  const lastWorkspaceProvider = pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? 'claude';
+  const pickedProvider: string = draftProvider ?? lastWorkspaceProvider;
+  // The Provider-menu identity of that pick: the model space, the model seed and the menu's tick.
+  const pickedChoice: string = draftChoice ?? lastWorkspaceProvider;
   // The Codex or Claude account picked for the draft on the New Session hero, scoped to its workspace
   // like the provider pick. Without one a new session starts where Automatic or its workspace says.
   const [draftAccountPick, setDraftAccountPick] = useState<{
@@ -3316,7 +3299,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
 
   const pickedModelDefault = pickedWorkspace
     ? newSessionModelForProvider(
-        pickedProvider,
+        pickedChoice,
         me.data?.preferences?.defaultModels,
         runner.modelCatalog,
         configuredProviders,
@@ -3365,7 +3348,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const currentProviderChoiceForDraft = useMemo(
     () =>
       currentProviderChoice(
-        pickedProvider,
+        pickedChoice,
         providerChoicesForRunner,
         runner.modelCatalog,
         configuredProviders,
@@ -3373,7 +3356,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         runner.antigravity,
       ),
     [
-      pickedProvider,
+      pickedChoice,
       providerChoicesForRunner,
       runner.modelCatalog,
       configuredProviders,
@@ -3386,14 +3369,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // when no group holds it (`opencode`, a removed provider) or holds it but cannot run it.
   const draftEngines = useMemo(
     () =>
-      engineChoices(providerChoicesForRunner, configuredProviders, [
-        pickedProvider,
-        pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider,
-      ]),
-    [providerChoicesForRunner, configuredProviders, pickedProvider, pickedWorkspace?.lastProvider, pickedWorkspace?.provider],
+      engineChoices(providerChoicesForRunner, configuredProviders, [pickedChoice, lastWorkspaceProvider]),
+    [providerChoicesForRunner, configuredProviders, pickedChoice, lastWorkspaceProvider],
   );
   const currentDraftEngine =
-    draftEngines.find((engine) => engine.provider.slug === pickedProvider) ??
+    draftEngines.find((engine) => engine.provider.slug === pickedChoice) ??
     engineChoiceFor(currentProviderChoiceForDraft, configuredProviders);
   // What a switch just changed. Shown under the summary and cleared on a timer: the model move
   // is a silent side effect otherwise, and so is the write-back that remembers the pick.
@@ -3442,7 +3422,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // An account row under an engine: that engine, on that account — or on Automatic (`null`). Like the
   // provider, it binds the session being drafted and rewrites no workspace setting.
   const pickDraftAccount = (slug: string, account: string | null): void => {
-    if (slug !== pickedProvider) pickDraftProvider(slug);
+    if (slug !== pickedChoice) pickDraftProvider(slug);
     setDraftAccountPick(account === null ? null : { workspaceId, engine: slug, account });
   };
 
@@ -3452,7 +3432,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // never carries into the new one's namespace.
   const modelContextKey = selectedId
     ? `session:${selectedId}`
-    : `draft:${runner.id}:${workspaceId ?? 'none'}:${pickedProvider}`;
+    : `draft:${runner.id}:${workspaceId ?? 'none'}:${pickedChoice}`;
   const effortContextKey = selectedId
     ? `session:${selectedId}:${live ? 'live' : 'ended'}`
     : modelContextKey;
@@ -3462,10 +3442,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // picker. Once the user chooses any model, ignore seed changes until the Workspace/Session context
   // changes. Dirty is explicit rather than inferred from value equality: choosing the same value
   // is still an intentional choice.
+  // '' is a seed too — OpenCode's (and agy's) "pick for yourself" — so only null waits.
   useEffect(() => {
-    const decision = decideContextSeed(modelSeedState.current, modelContextKey, !!modelSeed);
+    const ready = modelSeed !== null && modelSeed !== undefined;
+    const decision = decideContextSeed(modelSeedState.current, modelContextKey, ready);
     modelSeedState.current = decision.state;
-    if (decision.apply && modelSeed) setModel(modelSeed);
+    if (decision.apply && ready) setModel(modelSeed);
   }, [modelContextKey, modelSeed]);
 
   // A new session defaults to Auto — the app-level default (DEFAULT_PERMISSION_MODE) — rather
@@ -3673,6 +3655,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     () => queuedTurnsOutsideTranscript(scopedQueuedTurns, transcriptEvents),
     [scopedQueuedTurns, transcriptEvents],
   );
+  // The event each of those rows is drawn from (`queuedTurnEvent`): the one its echo will be.
+  const queuedTailEvents = useMemo(
+    () => visibleQueuedTurns.map((turn) => ({ turn, event: queuedTurnEvent(turn) })),
+    [visibleQueuedTurns],
+  );
   // The render-time filter above removes duplication in the same frame the SSE event lands. Trim
   // the acknowledged copy afterwards so landed turns do not accumulate in memory.
   useEffect(() => {
@@ -3861,13 +3848,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 id: attachment.id,
                 mime: attachment.mimeType || 'application/octet-stream',
               })),
-              // The card the snapshot carried for an exception item's delivery, so the placeholder
-              // this row paints is the card the runner's echo will replace it with.
-              ...(row.openItemDelivery ? { openItemDelivery: row.openItemDelivery } : {}),
-              ...(row.projectStarted ? { projectStarted: row.projectStarted } : {}),
-              // …and another session's message, drawn "From [that session]" rather than as the
-              // reader's own bubble while its echo is on the way.
-              ...(row.sessionMessage ? { sessionMessage: row.sessionMessage } : {}),
+              // Every card the snapshot carried, so the placeholder this row paints is the card the
+              // runner's echo will replace it with.
+              ...turnCardsOf(row),
             }))
             .filter(
               (turn) => !acceptedUserTurnLanded(turn, selectedId, accRef.current),
@@ -7232,8 +7215,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // only thing that can be inheriting here is nothing.
   const effectiveFastMode: boolean = selected?.fastMode === true;
   const shownModel: string = live ? effectiveModel : model;
+  // The Provider-menu identity the composer is on: the provider, except that an OpenCode session on
+  // a configured key is on that key (`opencode/<slug>`) — whose models are the ones it lists.
+  const shownChoice: string = selected ? providerChoiceFor(shownProvider, shownModel) : pickedChoice;
   const catalogModelOptions = shownProviderCapabilitiesResolved
-    ? modelOptionsForProvider(shownProvider, runner.modelCatalog, configuredProviders)
+    ? modelOptionsForProvider(shownChoice, runner.modelCatalog, configuredProviders)
     : [];
   // Runtime configuration can name a valid model that is not in the reported catalog yet. Keep
   // that effective default/selectable session value visible in the picker instead of rendering a
@@ -7348,7 +7334,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     () =>
       live || resumable || !selected
         ? sameRuntimeChoices(
-            shownProvider,
+            shownChoice,
             providerChoicesForRunner,
             configuredProviders,
             runner.modelCatalog,
@@ -7360,7 +7346,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       live,
       resumable,
       selected,
-      shownProvider,
+      shownChoice,
       providerChoicesForRunner,
       configuredProviders,
       runner.modelCatalog,
@@ -7934,7 +7920,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // `account`, when the pick was one of the engine's accounts listed under it rather than the engine's
   // own row: the switch lands the session there (SessionConfigDto.account) — Automatic's pick otherwise.
   const pickProvider = (v: string, account?: string): void => {
-    if (v === shownProvider) {
+    if (v === shownChoice) {
       if (account !== undefined) pickAccount(account, false);
       return;
     }
@@ -7955,6 +7941,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (!selected) {
       if (account === undefined) pickDraftProvider(v);
       else pickDraftAccount(v, account === AUTOMATIC_ACCOUNT ? null : account);
+      return;
+    }
+    // Within OpenCode a key is part of the model (`orbit-<slug>/<model>`), so moving between its own
+    // config and its keys is a model change, onto the default of the one picked.
+    if (shownProvider === AgentProvider.OPENCODE && runtimeForProvider(v, configuredProviders) === AgentProvider.OPENCODE) {
+      pickModel(defaultModelForProvider(v, runner.modelCatalog, configuredProviders, runner.runtimeDefaultModels));
       return;
     }
     // Each provider owns its model space, so carry the running model only when the new one offers
@@ -8085,11 +8077,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         ...prev,
         preferences: {
           ...prev.preferences,
-          defaultModels: { ...prev.preferences?.defaultModels, [shownProvider]: v },
+          defaultModels: { ...prev.preferences?.defaultModels, [shownChoice]: v },
         },
       } : prev,
     );
-    modelPreferenceMut.mutate({ provider: shownProvider, model: v });
+    modelPreferenceMut.mutate({ provider: shownChoice, model: v });
     if (v === shownModel) {
       modelSeedState.current = dirtyContextSeed(modelContextKey);
       return;
@@ -8237,7 +8229,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             label: (
               <span className="scope-menu-row">
                 Provider
-                {menuValue(providerSwitchChoices.find((c) => c.slug === shownProvider)?.label ?? shownProvider)}
+                {menuValue(providerSwitchChoices.find((c) => c.slug === shownChoice)?.label ?? shownChoice)}
               </span>
             ),
             children: providerSwitchChoices.flatMap((choice) => {
@@ -8246,7 +8238,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               // it does something useful — it goes where the fix is (see pickProvider), which is
               // the New Session hero's behaviour for the same row. The running provider is
               // exempt: it is the chip's own provider, and needs no parenthetical.
-              const blocked = !!choice.unavailable && choice.slug !== shownProvider;
+              const blocked = !!choice.unavailable && choice.slug !== shownChoice;
               // Each built-in engine's accounts under it: on the
               // engine the session is on, the ones it moves between (switchAccount); under another,
               // the ones a switch onto that engine lands on (pickProvider with the account).
@@ -8277,7 +8269,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         : choice.label}
                       {choice.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}
                       {/* With its accounts listed, the tick is on the account the session runs on. */}
-                      {checkSlot(choice.slug === shownProvider && accounts.length === 0)}
+                      {checkSlot(choice.slug === shownChoice && accounts.length === 0)}
                     </span>
                   ),
                   onClick: () => pickProvider(choice.slug),
@@ -9628,199 +9620,36 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   rememberable={approvalRememberOffered(runtimeForProvider(shownProvider, configuredProviders))}
                 />
               ))}
-              {!selectedTrashed && visibleQueuedTurns.map((q) => {
-                // Another Orbit session's message is asked about FIRST, off the card the snapshot
-                // carried, before anything is read out of its words — which are the sending agent's to
-                // choose, and could take the shape of a wake below (the transcript's own order,
-                // NodeView).
-                const fromSession = q.sessionMessage ?? null;
-                // A wake a watch queued is the card the transcript draws once a runner takes it
-                // (NodeView), so it keeps that shape when it lands and its JSON stays folded. How
-                // its delivery stands is the queue's line to say, as for every queued row.
-                const wake = fromSession ? null : parseWatchWake(q.content);
-                // A wake the control plane queued for a background job's news, or for a wakeup coming
-                // due, is nobody's message either: it gets the line the transcript draws once a
-                // runner takes it. Withdrawing it is an ordinary cancel — nothing re-sends it.
-                const background = fromSession || wake ? null : parseBackgroundWake(q.content);
-                return fromSession ? (
-                  // Drawn "From [that session]" while it waits, as the transcript draws it once a
-                  // runner takes it. Cancel withdraws it and hands nothing back to the composer — the
-                  // words are the sending session's (`returnsToComposer`) — and there is no Put back
-                  // for the same reason.
-                  <SessionMessageCard
+              {!selectedTrashed && queuedTailEvents.map(({ turn: q, event }) => {
+                // Each row is drawn from the event its echo will be, by the transcript's own dispatch
+                // (QueuedUserTurn): the card the transcript draws once a runner takes it, or the bubble
+                // the reader typed — so taking the turn changes nothing about how it reads. What is the
+                // queue's own is said here, in the slot each card keeps for it: how the turn stands,
+                // and the way out of it.
+                //
+                // A wake a watch queued is withdrawn rather than cancelled, because nothing sends it
+                // again; and only words the reader typed are put back in the composer
+                // (`returnsToComposer`), as Cancel and Stop hand back only those.
+                const wake = isQueuedWatchWake(q);
+                return (
+                  <QueuedUserTurn
                     key={q.turnId}
-                    card={fromSession}
-                    text={q.content}
-                    ts={q.createdAt}
+                    event={event}
+                    turnImages={turnImages}
                     queued={
                       <QueuedTurnMeta
                         placement={q.placement}
                         delivery={q.delivery}
                         deliveryCode={q.deliveryCode}
                         deliveryReason={q.deliveryReason}
-                        onCancel={() => cancelQueued(q.turnId)}
+                        wake={wake}
+                        onCancel={() => (wake ? withdrawWake(q.turnId) : cancelQueued(q.turnId))}
+                        onPutBack={
+                          restoreUndelivered && returnsToComposer(q) ? () => takeBackUndelivered(q) : undefined
+                        }
                       />
                     }
                   />
-                ) : wake ? (
-                  <WatchWakeCard
-                    key={q.turnId}
-                    wake={wake}
-                    text={q.content}
-                    linkable
-                    undelivered={false}
-                    queued={
-                      <QueuedTurnMeta
-                        placement={q.placement}
-                        delivery={q.delivery}
-                        deliveryCode={q.deliveryCode}
-                        deliveryReason={q.deliveryReason}
-                        wake
-                        onCancel={() => withdrawWake(q.turnId)}
-                      />
-                    }
-                  />
-                ) : background ? (
-                  <BackgroundWakeCard
-                    key={q.turnId}
-                    wake={background}
-                    queued={
-                      <QueuedTurnMeta
-                        placement={q.placement}
-                        delivery={q.delivery}
-                        deliveryCode={q.deliveryCode}
-                        deliveryReason={q.deliveryReason}
-                        onCancel={() => cancelQueued(q.turnId)}
-                      />
-                    }
-                  />
-                ) : q.openItemDelivery ? (
-                  // An exception item's delivery is nobody's message on the queue either, and for a
-                  // stronger reason than the two wakes above: nobody typed it at all. It gets the
-                  // card the transcript draws once a runner takes it, with the queue's line at its
-                  // foot — so taking the turn changes nothing about how the delivery reads. Read off
-                  // the payload the active snapshot carried, never out of the text's shape.
-                  <OpenItemDeliveryCard
-                    key={q.turnId}
-                    card={q.openItemDelivery}
-                    text={q.content}
-                    ts={q.createdAt}
-                    queued={
-                      <QueuedTurnMeta
-                        placement={q.placement}
-                        delivery={q.delivery}
-                        deliveryCode={q.deliveryCode}
-                        deliveryReason={q.deliveryReason}
-                        onCancel={() => cancelQueued(q.turnId)}
-                        onPutBack={restoreUndelivered ? () => takeBackUndelivered(q) : undefined}
-                      />
-                    }
-                  />
-                ) : q.confirmationReviewRequest || q.confirmationReturn ? (
-                  // A confirmation review's turns are Orbit's on the queue too: the card the
-                  // transcript draws once a runner takes them, with the queue's line at its foot.
-                  q.confirmationReviewRequest ? (
-                    <ReviewRequestedCard
-                      key={q.turnId}
-                      card={q.confirmationReviewRequest}
-                      ts={q.createdAt}
-                      queued={
-                        <QueuedTurnMeta
-                          placement={q.placement}
-                          delivery={q.delivery}
-                          deliveryCode={q.deliveryCode}
-                          deliveryReason={q.deliveryReason}
-                          onCancel={() => cancelQueued(q.turnId)}
-                        />
-                      }
-                    />
-                  ) : (
-                    <SentBackByReviewerCard
-                      key={q.turnId}
-                      card={q.confirmationReturn!}
-                      ts={q.createdAt}
-                      queued={
-                        <QueuedTurnMeta
-                          placement={q.placement}
-                          delivery={q.delivery}
-                          deliveryCode={q.deliveryCode}
-                          deliveryReason={q.deliveryReason}
-                          onCancel={() => cancelQueued(q.turnId)}
-                        />
-                      }
-                    />
-                  )
-                ) : q.sessionReplies ? (
-                  // The outcomes of this session's requests, handed back: nobody typed the turn, so
-                  // it gets the reply cards the transcript draws once a runner takes it.
-                  <SessionReplyCards
-                    key={q.turnId}
-                    cards={q.sessionReplies}
-                    ts={q.createdAt}
-                    attached={
-                      <QueuedTurnMeta
-                        placement={q.placement}
-                        delivery={q.delivery}
-                        deliveryCode={q.deliveryCode}
-                        deliveryReason={q.deliveryReason}
-                        onCancel={() => cancelQueued(q.turnId)}
-                      />
-                    }
-                  />
-                ) : q.projectStarted ? (
-                  // The message telling the coordinator its project was started, as the card the
-                  // transcript draws once a runner takes it — the same reason as the delivery above.
-                  <ProjectStartedCard
-                    key={q.turnId}
-                    card={q.projectStarted}
-                    text={q.content}
-                    ts={q.createdAt}
-                    queued={
-                      <QueuedTurnMeta
-                        placement={q.placement}
-                        delivery={q.delivery}
-                        deliveryCode={q.deliveryCode}
-                        deliveryReason={q.deliveryReason}
-                        onCancel={() => cancelQueued(q.turnId)}
-                        onPutBack={restoreUndelivered ? () => takeBackUndelivered(q) : undefined}
-                      />
-                    }
-                  />
-                ) : (
-                  <div className="chat-msg chat-user chat-queued" key={q.turnId}>
-                    {turnImages[q.turnId]?.length ? (
-                      // Fresh local previews (object URLs) — instant, before a reload drops them.
-                      <div className="chat-images">
-                        {turnImages[q.turnId].map((im, i) => (
-                          <ChatImage key={i} src={im.url} />
-                        ))}
-                      </div>
-                    ) : q.attachments?.length ? (
-                      // After a reload the local previews are gone; fetch the refs the queued-turn
-                      // list carries from the server, so an image-only turn stays visible.
-                      <div className="chat-images">
-                        {q.attachments.map((a) => (
-                          <AttachmentImage key={a.id} id={a.id} />
-                        ))}
-                      </div>
-                    ) : null}
-                    {/* Same Markdown render as the settled bubble it becomes (see UserBubble), so a
-                        message doesn't change shape when the runner picks it up. A queued `!cmd`
-                        shows the command verbatim — markdown would mangle its shell syntax. */}
-                    {q.shell ? (
-                      <code className="chat-queued-cmd">!{q.content}</code>
-                    ) : (
-                      q.content && <MD breaks>{q.content}</MD>
-                    )}
-                    <QueuedTurnMeta
-                      placement={q.placement}
-                      delivery={q.delivery}
-                      deliveryCode={q.deliveryCode}
-                      deliveryReason={q.deliveryReason}
-                      onCancel={() => cancelQueued(q.turnId)}
-                      onPutBack={restoreUndelivered ? () => takeBackUndelivered(q) : undefined}
-                    />
-                  </div>
                 );
               })}
               {placeholder === 'waiting' && <div className="chat-note">Waiting for the workspace…</div>}

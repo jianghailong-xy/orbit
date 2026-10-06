@@ -1,0 +1,18 @@
+{
+  "how": "keyboard",
+  "inDialog": true,
+  "inOverlay": true,
+  "rect": {
+    "x": 951,
+    "y": 29,
+    "width": 266,
+    "height": 40,
+    "top": 29,
+    "right": 1217,
+    "bottom": 69,
+    "left": 951
+  },
+  "cursor": "pointer",
+  "tabPresses": 5,
+  "path": "/sessions/2zr7BFsBKPRa35MeIQQwz"
+}

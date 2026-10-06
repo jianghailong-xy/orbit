@@ -1,0 +1,352 @@
+[
+  {
+    "ref": "exec-d01fa863-891a-4e1f-8cec-31bb206630d2",
+    "label": "before-repair",
+    "status": "failed",
+    "exitCode": 1,
+    "command": "python3 - <<'PY'\nfrom pathlib import Path\nimport shutil\nroot=Path('docs/evidence/base-ui-migration/p2.3/revision-2')\nroot.mkdir(exist_ok=True)\n(root/'checks').mkdir(exist_ok=True)\nscript=Path('/tmp/orbit-p23-check.py').read_text().replace(\"p2.3/checks\", \"p2.3/revision-2/checks\")\nPath('/tmp/orbit-p23-r2-check.py').write_text(script)\nfor name in ['coordinator-feedback.browser.mjs','coordinator-feedback.config.mjs']:\n    shutil.copy2(Path('/tmp/orbit-p23-coordinator-review-t5ns4cfj/src/web/ui-migration')/name, Path('src/web/ui-migration')/name)\nPY\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py before-repair node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/coordinator-feedback.config.mjs"
+  },
+  {
+    "ref": "exec-5d71e789-834c-46cf-bf82-1c79f9f828f1",
+    "label": "stable-top-layer",
+    "status": "failed",
+    "exitCode": 1,
+    "command": "cp -a src/web/.coordinator-feedback-results docs/evidence/base-ui-migration/p2.3/revision-2/before-repair\npython3 - <<'PY'\nfrom pathlib import Path\np=Path('src/web/src/components/ToastViewport.tsx')\ns=p.read_text(); start=s.index('  const [viewportWidth'); end=s.index('  const narrow',start)\ns=s[:start]+'''  // A stable React portal keeps notification DOM and hover state across modal\n  // ownership changes. The manual popover paints outside ancestor transforms.\n  const [host] = useState(() => {\n    const element = document.createElement('div');\n    element.className = 'toast-layer';\n    element.popover = 'manual';\n    return element;\n  });\n  useLayoutEffect(() => {\n    (portal ?? document.body).appendChild(host);\n    host.showPopover?.();\n    return () => { host.remove(); };\n  }, [host, portal]);\n'''+s[end:]\nstart=s.index('      style={portal');end=s.index('      {pinned.map',start)\ns=s[:start]+'>\\n'+s[end:]\ns=s.replace('    portal ?? document.body,','    host,')\np.write_text(s)\np=Path('src/web/src/index.css');s=p.read_text(); s=s.replace('.toast-viewport {', '''.toast-layer {\n  position: fixed; inset: 0; margin: 0; padding: 0; border: 0;\n  width: auto; height: auto; overflow: visible; background: transparent;\n  pointer-events: none;\n}\n.toast-layer::backdrop { background: transparent; pointer-events: none; }\n.toast-viewport {''',1);p.write_text(s)\nPY\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py stable-top-layer node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/coordinator-feedback.config.mjs"
+  },
+  {
+    "ref": "exec-5a31cdc5-cd38-4de9-9f2e-06f5094d8e4c",
+    "label": "hover-repair",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "cp -a src/web/.coordinator-feedback-results docs/evidence/base-ui-migration/p2.3/revision-2/top-layer-diagnostic\npython3 - <<'PY'\nfrom pathlib import Path\np=Path('src/web/src/components/ToastViewport.tsx');s=p.read_text(); key='  const narrow = useMediaQuery(PHONE_QUERY);'\ns=s.replace(key,'''  useLayoutEffect(() => {\n    let held = false;\n    const release = () => {\n      if (!held) return;\n      held = false;\n      releaseToasts();\n    };\n    // WebKit can omit mouseleave when a hovered node changes modal owners.\n    // Actual pointer movement remains reliable; changing owners alone must not\n    // resume a stationary hover or restart an unpaused notification's deadline.\n    const move = (event: MouseEvent) => {\n      const target = event.target;\n      const next = target instanceof Element && host.contains(target) && !!target.closest('[data-toast-dwell]');\n      if (next === held) return;\n      if (next) { held = true; holdToasts(); }\n      else release();\n    };\n    document.addEventListener('mousemove', move, true);\n    document.addEventListener('mouseleave', release);\n    return () => {\n      document.removeEventListener('mousemove', move, true);\n      document.removeEventListener('mouseleave', release);\n      release();\n    };\n  }, [host]);\n'''+key)\ns=s.replace('aria-label=\"Notifications\"\\n>', 'aria-label=\"Notifications\">')\ns=s.replace('      onMouseEnter={holdToasts}\\n      onMouseLeave={releaseToasts}', '      data-toast-dwell=\"\"')\ns=s.replace('onMouseEnter={holdToasts} onMouseLeave={releaseToasts}', 'data-toast-dwell=\"\"')\np.write_text(s)\nPY\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py hover-repair node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/coordinator-feedback.config.mjs"
+  },
+  {
+    "ref": "exec-64e45e8c-f6d4-42a2-bb55-6513403c1245",
+    "label": "targeted-unit",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "python3 - <<'PY'\nfrom pathlib import Path\nimport shutil\np=Path('docs/evidence/base-ui-migration/p2.3/revision-2/coordinator-input');p.mkdir()\nfor name in ['coordinator-feedback.browser.mjs','coordinator-feedback.config.mjs','coordinator-native-feedback.config.mjs']:\n    shutil.copy2(Path('/tmp/orbit-p23-coordinator-review-t5ns4cfj/src/web/ui-migration')/name,p/name)\nfor name in ['coordinator-edge-summary.json','coordinator-edge-checks.json','native-timer-checks.json']:\n    shutil.copy2(Path('/tmp/orbit-p23-coordinator-review-t5ns4cfj')/name,p/name)\nPath('src/web/ui-migration/toasts-lifecycle.browser.mjs').write_text((p/'coordinator-feedback.browser.mjs').read_text())\nPY\ncat >> src/web/ui-migration/toasts-lifecycle.browser.mjs <<'EOF'\n\nconst region = (page) => page.getByRole('region', { name: 'Notifications', exact: true });\nconst attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\nconst finishMotion = (page) => page.evaluate(async () => {\n  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));\n  await Promise.all(document.getAnimations().filter((a) => a.effect?.getComputedTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {})));\n});\n\nfor (const kind of ['Dialog', 'Drawer', 'Bottom drawer']) {\n  test(`notification card stays fixed through ${kind} entry, nested layers and exit`, async ({ page }, info) => {\n    await page.emulateMedia({ reducedMotion: 'no-preference' });\n    await button(page, 'Error notice').click();\n    await page.mouse.move(0, 0);\n    await finishMotion(page);\n    await page.evaluate(() => {\n      const card = document.querySelector('.toast');\n      window.cardMotion = { before: card.getBoundingClientRect().toJSON(), samples: [], phase: 'before', running: true };\n      const sample = () => {\n        const current = document.querySelector('.toast');\n        const r = current?.getBoundingClientRect();\n        window.cardMotion.samples.push({ phase: window.cardMotion.phase, t: performance.now(), sameNode: current === card,\n          card: r?.toJSON(), opacity: current ? getComputedStyle(current).opacity : null,\n          overlays: [...document.querySelectorAll('.orbit-overlay')].map((el) => {\n            const s = getComputedStyle(el);\n            return { scale: s.scale, translate: s.translate, opacity: s.opacity, ending: el.hasAttribute('data-ending-style') };\n          }) });\n        if (window.cardMotion.running) requestAnimationFrame(sample);\n      };\n      requestAnimationFrame(sample);\n    });\n    const phase = (name) => page.evaluate((value) => { window.cardMotion.phase = value; }, name);\n    await phase('open');\n    await button(page, `Open ${kind}`).click();\n    await finishMotion(page);\n    for (let depth = 1; depth <= 2; depth++) {\n      await phase(`nested-${depth}`);\n      await button(page, 'Nested dialog').click();\n      await finishMotion(page);\n      await expect(region(page)).toBeVisible();\n    }\n    for (let depth = 2; depth >= 0; depth--) {\n      await phase(`close-${depth}`);\n      await page.keyboard.press('Escape');\n      await finishMotion(page);\n      await expect(region(page)).toBeVisible();\n    }\n    const motion = await page.evaluate(() => { window.cardMotion.running = false; return window.cardMotion; });\n    await attach(info, 'continuous-card-motion', motion);\n    expect(motion.samples.length).toBeGreaterThan(20);\n    const shifted = motion.samples.filter((s) => !s.sameNode || !s.card || s.opacity !== '1' ||\n      ['x', 'y', 'width', 'height'].some((key) => Math.abs(s.card[key] - motion.before[key]) > 0.1));\n    expect(shifted, 'existing card DOM, opacity and geometry stay stable at every sampled frame').toEqual([]);\n    // These checks also prove the original popup transitions still run in both directions.\n    for (const name of ['open', 'nested-1', 'nested-2', 'close-2', 'close-1', 'close-0']) {\n      expect(motion.samples.some((s) => s.phase === name && s.overlays.some((o) =>\n        Number(o.opacity) < 1 || (o.translate !== 'none' && o.translate !== '0px') || (o.scale !== 'none' && o.scale !== '1'))), name).toBe(true);\n    }\n    await expect(button(page, `Open ${kind}`)).toBeFocused();\n  });\n}\n\ntest('stationary hover stays paused across nested modal owners then resumes for exactly six seconds', async ({ page }, info) => {\n  await page.clock.install({ time: new Date('2026-10-04T00:00:00Z') });\n  await page.clock.pauseAt(new Date('2026-10-04T00:00:01Z'));\n  await button(page, 'Complete session').click();\n  await region(page).getByRole('button', { name: 'Undo completing Fix login redirect', exact: true }).hover();\n  await page.clock.runFor(10000);\n  await expect(region(page)).toBeVisible();\n  for (const name of ['Open Dialog', 'Nested dialog']) {\n    await button(page, name).focus();\n    await page.keyboard.press('Enter');\n    await page.clock.runFor(10200);\n    await expect(region(page)).toBeVisible();\n  }\n  for (let i = 0; i < 2; i++) {\n    await page.keyboard.press('Escape');\n    await page.clock.runFor(10200);\n    await expect(region(page)).toBeVisible();\n  }\n  await page.mouse.move(0, 0);\n  await page.clock.runFor(5999);\n  await expect(region(page)).toBeVisible();\n  await page.clock.runFor(1);\n  await expect(region(page)).toHaveCount(0);\n  await attach(info, 'stationary-hover', { pausedAcrossFourTransfersMs: 40800, pausedBeforeTransfersMs: 10000, visibleAfterReleaseMs: 5999, expiredAfterReleaseMs: 6000 });\n});\n\ntest('unhovered notifications retain their original deadline through modal owner changes', async ({ page }, info) => {\n  await page.clock.install({ time: new Date('2026-10-04T00:00:00Z') });\n  await page.clock.pauseAt(new Date('2026-10-04T00:00:01Z'));\n  await button(page, 'Complete session').click();\n  await page.mouse.move(0, 0);\n  await page.clock.runFor(2000);\n  await button(page, 'Open Drawer').focus();\n  await page.keyboard.press('Enter');\n  await page.clock.runFor(200);\n  await page.keyboard.press('Escape');\n  await page.clock.runFor(3799);\n  await expect(region(page)).toBeVisible();\n  await page.clock.runFor(1);\n  await expect(region(page)).toHaveCount(0);\n  await attach(info, 'unchanged-deadline', { visibleAtTotalMs: 5999, expiredAtTotalMs: 6000 });\n});\nEOF\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py targeted-unit npm test -w @orbit/web -- src/lib/toast.test.tsx src/lib/toastFeed.test.ts src/lib/theme.test.tsx src/components/ui/boundary.test.ts"
+  },
+  {
+    "ref": "exec-58808d3f-facb-49d0-8c40-9face234b614",
+    "label": "fixture-types",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py fixture-types node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts.tsconfig.json --noEmit && NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py notification-test-types node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts-tests.tsconfig.json --noEmit && NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py web-build npm run build -w @orbit/web"
+  },
+  {
+    "ref": "exec-3b8a6751-da09-4d43-907e-f4f0f556d3e2",
+    "label": "notification-compatibility",
+    "status": "failed",
+    "exitCode": 1,
+    "command": "python3 docs/evidence/base-ui-migration/p2.3/collect.py src/web/.coordinator-feedback-results docs/evidence/base-ui-migration/p2.3/revision-2/coordinator-after\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py notification-compatibility npm run test:ui-toasts -w @orbit/web"
+  },
+  {
+    "ref": "exec-ff8beda8-7683-44e2-88c3-cf952eadcbf6",
+    "label": "lifecycle-diagnostic",
+    "status": "failed",
+    "exitCode": 1,
+    "command": "python3 - <<'PY'\nfrom pathlib import Path\nimport subprocess\np=Path('src/web/src/components/ToastViewport.tsx');s=p.read_text();old=subprocess.check_output(['git','show','HEAD:'+str(p)],text=True)\nstart=old.index('  const [viewportWidth');end=old.index('  const narrow',start)\ns=s.replace('  const narrow = useMediaQuery(PHONE_QUERY);',old[start:end]+'  const narrow = useMediaQuery(PHONE_QUERY);')\nstart=old.index('      style={portal');end=old.index('      {pinned.map',start)\ns=s.replace('aria-label=\"Notifications\">\\n', 'aria-label=\"Notifications\"\\n'+old[start:end])\np.write_text(s)\np=Path('src/web/src/index.css');s=p.read_text().replace('width: auto; height: auto; overflow: visible; background: transparent;', 'width: auto; height: auto; overflow: visible; background: transparent; color: inherit;');p.write_text(s)\nPY\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py lifecycle-diagnostic node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/toasts.config.mjs toasts-lifecycle.browser.mjs --project chromium-light-desktop --project webkit-light-phone --project webkit-light-desktop"
+  },
+  {
+    "ref": "exec-e26e9159-18a4-435a-99b6-7dbc3c3ea2b8",
+    "label": "full-web-test",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py full-web-test npm test -w @orbit/web"
+  },
+  {
+    "ref": "exec-91ae80c9-1acc-4ba6-8b29-31ce476e3c61",
+    "label": "continuous-motion-repair",
+    "status": "failed",
+    "exitCode": 1,
+    "command": "cp -a src/web/.toasts-results docs/evidence/base-ui-migration/p2.3/revision-2/card-motion-diagnostic\npython3 - <<'PY'\nfrom pathlib import Path\np=Path('src/web/src/components/ToastViewport.tsx');s=p.read_text();s=s.replace('    (portal ?? document.body).appendChild(host);','''    // Reparenting restarts CSS animations even when React keeps the same DOM.\n    // Carry each notification's original animation time into its new parent.\n    for (const toast of host.querySelectorAll<HTMLElement>('[data-toast-enter-start]')) {\n      toast.style.animationDelay = `${Number(toast.dataset.toastEnterStart) - Number(document.timeline.currentTime)}ms`;\n    }\n    (portal ?? document.body).appendChild(host);''')\ns=s.replace('    if (!portal) return;\\n    // WebKit sizes fixed descendants of an absolute drawer against its wider\\n    // scroll viewport. Keep the same layout width as a body-mounted notification.', '''    // WebKit top-layer descendants can retain a wider scroll viewport during\n    // modal transitions. Match a body-mounted notification even while closing.''')\ns=s.replace('style={portal && viewportWidth ? narrow', 'style={viewportWidth ? narrow')\ns=s.replace('aria-label=\"Notifications\"\\n      style=', '''aria-label=\"Notifications\"\n      onAnimationStart={(event) => {\n        const toast = event.target;\n        if (!(toast instanceof HTMLElement) || !event.animationName.startsWith('orbit-toast-') || toast.dataset.toastEnterStart) return;\n        const animation = toast.getAnimations().find((a) => a instanceof CSSAnimation && a.animationName === event.animationName);\n        if (animation) toast.dataset.toastEnterStart = String(Number(document.timeline.currentTime) - Number(animation.currentTime));\n      }}\n      style=''')\np.write_text(s)\nPY\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py continuous-motion-repair node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/toasts.config.mjs toasts-lifecycle.browser.mjs --grep 'card stays fixed' --project chromium-light-desktop --project webkit-light-phone --project webkit-light-desktop"
+  },
+  {
+    "ref": "exec-02e67fc0-84e5-47db-9088-f1b2dcf4bc10",
+    "label": "unit-after-probe",
+    "status": "failed",
+    "exitCode": 1,
+    "command": "python3 - <<'PY'\nimport json,base64\nfrom pathlib import Path\nr=json.loads(Path('src/web/.toasts-results/report.json').read_text())\ndef visit(s):\n for spec in s.get('specs',[]):\n  for t in spec['tests']:\n   if t['projectName']!='webkit-light-phone':continue\n   a=next(a for a in t['results'][0]['attachments'] if a['name']=='continuous-card-motion')\n   d=json.loads(base64.b64decode(a['body']));print(spec['title'], d['before']);print({p:sorted(set((x['card']['width'],x['card']['x']) for x in d['samples'] if x['phase']==p and x['card'])) for p in ['before','open','nested-1','nested-2','close-2','close-1','close-0']})\n for x in s.get('suites',[]):visit(x)\nfor s in r['suites']:visit(s)\nPY\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py unit-after-probe npm test -w @orbit/web -- src/lib/toast.test.tsx src/lib/toastFeed.test.ts src/lib/theme.test.tsx src/components/ui/boundary.test.ts"
+  },
+  {
+    "ref": "exec-d71cc8e7-44f5-48ea-819a-061537f60c29",
+    "label": "original-nested-motion",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "python3 - <<'PY'\nfrom pathlib import Path\np=Path('/tmp/orbit-p23-reference/src/web/ui-migration')\ns=(p/'reference.config.mjs').read_text().replace(\"'reference.browser.mjs'\",\"'reference-lifecycle.browser.mjs'\").replace('.toasts-results','.lifecycle-results').replace('4178','14380')\n(p/'reference-lifecycle.config.mjs').write_text(s)\nPY\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py original-nested-motion node node_modules/@playwright/test/cli.js test --config /tmp/orbit-p23-reference/src/web/ui-migration/reference-lifecycle.config.mjs --grep 'card stays fixed' --project webkit-light-phone"
+  },
+  {
+    "ref": "exec-f3cbf736-d559-4694-967b-8687002c069e",
+    "label": "stable-width-probe",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "python3 - <<'PY'\nfrom pathlib import Path\nfor p in Path('src/web/src').rglob('*.test.tsx'):\n s=p.read_text()\n if 'ToastViewport' in s: print(p, 'has RO' if 'ResizeObserver' in s else 'needs RO')\nPY\ncp -a src/web/.toasts-results docs/evidence/base-ui-migration/p2.3/revision-2/animation-time-diagnostic\npython3 docs/evidence/base-ui-migration/p2.3/collect.py /tmp/orbit-p23-reference/src/web/.lifecycle-results docs/evidence/base-ui-migration/p2.3/revision-2/original-nested-motion\npython3 - <<'PY'\nfrom pathlib import Path\np=Path('src/web/src/components/ToastViewport.tsx');s=p.read_text();s=s.replace('return () => { observer.disconnect(); probe.remove(); };\\n  }, [portal]);', 'return () => { observer.disconnect(); probe.remove(); };\\n  }, []);');p.write_text(s)\nPY\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py stable-width-probe node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/toasts.config.mjs toasts-lifecycle.browser.mjs --grep 'card stays fixed' --project chromium-light-desktop --project webkit-light-phone --project webkit-light-desktop"
+  },
+  {
+    "ref": "exec-a977be77-0b18-4f9f-a2f4-9fdebbb50ddc",
+    "label": "platform-stubs-unit",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "python3 - <<'PY'\nfrom pathlib import Path\nfor name in ['src/web/src/lib/toast.test.tsx','src/web/src/pages/ProjectsPage.newTask.test.tsx']:\n p=Path(name);s=p.read_text();key='  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;'\n s=s.replace(key,key+\"\\n  // Layout is covered in real browsers; jsdom has no ResizeObserver.\\n  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });\")\n if name.endswith('/toast.test.tsx'):s=s.replace('  vi.useRealTimers();','  vi.useRealTimers();\\n  vi.unstubAllGlobals();')\n p.write_text(s)\nPY\ncat >> src/web/ui-migration/toasts-lifecycle.browser.mjs <<'EOF'\n\nfor (const [kind, trigger] of [['Dialog', 'Open Dialog'], ['Drawer', 'Open Drawer'], ['Bottom drawer', 'Open Bottom drawer'], ['Confirmation', 'Confirm save']]) {\n  test(`notification pixels stay intact at ${kind} animation midpoints`, async ({ page }, info) => {\n    await page.emulateMedia({ reducedMotion: 'no-preference' });\n    await button(page, 'Error notice').click();\n    await page.mouse.move(0, 0);\n    await finishMotion(page);\n    await info.attach('before-motion', { body: await region(page).screenshot({ animations: 'allow' }), contentType: 'image/png' });\n    await button(page, trigger).click();\n    for (const phase of ['opening', 'closing']) {\n      if (phase === 'closing') await page.keyboard.press('Escape');\n      const frozen = await page.evaluate(async () => {\n        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));\n        const popup = [...document.querySelectorAll('.orbit-overlay')].find((el) => el.getAnimations().length);\n        window.frozenPopupAnimations = popup?.getAnimations() ?? [];\n        for (const animation of window.frozenPopupAnimations) {\n          animation.pause();\n          animation.currentTime = Number(animation.effect.getTiming().duration) / 2;\n        }\n        const s = popup && getComputedStyle(popup);\n        return { count: window.frozenPopupAnimations.length, scale: s?.scale, translate: s?.translate, opacity: s?.opacity };\n      });\n      expect(frozen.count, 'the real popup animation must exist; it is paused only for the screenshot').toBeGreaterThan(0);\n      await page.mouse.move(0, 0);\n      await info.attach(`${phase}-page`, { body: await page.screenshot({ animations: 'allow' }), contentType: 'image/png' });\n      await info.attach(`${phase}-notification`, { body: await region(page).screenshot({ animations: 'allow' }), contentType: 'image/png' });\n      await attach(info, `${phase}-animation`, frozen);\n      await page.evaluate(() => window.frozenPopupAnimations.forEach((a) => a.play()));\n      await finishMotion(page);\n    }\n    await expect(region(page)).toBeVisible();\n  });\n}\n\ntest('a newly posted notification still plays its original entrance animation once', async ({ page }, info) => {\n  await page.emulateMedia({ reducedMotion: 'no-preference' });\n  // Start on the first animation frame so an intermediate frame cannot be missed by an actionability wait.\n  await page.evaluate(() => {\n    window.freshToastFrames = [];\n    const start = performance.now();\n    const frame = () => {\n      const card = document.querySelector('.toast');\n      if (card) {\n        const s = getComputedStyle(card);\n        window.freshToastFrames.push({ t: performance.now() - start, opacity: Number(s.opacity), transform: s.transform });\n      }\n      if (performance.now() - start < 700) requestAnimationFrame(frame);\n      else window.freshToastDone = true;\n    };\n    requestAnimationFrame(frame);\n  });\n  await button(page, 'Error notice').click();\n  await page.waitForFunction(() => window.freshToastDone);\n  const frames = await page.evaluate(() => window.freshToastFrames);\n  await attach(info, 'fresh-notification-animation', frames);\n  expect(frames.some((f) => f.opacity > 0 && f.opacity < 1 && f.transform !== 'none')).toBe(true);\n  expect(frames.at(-1).opacity).toBe(1);\n  expect(frames.at(-1).transform).toBe('none');\n});\nEOF\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py platform-stubs-unit npm test -w @orbit/web -- src/lib/toast.test.tsx src/lib/toastFeed.test.ts src/lib/theme.test.tsx src/components/ui/boundary.test.ts src/pages/ProjectsPage.newTask.test.tsx"
+  },
+  {
+    "ref": "exec-29588b4a-981a-41c9-8516-7c8e48c71822",
+    "label": "final-fixture-types",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py final-fixture-types node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts.tsconfig.json --noEmit && NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py final-test-types node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts-tests.tsconfig.json --noEmit && NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py final-web-build npm run build -w @orbit/web"
+  },
+  {
+    "ref": "exec-e0384b3d-fca0-488b-94f7-b03a87042213",
+    "label": "original-confirmation-close",
+    "status": "failed",
+    "exitCode": 1,
+    "command": "cat > /tmp/orbit-p23-reference/src/web/ui-migration/reference-confirm-close.browser.mjs <<'EOF'\nimport { test, expect } from '@playwright/test';\ntest('original confirmation closes by unmounting without an exit animation', async ({ page }, info) => {\n await page.emulateMedia({ reducedMotion: 'no-preference' });\n await page.goto('/ui-migration/toasts.html');\n await page.getByRole('button', { name: 'Confirm save', exact: true }).click();\n await expect(page.getByRole('alertdialog', { name: 'Save schedule?', exact: true })).toBeVisible();\n await page.evaluate(async()=>{ await Promise.all(document.getAnimations().map(a=>a.finished.catch(()=>{}))); });\n await page.keyboard.press('Escape');\n const state = await page.evaluate(()=>({confirmCount:document.querySelectorAll('.orbit-confirm').length, animations:document.getAnimations().length}));\n await info.attach('original-confirmation-close', {body:JSON.stringify(state),contentType:'application/json'});\n expect(state).toEqual({confirmCount:0,animations:0});\n});\nEOF\npython3 - <<'PY'\nfrom pathlib import Path\np=Path('/tmp/orbit-p23-reference/src/web/ui-migration')\ns=(p/'reference-lifecycle.config.mjs').read_text().replace('reference-lifecycle.browser','reference-confirm-close.browser').replace('.lifecycle-results','.confirm-close-results')\n(p/'reference-confirm-close.config.mjs').write_text(s)\nPY\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py original-confirmation-close node node_modules/@playwright/test/cli.js test --config /tmp/orbit-p23-reference/src/web/ui-migration/reference-confirm-close.config.mjs --project chromium-light-desktop --project webkit-light-phone"
+  },
+  {
+    "ref": "exec-ebdacd35-a081-4815-b546-0ab8fc050f6c",
+    "label": "final-full-web-test",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py final-full-web-test npm test -w @orbit/web"
+  },
+  {
+    "ref": "exec-a2b0802a-fc87-4001-a51d-75fea6e87658",
+    "label": "final-notification-matrix",
+    "status": "failed",
+    "exitCode": 1,
+    "command": "python3 docs/evidence/base-ui-migration/p2.3/collect.py src/web/.toasts-results docs/evidence/base-ui-migration/p2.3/revision-2/continuous-motion-after\npython3 - <<'PY'\nfrom pathlib import Path\np=Path('src/web/ui-migration/toasts-lifecycle.browser.mjs');s=p.read_text();s=s.replace(\"    const start = performance.now();\\n    const frame = () => {\\n      const card = document.querySelector('.toast');\", \"    const start = performance.now();\\n    let firstCardAt;\\n    const frame = () => {\\n      const card = document.querySelector('.toast');\")\ns=s.replace('      if (card) {\\n        const s = getComputedStyle(card);', '      if (card) {\\n        firstCardAt ??= performance.now();\\n        const s = getComputedStyle(card);')\ns=s.replace('      if (performance.now() - start < 700) requestAnimationFrame(frame);', '      if (firstCardAt === undefined || performance.now() - firstCardAt < 700) requestAnimationFrame(frame);');p.write_text(s)\np=Path('src/web/src/components/ui/README.md');s=p.read_text();s=s.replace('\u4e0d\u589e\u52a0\u906e\u7f69\u6216\u62a2\u7126\u70b9\uff0c\u4e5f\u4e0d\u6539\u53d8\u539f Dialog/Drawer \u52a8\u753b\u3002', '\u4e0d\u589e\u52a0\u906e\u7f69\u6216\u62a2\u7126\u70b9\uff0c\u4e5f\u4e0d\u6539\u53d8\u539f Dialog/Drawer \u52a8\u753b\u3002\u901a\u77e5\u81ea\u8eab\u4fdd\u7559\u9996\u6b21\u5165\u573a\u7684\u52a8\u753b\u8d77\u70b9\uff0c\u5207\u5c42\u4ee5\u8d1f delay \u5ef6\u7eed\u539f\u8fdb\u5ea6\uff0c\u4e0d\u91cd\u64ad\u6216\u5220\u9664\u5165\u573a\u52a8\u753b\u3002');s=s.replace('\u6b64\u80fd\u529b\u4f9d\u8d56\u6d4f\u89c8\u5668\u7684 Popover API', '\u6301\u4e45\u7684 body \u56fa\u5b9a\u5b9a\u4f4d\u6d4b\u91cf\u8282\u70b9\u4fdd\u7559 WebKit \u7684\u6eda\u52a8\u6761\u9884\u7559\u5bbd\u5ea6\uff0c\u5e76\u968f\u901a\u77e5\u89c6\u53e3\u5378\u8f7d\u6e05\u7406\u3002\u6b64\u80fd\u529b\u4f9d\u8d56\u6d4f\u89c8\u5668\u7684 Popover API');p.write_text(s)\nPY\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py final-notification-matrix npm run test:ui-toasts -w @orbit/web"
+  },
+  {
+    "ref": "exec-158fa8c6-6bda-4455-a593-e4f4a764405b",
+    "label": "original-confirmation-close-scoped",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "cat > docs/evidence/base-ui-migration/p2.3/revision-2/audit.py <<'PY'\n\"\"\"Audit P2.3 revision 2 without changing any screenshot or comparison tolerance.\"\"\"\nimport base64, hashlib, json, math, pathlib, re, subprocess\nfrom PIL import Image\nhere = pathlib.Path(__file__).resolve().parent\nroot = here.parents[4]\nprevious = here.parent\nstart = '67e62c0b4028eefe2c619dac80d3fac312cea601'\nr1 = '0e3b3a61cadc73bda93f06985dbd866e4d1fba79'\nsha = lambda b: hashlib.sha256(b).hexdigest()\nout = {'taskStart': start, 'revision1': r1, 'unchanged': {}, 'testedSources': {}, 'screenshots': [], 'attachments': {}, 'settled': [], 'midpoints': [], 'production': []}\nfor name in ['src/web/src/lib/toast.tsx', 'src/web/src/lib/toastFeed.ts', 'src/web/src/lib/toastStore.ts', 'src/web/src/main.tsx', 'src/web/src/components/ui/Overlay.css', 'src/web/src/components/ui/ConfirmDialog.tsx']:\n    data = (root/name).read_bytes()\n    assert data == subprocess.check_output(['git', 'show', f'{start}:{name}'], cwd=root), name\n    out['unchanged'][name] = sha(data)\nfor name in ['src/web/src/components/ui/Overlay.tsx', 'src/web/src/components/ui/feedbackPortal.ts']:\n    data = (root/name).read_bytes()\n    assert data == subprocess.check_output(['git', 'show', f'{r1}:{name}'], cwd=root), name\n    out['unchanged'][name] = sha(data)\nfor name, expected in json.loads((here/'tested-sources.json').read_text()).items():\n    out['testedSources'][name] = sha((root/name).read_bytes())\n    assert out['testedSources'][name] == expected, name\nfor p in sorted((root/'docs/evidence/base-ui-migration/p0.2/screenshots').rglob('*.png')):\n    name = p.relative_to(root).as_posix()\n    data = p.read_bytes()\n    assert data == subprocess.check_output(['git', 'show', f'{start}:{name}'], cwd=root)\n    out['screenshots'].append({'file': name, 'sha256': sha(data)})\nfor directory in ['toasts-run', 'overlays-regression', 'production-run', 'reference-motion-run', 'coordinator-after', 'continuous-motion-after', 'original-nested-motion', 'original-confirmation-close']:\n    summary = json.loads((here/directory/'summary.json').read_text())\n    assert summary['stats']['unexpected'] == summary['stats']['skipped'] == summary['stats']['flaky'] == 0, directory\n    count = 0\n    for test in summary['tests']:\n        assert test['status'] == 'expected', test['name']\n        for a in test['artifacts']:\n            assert sha((here/directory/a['file']).read_bytes()) == a['sha256']\n            count += 1\n    out['attachments'][directory] = {'stats': summary['stats'], 'artifacts': count}\n\ndef pixels(a, b, box=None):\n    left, right = Image.open(a).convert('RGBA'), Image.open(b).convert('RGBA')\n    assert left.size == right.size, (a, b, left.size, right.size)\n    if box: left, right = left.crop(box), right.crop(box)\n    count = sum(x != y for x, y in zip(left.getdata(), right.getdata()))\n    return {'pixels': left.width*left.height, 'differentPixels': count}\n\nfor p in sorted((here/'toasts-run').glob('*unchanged-appearance--appearance.json')):\n    project = p.name.split('--')[0]\n    kind = next(k for k in ['Bottom-drawer', 'Drawer', 'Dialog'] if f'-in-{k}-' in p.name)\n    ref = previous/'reference-run'/f'{project}--reference-{kind}--appearance.json'\n    actual, original = json.loads(p.read_text()), json.loads(ref.read_text())\n    assert actual['before'] == original['before'] and actual['after'] == original['after'], p\n    c = pixels(p.with_name(p.name.replace('--appearance.json', '--with-overlay.png')), ref.with_name(ref.name.replace('--appearance.json', '--with-overlay.png')))\n    assert c['differentPixels'] == 0, p\n    out['settled'].append({'project': project, 'kind': kind, 'png': c, 'computedStylesEqual': True})\nfor p in sorted((here/'reference-motion-run').glob('*.png')):\n    actual = here/'toasts-run'/p.name\n    assert actual.exists(), p.name\n    c = pixels(p, actual)\n    assert c['differentPixels'] == 0, (p, c)\n    out['midpoints'].append({'file': p.name, 'png': c})\nfor p in sorted((here/'production-run').glob('*--production-notification.png')):\n    project = p.name.split('--')[0]\n    geometry = json.loads(p.with_name(p.name.replace('--production-notification.png', '--notification-appearance.json')).read_text())['region']\n    image = Image.open(p)\n    box = [max(0, math.floor(geometry['x'])-12), max(0, math.floor(geometry['y'])-12), min(image.width, math.ceil(geometry['right'])+12), min(image.height, math.ceil(geometry['bottom'])+12)]\n    old = root/'docs/evidence/base-ui-migration/p0.2/screenshots'/project/'notification-error.png'\n    c = pixels(old, p, box)\n    full = pixels(previous/'production-reference-run'/p.name, p)\n    assert c['differentPixels'] == full['differentPixels'] == 0, p\n    out['production'].append({'project': project, 'box': box, 'notificationAndShadow': c, 'fullPageAgainstTaskStart': full, 'fullPageAgainstP0': pixels(old, p)})\nfiles = ['src/web/src/lib/toast.tsx', 'src/web/src/lib/toastFeed.ts', 'src/web/src/lib/toastStore.ts', 'src/web/src/components/ToastViewport.tsx', 'src/web/src/components/ui/feedbackPortal.ts', 'src/web/src/components/ui/Overlay.tsx']\nfor name in files:\n    assert not re.findall(r'''(?:from\\s*|import\\s*)[\"']antd(?:/[^\"']*)?[\"']|\\.ant-(?:message|notification)|(?:querySelector|closest)\\([^\\n]*\\.ant-''', (root/name).read_text()), name\nout['noAntDInternalDOM'] = files\n(here/'audit.json').write_text(json.dumps(out, indent=2)+'\\n')\nprint(json.dumps({'baselineImagesUnchanged': len(out['screenshots']), 'attachments': out['attachments'], 'settledPairs': len(out['settled']), 'midpointImagePairs': len(out['midpoints']), 'production': out['production']}, indent=2))\nPY\npython3 - <<'PY'\nfrom pathlib import Path\nimport shutil\np=Path('/tmp/orbit-p23-reference/src/web/ui-migration/reference-confirm-close.browser.mjs')\ns=p.read_text().replace('animations:document.getAnimations().length','confirmationAnimations:document.getAnimations().filter(a=>a.effect?.target?.closest?.(\\'.orbit-confirm\\')).length').replace('confirmCount:0,animations:0','confirmCount:0,confirmationAnimations:0')\np.write_text(s)\nPY\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py original-confirmation-close-scoped node node_modules/@playwright/test/cli.js test --config /tmp/orbit-p23-reference/src/web/ui-migration/reference-confirm-close.config.mjs --project chromium-light-desktop --project webkit-light-phone"
+  },
+  {
+    "ref": "exec-e0ee68c0-7379-40d9-95b3-34a6dca436e4",
+    "label": "all-modified-test-types",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "cat src/web/ui-migration/overlays.config.mjs && NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py all-modified-test-types node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts-tests.tsconfig.json --noEmit && NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py web-force-typecheck node node_modules/typescript/bin/tsc -b src/web --force"
+  },
+  {
+    "ref": "exec-cb7c28f8-e4cf-48bd-bff2-ddebd469ecf9",
+    "label": "prepare-original",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "cat > docs/evidence/base-ui-migration/p2.3/revision-2/prepare-reference.py <<'PY'\n\"\"\"Prepare original production code with this revision's fixed animation capture.\"\"\"\nimport pathlib, shutil, subprocess, sys\nhere = pathlib.Path(__file__).resolve().parent\nroot = here.parents[4]\ndest = pathlib.Path(sys.argv[1]).resolve()\nsubprocess.run([sys.executable, str(here.parent/'prepare-reference.py'), str(dest)], check=True)\ntests = root/'src/web/ui-migration/toasts-lifecycle.browser.mjs'\n# The task-start notification is painted but excluded from the modal AX tree.\n# Only this pixel/motion reference uses the owned DOM locator. All current-code\n# accessibility and keyboard assertions continue to use the accessible region.\ntext = tests.read_text().replace(\"page.getByRole('region', { name: 'Notifications', exact: true })\", \"page.locator('.toast-viewport')\")\nweb = dest/'src/web/ui-migration'\n(web/'reference-lifecycle.browser.mjs').write_text(text)\nconfig = (web/'reference.config.mjs').read_text().replace('reference.browser.mjs', 'reference-lifecycle.browser.mjs').replace('.toasts-results', '.lifecycle-results').replace('4178', '14380')\n(web/'reference-lifecycle.config.mjs').write_text(config)\nprint(dest)\nPY\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py prepare-original python3 docs/evidence/base-ui-migration/p2.3/revision-2/prepare-reference.py /tmp/orbit-p23-r2-reference"
+  },
+  {
+    "ref": "exec-30ea6857-af6a-4c42-bc99-655d6ebd4d65",
+    "label": "final-208-notifications",
+    "status": "failed",
+    "exitCode": 130,
+    "command": "cp -a src/web/.toasts-results docs/evidence/base-ui-migration/p2.3/revision-2/confirmation-assumption-diagnostic\npython3 docs/evidence/base-ui-migration/p2.3/collect.py /tmp/orbit-p23-reference/src/web/.confirm-close-results docs/evidence/base-ui-migration/p2.3/revision-2/original-confirmation-close\npython3 - <<'PY'\nfrom pathlib import Path\nimport json,hashlib,subprocess,shutil\np=Path('src/web/ui-migration/toasts-lifecycle.browser.mjs');s=p.read_text().replace('notification pixels stay intact at ${kind} animation midpoints','notification pixels stay intact through ${kind} opening and closing')\ns=s.replace('        window.frozenPopupAnimations = popup?.getAnimations() ?? [];', '''        const popupAnimationCount = popup?.getAnimations().length ?? 0;\n        window.frozenPopupAnimations = document.getAnimations().filter((a) =>\n          a.effect?.target?.matches?.('.orbit-overlay, .orbit-overlay-backdrop'));''')\ns=s.replace('count: window.frozenPopupAnimations.length, scale:', 'count: popupAnimationCount, scale:')\ns=s.replace(\"      expect(frozen.count, 'the real popup animation must exist; it is paused only for the screenshot').toBeGreaterThan(0);\", '''      if (kind === 'Confirmation' && phase === 'closing') {\n        // The original useConfirm holder unmounts immediately on resolution.\n        await expect(page.locator('.orbit-confirm')).toHaveCount(0);\n        expect(frozen.count).toBe(0);\n      } else {\n        expect(frozen.count, 'the real popup animation must exist; it is paused only for the screenshot').toBeGreaterThan(0);\n      }''')\np.write_text(s)\np=Path('src/web/ui-migration/toasts-tests.tsconfig.json');d=json.loads(p.read_text());d['include'].append('../src/pages/ProjectsPage.newTask.test.tsx');p.write_text(json.dumps(d,indent=2)+'\\n')\nout=Path('docs/evidence/base-ui-migration/p2.3/revision-2')\nfiles=subprocess.check_output(['git','diff','--name-only','--','src/web'],text=True).splitlines()+['src/web/ui-migration/toasts-lifecycle.browser.mjs']\n(out/'tested-sources.json').write_text(json.dumps({name:hashlib.sha256(Path(name).read_bytes()).hexdigest() for name in files},indent=2)+'\\n')\nfor name in ['reference-confirm-close.browser.mjs','reference-confirm-close.config.mjs']:\n shutil.copy2(Path('/tmp/orbit-p23-reference/src/web/ui-migration')/name,out/'coordinator-input'/name)\np=Path('docs/evidence/base-ui-migration/p2.3/README.md');s=p.read_text().replace('# P2.3 \u901a\u77e5\u4e0e\u53cd\u9988\u670d\u52a1\u590d\u6838\\n','# P2.3 \u901a\u77e5\u4e0e\u53cd\u9988\u670d\u52a1\u590d\u6838\\n\\n\u6b64\u9875\u4fdd\u7559\u7b2c1\u7248\u5386\u53f2\u8bc1\u636e\uff1b\u7b2c1\u7248\u56e0\u52a8\u753b\u4e0e\u60ac\u505c\u8ba1\u65f6\u56de\u5f52\u88ab\u9000\u56de\u3002\u5f53\u524d\u8fd4\u5de5\u7ed3\u8bba\u53ca\u65b0\u589e\u76f4\u63a5\u8bc1\u636e\u89c1 [\u7b2c2\u7248](revision-2/README.md)\u3002\\n',1);p.write_text(s)\nPY\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py final-208-notifications npm run test:ui-toasts -w @orbit/web"
+  },
+  {
+    "ref": "exec-95a67842-7d38-450e-8d53-718b5ab16947",
+    "label": "original-confirmation-open-close",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "python3 - <<'PY'\nfrom pathlib import Path\np=Path('/tmp/orbit-p23-reference/src/web/ui-migration/reference-confirm-close.browser.mjs');s=p.read_text()\ns=s.replace(\" await page.evaluate(async()=>{ await Promise.all(document.getAnimations().map(a=>a.finished.catch(()=>{}))); });\", \"\"\" const opening = await page.evaluate(async()=>{\n  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));\n  const popup=document.querySelector('.orbit-confirm'), s=getComputedStyle(popup);\n  return {count:popup.getAnimations().length, opacity:s.opacity, scale:s.scale, translate:s.translate};\n });\n await info.attach('original-confirmation-open', {body:JSON.stringify(opening),contentType:'application/json'});\n expect(opening).toEqual({count:0, opacity:'1', scale:'none', translate:'none'});\"\"\")\np.write_text(s)\nPY\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py original-confirmation-open-close node node_modules/@playwright/test/cli.js test --config /tmp/orbit-p23-reference/src/web/ui-migration/reference-confirm-close.config.mjs --project chromium-light-desktop --project webkit-light-phone"
+  },
+  {
+    "ref": "exec-37f14755-7386-4d79-8807-092d657703d0",
+    "label": "confirmation-capture-corrected",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "cp -a src/web/.toasts-results docs/evidence/base-ui-migration/p2.3/revision-2/interrupted-assumption-diagnostic\npython3 docs/evidence/base-ui-migration/p2.3/collect.py /tmp/orbit-p23-reference/src/web/.confirm-close-results docs/evidence/base-ui-migration/p2.3/revision-2/original-confirmation-open-close\npython3 - <<'PY'\nfrom pathlib import Path\nimport hashlib,json,shutil\np=Path('src/web/ui-migration/toasts-lifecycle.browser.mjs');s=p.read_text()\ns=s.replace(\".find((el) => el.getAnimations().length);\", \".find((el) => el.getClientRects().length);\")\ns=s.replace(\"      if (kind === 'Confirmation' && phase === 'closing') {\\n        // The original useConfirm holder unmounts immediately on resolution.\\n        await expect(page.locator('.orbit-confirm')).toHaveCount(0);\", \"\"\"      if (kind === 'Confirmation') {\n        // The original holder mounts already open, then unmounts on resolution:\n        // it has no popup entry/exit transition in either baseline browser.\n        await expect(page.locator('.orbit-confirm')).toHaveCount(phase === 'opening' ? 1 : 0);\"\"\")\np.write_text(s)\nout=Path('docs/evidence/base-ui-migration/p2.3/revision-2')\nfor name in ['reference-confirm-close.browser.mjs','reference-confirm-close.config.mjs']:\n shutil.copy2(Path('/tmp/orbit-p23-reference/src/web/ui-migration')/name,out/'coordinator-input'/name)\nmanifest=out/'tested-sources.json';d=json.loads(manifest.read_text());d[str(p)]=hashlib.sha256(p.read_bytes()).hexdigest();manifest.write_text(json.dumps(d,indent=2)+'\\n')\nref=Path('/tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs');ref.write_text(s.replace(\"page.getByRole('region', { name: 'Notifications', exact: true })\", \"page.locator('.toast-viewport')\"))\nPY\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py confirmation-capture-corrected node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/toasts.config.mjs toasts-lifecycle.browser.mjs --grep 'pixels stay intact through Confirmation' --project chromium-light-desktop --project webkit-light-phone"
+  },
+  {
+    "ref": "exec-e9d1ea30-66dc-4c92-8bfa-3d1a78dc90de",
+    "label": "overlay-regression",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py overlay-regression npm run test:ui-overlays -w @orbit/web"
+  },
+  {
+    "ref": "exec-1359b21d-5e05-4c1e-ac93-e41375b07591",
+    "label": "reference-motion-matrix",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py reference-motion-matrix node node_modules/@playwright/test/cli.js test --config /tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.config.mjs --grep 'pixels stay intact'"
+  },
+  {
+    "ref": "exec-c9541fd1-07ce-493e-9df9-61172f613592",
+    "label": "production-notifications",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "python3 docs/evidence/base-ui-migration/p2.3/collect.py /tmp/orbit-p23-r2-reference/src/web/.lifecycle-results docs/evidence/base-ui-migration/p2.3/revision-2/reference-motion-run\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py production-notifications npm run test:ui-migration -w @orbit/web -- feedback-production.browser.mjs"
+  },
+  {
+    "ref": "exec-a3c901ef-f4d1-4cd2-b395-8522a6d2afee",
+    "label": "accepted-notification-matrix",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "python3 docs/evidence/base-ui-migration/p2.3/collect.py src/web/.toasts-results docs/evidence/base-ui-migration/p2.3/revision-2/confirmation-capture-after\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py accepted-notification-matrix npm run test:ui-toasts -w @orbit/web"
+  },
+  {
+    "ref": "exec-cc963bdb-58a9-4052-ada0-941b7c21a3d5",
+    "label": "raster-diagnostic",
+    "status": "failed",
+    "exitCode": 1,
+    "command": "cat > docs/evidence/base-ui-migration/p2.3/revision-2/raster.browser.mjs <<'EOF'\nimport { test } from '@playwright/test';\nconst variants = {\n  original: '',\n  cardWillChange: '.toast { will-change: transform; }',\n  cardTransform: '.toast { transform: translateZ(0); }',\n  viewportTransform: '.toast-viewport { transform: translateZ(0); }',\n  hostWillChange: '.toast-layer { will-change: transform; }',\n  backface: '.toast { backface-visibility: hidden; }',\n  isolate: '.toast-viewport { isolation: isolate; }',\n  opacityGroup: '.toast-layer { opacity: .999999; }',\n};\nfor (const [name, css] of Object.entries(variants)) {\n test(name, async ({page},info)=>{\n  await page.goto('/ui-migration/toasts.html');\n  await page.evaluate(()=>document.fonts.ready);\n  if(css) await page.addStyleTag({content:css});\n  await page.getByRole('button',{name:'Error notice',exact:true}).click();\n  await page.mouse.move(0,0);\n  await page.evaluate(async()=>{\n   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));\n   await Promise.all(document.getAnimations().map(a=>a.finished.catch(()=>{})));\n  });\n  await info.attach('notification',{body:await page.locator('.toast-viewport').screenshot({animations:'allow'}),contentType:'image/png'});\n });\n}\nEOF\ncat > docs/evidence/base-ui-migration/p2.3/revision-2/raster.config.mjs <<'EOF'\nimport { defineConfig } from '@playwright/test';\nimport { fileURLToPath } from 'node:url';\nimport baseline from '../../../../../src/web/ui-migration/toasts.config.mjs';\nexport default defineConfig({...baseline,testDir:'.',testMatch:'raster.browser.mjs',projects:baseline.projects.filter(p=>p.name==='chromium-light-desktop'),use:{...baseline.use,reducedMotion:'no-preference'},outputDir:'./raster-results',reporter:[['list'],['json',{outputFile:fileURLToPath(new URL('./raster-results/report.json',import.meta.url))}]]});\nEOF\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py raster-diagnostic node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2.3/revision-2/raster.config.mjs"
+  },
+  {
+    "ref": "exec-cd510d5e-5086-4d1c-901a-88e42d3e6166",
+    "label": "initial-evidence-audit",
+    "status": "failed",
+    "exitCode": 1,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py initial-evidence-audit python3 docs/evidence/base-ui-migration/p2.3/revision-2/audit.py"
+  },
+  {
+    "ref": "exec-819cc00f-3955-4979-b02e-cc893f9cf58c",
+    "label": "raster-diagnostic-with-environment",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "python3 - <<'PY'\nfrom pathlib import Path\np=Path('docs/evidence/base-ui-migration/p2.3/revision-2/raster.config.mjs');s=p.read_text().replace(\"...baseline,testDir:'.'\", \"...baseline,globalSetup:fileURLToPath(new URL('../../../../../src/web/ui-migration/environment.mjs',import.meta.url)),testDir:'.'\");p.write_text(s)\nPY\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py raster-diagnostic-with-environment node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2.3/revision-2/raster.config.mjs"
+  },
+  {
+    "ref": "exec-62ba41cf-d6cc-4edf-8693-77d45fd9d5a5",
+    "label": "reference-matching-fixture",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "python3 - <<'PY'\nfrom pathlib import Path\nimport shutil\np=Path('docs/evidence/base-ui-migration/p2.3/revision-2/prepare-reference.py');s=p.read_text().replace(\"web = dest/'src/web/ui-migration'\", \"web = dest/'src/web/ui-migration'\\nshutil.copy2(root/'src/web/src/components/ui/__fixtures__/ToastsFixture.tsx', dest/'src/web/src/components/ui/__fixtures__/ToastsFixture.tsx')\");p.write_text(s)\nshutil.copy2('src/web/src/components/ui/__fixtures__/ToastsFixture.tsx','/tmp/orbit-p23-r2-reference/src/web/src/components/ui/__fixtures__/ToastsFixture.tsx')\nshutil.move('docs/evidence/base-ui-migration/p2.3/revision-2/reference-motion-run','docs/evidence/base-ui-migration/p2.3/revision-2/reference-fixture-diagnostic')\nPY\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py reference-matching-fixture node node_modules/@playwright/test/cli.js test --config /tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.config.mjs --grep 'pixels stay intact'"
+  },
+  {
+    "ref": "exec-6d605bd5-2682-4bad-8a57-b97878646673",
+    "label": "final-types-and-bundle",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "cat > src/web/ui-migration/toasts-tests.tsconfig.json <<'EOF'\n{\n  \"extends\": \"../tsconfig.json\",\n  \"compilerOptions\": { \"types\": [\"vite/client\", \"node\"] },\n  \"include\": [\"../src/lib/toast.test.tsx\", \"../src/lib/toastFeed.test.ts\", \"../src/pages/ProjectsPage.newTask.test.tsx\"],\n  \"exclude\": []\n}\nEOF\npython3 - <<'PY'\nfrom pathlib import Path\nimport hashlib,json\np=Path('src/web/ui-migration/toasts-tests.tsconfig.json');m=Path('docs/evidence/base-ui-migration/p2.3/revision-2/tested-sources.json');d=json.loads(m.read_text());d[str(p)]=hashlib.sha256(p.read_bytes()).hexdigest();m.write_text(json.dumps(d,indent=2)+'\\n')\nPY\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py final-types-and-bundle bash -c 'node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts-tests.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts.tsconfig.json --noEmit && npm run build -w @orbit/web' "
+  },
+  {
+    "ref": "exec-a7a9af41-9978-45d0-bc2a-331766016d3f",
+    "label": "final-raster-full-web",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py final-raster-full-web npm test -w @orbit/web"
+  },
+  {
+    "ref": "exec-a3b3cf1e-ffd3-4754-af67-9201300236d3",
+    "label": "final-raster-notifications",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "python3 - <<'PY'\nfrom pathlib import Path\nimport json,hashlib,shutil\np=Path('src/web/src/index.css');s=p.read_text();key=\"@media (prefers-reduced-motion: reduce) {\\n  .toast {\"\ns=s.replace(key,\"\"\"/* Keep the original animated card's rasterization when its host enters the top layer. */\n@media (prefers-reduced-motion: no-preference) {\n  .toast { will-change: transform; }\n}\n\n\"\"\"+key,1);p.write_text(s)\nout=Path('docs/evidence/base-ui-migration/p2.3/revision-2')\nmanifest=out/'tested-sources.json';d=json.loads(manifest.read_text());d[str(p)]=hashlib.sha256(p.read_bytes()).hexdigest();manifest.write_text(json.dumps(d,indent=2)+'\\n')\nfor name in ['toasts-run','production-run']:\n shutil.move(out/name,out/('pre-raster-'+name))\nPY\nNO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py final-raster-notifications npm run test:ui-toasts -w @orbit/web"
+  },
+  {
+    "ref": "exec-6b51f72d-c34c-4e70-b7cd-f0c152564bf6",
+    "label": "final-reference-repro",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py final-reference-repro python3 docs/evidence/base-ui-migration/p2.3/revision-2/prepare-reference.py /tmp/orbit-p23-r2-reference-repro\npython3 - <<'PY'\nfrom pathlib import Path\nimport subprocess,hashlib,json\nroot=Path.cwd();ref=Path('/tmp/orbit-p23-r2-reference-repro');baseline='67e62c0b4028eefe2c619dac80d3fac312cea601';verified=[]\nfor line in subprocess.check_output(['git','ls-tree','-r','--format=%(objectname) %(path)',baseline,'src/web/src'],text=True).splitlines():\n expected,name=line.split(' ',1);data=(ref/name).read_bytes();actual=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\\0'+data).hexdigest();assert actual==expected,name;verified.append(name)\nfixture='src/web/src/components/ui/__fixtures__/ToastsFixture.tsx'\nassert (root/fixture).read_bytes()==(ref/fixture).read_bytes()\np=Path('docs/evidence/base-ui-migration/p2.3/revision-2/reference-source-check.json');p.write_text(json.dumps({'baseline':baseline,'allOriginalSourceFilesMatch':len(verified),'samePrivateFixture':fixture,'fixtureSha256':hashlib.sha256((ref/fixture).read_bytes()).hexdigest()},indent=2)+'\\n')\nprint(p.read_text())\nPY"
+  },
+  {
+    "ref": "exec-d4bd3a66-9b79-4743-a105-030826806845",
+    "label": "final-production-notifications",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py final-production-notifications npm run test:ui-migration -w @orbit/web -- feedback-production.browser.mjs"
+  },
+  {
+    "ref": "exec-50398334-0f6e-4d1f-8f4f-e50ac23ae9f8",
+    "label": "final-evidence-audit",
+    "status": "failed",
+    "exitCode": 1,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py final-evidence-audit python3 docs/evidence/base-ui-migration/p2.3/revision-2/audit.py"
+  },
+  {
+    "ref": "exec-0acc4c7a-9720-46aa-ab27-ef6177397aa1",
+    "label": "reference-hover-settled",
+    "status": "failed",
+    "exitCode": 1,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py reference-hover-settled node node_modules/@playwright/test/cli.js test --config /tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.config.mjs --grep 'pixels stay intact'"
+  },
+  {
+    "ref": "exec-227befab-4c1a-499a-acc7-a16df034b759",
+    "label": "static-raster-check",
+    "status": "failed",
+    "exitCode": 1,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py static-raster-check npm run test:ui-toasts -w @orbit/web -- --grep 'unchanged appearance|pixels stay intact'"
+  },
+  {
+    "ref": "exec-ebac3bb6-0dd7-4fd8-bd36-ce934d81cbae",
+    "label": "reference-hover-settled-browser",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py reference-hover-settled-browser node node_modules/@playwright/test/cli.js test --config /tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.config.mjs --grep 'pixels stay intact'"
+  },
+  {
+    "ref": "exec-c6974851-014d-4273-b7dd-1ad6813ffa2a",
+    "label": "static-raster-browser",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py static-raster-browser npm run test:ui-toasts -w @orbit/web -- --grep 'unchanged appearance|pixels stay intact'"
+  },
+  {
+    "ref": "exec-4941dc5f-8be4-4522-96aa-17f6fccc37d0",
+    "label": "verified-production",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py verified-production npm run test:ui-migration -w @orbit/web -- feedback-production.browser.mjs"
+  },
+  {
+    "ref": "exec-b915de05-ff83-4715-abb6-48312e7ed557",
+    "label": "verified-full-web",
+    "status": "failed",
+    "exitCode": 1,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py verified-full-web npm test -w @orbit/web"
+  },
+  {
+    "ref": "exec-b3f19c47-91f3-4951-9d19-cc810ed069ec",
+    "label": "verified-notification-matrix",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py verified-notification-matrix npm run test:ui-toasts -w @orbit/web"
+  },
+  {
+    "ref": "exec-7bc87b1d-77fb-449b-9142-0619a2324cdd",
+    "label": "implementation-commit",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "git add src/web/src/components/ToastViewport.tsx src/web/src/components/ui/README.md src/web/src/index.css src/web/src/lib/toast.test.tsx src/web/src/pages/ProjectsPage.newTask.test.tsx src/web/ui-migration/toasts-tests.tsconfig.json src/web/ui-migration/toasts-lifecycle.browser.mjs\n\ngit commit -m 'fix(web): preserve notification motion and hover across modal changes'"
+  },
+  {
+    "ref": "exec-46faa884-901d-4672-a635-28fbb04931f5",
+    "label": "committed-production",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py committed-production npm run test:ui-migration -w @orbit/web -- feedback-production.browser.mjs"
+  },
+  {
+    "ref": "exec-b3c919d6-b57c-4060-aac2-bd77d7d8ef7e",
+    "label": "committed-full-web",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py committed-full-web npm test -w @orbit/web"
+  },
+  {
+    "ref": "exec-72e8d960-6582-4420-a79c-00fbfe5619ea",
+    "label": "committed-notification-matrix",
+    "status": "failed",
+    "exitCode": 1,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py committed-notification-matrix npm run test:ui-toasts -w @orbit/web"
+  },
+  {
+    "ref": "exec-1d845e11-b040-45ab-b017-40a9f8166b18",
+    "label": "committed-notifications-clean-rerun",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py committed-notifications-clean-rerun npm run test:ui-toasts -w @orbit/web"
+  },
+  {
+    "ref": "exec-615141d9-28dc-4ad3-9ce2-694d8d2256ec",
+    "label": "committed-evidence-audit",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r2-check.py committed-evidence-audit python3 docs/evidence/base-ui-migration/p2.3/revision-2/audit.py"
+  }
+]

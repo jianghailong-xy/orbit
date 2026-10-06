@@ -1857,6 +1857,10 @@ struct DeliveredDecisionCardView: View {
                 AcceptanceConfirmationCard(console: console)
             case .startProject(let itemID):
                 StartProjectCardView(console: console, itemID: itemID)
+            case .projectDone:
+                ProjectDoneCardView(console: console)
+            case .projectNotDone:
+                ProjectNotDoneCardView(console: console)
             case .criteriaChange:
                 CriteriaChangeCardView(console: console)
             case .acceptanceConfirmationReceipt(let confirmed):
@@ -2396,6 +2400,60 @@ private struct StartProjectCardView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .approvalChrome(.blue, dimmed: !StartProject.isOpen(standing))
+        }
+    }
+}
+
+/// "Is this project done?" in a coordinator conversation — the card on which the account owner
+/// records the project done, once its coordinator asked (`project_request_done`) or its row says
+/// Record as done… — and, once it is recorded, that card's receipt, in place.
+///
+/// Everything is re-derived from the console's reads on every render: the request the card answers
+/// is the one standing now (`ProjectDone.live`), so a request the coordinator filed again is this
+/// card with the new request in it. What it draws is `ProjectDoneCard`, which the project page's
+/// own Review and Record as done… open too.
+///
+/// Drawn whole where it arrived, not as a preview that opens a review: the card is the question
+/// and its receipt is the answer left in the conversation (mock ⑤ ①–③, the browser's
+/// `SessionProjectSettlementCard`), so neither hides behind a press. Clearing the review target
+/// is what puts `ApprovalReviewLayout` on its whole-card path.
+private struct ProjectDoneCardView: View {
+    let console: ConsoleModel
+
+    var body: some View {
+        if let subject = console.projectDone {
+            let row = console.doneRequestRow
+            ProjectDoneCard(
+                subject: subject,
+                request: row?.doneRequest,
+                askedAt: row?.waitingSince,
+                confirmedAt: console.acceptanceConfirmation?.confirmation?.confirmedAt,
+                openItems: ProjectDone.openItemsCount(console.openItems),
+                running: ProjectDone.runningCount(subject),
+                record: console.doneRecord,
+                sealRead: row?.doneRequest != nil
+                    || console.acceptanceConfirmation?.currentVersion.digest != nil,
+                onRecord: { await console.recordProjectDone() },
+                onNotYet: row == nil ? nil : { await console.declineDoneRequest(note: $0) },
+                onReopen: { await console.reopenProject() })
+                .environment(\.approvalReviewTarget, nil)
+        }
+    }
+}
+
+/// "Why is this project not done?" in a coordinator conversation: the criteria the projection is
+/// waiting on, grouped by what they need — and, while the work has nobody on it, the one press that
+/// hands the card's facts to the coordinator this conversation is with.
+private struct ProjectNotDoneCardView: View {
+    let console: ConsoleModel
+
+    var body: some View {
+        if let subject = console.projectDone {
+            ProjectNotDoneCard(
+                subject: subject,
+                withCoordinator: console.openItems?.withCoordinator.count ?? 0,
+                askedAt: nil,
+                onAskCoordinator: { Task { await console.askCoordinatorAboutDone() } })
         }
     }
 }

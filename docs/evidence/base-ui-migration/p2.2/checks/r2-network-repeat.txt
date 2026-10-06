@@ -1,0 +1,31 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs choices.browser.mjs --project=chromium-light-phone --grep (account|search) matches the current surface --repeat-each=3
+
+[WebServer] (node:3601271) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 6 tests using 1 worker
+
+(node:3601347) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › account matches the current surface, density and option states (3.4s)
+  ✓  2 [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › search matches the current surface, density and option states (2.9s)
+(node:3601645) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  3 [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › account matches the current surface, density and option states (3.1s)
+  ✓  4 [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › search matches the current surface, density and option states (2.9s)
+(node:3602002) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  5 [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › account matches the current surface, density and option states (2.9s)
+  ✓  6 [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › search matches the current surface, density and option states (3.0s)
+
+  6 passed (19.5s)

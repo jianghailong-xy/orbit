@@ -9,6 +9,7 @@ import type { SharedPool } from './sharedPools';
 import {
   defaultModelForProvider,
   modelOptionsForProvider,
+  openCodeKeyChoice,
   runtimeForProvider,
   type ConfiguredProvider,
 } from './workspaceDefaults';
@@ -21,9 +22,8 @@ import {
  *
  * Engines are the slugs a runner can sign into (LoginEngine in @orbit/shared). Antigravity is
  * offered when the server confirms an environment key or a runner Google account.
- * `opencode` is an AgentProvider that is neither,
- * so it never appears as a choice — it only shows up as the current pick when a workspace is
- * already set to it.
+ * `opencode` has no sign-in, so it is not one of them: it is offered after everything else once the
+ * runner reports it installed, with the keys it may spend (`providerChoices`).
  */
 export const ENGINE_SLUGS = [
   AgentProvider.CLAUDE,
@@ -386,11 +386,36 @@ export function providerChoices(
         }]
       : [];
   const antigravityKeys = byok.filter((choice) => runtimeForProvider(choice.slug, configured) === AgentProvider.ANTIGRAVITY);
+  // OpenCode, once the runner reports it installed — it has no sign-in to offer, so a machine without
+  // it has nothing to fix here either. Its own config first, then every key it may spend (shared
+  // `openCodeKeys`): it speaks each dialect a configured key does, so the same key is listed under
+  // its own engine above and here, as `opencode/<slug>`.
+  const openCode: ProviderChoice[] = engineHealth?.find((e) => e.engine === AgentProvider.OPENCODE)?.installed
+    ? [
+        {
+          slug: AgentProvider.OPENCODE,
+          label: ENGINE_LABELS[AgentProvider.OPENCODE],
+          kind: 'engine' as const,
+          ...brandForProvider(AgentProvider.OPENCODE, ENGINE_LABELS[AgentProvider.OPENCODE]),
+          modelLabel: defaultModelLabel(AgentProvider.OPENCODE, modelCatalog, configured, runtimeDefaultModels),
+        },
+        ...configured
+          .filter((p) => p.runsOnOpenCode && !poolSlugs.has(p.slug))
+          .map((p) => ({
+            slug: openCodeKeyChoice(p.slug),
+            label: providerDisplayLabel(p.label, p.presetSlug),
+            kind: 'byok' as const,
+            ...brandForProvider(p.slug, p.label, p.presetSlug),
+            modelLabel: defaultModelLabel(openCodeKeyChoice(p.slug), modelCatalog, configured, runtimeDefaultModels),
+          })),
+      ]
+    : [];
   return [
     ...engines.flatMap((choice) => choice.slug === AgentProvider.KIMI ? [...antigravityKeys, choice] : [choice]),
     ...accountPools,
     ...byok.filter((choice) => !antigravityKeys.includes(choice)),
     ...dshSetup,
+    ...openCode,
   ];
 }
 
@@ -541,12 +566,7 @@ export function engineChoices(
   });
 }
 
-/** How the hero says which provider its engine runs on: nothing extra for the engine's own sign-in
- *  (bar how it signs in, for Antigravity), "via DeepSeek" for anything else. */
+/** The small label beside an engine's name: how its own sign-in signs in (Antigravity's "env key"),
+ *  and nothing for a provider of it — which provider is the composer's Provider menu's to say. */
 export const engineProviderDetail = (engine: EngineChoice): string | undefined =>
-  engine.provider.slug === engine.slug
-    ? engine.provider.labelDetail
-    : // A key named for its engine (DeepSeek Harness) would only repeat it.
-      engine.provider.label === engine.label || engine.provider.setup
-      ? undefined
-      : `via ${engine.provider.label}`;
+  engine.provider.slug === engine.slug ? engine.provider.labelDetail : undefined;

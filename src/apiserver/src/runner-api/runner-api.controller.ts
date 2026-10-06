@@ -53,6 +53,7 @@ import {
 } from './integration-job-relay';
 import {
   AgentProvider,
+  openCodeKeyOf,
   AgentExecConfig,
   ActivateTurnLeasesRequest,
   ArtifactResultRequest,
@@ -240,8 +241,12 @@ import {
   appendSessionRepliesContext,
   closeUnansweredRequests,
   closeUnreadSteerRequests,
+  foldQueuedReplyTurnsInto,
+  foldRequeuedReplyTurns,
   holdTurnRepliesForRetry,
+  isSessionReplyTurn,
   readRequestForBlock,
+  releaseUnreadSteerReplies,
   settleUnrunSessionRequests,
 } from '../sessions/session-request';
 import { readTurnCards } from '../sessions/turn-cards';
@@ -273,7 +278,7 @@ import {
   withSessionReplies,
   withTaskStart,
 } from './control-plane-note';
-import { accountPoolRuntime, isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
+import { accountPoolRuntime, isBuiltinProvider, openCodeKeyRows, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
 import { bgLaunchConfirmed, bgLaunchKind } from './bg-launch-receipt';
 import { enginePhaseAfter, enginePhaseSinceAfter, engineTurnActiveAfter } from './engine-turn';
@@ -304,6 +309,7 @@ import { antigravityGoogleLoginRefusal, antigravitySignInUnderWay } from '../com
 import { RUNNER_OS_HEADER, withRunnerOs } from '../common/runner-platform';
 import { loginCodeRelay } from '../runners/login-code-relay';
 import { readRunnerRepoHealth, sanitizeRunnerRepoHealth } from '../common/runner-repo-health';
+import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 import { orchestrationEnabled } from '../common/orchestration-switch';
@@ -1013,6 +1019,12 @@ export class RunnerApiController {
         // ROOT_REFUSED_PERMISSION_MODES). Omitted by a runner too old to report it, which keeps
         // the stored value — NULL there means "never told us" and stays unrestricted.
         runsAsRoot: dto?.runsAsRoot ?? undefined,
+        // Where this runner's updates of itself stand. Written by every beat, and as NULL when the
+        // beat omits it: unlike `engines` or `repos`, absence is not "no news" but a binary that
+        // does not report it — an older release, or one a rollback put back — and the state a
+        // newer binary reported must not outlive it. A report this server can't read is NULL too.
+        selfUpdate:
+          (sanitizeRunnerSelfUpdate(dto?.selfUpdate) as unknown as Prisma.InputJsonValue | null) ?? Prisma.DbNull,
         // The directory this machine clones into, under which a workspace created from a git URL
         // gets its checkout. An empty string is treated as no report, exactly like the omission an
         // older runner sends: NULL here means "this machine never told us where it clones", and
@@ -1283,6 +1295,7 @@ export class RunnerApiController {
     let repoCleanupRequest: RunnerHeartbeatResponse['repoCleanupRequest'];
     let claudeHistoryRequest: RunnerHeartbeatResponse['claudeHistoryRequest'];
     let refreshModelCatalog: RunnerHeartbeatResponse['refreshModelCatalog'];
+    let checkSelfUpdate: RunnerHeartbeatResponse['checkSelfUpdate'];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
       // Manual git mutations are fail-closed during rolling upgrades. A capable
@@ -1335,6 +1348,8 @@ export class RunnerApiController {
       // so a hiccup while draining it costs a heartbeat, where a hiccup IN it, drained earlier,
       // would have cost the directory listing behind it.
       refreshModelCatalog = await this.drainModelCatalogRefresh(runner.id);
+      // The same kind of request, kept on the row the same way, so it goes last beside it.
+      checkSelfUpdate = await this.drainSelfUpdateRequest(runner.id);
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
@@ -1357,6 +1372,7 @@ export class RunnerApiController {
       agentDirs,
       repoCleanupRequest,
       refreshModelCatalog,
+      checkSelfUpdate,
       // Only when a claim holds a command for this process: an older runner's response stays the shape
       // it always was, and a direct caller comparing responses sees no new key.
       ...(codexRateLimitResetRequest ? { codexRateLimitResetRequest } : {}),
@@ -1493,6 +1509,22 @@ export class RunnerApiController {
     const claimed = await this.prisma.runner.updateMany({
       where: { id: runnerId, modelCatalogRefreshAt: { not: null } },
       data: { modelCatalogRefreshAt: null },
+    });
+    return claimed.count > 0 ? true : undefined;
+  }
+
+  /**
+   * Whether this runner should check for a release of itself on this beat: the owner pressed
+   * Update Runner Now (RunnersService.requestSelfUpdate).
+   *
+   * Claimed, not redelivered, for drainModelCatalogRefresh's reason: the answer is the
+   * `selfUpdate` state later heartbeats carry — the new version, or `waitingForIdle` while a turn
+   * runs — so a redelivered request would re-run the check on every beat. The clear is the claim.
+   */
+  private async drainSelfUpdateRequest(runnerId: string): Promise<true | undefined> {
+    const claimed = await this.prisma.runner.updateMany({
+      where: { id: runnerId, selfUpdateRequestedAt: { not: null } },
+      data: { selfUpdateRequestedAt: null },
     });
     return claimed.count > 0 ? true : undefined;
   }
@@ -2382,11 +2414,13 @@ export class RunnerApiController {
           s.status === RunStatus.PENDING ? [{ id: s.id, error: s.error }] : []);
         continue;
       }
+      const openCodeKeys = declared === AgentProvider.OPENCODE ? await openCodeKeyRows(this.prisma, s.ownerId) : undefined;
       const resolveExec = (sessionModel: string | null) =>
         resolveProviderExec({
           declaredProvider: declared,
           declaredProviderBuiltin: s.providerBuiltin,
           customRow,
+          openCodeKeys,
           sessionModel,
           usesRuntimeDefaultModel: s.usesRuntimeDefaultModel,
           runtimeDefaultModels: s.assignedRunner?.runtimeDefaultModels,
@@ -3555,9 +3589,10 @@ export class RunnerApiController {
         // outcomes held for this session's next turn — the ones whose reply turn an interrupt dropped,
         // or that came back while it had ended. Outside the first-delivery branch for the reason the
         // wake is: a reply turn handed out again after its runner died still has to say what it is
-        // for. Not best-effort: for a reply turn this block IS the turn.
-        if (t.kind === 'message') {
-          content = (await appendSessionRepliesContext(tx, sessionId, t.clientTurnId, content)) ?? content;
+        // for. Not best-effort: for a reply turn this block IS the turn. An outcome written into the
+        // running turn is a reply steer, and carries its blocks the same way, saying which turn they join.
+        if (t.kind === 'message' || (t.kind === 'steer' && isSessionReplyTurn(t.clientTurnId))) {
+          content = (await appendSessionRepliesContext(tx, sessionId, t.clientTurnId, content, t.kind)) ?? content;
         }
         // A confirmation request handed to this session for review, and a reviewer's return handed to
         // a run (docs/owner-confirmation-review-contract.md §2 D6, §8 B3): turns with nobody's words,
@@ -3756,6 +3791,10 @@ export class RunnerApiController {
       declaredProvider: session.provider,
       declaredProviderBuiltin: session.providerBuiltin,
       customRow,
+      openCodeKeys:
+        session.provider === AgentProvider.OPENCODE && openCodeKeyOf(session.model)
+          ? await openCodeKeyRows(tx, session.ownerId)
+          : undefined,
       sessionModel: session.model,
       usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
       runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,
@@ -4347,6 +4386,9 @@ export class RunnerApiController {
           // A background job's exit the engine never read is a wake turn of its own again, and a
           // wake already queued for the next turn joins it rather than opening a second one.
           await foldQueuedWakeTurnsInto(tx, sessionId, steering);
+          // So is an outcome handed back to this session: the reply steer is its next-turn reply turn
+          // now, still carrying it, and a reply turn already queued joins it (session-request.ts).
+          await foldQueuedReplyTurnsInto(tx, sessionId, steering);
         }
         return {
           applied: requeued.count > 0,
@@ -4387,6 +4429,11 @@ export class RunnerApiController {
           && steering.deliveryStatus !== 'ACKNOWLEDGED'
           ? await closeUnreadSteerRequests(tx, sessionId, [dto.turnId])
           : [];
+        // And a reply steer the engine never took said nothing of the outcomes it carries back to this
+        // session as an asker: they are let go, for the request worker to hand back again.
+        if (acked.count > 0 && failedCurrentWork) {
+          await releaseUnreadSteerReplies(tx, sessionId, steering.clientTurnId);
+        }
         return {
           applied: acked.count > 0,
           steer: true,
@@ -4751,8 +4798,12 @@ export class RunnerApiController {
         const requeuedSteers = await requeueUnreadCurrentWorkSteers(tx, sessionId, [completedTurn.id]);
         currentWorkRequeued = requeuedSteers.length;
         // A background job's exit that missed this turn is a wake turn of its own again; a wake
-        // already queued for the next turn joins it rather than opening a second one behind it.
-        if (requeuedSteers.length > 0) await foldRequeuedWakeTurns(tx, sessionId, requeuedSteers);
+        // already queued for the next turn joins it rather than opening a second one behind it. The
+        // same for an outcome handed back to this session that missed it (session-request.ts).
+        if (requeuedSteers.length > 0) {
+          await foldRequeuedWakeTurns(tx, sessionId, requeuedSteers);
+          await foldRequeuedReplyTurns(tx, sessionId, requeuedSteers);
+        }
       } else if (completedTurn) {
         // A failing turn takes the session with it, and the drain below answers every queued row.
         // Requeueing into a queue about to be emptied would lose the message with nothing said;
