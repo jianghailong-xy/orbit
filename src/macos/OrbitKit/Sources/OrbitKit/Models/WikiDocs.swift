@@ -140,6 +140,10 @@ public struct WikiDocsDirectory: Codable, Equatable, Sendable {
         public let status: WikiDocStatus?
         public let updatedAt: String?
         public let planVersion: Int?
+        /// Its two lines on the home (contract `docs.lead`): the first two sentences of its first section,
+        /// withdrawn ones skipped, cut with an ellipsis. Nil until it is written, while its first section has
+        /// no sentence to give, and from a server older than it.
+        public let lead: String?
         public let sections: [Section]?
     }
 

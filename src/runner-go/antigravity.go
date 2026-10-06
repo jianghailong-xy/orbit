@@ -282,7 +282,17 @@ func antigravityArgs(job *ClaimedSession, geminiDir string, gated bool) []string
 // antigravityEnv is agy's environment: the agent's on top of the runner's, the session context Orbit's
 // own MCP server and CLI read, and the self-update switched off. HOME is left alone (§3).
 func antigravityEnv(job *ClaimedSession, execDir string) []string {
-	env := replaceEnv(envWithAgent(job.Agent.Env), map[string]string{
+	// Which account the session runs on is the runner's to read (antigravitySessionGoogleDir), not agy's.
+	agentEnv := job.Agent.Env
+	if _, named := agentEnv[antigravityAccountDirVar]; named {
+		agentEnv = make(map[string]string, len(job.Agent.Env))
+		for key, value := range job.Agent.Env {
+			if key != antigravityAccountDirVar {
+				agentEnv[key] = value
+			}
+		}
+	}
+	env := replaceEnv(envWithAgent(agentEnv), map[string]string{
 		"PWD":                       execDir,
 		"ORBIT_SESSION_ID":          publicID(job.SessionID),
 		"ORBIT_AGENT_ID":            publicID(job.AgentID),

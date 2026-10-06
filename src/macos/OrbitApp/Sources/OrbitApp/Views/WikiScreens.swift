@@ -87,12 +87,14 @@ struct WikiHomeView: View {
 }
 
 /// What stands where the home page would be: a spinner, the reason it could not be read, or — only
-/// after a read that succeeded — that there is no space yet.
+/// after a read that succeeded — that there is no space yet, or that the wiki is off for this account.
 private struct WikiHomePlaceholder: View {
     let wiki: WikiModel
 
     var body: some View {
-        if wiki.homeState.lastLoadFailed {
+        if wiki.disabled {
+            WikiDisabledNote()
+        } else if wiki.homeState.lastLoadFailed {
             ContentUnavailableView {
                 Label("The wiki couldn't be loaded", systemImage: AppSection.wiki.systemImage)
             } description: {
@@ -132,10 +134,21 @@ struct WikiDetailPane: View {
             WikiDocScreen(address: doc).id(doc)
         } else if let plan = model.nav.selectedWikiPlan {
             WikiPlanScreen(address: plan).id(plan)
+        } else if model.wiki?.disabled == true {
+            WikiDisabledNote()
         } else {
             ContentUnavailableView(WikiCopy.title, systemImage: AppSection.wiki.systemImage,
                                    description: Text("Pick an entry, or open Review."))
         }
+    }
+}
+
+/// The Wiki section reached on an account the server has not switched the wiki on for — a link, or a
+/// section kept from before: the web page's own sentence, not a failure to retry.
+struct WikiDisabledNote: View {
+    var body: some View {
+        ContentUnavailableView(WikiCopy.title, systemImage: AppSection.wiki.systemImage,
+                               description: Text(WikiCopy.disabledNote))
     }
 }
 
@@ -385,7 +398,9 @@ struct WikiEntryView: View {
     var body: some View {
         if let wiki = model.wiki {
             TimelineView(.periodic(from: .now, by: 60)) { context in
-                if let detail = wiki.detail(entryID) {
+                if wiki.disabled {
+                    WikiDisabledNote()
+                } else if let detail = wiki.detail(entryID) {
                     WikiEntryPage(detail: detail, now: context.date,
                                   sessionTitle: { id in
                                       Self.card(.session, id).flatMap(title(of:))

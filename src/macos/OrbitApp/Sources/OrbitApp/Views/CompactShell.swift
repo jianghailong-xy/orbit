@@ -708,7 +708,10 @@ struct NavigationDrawer: View {
                     if section == .projects {
                         projectsRow
                     } else if section == .wiki {
-                        wikiRow
+                        // No row at all for an account the server has not switched the wiki on for
+                        // (WIKI_DISABLED), as the web sidebar draws none: a row that led to a refusal
+                        // would be worse than none.
+                        if model.wiki?.shown == true { wikiRow }
                     } else {
                         sectionRow(section)
                     }

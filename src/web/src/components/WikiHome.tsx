@@ -9,7 +9,14 @@ import { WikiEntryLine } from './WikiEntryRow';
 import { WikiDot, WikiOpChip, WikiTrustBadge } from './WikiMarks';
 import { WikiPlanBanner, WikiPlanCard } from './WikiPlanCard';
 import { WikiRunTimelineRow } from './WikiRunPage';
-import { wikiEntriesQuery, wikiReviewQuery, wikiSpaceQuery, wikiSpacesQuery, wikiTimelineQuery } from '../lib/queries';
+import {
+  wikiEntriesOfKindQuery,
+  wikiEntriesQuery,
+  wikiReviewQuery,
+  wikiSpaceQuery,
+  wikiSpacesQuery,
+  wikiTimelineQuery,
+} from '../lib/queries';
 import type { WikiChangeset, WikiChangesetOp, WikiEntry, WikiSpaceWithUsage, WikiTimelineItem } from '../lib/wiki';
 import {
   WIKI_AGENTS_USED,
@@ -19,7 +26,7 @@ import {
   WIKI_NO_AGENTS_YET,
   WIKI_NO_CHANGES,
   WIKI_NO_DECISIONS,
-  WIKI_NO_ENTRIES,
+  WIKI_NO_PRINCIPLES,
   WIKI_NO_REVIEW,
   WIKI_PRINCIPLES,
   WIKI_PRINCIPLES_HINT,
@@ -47,6 +54,11 @@ import {
 } from '../lib/wiki';
 import { wikiRecentRows } from '../lib/wikiReviewMode';
 
+/** Every principle: the most one read answers (the server's cap), far above any space's own rules. */
+const PRINCIPLES_READ = 200;
+/** The decision log's rows: the newest four. */
+const RECENT_DECISIONS = 4;
+
 /**
  * The Wiki home: what the space holds, and what wants the owner's attention.
  *
@@ -61,8 +73,15 @@ import { wikiRecentRows } from '../lib/wikiReviewMode';
  * bars all come from the space and its entries; the one block whose data phase 1 has no writer for
  * ("Detector") is absent from the entry drawer rather than drawn at zero, and the usage block says
  * plainly when nothing has used the wiki yet.
+ *
+ * THE PRINCIPLES AND THE DECISION LOG READ THEIR OWN KIND, never the newest 200 entries of every kind:
+ * a space holds thousands, and a principle older than the 200th newest entry dropped off the page.
  */
 export function WikiHome({ space }: { space: WikiSpaceWithUsage }) {
+  const principleRead = useQuery(wikiEntriesOfKindQuery(space.id, 'principle', PRINCIPLES_READ));
+  const decisionRead = useQuery(wikiEntriesOfKindQuery(space.id, 'decision', RECENT_DECISIONS));
+  // The newest entries of every kind, which the frame reads anyway: only to name the entry a decision
+  // was superseded by.
   const entries = useQuery(wikiEntriesQuery(space.id));
   const timeline = useQuery(wikiTimelineQuery(space.id));
   const review = useQuery(wikiReviewQuery(space.id));
@@ -78,12 +97,18 @@ export function WikiHome({ space }: { space: WikiSpaceWithUsage }) {
   // reads top to bottom, and a new one appends to the bottom of it rather than pushing the rest
   // down. The blue dot is what says which is new.
   const principles = useMemo(
-    () => [...wikiEntriesOfKind(all, 'principle')].sort((a, b) => Date.parse(a.recordedAt) - Date.parse(b.recordedAt)),
-    [all],
+    () =>
+      [...wikiEntriesOfKind(principleRead.data ?? [], 'principle')].sort(
+        (a, b) => Date.parse(a.recordedAt) - Date.parse(b.recordedAt),
+      ),
+    [principleRead.data],
   );
-  const decisions = useMemo(() => wikiEntriesOfKind(all, 'decision'), [all]);
+  const decisions = useMemo(() => wikiEntriesOfKind(decisionRead.data ?? [], 'decision'), [decisionRead.data]);
   const pending = useMemo(() => reviewOps(review.data ?? []), [review.data]);
-  const entryById = useMemo(() => new Map(all.map((entry) => [entry.id, entry])), [all]);
+  const entryById = useMemo(
+    () => new Map([...all, ...principles, ...decisions].map((entry) => [entry.id, entry])),
+    [all, principles, decisions],
+  );
 
   return (
     <>
@@ -106,7 +131,7 @@ export function WikiHome({ space }: { space: WikiSpaceWithUsage }) {
           hint={`${principles.length} · ${WIKI_PRINCIPLES_HINT}`}
         >
           {principles.length === 0 ? (
-            <WikiEmpty>{WIKI_NO_ENTRIES}</WikiEmpty>
+            <WikiEmpty>{WIKI_NO_PRINCIPLES}</WikiEmpty>
           ) : (
             principles.map((entry) => (
               <WikiEntryLine
@@ -131,7 +156,7 @@ export function WikiHome({ space }: { space: WikiSpaceWithUsage }) {
           {decisions.length === 0 ? (
             <WikiEmpty>{WIKI_NO_DECISIONS}</WikiEmpty>
           ) : (
-            decisions.slice(0, 4).map((entry) => (
+            decisions.slice(0, RECENT_DECISIONS).map((entry) => (
               <div className="wk-dec" key={entry.id}>
                 <span className="d">{entry.validFrom.slice(0, 10)}</span>
                 <div className="wk-row-main">
@@ -156,7 +181,7 @@ export function WikiHome({ space }: { space: WikiSpaceWithUsage }) {
 
       <div className="wk-col">
         <WikiPlanCard space={space} />
-        <ReviewCard space={space} pending={pending} changesets={review.data ?? []} entryById={entryById} />
+        <ReviewCard space={space} pending={pending} changesets={review.data ?? []} />
 
         <WikiCard title={WIKI_RECENTLY_CHANGED}>
           {(timeline.data?.items ?? []).length === 0 ? (
@@ -194,12 +219,10 @@ function ReviewCard({
   space,
   pending,
   changesets,
-  entryById,
 }: {
   space: WikiSpaceWithUsage;
   pending: WikiChangesetOp[];
   changesets: WikiChangeset[];
-  entryById: Map<string, WikiEntry>;
 }) {
   const navigate = useNavigate();
   const sessions = new Set(changesets.map((changeset) => changeset.sessionId).filter(Boolean));
@@ -225,7 +248,7 @@ function ReviewCard({
           {pending.slice(0, 3).map((op, index) => (
             <div className={`wk-rv-row${index === 0 ? ' first' : ''}`} key={op.id}>
               <WikiOpChip op={op.op} />
-              <span className="t">{opTitle(op, entryById)}</span>
+              <span className="t">{opTitle(op)}</span>
               <span className="a">{relTime(changesetAt(op, changesets))}</span>
             </div>
           ))}
@@ -332,12 +355,14 @@ export function changesetAt(op: WikiChangesetOp, changesets: readonly WikiChange
   return changesets.find((changeset) => changeset.id === op.changesetId)?.createdAt ?? new Date().toISOString();
 }
 
-/** What a pending op is about: the entry it names, or the one an add would create. */
-export function opTitle(op: WikiChangesetOp, entryById: Map<string, WikiEntry>): string {
-  const named = entryById.get(op.resultEntryId ?? op.entryId ?? '');
-  if (named) return named.title;
+/**
+ * What a pending op is about: the entry an add or a supersede drafts, else the entry it names — by the
+ * title Review's read carries for it (`entryTitle`), which no window of entries can leave out.
+ */
+export function opTitle(op: WikiChangesetOp): string {
   const payload = (op.payload ?? {}) as { entry?: { title?: unknown }; changes?: { title?: unknown } };
   if (typeof payload.entry?.title === 'string') return payload.entry.title;
+  if (op.entryTitle) return op.entryTitle;
   if (typeof payload.changes?.title === 'string') return payload.changes.title;
   return op.op === 'add' ? 'A new entry' : 'An entry';
 }
