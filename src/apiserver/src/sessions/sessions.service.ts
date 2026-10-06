@@ -1443,8 +1443,10 @@ export class SessionsService {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${SessionsService.IMPORT_LOCK_NAMESPACE}, ${lockKey})`;
         // Rejection ③: a Claude transcript can be imported once — the imported session IS the
         // continuation of it. A Trashed one does not count: deleting the import frees the id.
+        // Once per account: a session of another account with this engine id is not this
+        // account's to be told about — not that it exists, nor its id or title — nor in its way.
         const claimed = await tx.session.findFirst({
-          where: { runtimeSessionId: dto.claudeSessionId, deletedAt: null },
+          where: { ownerId, runtimeSessionId: dto.claudeSessionId, deletedAt: null },
           select: { id: true, title: true },
         });
         if (claimed) {
