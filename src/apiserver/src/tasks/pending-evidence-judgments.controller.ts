@@ -19,7 +19,7 @@ import { TaskCompletionEvidenceService } from './task-completion-evidence.servic
 export class PendingEvidenceJudgmentsController {
   constructor(private readonly evidence: TaskCompletionEvidenceService) {}
 
-  @PatScope('tasks:read')
+  @PatScope('tasks:read', { workspaceConfinable: false })
   @Get('pending')
   pending(
     @CurrentUser() user: AuthUser,

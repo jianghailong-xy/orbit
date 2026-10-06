@@ -23,10 +23,10 @@ const EMAIL = 'pat-scope@example.test';
 
 /** A route of each kind the guard tells apart. */
 class Routes {
-  @PatScope('tasks:read')
+  @PatScope('tasks:read', { workspaceConfinable: false })
   read(): void {}
 
-  @PatScope('tasks:write')
+  @PatScope('tasks:write', { workspaceConfinable: false })
   write(): void {}
 
   undeclared(): void {}
@@ -41,7 +41,7 @@ class Routes {
 /** A controller that refuses tokens, around a handler that declares a scope: the refusal wins. */
 @PatForbidden('ADMIN')
 class Closed {
-  @PatScope('tasks:read')
+  @PatScope('tasks:read', { workspaceConfinable: false })
   read(): void {}
 }
 

@@ -1074,7 +1074,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'tasks/tasks.service.ts#create',
     shape: 'TX_RETRIED',
-    locks: 'user FOR UPDATE (rank 10, whenever it restructures), task_list FOR KEY SHARE (20), the creator and predecessor Sessions FOR KEY SHARE (30), project FOR NO KEY UPDATE (40 when it retires a predecessor), then the successor/source task rows (50), dependency edges (60), and dependency revision triggers (70).',
+    locks: 'user FOR UPDATE (rank 10, whenever it restructures), task_list FOR KEY SHARE (20), the creator and predecessor Sessions FOR KEY SHARE (30), project FOR NO KEY UPDATE (40 when it retires a predecessor), then the successor/source task rows (50), dependency edges (60), and dependency revision triggers (70). Last, through the user door, the `activity` row recording the credential (`recordTasksCreated`), which has no foreign key or trigger and locks nothing else.',
     identity: 'The key built from `(session, turn, title, description)` above the closure.',
     isolation: '',
     attempts: 4,
@@ -1087,7 +1087,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     // call `createManyPass`, and only the first of those reaches the transaction below.
     at: 'tasks/tasks.service.ts#createManyPass',
     shape: 'TX_RETRIED',
-    locks: 'Same ranks as create, taken unconditionally: a batch writes several task rows in item order, which is not an order any other writer shares.',
+    locks: 'Same ranks as create, taken unconditionally: a batch writes several task rows in item order, which is not an order any other writer shares. The same last `activity` INSERT as create, once for every row the attempt inserted.',
     identity: 'The per-item idempotency keys and the turn they are built from, all outside the closure; the find-or-create by key makes a half-committed attempt impossible to double up on.',
     isolation: '',
     attempts: 4,
@@ -1579,6 +1579,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'tasks/tasks.service.ts#assertPlanAuthorityUnchanged', under: 'tasks.create, tasks.createMany — the preflight facts, re-read under the locks now held and before the first row' },
   { at: 'tasks/tasks.service.ts#assertDependencyCrossingsAtEffect', under: 'tasks.create, tasks.createMany — the cross-project edges, re-judged under a rank-50 lock on the prerequisites' },
   { at: 'tasks/tasks.service.ts#copyAttachmentsToTask', under: 'tasks.create, tasks.createMany — the input files copied onto the new task, in the transaction that inserts it and after its row; a source deleted after the preflight fails the recheck and rolls the task back with them' },
+  { at: 'tasks/tasks.service.ts#recordTasksCreated', under: "tasks.create, tasks.createMany — through the user door only, one `activity` INSERT naming the tasks this attempt inserted and the credential they came in through (PAT design §6.4), as the transaction's last write. `activity` has no foreign key and no trigger, so it locks nothing but its own new rows and adds no edge to the order; a rolled-back attempt takes its rows with it, and a replayed or collapsed item is not in the list" },
   { at: 'projects/session-attempt.service.ts#bySessionId', under: 'sessionAttempt.evaluate, .close and chargeSteer' },
   { at: 'projects/session-attempt.service.ts#chargeSteer', under: 'sessions.createTurn and sessions.interrupt — only as an explicit transaction participant after the Session idempotency receipt check; lock order is Session rank 30 then task_attempt child rank 60' },
   { at: 'projects/projects.service.ts#lockLiveAgent', under: 'projects.update, .remove' },

@@ -1915,7 +1915,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // indexes and one foreign key to `user` (ON DELETE CASCADE). No existing table, column,
       // constraint, function, trigger or type is altered or dropped; no task, project, acceptance
       // or DONE fence object is named, and no row is written.
-      '0383_personal_access_token'],
+      '0383_personal_access_token',
+      // Activity credential (0384): two nullable columns on `activity` — credential_kind and
+      // credential_id — and one CHECK pairing them, which every existing row (both NULL) satisfies.
+      // `activity` is not a preserved relation; no task, project, acceptance or DONE fence object,
+      // trigger, function or type is named, and no row is written or backfilled.
+      '0384_activity_credential'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

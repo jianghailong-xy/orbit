@@ -28,49 +28,49 @@ import { SharedPoolsService } from './shared-pools.service';
 export class SharedPoolsController {
   constructor(private readonly pools: SharedPoolsService) {}
 
-  @PatScope('workspaces:read')
+  @PatScope('workspaces:read', { workspaceConfinable: false })
   @Get()
   list(@CurrentUser() user: AuthUser) {
     return this.pools.list(user.userId);
   }
 
-  @PatScope('workspaces:write')
+  @PatScope('workspaces:write', { workspaceConfinable: false })
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateSharedPoolDto) {
     return this.pools.create(user.userId, dto);
   }
 
-  @PatScope('workspaces:read')
+  @PatScope('workspaces:read', { workspaceConfinable: false })
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.pools.get(user.userId, id);
   }
 
-  @PatScope('workspaces:write')
+  @PatScope('workspaces:write', { workspaceConfinable: false })
   @Patch(':id')
   update(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateSharedPoolDto) {
     return this.pools.update(user.userId, id, dto);
   }
 
-  @PatScope('workspaces:write')
+  @PatScope('workspaces:write', { workspaceConfinable: false })
   @Delete(':id')
   remove(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.pools.remove(user.userId, id);
   }
 
-  @PatScope('workspaces:write')
+  @PatScope('workspaces:write', { workspaceConfinable: false })
   @Post(':id/leave')
   leave(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.pools.leave(user.userId, id);
   }
 
-  @PatScope('workspaces:write')
+  @PatScope('workspaces:write', { workspaceConfinable: false })
   @Post(':id/people')
   addPerson(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: AddSharedPoolPersonDto) {
     return this.pools.addPerson(user.userId, id, dto);
   }
 
-  @PatScope('workspaces:write')
+  @PatScope('workspaces:write', { workspaceConfinable: false })
   @Patch(':id/people/:userId')
   setRole(
     @CurrentUser() user: AuthUser,
@@ -81,7 +81,7 @@ export class SharedPoolsController {
     return this.pools.setRole(user.userId, id, personId, dto);
   }
 
-  @PatScope('workspaces:write')
+  @PatScope('workspaces:write', { workspaceConfinable: false })
   @Delete(':id/people/:userId')
   removePerson(
     @CurrentUser() user: AuthUser,
@@ -91,13 +91,13 @@ export class SharedPoolsController {
     return this.pools.removePerson(user.userId, id, personId);
   }
 
-  @PatScope('workspaces:write')
+  @PatScope('workspaces:write', { workspaceConfinable: false })
   @Post(':id/keys')
   addKey(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: AddPoolKeyDto) {
     return this.pools.addKey(user.userId, id, dto);
   }
 
-  @PatScope('workspaces:write')
+  @PatScope('workspaces:write', { workspaceConfinable: false })
   @Patch(':id/keys/:keyId')
   updateKey(
     @CurrentUser() user: AuthUser,
@@ -108,7 +108,7 @@ export class SharedPoolsController {
     return this.pools.updateKey(user.userId, id, keyId, dto);
   }
 
-  @PatScope('workspaces:write')
+  @PatScope('workspaces:write', { workspaceConfinable: false })
   @Put(':id/keys/:keyId/secret')
   replaceKey(
     @CurrentUser() user: AuthUser,
@@ -119,7 +119,7 @@ export class SharedPoolsController {
     return this.pools.replaceKey(user.userId, id, keyId, dto);
   }
 
-  @PatScope('workspaces:write')
+  @PatScope('workspaces:write', { workspaceConfinable: false })
   @Delete(':id/keys/:keyId')
   removeKey(
     @CurrentUser() user: AuthUser,

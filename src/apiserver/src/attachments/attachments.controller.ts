@@ -27,7 +27,7 @@ export class AttachmentsController {
   // multipart/form-data with a `file` field. We use multipart (not base64 JSON) because
   // the app sets no raised body limit, so Express' ~100kb JSON cap would 413 real images;
   // multipart also avoids base64's ~33% inflation. `limits.fileSize` bounds buffered memory.
-  @PatScope('tasks:write')
+  @PatScope('tasks:write', { workspaceConfinable: false })
   @Post()
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_UPLOAD_BYTES } }))
   upload(
@@ -44,7 +44,7 @@ export class AttachmentsController {
 
   // Task inputs only — see AttachmentsService.removeTaskInput for why a transcript's image is
   // not deletable through here.
-  @PatScope('tasks:write')
+  @PatScope('tasks:write', { workspaceConfinable: false })
   @Delete(':id')
   @HttpCode(204)
   removeTaskInput(
@@ -54,7 +54,7 @@ export class AttachmentsController {
     return this.attachments.removeTaskInput(user.userId, id);
   }
 
-  @PatScope('tasks:read')
+  @PatScope('tasks:read', { workspaceConfinable: false })
   @Get(':id')
   async download(
     @CurrentUser() user: AuthUser,

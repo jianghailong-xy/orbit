@@ -26,7 +26,7 @@ export class EventsController {
   constructor(private readonly realtime: RealtimeService) {}
 
   @AllowQueryToken() // browser EventSource can't set headers; native clients use Authorization
-  @PatScope('events:read')
+  @PatScope('events:read', { workspaceConfinable: false })
   @Sse('events')
   events(@CurrentUser() user: AuthUser): Observable<MessageEvent> {
     return merge(
