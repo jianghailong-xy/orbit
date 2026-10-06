@@ -36,6 +36,54 @@ account draws on it — and every surface says so.
   happens on the web. macOS has no Providers page, so nothing changed there beyond the shared sources
   compiling.
 
-## Evidence
+## Tests
+
+- **Server** — `src/apiserver/src/providers/deepseek-balance.spec.ts`, 15 cases: the fixed `/user/balance` URL
+  with `Bearer <stored key>` and `redirect: manual`, never the preset's `/anthropic` base; every currency kept;
+  `is_available=false` with its real amount; 401 and 403 → KEY_REJECTED with no amount and none of DeepSeek's
+  error text; refused/unreachable and timed-out → NETWORK; 503/429/302 and unreadable or empty bodies →
+  UPSTREAM_ERROR; two providers holding one key share one read (one request, same `fetchedAt`, each names the
+  other) while another key is another read; reads arriving together share the request in flight; 90 s cache;
+  `refresh` skips it but asks DeepSeek at most once per 10 s for a key (a refresh through one provider serves
+  the other); a failed read is cached and retried by a refresh past the throttle; only the owner's own
+  DeepSeek keys (another owner's 404, Anthropic and a non-DeepSeek custom host 400, keyless 404); the
+  detection rule; the parser. `pool-security-boundary.pg.spec.ts` now sweeps the route: the owner's
+  DeepSeek key answers 200 with a balance and no credential in the body, another owner 404, a non-DeepSeek
+  key 400, a shared provider 404, a pool id 404 (as the owner and as a person of the pool). Three other pg
+  specs that build `ProvidersController` provide its new dependency.
+- **Web** — `components/DeepSeekBalance.test.tsx` (21) and `lib/deepseekBalance.test.ts` (11): every state of
+  the list line and the edit section (normal, multi-currency, too low with the top-up link and button, key
+  rejected, network, upstream, a request that never reached the server, loading), each failure and loading
+  asserted to show no currency sign and no 0; Retry/Refresh send `?refresh=1` and the sibling provider's read
+  is invalidated; the pages: which rows get a line (both presets and a custom `api.deepseek.com`, not
+  Anthropic or another custom host), the section sits right under the key, nothing on a page that only
+  connects a key; and a source check that neither file falls back with `?? 0` / `|| 0`.
+- **OrbitKit** — `DeepSeekBalanceTests` (10): decoding the server's answers (public-id twins included), the
+  state each comes to (a read, low, every failure, the unreachable request, an `ok` with no balance → failure,
+  never zero), the row's value ("Unavailable" in orange, never an amount, for every failure), amounts,
+  splits, times, which providers are DeepSeek keys and the slug match from the catalogue row.
+  `DeepSeekBalanceCopyParityTests` (4) hold the phone's words to the web source.
+
+## Screenshots
+
+### Web — the real console, light and dark (`web/`)
+
+This checkout's own web console, served by vite (`web-rig/vite.config.mjs`) with `/api` answered by
+`web-rig/server.mjs`, whose DeepSeek keys answer the balance route in the server's shape and in every state;
+headless Chromium driven by `web-rig/drive.mjs` signs in with a fake token, opens each page, waits until the
+state it is meant to show has rendered, presses Refresh where a user would, and screenshots at 2×. Each
+check it makes is in `web/checks-light.json` (34/34) and `web/checks-dark.json` (33/33; Refresh is pressed
+in the light pass only); a page that did not render its state fails the run.
+
+| Mock | Screenshot (`-light` / `-dark`) | What it shows |
+|---|---|---|
+| web-01 | `web-01-providers` | DeepSeek and DeepSeek Harness on one key: the same "Account balance ¥110.00 · updated 2 min ago ⟳"; Anthropic and Kimi have none |
+| web-02 | `web-02-providers-states` | every row state: normal, two currencies, too low (red, "Top up on DeepSeek ↗"), API key rejected, network error, DeepSeek error (orange, "Retry"), loading ("Checking account balance…") |
+| web-03 | `web-03-edit-deepseek` | the DeepSeek key's edit page: the section right under the API key — total, granted/topped-up bar and legend, "Updated 2 min ago", Refresh, "Top up on DeepSeek ↗", the whole-account note, "Same DeepSeek account as DeepSeek Harness — both show this balance." |
+| web-04 | `web-04-edit-deepseek-harness` | the same for the DeepSeek Harness key, naming DeepSeek |
+| web-05 | `web-05a…f-section-*` | the section in each other state: multi-currency, too low, key rejected, network, upstream error, loading — the failures say why, "Balance unknown", Retry, and no amount |
+| — | `web-06-edit-refreshed-light` | after pressing Refresh: `?refresh=1` reached the fixture and the section reads "Updated just now" |
+
+### iPhone — the app on the simulator, light and dark (`ios/`)
 
 FILLED IN BELOW
