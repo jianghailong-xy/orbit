@@ -5945,11 +5945,12 @@ export class SessionsService {
    * Queue a "merge this session's worktree branch into main" for the runner that ran it.
    * Worktree-isolated sessions only, whose `branch` holds committed work (auto-committed at
    * /complete for a finished session, or via {@link commitWorktree} for a live one) and whose
-   * `assignedRunnerId` still points at the machine whose local repo holds it. The runner
-   * picks the request up on its next heartbeat (≤30s), merges its branch's committed state
-   * into main (the live checkout, if any, is a separate worktree and is undisturbed), and
-   * reports the outcome back into `mergeStatus`/`mergeError`/`mergedAt`. Idempotent while a
-   * merge is already pending; re-requesting a merged/conflicted session re-queues it.
+   * `assignedRunnerId` still points at the machine whose local repo holds it. The runner is
+   * woken to pick the request up at once (else on its next heartbeat, ≤30s), merges its branch's
+   * committed state into main (the live checkout, if any, is a separate worktree and is
+   * undisturbed), and reports the outcome back into `mergeStatus`/`mergeError`/`mergedAt`.
+   * Idempotent while a merge is already pending; re-requesting a merged/conflicted session
+   * re-queues it.
    *
    * `targetBranch` is the branch to merge INTO, picked from the status bar's dropdown; it's
    * stored on `mergeTarget` and relayed to the runner. Omitted/empty → the default (the runner
@@ -5983,10 +5984,13 @@ export class SessionsService {
     // The operation this call is about, for a caller that asked to wait on it. Assigned inside the
     // closure because `withTransactionRetry` may run it again, and each run re-derives it.
     let operationId: string | null = null;
+    // The runner a merge this call queued is waiting on, re-derived by each run like the id above.
+    let queuedOn: string | null = null;
     // Retried whole. The worktree-operation claim is taken under the Session row lock inside the
     // closure, so a re-run competes for it from the state that exists. The runner is only told
     // about the operation after this returns.
     const workspaceId = await withTransactionRetry(this.prisma, async (tx) => {
+      queuedOn = null;
       // Queueing, heartbeat claim, new-turn enqueue, Adopt, and terminal Resume
       // all linearize on this row. An old click therefore cannot create a fresh
       // operation after the session has already entered a new turn epoch.
@@ -6097,8 +6101,12 @@ export class SessionsService {
           } : {}),
         },
       });
+      queuedOn = session.assignedRunnerId;
       return session.workspaceId;
     }, loggedRetry(this.logger, 'sessions.mergeToMain'));
+    // Have that runner heartbeat now instead of at its next 30s tick: whoever pressed Merge is
+    // watching a spinner. Only a nudge; a lost wake leaves the merge to that tick.
+    if (queuedOn) this.realtime.notifyRunnerWake(queuedOn);
     if (workspaceId && typeof workspaceId === 'object' && 'alreadyLanded' in workspaceId) {
       // Nothing was queued and nothing will be executed: the receipt that already says this landed
       // IS the answer. Handing it back rather than re-running the merge is the whole of CP4's
@@ -6142,9 +6150,10 @@ export class SessionsService {
 
   /**
    * The longest a caller may hold the request open waiting for a merge, and how often the wait
-   * looks. Five minutes because the floor is a heartbeat — `runloop.go`'s ticker is 30 seconds, so
-   * the runner does not even READ the command before then — and a ceiling below a few multiples of
-   * that would make the parameter useless for the one merge it exists for.
+   * looks. Five minutes because the floor can be a heartbeat — when the wake is lost,
+   * `runloop.go`'s ticker is 30 seconds, so the runner does not even READ the command before
+   * then — and a ceiling below a few multiples of that would make the parameter useless for the
+   * one merge it exists for.
    */
   private static readonly MERGE_WAIT_MAX_SECONDS = 300;
   private static readonly MERGE_WAIT_POLL_MS = 250;
@@ -6277,9 +6286,10 @@ export class SessionsService {
    * clear and gating on them disabled Commit permanently for that session. A commit racing a
    * background writer is re-committable; a permanently blocked one isn't.
    *
-   * The runner picks the request up on its next heartbeat (≤30s), commits, and reports the
-   * outcome back into `commitStatus`/`commitError` (clearing `worktreeDirty` on success, so the
-   * bar flips to Merge). Idempotent while a commit is already pending.
+   * The runner is woken to pick the request up at once (else on its next heartbeat, ≤30s),
+   * commits, and reports the outcome back into `commitStatus`/`commitError` (clearing
+   * `worktreeDirty` on success, so the bar flips to Merge). Idempotent while a commit is already
+   * pending.
    *
    * An ENDED session is admitted on one condition: its checkout still reports uncommitted changes.
    * This endpoint used to refuse every finished session with "its work is already committed",
@@ -6370,6 +6380,8 @@ export class SessionsService {
         'the session is no longer idle — wait for its current work to finish',
       );
     }
+    // As for a merge: have the runner heartbeat now rather than at its next 30s tick.
+    this.realtime.notifyRunnerWake(session.assignedRunnerId);
     return { ok: true };
   }
 

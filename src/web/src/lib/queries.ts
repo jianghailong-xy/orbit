@@ -58,6 +58,7 @@ import type {
   WikiChangeset,
   WikiEntry,
   WikiEntryDetail,
+  WikiEntryKind,
   WikiSpaceRow,
   WikiSpaceWithUsage,
   WikiTimeline,
@@ -1020,6 +1021,22 @@ export const wikiEntriesQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'entries'] as const,
     queryFn: () => api<WikiEntry[]>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/entries?limit=200`),
+    enabled: spaceId !== null,
+  });
+
+/**
+ * A space's entries of one kind, newest record first, at most `limit` (the server stops at 200) — the
+ * home's Principles and its Recent decisions.
+ *
+ * READ BY KIND, NOT PICKED OUT OF `wikiEntriesQuery`: that read is the 200 newest entries of every kind,
+ * and a space holds thousands, so a principle recorded before the 200th newest entry was not in it and
+ * the home said the space had nothing recorded.
+ */
+export const wikiEntriesOfKindQuery = (spaceId: string | null, kind: WikiEntryKind, limit: number) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'entries', kind, limit] as const,
+    queryFn: () =>
+      api<WikiEntry[]>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/entries?kind=${kind}&limit=${limit}`),
     enabled: spaceId !== null,
   });
 

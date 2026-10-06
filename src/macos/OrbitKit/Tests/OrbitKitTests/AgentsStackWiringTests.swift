@@ -72,6 +72,31 @@ final class AgentsStackWiringTests: XCTestCase {
                        "no boolean push left on the Agents stack")
     }
 
+    /// The list this stack keeps mounted under whatever it pushes over it is not on screen then, so
+    /// its rows' animated cues — one 30Hz `TimelineView` per running row — are held back until it is
+    /// the page showing again. The switch is set at the one place that already knows what the stack
+    /// shows (`sectionAtRoot`, nothing pushed), and read by the two glyphs themselves, so every row
+    /// that draws one — a session's, a project's, a folder's — follows without threading a flag
+    /// through each. The drawer's cues are held back the same way by its own `live:`.
+    func testTheCoveredListHoldsItsAnimatedRowCuesBack() throws {
+        let agents = code(try slice(try appSource("Views/CompactShell.swift"),
+                                    from: "case .agents:", to: "// RUNNERS"))
+        XCTAssertTrue(agents.contains(".environment(\\.liveRowCues, model.sectionAtRoot)"),
+                      "nothing pushed is exactly when the list is the page showing")
+
+        let views = code(try appSource("Views/AgentsView.swift"))
+        let spinner = try slice(views, from: "struct SpinnerGlyph: View {", to: "\n}\n")
+        XCTAssertTrue(spinner.contains("@Environment(\\.liveRowCues) private var liveRowCues"),
+                      "the spinner reads the switch itself, so every row that draws one is covered")
+        XCTAssertTrue(spinner.contains("if liveRowCues {"),
+                      "a covered row draws the arc still, with no display link behind it")
+        let breathing = try slice(views, from: "struct BreathingGlyph: View {", to: "\n}\n")
+        XCTAssertTrue(breathing.contains("@Environment(\\.liveRowCues) private var liveRowCues"),
+                      "and so does the breathing glyph")
+        XCTAssertTrue(breathing.contains("if reduceMotion || !liveRowCues {"),
+                      "still, like reduced motion already drew it")
+    }
+
     /// One row, two containers. The row view is built once — what differs is who moves the screen:
     /// the three-column `List`'s selection, or the compact row's own destination value. Neither
     /// shape draws a highlight it cannot open, because both read the same stack.
