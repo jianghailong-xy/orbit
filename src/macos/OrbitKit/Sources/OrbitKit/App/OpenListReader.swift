@@ -41,6 +41,11 @@ public final class OpenListReader {
         self.now = now
     }
 
+    /// The rows the last `.list` changed — a delta that removed nothing, so every other row is the
+    /// previous list's, though perhaps somewhere else in it (`OpenRowChange.replacements` tells
+    /// whether anything was added). nil for any other list.
+    public private(set) var replacedRows: [Session]?
+
     /// Whether polls go out as the delta read (or would, at the next one).
     public var usesDelta: Bool { deltaRetryAt.map { now() >= $0 } ?? true }
 
@@ -59,6 +64,7 @@ public final class OpenListReader {
                 }
                 if cursor != nil, let list = delta.applied(to: base) {
                     remember(list, cursor: delta.cursor, etag: nil)
+                    if delta.removedIds.isEmpty { replacedRows = delta.upserts }
                     return .list(list)
                 }
                 // It does not fit the list it should apply to. Read the list whole; the next poll
@@ -85,6 +91,7 @@ public final class OpenListReader {
     private func remember(_ list: [Session], cursor next: String?, etag tag: String?) {
         cursor = next
         base = next == nil ? [] : list
+        replacedRows = nil
         etag = tag
         current = false
     }
