@@ -811,10 +811,37 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 			app.fail(err)
 		}
 	}
+	// runAcceptance runs a task's EXECUTABLE acceptance command on the runner in the session's
+	// worktree, with the same runSynchronousShellTurn every other engine uses, and reports its exit
+	// code and output in the same shape. dsh is idle while it runs and is never told about it.
+	runAcceptance := func(resp *RunInboxResponse) bool {
+		if !p.waitTurnPermit(p.ctx) {
+			return false
+		}
+		p.setTurn(resp.TurnID)
+		req, err := runSynchronousShellTurn(p.ctx, p.t, p.job, p.execDir, resp,
+			func(typ string, payload map[string]interface{}) { p.emitFor(resp.TurnID, typ, payload) })
+		if err != nil {
+			req = TurnCompleteRequest{TurnID: resp.TurnID, Status: stFailed, Result: err.Error(), Subtype: "shell"}
+		}
+		req.RuntimeSessionID = sessionID
+		req.BranchSha = effectiveBranchSha(p.job.WT)
+		if err := p.completeTurn(req); err != nil {
+			logln("dsh acceptance turn-complete failed:", err)
+		}
+		p.setTurn("")
+		return true
+	}
 	for {
 		if activeID == "" && len(queued) > 0 {
 			next := queued[0]
 			queued = queued[1:]
+			if next.Kind == "shell" {
+				if !runAcceptance(next) {
+					return stCancelled, true, false
+				}
+				continue
+			}
 			if !start(next) {
 				return stCancelled, true, false
 			}
@@ -924,11 +951,18 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 					logln("diff-result failed for", p.job.SessionID+":", err)
 				}
 			case "shell":
-				// No shell bridge in this composition; the accepted turn still reaches a terminal.
 				if seen[resp.TurnID] {
 					continue
 				}
 				seen[resp.TurnID] = true
+				if resp.TaskAcceptance {
+					// The server-generated EXECUTABLE command is the runner's, not the engine's: it
+					// waits behind the messages ahead of it and then runs in the worktree exactly as
+					// every other engine runs it (runAcceptance), never through dsh or its model.
+					queued = append(queued, resp)
+					continue
+				}
+				// A person's `!` shell has no bridge in this composition (P5); the turn still reaches a terminal.
 				if err := p.completeTurn(TurnCompleteRequest{TurnID: resp.TurnID, Status: stFailed, Subtype: subtypeUnknownKind,
 					Result: "DeepSeek Harness sessions do not run shell turns", RuntimeSessionID: sessionID,
 					BranchSha: effectiveBranchSha(p.job.WT)}); err != nil {

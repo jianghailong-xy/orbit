@@ -14,7 +14,7 @@ const server = createServer((req, res) => {
     let body = null;
     try { body = JSON.parse(raw); } catch { /* recorded and refused below */ }
     const accepted = req.method === 'POST' && req.url === '/v1/messages' && req.headers['x-api-key'] === apiKey && body;
-    appendFileSync(log, JSON.stringify({ call: ++calls, method: req.method, url: req.url, accepted: !!accepted, model: body?.model ?? null,
+    appendFileSync(log, JSON.stringify({ call: ++calls, at: Date.now(), method: req.method, url: req.url, accepted: !!accepted, model: body?.model ?? null,
       keyMatched: req.headers['x-api-key'] === apiKey, lastUser: lastUserText(body) }) + '\n');
     if (!accepted) {
       res.writeHead(400, { 'content-type': 'application/json' });

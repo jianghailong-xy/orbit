@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { TASK_ACCEPTANCE_CLIENT_TURN_PREFIX } from '../tasks/executable-acceptance-round';
 
 /**
  * The namespace the Watch delivery worker queues its wakes in: `watch:<watchId>:<generation>` for a
@@ -51,6 +52,10 @@ const RESERVED_TURN_KEY_PREFIXES = [
   CONFIRMATION_RETURN_TURN_KEY_PREFIX,
   OWNER_CONFIRMATION_ANSWERS_TURN_KEY_PREFIX,
   EVIDENCE_REVIEW_TURN_KEY_PREFIX,
+  // A shell turn under it is delivered to the runner as the task's EXECUTABLE acceptance command
+  // (`taskAcceptance`), which the runner executes itself even where a person's `!` shell is refused
+  // (DeepSeek Harness, P5), and whose exit code is judged against the task. Only the server queues one.
+  TASK_ACCEPTANCE_CLIENT_TURN_PREFIX,
 ] as const;
 
 /**
@@ -89,6 +94,11 @@ export function assertClientTurnIdNotReserved(clientTurnId: string | undefined |
   if (reserved === AUTO_RETRY_TURN_KEY_PREFIX) {
     throw new BadRequestException(
       `clientTurnId must not start with "${AUTO_RETRY_TURN_KEY_PREFIX}" — that prefix is reserved for the messages the server re-sends itself after a failed turn (docs/session-request-reply-contract.md §2.1). Choose your own key, such as a UUID.`,
+    );
+  }
+  if (reserved === TASK_ACCEPTANCE_CLIENT_TURN_PREFIX) {
+    throw new BadRequestException(
+      `clientTurnId must not start with "${TASK_ACCEPTANCE_CLIENT_TURN_PREFIX}" — that prefix is reserved for the EXECUTABLE acceptance rounds the server queues itself (docs/task-completion-criteria.md). Choose your own key, such as a UUID.`,
     );
   }
   if (reserved) {
