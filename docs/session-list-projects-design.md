@@ -112,6 +112,7 @@
 - **合入 main**（owner 10-06 的决定，效果图 `docs/mocks/project-merge-sessions-page/`）：进度条下面一张合入卡，只在有话说时出现——检查中（`CHECK_PROMOTION` 在途，它那行合入状态从进度条挪进来，任务落到项目分支的 Landing 行仍在进度条里）、等你确认（可直接按 `Merge to main` / `Not now`，`Details ›` 打开完整的卡）、合入中（推送前可 `Cancel`）、暂时合不了（`Coordinator is resolving it · <age>`，`Open coordinator ›`）。合完卡片收起，这次合入作为一行 `Merged into main`（`<sha> · <n> tasks · by you`）按 `merged.at` 排进下面的时间分组，点开是回执。协调会话里只留一行。契约见 `docs/project-integration-line-contract.md` 修订 10。
 - **搜索**：页头和进度条下面直接是列表，没有搜索框（owner 10-04 的决定）。Web 的 ⌘K 仍能打开全局搜索面板；iOS 项目页不接全局搜索。Workspace 列表和文件夹页的搜索保持原样。
 - **列表**：`Coordinator` 一节放 coordinator（行上照旧带 `Coordinator` 标），下面是成员会话，按时间分组。列出全部 Workspace 的全部成员会话（Open 和 Completed，不含 Trash），每行操作按它自己的状态，行、悬停按钮、左右滑、长按和外面同状态的会话行一样（owner 10-04 的决定）。客户端分别请求 `GET /sessions?projectId=<id>&view=open` 和 `view=completed`，按 id 合并去重；页头会话数和进度条 running 数按合并后的全部会话计算。
+- **打开与轮询**（iOS，2026-10-06）：打开时先用 App 手里已有的会话填上——Open 列表里这个项目的成员、Workspace 列表里的行、这一页上次读到的 Completed 成员（OrbitKit `SessionProjectMembers`，和上面的合并去重同一条规则），不先清成 0，上面两个请求回来后再替换。之后每 4 秒的轮询不再重拉两份完整列表：Open 成员直接取 App 的 Open 列表（它有自己的轮询和实时推送），Completed 列表只在某个 Open 成员离开 Open 列表时、或距上次读满 60 秒（同 Web 的 `PROJECT_SESSION_REFRESH_MS`）时再读。landing 行、合入卡、开工行的读各自并行轮询，不排在成员列表后面。`view=completed` 回来空列表就是答案，不再用旧参数 `archived` 重问。
 
 ## 6. 文案（Web 与 OrbitKit 逐字一致）
 
