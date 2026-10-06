@@ -4435,16 +4435,17 @@ final class ConsoleModel {
         publishStateNow()
     }
 
-    /// Fetch and reconcile the server's still-PENDING user turns. The generation fence makes a
-    /// burst of add/withdraw nudges monotonic: an older, slower response cannot repaint a turn a
-    /// newer response already observed as cancelled or leased. `knownBefore` deliberately contains
-    /// only turn ids learned from the server; an untagged local POST still in flight survives a
-    /// snapshot that raced just ahead of its commit.
+    /// Fetch and reconcile the server's user turns no transcript event draws yet — the accepted head
+    /// and the queue behind it. The generation fence makes a burst of add/withdraw nudges monotonic:
+    /// an older, slower response cannot repaint a turn a newer response already observed as
+    /// cancelled or leased. `knownBefore` deliberately contains only turn ids learned from the
+    /// server, the accepted head's among them, so a head the listing no longer names goes too; an
+    /// untagged local POST still in flight survives a snapshot that raced just ahead of its commit.
     private var queuedTurnsFetchGeneration = 0
     private func refreshQueuedTurns() async {
         queuedTurnsFetchGeneration &+= 1
         let generation = queuedTurnsFetchGeneration
-        let knownBefore = Set(reducer.state.queued.compactMap(\.turnId))
+        let knownBefore = reducer.state.listedTurnIDs
         guard let turns = try? await api.queuedTurns(sessionID: sessionID),
               generation == queuedTurnsFetchGeneration else { return }
         reducer.reconcileQueuedTurns(turns, knownBefore: knownBefore)
