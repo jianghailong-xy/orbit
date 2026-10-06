@@ -32,7 +32,7 @@
 /* The exact field width (Base UI snaps --anchor-width to whole pixels), as the replaced list used. */
 .orbit-choice-positioner[data-match-width='true'] { width: var(--orbit-choice-anchor-width, var(--anchor-width)); }
 .orbit-choice-positioner { min-width: var(--orbit-choice-anchor-width, var(--anchor-width)); max-width: var(--orbit-dropdown-room, var(--available-width)); }
-.orbit-select-popup { padding: 4px; }
+.orbit-select-popup { position: relative; left: var(--orbit-dropdown-subpixel, 0px); padding: 4px; }
 .orbit-select-list { max-height: min(256px, var(--available-height)); overflow-y: auto; overscroll-behavior: contain; outline: none; }
 .orbit-select-option { padding: 5px 12px; min-height: 32px; border-radius: 4px; cursor: pointer; outline: none; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .orbit-select-option-label { display: block; overflow: hidden; text-overflow: ellipsis; }

@@ -10,7 +10,7 @@
   box-shadow: var(--orbit-shadow-popup);
   outline: none;
 }
-.orbit-menu { min-width: var(--orbit-menu-anchor-width, var(--anchor-width)); max-width: var(--orbit-dropdown-room, var(--available-width)); max-height: var(--available-height); overflow-y: auto; padding: 4px; }
+.orbit-menu { min-width: var(--orbit-menu-anchor-width, var(--anchor-width)); max-width: var(--orbit-dropdown-room, var(--available-width)); max-height: var(--available-height); overflow-y: auto; padding: 4px; position: relative; left: var(--orbit-dropdown-subpixel, 0px); }
 .orbit-menu-item {
   display: flex; align-items: center; gap: 8px; padding: 5px 12px; min-height: 32px;
   border-radius: 4px; cursor: pointer; outline: none; white-space: nowrap;

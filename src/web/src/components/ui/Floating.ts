@@ -100,6 +100,10 @@ export function useDropdownPlacement(open: boolean, anchor: RefObject<Element | 
     positioner.current?.style.setProperty('--orbit-dropdown-room',
       flipped.current === null ? 'none' : `${atStart ? right - startX : Math.ceil(rect.right)}px`);
     const x = atStart ? startX : endX;
+    // Held by its right inset, an end-aligned list keeps the fractional left edge of its width there;
+    // Base UI rounds the position, so the remainder is handed back as a relative offset, which moves
+    // the list in layout without resizing the positioner it is measured by.
+    positioner.current?.style.setProperty('--orbit-dropdown-subpixel', `${x - Math.round(x)}px`);
     return data.align === 'start' ? x - rect.left : rect.right - width - x;
   };
   return { sideOffset, alignOffset, positioner, collisionPadding: 0, collisionAvoidance: { side: 'flip', align: 'none' } as const };
