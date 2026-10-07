@@ -164,7 +164,7 @@ internal fun WikiPlanEditSheet(number: String, stored: WikiPlanDoc, nextVersion:
                                     PlanEditRow(i, row, shown.size, change = { updated -> sections { this[indexOfFirst { it.id == row.id }] = updated } },
                                         remove = { sections { removeAt(indexOfFirst { it.id == row.id }) } },
                                         move = { by -> sections { val at = indexOfFirst { it.id == row.id }; add(at + by, removeAt(at)) } },
-                                        handle = Modifier.onGloballyPositioned { at -> list?.takeIf { it.isAttached }?.let { handles[row.id] = it.localBoundingBoxOf(at) } })
+                                        onHandlePlaced = { at -> list?.takeIf { it.isAttached }?.let { handles[row.id] = it.localBoundingBoxOf(at) } })
                                 }
                             }
                         }
@@ -188,7 +188,7 @@ internal fun WikiPlanEditSheet(number: String, stored: WikiPlanDoc, nextVersion:
  * its handle, or, for TalkBack, which cannot drag, by the row's Move up and Move down actions. */
 @Composable
 private fun PlanEditRow(index: Int, row: WikiPlanLogic.DocForm.Section, count: Int, change: (WikiPlanLogic.DocForm.Section) -> Unit,
-    remove: () -> Unit, move: (Int) -> Unit, handle: Modifier) {
+    remove: () -> Unit, move: (Int) -> Unit, onHandlePlaced: (LayoutCoordinates) -> Unit) {
     Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp).testTag("wiki-plan-edit-row:$index")
         .semantics {
             customActions = listOfNotNull(CustomAccessibilityAction(WikiPlanCopy.moveUp) { move(-1); true }.takeIf { index > 0 },
@@ -204,7 +204,8 @@ private fun PlanEditRow(index: Int, row: WikiPlanLogic.DocForm.Section, count: I
             PlanKindMenu(row.kind, "wiki-plan-edit-kind:$index") { change(row.copy(kind = it)) }
         }
         // The handle iOS's edit mode draws at a row's trailing edge; the drag itself is the list's.
-        Box(handle.size(48.dp).testTag("wiki-plan-edit-drag:$index").clearAndSetSemantics { }, contentAlignment = Alignment.Center) {
+        Box(Modifier.size(48.dp).onGloballyPositioned(onHandlePlaced).testTag("wiki-plan-edit-drag:$index").clearAndSetSemantics { },
+            contentAlignment = Alignment.Center) {
             Icon(painterResource(R.drawable.ic_reorder), null, tint = WikiPalette.secondary)
         }
     }
