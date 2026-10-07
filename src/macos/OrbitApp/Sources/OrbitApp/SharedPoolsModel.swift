@@ -3,7 +3,7 @@ import Observation
 import OrbitKit
 
 /// The Codex pools' people and API keys (GET /providers/shared-pools[/:id]): the shared pools the account
-/// is in and the pools of somebody else's own it was added to — Settings → Providers lists them — and, read
+/// is in and the pools of somebody else's own it was added to — Infrastructure lists them — and, read
 /// pool by pool beside their ChatGPT accounts, who can use each Codex pool of the account's own (migration
 /// 0358). A pool's page is run from here — keys put in, replaced, switched and taken out, its rule, people
 /// added and taken out, the pool deleted or left. Every write answers with the pool as it now stands, which

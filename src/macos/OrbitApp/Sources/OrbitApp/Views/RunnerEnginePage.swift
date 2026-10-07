@@ -65,6 +65,8 @@ private struct RunnerEngineContent: View {
                 dshSection(offline: offline)
             } else if let health, health.installed == true, let login = RunnerPageFormat.loginEngine(engine) {
                 accountsSection(health, login: login, offline: offline, now: now)
+            } else if let login = RunnerPageFormat.loginEngine(engine) {
+                installSection(login, offline: offline)
             }
             updateSection(offline: offline)
         }
@@ -118,6 +120,30 @@ private struct RunnerEngineContent: View {
             }
             if runner.install?.engine == "dsh", let message = runner.install?.message, !message.isEmpty {
                 Text(message).font(.orbitLabel).foregroundStyle(Color.secondary)
+            }
+        }
+    }
+
+    /// An engine the machine doesn't have, installed from here as the web's engine row installs it —
+    /// Install, or Retry after an install that failed, and the relay's own words while it runs. Nothing
+    /// for an Antigravity this runner can't run at all.
+    @ViewBuilder private func installSection(_ login: LoginEngine, offline: Bool) -> some View {
+        let kind = Infrastructure.rowKind(Infrastructure.engineHealth(runner, login), install: runner.install,
+                                          engine: login)
+        if kind == .installing || Infrastructure.installable(runner, login) {
+            Section {
+                if kind == .installing {
+                    Text("Installing…")
+                        .foregroundStyle(Color.secondary)
+                } else {
+                    Button(kind == .installFailed ? "Retry" : "Install \(login.displayName)") { install(login) }
+                        .disabled(offline || runner.install?.inFlight == true)
+                }
+                if runner.install?.engine == engine, let message = runner.install?.message, !message.isEmpty {
+                    Text(message)
+                        .font(.orbitLabel)
+                        .foregroundStyle(Color.secondary)
+                }
             }
         }
     }
@@ -463,6 +489,13 @@ private struct RunnerEngineContent: View {
         let id = runner.id
         Task {
             if let failure = await runners.updateEngines(id) { show(failure) }
+        }
+    }
+
+    private func install(_ login: LoginEngine) {
+        let id = runner.id
+        Task {
+            if let failure = await runners.installEngine(id, engine: login.rawValue) { show(failure) }
         }
     }
 

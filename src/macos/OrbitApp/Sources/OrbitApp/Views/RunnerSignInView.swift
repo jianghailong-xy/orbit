@@ -350,6 +350,7 @@ struct AuthErrorCardView: View {
 struct AntigravityRepairCardView: View {
     let console: ConsoleModel
     let repair: EngineAuth.AntigravityRepair
+    @Environment(AppModel.self) private var app
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
 
@@ -386,11 +387,12 @@ struct AntigravityRepairCardView: View {
                             .buttonStyle(.borderedProminent)
                             .disabled(!console.canInstallAntigravity)
                     }
+                    // This runner's Antigravity page, in the app: where it is installed and signed in.
                     Button("Open in Infrastructure") {
-                        if let url = console.antigravityProvidersURL { openURL(url) }
+                        if let runnerID = console.runnerID { app.openRunnerEngine(runnerID, engine: "antigravity") }
                     }
                     .buttonStyle(.bordered)
-                    .disabled(console.antigravityProvidersURL == nil)
+                    .disabled(console.runnerID == nil)
                 }
             }
             .font(.orbitLabel)

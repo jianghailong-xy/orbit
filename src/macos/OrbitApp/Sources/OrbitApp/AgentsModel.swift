@@ -35,9 +35,16 @@ final class AgentsModel {
     /// keys: a new-session draft is what offers pools, and the draft seed resolves a workspace that
     /// runs on one through them.
     private(set) var providerPools: [ProviderPool] = []
+    /// How the pool reads have gone: the Infrastructure page waits for an answer before it says what an
+    /// engine can run on.
+    private(set) var poolsState = ListLoadState()
+    /// The account's own keys (GET /providers/mine), disabled ones included: the Infrastructure page's API
+    /// keys, and what each engine can run on. Read when that page asks, unlike the catalogue above.
+    private(set) var ownKeys: [ConfiguredProvider] = []
+    private(set) var ownKeysState = ListLoadState()
     /// The shared Codex pools this account is in (GET /providers/shared-pools), read into their own
     /// model. A new-session draft offers them beside the account pools (`allPools`), and the
-    /// Providers page lists them on their own — which is why the two are kept apart here.
+    /// Infrastructure page lists them on their own — which is why the two are kept apart here.
     private(set) var sharedPools: [SharedPool] = []
     /// Every pool a new-session draft may offer, in web's order: the shared ones drawn as account
     /// pools whose members are their keys (`SharedPools.asProviderPool`), then this account's own.
@@ -121,7 +128,24 @@ final class AgentsModel {
 
     /// The pools read again: an account went in or out, or a pool went.
     func reloadPools() async {
-        if let pools = try? await api.providerPools() { providerPools = pools }
+        poolsState.begin()
+        do {
+            providerPools = try await api.providerPools()
+            poolsState.succeed()
+        } catch {
+            poolsState.fail()
+        }
+    }
+
+    /// Best-effort like the pools: a failed read keeps the last good list.
+    func loadOwnKeys() async {
+        ownKeysState.begin()
+        do {
+            ownKeys = try await api.personalProviders()
+            ownKeysState.succeed()
+        } catch {
+            ownKeysState.fail()
+        }
     }
 
     func pausePoolMember(_ pool: ProviderPool, member: PoolMember, durationMinutes: Int?) async -> String? {
@@ -183,7 +207,7 @@ final class AgentsModel {
                 configuredProviders = providers
                 configuredProvidersLoaded = true
             }
-            if let pools = try? await api.providerPools() { providerPools = pools }
+            await reloadPools()
             if let shared = try? await api.sharedPools() { sharedPools = shared }
             loadState.succeed()
         } catch {

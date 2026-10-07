@@ -58,14 +58,12 @@ public enum NavNode: Hashable, Sendable {
     /// device's name is, instead of a text field and a Rename button on the record.
     case runnerName(runnerID: String)
     case watchDetail(watchID: String)
-    /// Settings' second layer: the runners list, pushed from Settings' own form. A runner's record is
-    /// the third, and it is the *same* ``runnerDetail(runnerID:)`` frame the Runners section pushes —
+    /// A page Settings' list opens — Infrastructure, Notifications, Shared links, Access tokens, Change
+    /// password, Admin — each a frame of Settings' own stack. A machine's record pushed from
+    /// Infrastructure is the *same* ``runnerDetail(runnerID:)`` frame the Infrastructure section pushes —
     /// what tells the two apart is the stack a frame rides, not the frame.
-    case settingsRunners
-    /// Every other page Settings' list opens — Notifications, Providers, Shared links, Change
-    /// password, Admin — each a frame of Settings' own stack like the runners list above it.
     case settingsPage(SettingsPage)
-    /// A pool's page, pushed from Settings → Providers: an account pool of the user's own Claude
+    /// A pool's page, pushed from Infrastructure's Account pools: an account pool of the user's own Claude
     /// subscriptions, read-only here, or a shared pool of OpenAI API keys, which is run from its page.
     case accountPool(poolID: String)
     case sharedPool(poolID: String)
@@ -234,8 +232,8 @@ public struct NavState: Equatable, Sendable {
         return nil
     }
 
-    // The three single-layer sections — Following, Runners, Admin — push exactly one kind of page,
-    // so "which record is showing" is the id on top of their own stack. Each one is a total function
+    // The three sections whose list opens one kind of record — Following, Infrastructure (a machine's),
+    // Admin — say "which record is showing" with the id on top of their own stack. Each one is a total function
     // of that stack like every other fact here: the list's highlight and the detail pane are the
     // same read, which is what stops a row drawing as selected while the page under it says
     // something else. Admin is the one that had nowhere to put this at all — see ``NavNode/userDetail(userID:)``.
@@ -248,7 +246,7 @@ public struct NavState: Equatable, Sendable {
         return id
     }
 
-    /// `AppModel.selectedRunnerID` — the runner record the Runners pane shows. A page the record
+    /// `AppModel.selectedRunnerID` — the machine's record the Infrastructure pane shows. A page the record
     /// pushed over itself (an engine's, its name's) is still that runner's, so the list's highlight
     /// stays on it.
     public var selectedRunnerID: String? {

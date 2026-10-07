@@ -52,17 +52,22 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
     /// Whether an OpenCode session may spend this key too (`OpenCodeKeys`), as GET /providers decides
     /// it. Nil from an older server, which reads as no.
     public var runsOnOpenCode: Bool? = nil
+    /// Whether the key is switched on. Only GET /providers/mine says — the account's own keys, disabled
+    /// ones included (the Infrastructure page's API keys); the catalogue lists enabled keys alone, and
+    /// nil reads as on.
+    public var enabled: Bool? = nil
     public var id: String { slug }
 
     private enum CodingKeys: String, CodingKey {
         case providerID = "id"
         case slug, label, runtime, models, defaultModel, presetSlug, modelsFromRuntime, planUsage, runsOnOpenCode
+        case enabled
     }
 
     public init(slug: String, label: String, runtime: String? = nil,
                 models: [ConfiguredProviderModel] = [], defaultModel: String? = nil,
                 presetSlug: String? = nil, modelsFromRuntime: Bool? = nil,
-                planUsage: PlanUsageSnapshot? = nil, runsOnOpenCode: Bool? = nil) {
+                planUsage: PlanUsageSnapshot? = nil, runsOnOpenCode: Bool? = nil, enabled: Bool? = nil) {
         self.slug = slug
         self.label = label
         self.runtime = runtime
@@ -72,5 +77,6 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
         self.modelsFromRuntime = modelsFromRuntime
         self.planUsage = planUsage
         self.runsOnOpenCode = runsOnOpenCode
+        self.enabled = enabled
     }
 }
