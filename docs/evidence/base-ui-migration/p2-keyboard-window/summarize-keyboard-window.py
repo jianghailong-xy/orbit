@@ -31,12 +31,15 @@ STUDIES = {
     # network namespace; each run is judged on its own, its AntD target included.
     'fix-menu-before': 'before-fix tree 46a418fba, all menu sequences: 20 burst + 20 paced per target and sequence (A/B with fix-menu-after)',
     'fix-menu-after': 'fixed tree 4fb7ee43f, all menu sequences: 20 burst + 20 paced per target and sequence (A/B with fix-menu-before)',
-    'fix-select-after': 'fixed tree, all select sequences: 20 burst + 20 paced per target and sequence (Select is not changed)',
 }
 # The judged data set: the studies taken together (a rerun replaces nothing; it only adds samples).
 DATASETS = {'baseline': ['baseline-menu', 'baseline-select-a', 'baseline-select-b', 'baseline-select-c',
                          'baseline-select-d', 'baseline-select-e', 'baseline-rerun', 'baseline-menu-up',
                          'baseline-menu-up-rerun']}
+# The fixed tree's select sequences (Select is not changed), run one sequence per chunk by run-chunks.py after a
+# runner drain lost the single run (checks/fix-select-after-killed.*); each chunk is judged with the others.
+CHUNKS = lambda prefix: sorted(p.name for p in HERE.glob(f'{prefix}-*') if (p / 'summary.json').exists())
+DATASETS['fix-select-after'] = CHUNKS('fix-select-after')
 ANTD = {'menu': 'antd-menu', 'select': 'antd-sample'}
 ORBIT = {'menu': ['orbit-menu', 'orbit-menu-sample'], 'select': ['orbit-field', 'orbit-sample']}
 CONTROLS = {'menu-enter', 'select-down', 'select-down-enter', 'select-down-enter-from-7'}
@@ -141,11 +144,11 @@ for dataset, studies in DATASETS.items():
         report[f'dataset:{dataset}'] = entry_of(present, ' + '.join(present))
 
 
-def select_keys_burst(study):
+def select_keys_burst(studies):
     """The previous task's burst probe (../p2-select-keys, unchanged) run again on this tree: grouped and judged as
     its own summarize-select-keys.py does (a fixed expectation, or the paced majority), which is not run here
     because it rewrites that directory's summary."""
-    samples = [json.loads(file.read_text()) for file in sorted((HERE / study).glob('*--select-keys.json'))]
+    samples = [json.loads(file.read_text()) for study in studies for file in sorted((HERE / study).glob('*--select-keys.json'))]
     paced = collections.defaultdict(collections.Counter)
     for data in samples:
         if data['mode'] == 'paced':
@@ -162,14 +165,19 @@ def select_keys_burst(study):
     return rows
 
 
-for study, tree in {'regression-select-keys-burst': 'baseline tree', 'regression-select-keys-burst-delivered': 'delivered tree',
-                    'fix-select-keys-burst-before': 'before-fix tree 46a418fba (A/B)', 'fix-select-keys-burst-after': 'fixed tree (A/B)'}.items():
-    if (HERE / study / 'summary.json').exists():
-        stats = json.loads((HERE / study / 'summary.json').read_text())['stats']
+# The fix A/B ran in chunks by target (run-chunks.py), after a runner drain lost both single runs.
+for study, (tree, studies) in {'regression-select-keys-burst': ('baseline tree', ['regression-select-keys-burst']),
+                               'regression-select-keys-burst-delivered': ('delivered tree', ['regression-select-keys-burst-delivered']),
+                               'fix-select-keys-burst-before': ('before-fix tree 46a418fba (A/B)', CHUNKS('fix-select-keys-burst-before')),
+                               'fix-select-keys-burst-after': ('fixed tree (A/B)', CHUNKS('fix-select-keys-burst-after'))}.items():
+    studies = [name for name in studies if (HERE / name / 'summary.json').exists()]
+    if studies:
+        stats = [json.loads((HERE / name / 'summary.json').read_text())['stats'] for name in studies]
         report[study] = {
-            'scope': f'{tree}, the unchanged ../p2-select-keys/select-keys-burst.browser.mjs (20 burst + 3 paced per combination)',
-            'playwright': {k: stats[k] for k in ['expected', 'unexpected', 'skipped', 'flaky']},
-            'targets': select_keys_burst(study), 'sequences': {}}
+            'scope': f'{tree}, the unchanged ../p2-select-keys/select-keys-burst.browser.mjs (20 burst + 3 paced per combination)'
+                     + (': ' + ' + '.join(studies) if study.startswith('fix-') else ''),
+            'playwright': {k: sum(stat[k] for stat in stats) for k in ['expected', 'unexpected', 'skipped', 'flaky']},
+            'targets': select_keys_burst(studies), 'sequences': {}}
 
 
 def before_after(before, after):

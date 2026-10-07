@@ -9,6 +9,7 @@ import sys
 import zipfile
 from pathlib import Path
 
+sys.dont_write_bytecode = True  # importing read-trace.py must not leave a __pycache__ in the p2.2 directory
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('read_trace', HERE.parent / 'p2.2' / 'revision-8' / 'read-trace.py')
 read_trace = importlib.util.module_from_spec(spec)
