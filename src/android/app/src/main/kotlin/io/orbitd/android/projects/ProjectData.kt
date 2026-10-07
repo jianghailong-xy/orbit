@@ -54,34 +54,6 @@ class ProjectsApi(private val api: DirectoryApi) {
     }
 }
 
-enum class ProjectLane(val title: String) { ATTENTION("Needs attention"), RUNNING("Running"), READY("Ready"), WAITING("Waiting"), DEFINITION("Needs definition"), COMPLETED("Completed"), OTHER("Other") }
-
-/** Presentation rules from OrbitKit ProjectAttention; none of these grant an action. */
-fun projectLane(project: JsonObject, now: Instant = Instant.now()): ProjectLane {
-    if (project.text("status") != "OPEN") return if (project.text("status") in setOf("DONE", "CANCELLED")) ProjectLane.COMPLETED else ProjectLane.OTHER
-    val buckets = project.obj("buckets") ?: JsonObject(emptyMap())
-    val attention = project.obj("attention")
-    val hasOwner = attention?.objects("ownerItems").orEmpty().any { (it.number("count") ?: 0) > 0 }
-        || attention?.obj("startRequest") != null
-    val automaticBlockers = (attention?.number("coordinatorBlockers") ?: 0) + (attention?.number("systemBlockers") ?: 0)
-    if (hasOwner || automaticBlockers > 0 || (attention?.number("userBlockers") ?: 0) > 0) return ProjectLane.ATTENTION
-    val active = (project.obj("integration")?.number("activeJobCount") ?: 0) > 0 || project.obj("coordinatorActivity")?.flag("working") == true
-    val quiet = project.text("lastActivityAt")?.let { runCatching { Duration.between(Instant.parse(it), now).seconds >= 86400 }.getOrDefault(false) } == true
-    val running = buckets.number("running") ?: 0
-    val ready = buckets.number("ready") ?: 0
-    if (active || running > 0 && !quiet) return ProjectLane.RUNNING
-    if (quiet && (running > 0 || ready > 0)) return ProjectLane.ATTENTION
-    val failed = buckets.number("failed") ?: ((project.obj("_count")?.number("tasks") ?: 0) - listOf("running", "ready", "blocked", "awaitingVerification", "done", "cancelled").sumOf { buckets.number(it) ?: 0 }).coerceAtLeast(0)
-    val coordinatorHandling = attention?.obj("coordinatorItems") != null
-    val unsettled = running + ready + (buckets.number("blocked") ?: 0) + (buckets.number("awaitingVerification") ?: 0) + failed
-    if (!coordinatorHandling && unsettled == 0 && (buckets.number("done") ?: 0) + (buckets.number("cancelled") ?: 0) > 0) return ProjectLane.ATTENTION
-    if (coordinatorHandling && ready == 0) return ProjectLane.WAITING
-    if ((project.obj("_count")?.number("tasks") ?: 0) == 0) return ProjectLane.DEFINITION
-    if (ready > 0) return ProjectLane.READY
-    if ((buckets.number("blocked") ?: 0) + (buckets.number("awaitingVerification") ?: 0) + failed > 0) return ProjectLane.WAITING
-    return ProjectLane.DEFINITION
-}
-
 fun projectStatus(document: JsonObject): String = when {
     document.text("status") == "OPEN" && document.containsKey("startedAt") && document["startedAt"] == JsonNull -> "Not started"
     document.text("status") == "DONE" -> "Completed"
@@ -110,42 +82,4 @@ fun projectStartSettings(page: ProjectPageData): ProjectStartSettings {
     val line = integration?.text("line")?.takeIf { it in setOf("MAIN", "PROJECT_BRANCH") } ?: if (dependencies) "PROJECT_BRANCH" else "MAIN"
     return ProjectStartSettings(line, true, page.document.number("maxConcurrentTasks") ?: 1,
         integration?.text("mergeCheckCommand"), if (integration?.text("line") == "PROJECT_BRANCH") integration.text("ref")?.let { "refs/heads/$it" } else null)
-}
-
-/** OrbitKit attention ordering: owner wait, reason/severity, oldest signal; ids break ties. */
-fun orderedProjects(rows: List<JsonObject>, lane: ProjectLane, now: Instant = Instant.now()): List<JsonObject> {
-    fun instant(raw: String?) = raw?.let { runCatching { Instant.parse(it) }.getOrNull() }
-    fun oldest(a: String?, b: String?) = compareValues(instant(a) ?: Instant.MAX, instant(b) ?: Instant.MAX)
-    fun ownerSince(row: JsonObject): String? {
-        val attention = row.obj("attention") ?: return null
-        return (attention.objects("ownerItems").mapNotNull { it.text("oldestWaitingSince") } + listOfNotNull(attention.obj("startRequest")?.text("waitingSince")))
-            .minByOrNull { instant(it) ?: Instant.MAX }
-    }
-    fun reason(row: JsonObject): Int {
-        val attention = row.obj("attention")
-        if (attention?.objects("ownerItems").orEmpty().any { (it.number("count") ?: 0) > 0 } || attention?.obj("startRequest") != null) return 1
-        if ((attention?.number("coordinatorBlockers") ?: 0) + (attention?.number("systemBlockers") ?: 0) > 0) return 3
-        if ((attention?.number("userBlockers") ?: 0) > 0) return 2
-        val quiet = instant(row.text("lastActivityAt"))?.let { Duration.between(it, now).seconds >= 86400 } == true
-        if (quiet && (row.obj("buckets")?.number("running") ?: 0) > 0) return 4
-        if (quiet && (row.obj("buckets")?.number("ready") ?: 0) > 0) return 5
-        return if (attention?.obj("coordinatorItems") != null) 7 else 6
-    }
-    fun severity(row: JsonObject) = when (row.obj("attention")?.text("maxSeverity")) { "CRITICAL" -> 0; "WARNING" -> 1; "INFO" -> 2; else -> 3 }
-    return rows.sortedWith { a, b ->
-        val comparison = when (lane) {
-            ProjectLane.ATTENTION -> {
-                val left = reason(a); val right = reason(b)
-                val rank = left.compareTo(right)
-                val wait = if (left == 1 && right == 1) oldest(ownerSince(a), ownerSince(b)) else 0
-                val severity = if (left == right && left in setOf(2, 3)) severity(a).compareTo(severity(b)) else 0
-                val age = if (left == right && left in setOf(2, 3)) oldest(a.obj("attention")?.text("attentionSinceAt"), b.obj("attention")?.text("attentionSinceAt")) else 0
-                listOf(rank, wait, severity, age, oldest(a.text("lastActivityAt"), b.text("lastActivityAt"))).firstOrNull { it != 0 } ?: 0
-            }
-            ProjectLane.RUNNING, ProjectLane.COMPLETED -> compareValues(instant(b.text("lastActivityAt")) ?: Instant.MIN, instant(a.text("lastActivityAt")) ?: Instant.MIN)
-            ProjectLane.DEFINITION -> a.text("title").orEmpty().compareTo(b.text("title").orEmpty(), ignoreCase = true)
-            else -> oldest(a.text("lastActivityAt"), b.text("lastActivityAt"))
-        }
-        if (comparison == 0) a.text("id").orEmpty().compareTo(b.text("id").orEmpty()) else comparison
-    }
 }

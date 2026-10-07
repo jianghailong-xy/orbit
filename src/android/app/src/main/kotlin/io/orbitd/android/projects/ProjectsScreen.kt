@@ -130,8 +130,8 @@ fun ProjectsScreen(app: OrbitApplication, handle: SessionHandle, route: OrbitRou
             if (!loading && matching.isEmpty()) item {
                 Text(if (query.isBlank()) "No projects yet. Ask an agent in a session to start a project." else "No matching projects.")
             }
-            ProjectLane.entries.forEach { lane ->
-                val rows = orderedProjects(matching.filter { projectLane(it) == lane }, lane)
+            val now = java.time.Instant.now()
+            ProjectAttention.lanes(matching, now).forEach { (lane, rows) ->
                 if (rows.isNotEmpty()) {
                     item {
                         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {

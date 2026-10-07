@@ -16,12 +16,13 @@ class ProjectDataTest {
 
     @Test fun indexDistinguishesOwnerAttentionFromPlatformWorkAndQuietTasks() {
         val ordinary = obj("""{"id":"project","title":"Project","status":"OPEN","_count":{"tasks":2},"buckets":{"ready":2},"lastActivityAt":"2026-10-04T23:00:00Z"}""")
-        assertEquals(ProjectLane.READY, projectLane(ordinary, now))
-        assertEquals(ProjectLane.RUNNING, projectLane(JsonObject(ordinary + ("integration" to obj("""{"activeJobCount":1}"""))), now))
-        assertEquals(ProjectLane.ATTENTION, projectLane(JsonObject(ordinary + ("attention" to obj("""{"startRequest":{"waitingSince":"2026-10-04T00:00:00Z"}}"""))), now))
-        assertEquals(ProjectLane.ATTENTION, projectLane(JsonObject(ordinary + ("lastActivityAt" to JsonPrimitive("2026-10-01T00:00:00Z"))), now))
-        assertEquals(ProjectLane.OTHER, projectLane(JsonObject(ordinary + ("status" to JsonPrimitive("FUTURE_STATUS"))), now))
-        assertEquals(ProjectLane.WAITING, projectLane(obj("""{"status":"OPEN","_count":{"tasks":1},"buckets":{"failed":1}}"""), now))
+        assertEquals(ProjectLane.READY, ProjectAttention.lane(ordinary, now))
+        assertEquals(ProjectLane.RUNNING, ProjectAttention.lane(JsonObject(ordinary + ("integration" to obj("""{"activeJobCount":1}"""))), now))
+        assertEquals(ProjectLane.ATTENTION, ProjectAttention.lane(JsonObject(ordinary + ("attention" to obj("""{"startRequest":{"waitingSince":"2026-10-04T00:00:00Z"}}"""))), now))
+        assertEquals(ProjectLane.ATTENTION, ProjectAttention.lane(JsonObject(ordinary + ("lastActivityAt" to JsonPrimitive("2026-10-01T00:00:00Z"))), now))
+        // A status this build does not know reads as closed, as iOS reads it — never an invented lane.
+        assertEquals(ProjectLane.COMPLETED, ProjectAttention.lane(JsonObject(ordinary + ("status" to JsonPrimitive("FUTURE_STATUS"))), now))
+        assertEquals(ProjectLane.WAITING, ProjectAttention.lane(obj("""{"status":"OPEN","_count":{"tasks":1},"buckets":{"failed":1}}"""), now))
     }
 
     @Test fun authorizationRetainsBigintRevisionAndAutomaticDoesNotBecomeLegacyPause() {

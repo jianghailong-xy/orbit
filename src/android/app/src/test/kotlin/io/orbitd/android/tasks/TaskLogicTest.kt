@@ -28,7 +28,7 @@ class TaskLogicTest {
         assertFalse(TaskListLogic.canStart(task(""","runnable":false,"assignee":{"id":"a","runner":{"id":"r"}}""")))
         assertTrue(TaskListLogic.canStart(task(""","assignee":{"id":"a","runner":{"id":"r"}}""")))
         assertFalse(TaskListLogic.canStart(task(""","assignee":{"id":"a"}""")))
-        assertFalse(TaskListLogic.canStart(task(""","dependencyState":"BLOCKED"""), assigneeHasRunner = true))
+        assertFalse(TaskListLogic.canStart(task(""","dependencyState":"BLOCKED""""), assigneeHasRunner = true))
         assertFalse(TaskListLogic.canStart(task(""","dependsOn":[{"dependsOnTask":{"id":"p","status":"OPEN"}}]"""), assigneeHasRunner = true))
         // A check row is not a gate row: it has work of its own.
         assertFalse(TaskJudgment.isGateRow(task(""","completionPolicy":"VERIFICATION_PASSED","verifiesTaskId":"x"""")))
