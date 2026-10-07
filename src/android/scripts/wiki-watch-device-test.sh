@@ -22,7 +22,9 @@ mkdir -p "$output"
 adb() { command "$adb_bin" "$@" 9>&-; }
 adb_bin="$adb"; adb=adb
 exec 9>"${ANDROID_DEVICE_LOCK:-/var/lib/orbit/android/ui.lock}"
-flock -n 9 || { echo 'Device lock busy; no device action performed' >&2; exit 75; }
+# A12_LOCK_WAIT=<seconds> waits that long for another task to release the device; by default it does not wait.
+flock -w "${A12_LOCK_WAIT:-0}" 9 || { echo 'Device lock busy; no device action performed' >&2; exit 75; }
+printf 'lock_acquired_utc=%s\n' "$(date -u +%FT%TZ)" > "$output/lock.txt"
 fixture_pid=''
 old_font=''
 cleanup() {
