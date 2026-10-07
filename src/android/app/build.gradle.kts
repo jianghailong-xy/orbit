@@ -32,6 +32,9 @@ val releaseVersionCode = providers.environmentVariable("ORBIT_ANDROID_VERSION_CO
 require(releaseVersionCode in 1..2100000000) { "Version code must be between 1 and 2100000000" }
 val packageId = providers.environmentVariable("ORBIT_ANDROID_APPLICATION_ID").orElse("io.orbitd.android").get()
 require(packageId.matches(Regex("[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+"))) { "Invalid Android application ID" }
+// The in-app updater reads android-v* releases of this GitHub repository.
+val updateRepository = providers.gradleProperty("orbitUpdateRepository").orElse("jianghailong-xy/orbit").get()
+require(updateRepository.matches(Regex("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+"))) { "orbitUpdateRepository must be owner/name" }
 
 // Environment only: no credential files or passwords in Gradle properties or source control.
 val signingValues = listOf("KEYSTORE_PATH", "STORE_PASSWORD", "KEY_ALIAS", "KEY_PASSWORD").associateWith {
@@ -56,6 +59,7 @@ android {
 
         buildConfigField("String", "SOURCE_SHA", "\"$sourceSha\"")
         buildConfigField("boolean", "SOURCE_DIRTY", sourceDirty.toString())
+        buildConfigField("String", "UPDATE_REPOSITORY", "\"$updateRepository\"")
         // Firebase client values are supplied per build, independently of signing/release settings.
         // An empty or mismatched configuration keeps push disabled; no credential is required by CI.
         mapOf("APP_ID" to "AppId", "API_KEY" to "ApiKey", "PROJECT_ID" to "ProjectId",

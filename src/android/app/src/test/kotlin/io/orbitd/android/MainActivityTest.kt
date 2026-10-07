@@ -119,7 +119,10 @@ class MainActivityTest {
     }
 }
 
-class TestOrbitApplication : OrbitApplication() {
+open class TestOrbitApplication : OrbitApplication() {
+    // Release unit tests must not reach GitHub when an Activity starts.
+    override fun createUpdates() = io.orbitd.android.update.AppUpdater(this, processScope,
+        io.orbitd.android.update.UpdateConfig.forBuild().copy(enabled = false))
     override fun createSession(): AuthSession = AuthSession(
         HttpTransport { request -> ApiResponse(200, (if (request.api.path == listOf("auth", "login")) """{"accessToken":"fixture-access","refreshToken":"fixture-refresh","user":{"id":"u1","email":"fixture@example.test","name":"Fixture"}}""" else if (request.api.path.firstOrNull() == "tasks") """{"id":"01a0cca7-8609-70ed-a0e2-d4b55b832b60","title":"Linked task"}""" else "[]").encodeToByteArray()) },
         object : CredentialStore {

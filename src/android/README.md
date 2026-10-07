@@ -5,8 +5,8 @@ A03 adds instance selection, login/logout, rotating authentication, a reusable R
 and AndroidKeyStore credential storage. A04 supplies foreground realtime/cache recovery;
 A05 adds the semantic theme, authenticated directory and object navigation. A06 adds real
 session reading and long content. Composing, full task/project/wiki/watch pages, notifications
-belong to their feature tasks. A14 adds [signed APK builds, versions and upgrade verification](docs/release.md),
-with [explicit release workflow isolation](docs/release-workflows.md).
+belong to their feature tasks. A14 adds [GitHub pre-releases from `android-v*` tags, versions and
+in-app updates](docs/release.md), with [explicit release workflow isolation](docs/release-workflows.md).
 The iOS installed version is still being established by A01; no repository revision or
 "latest beta" is treated as that frozen baseline.
 

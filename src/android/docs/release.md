@@ -1,143 +1,134 @@
-# Android S1 internal APK builds
+# Android S1 internal releases
 
-S1 is direct installation of a signed APK on Android 10–16 (minSdk 29, targetSdk 36).
-There is no store upload, AAB channel, automatic Android tag release, or deployment in this workflow.
-The existing `:app` / `:core`, pinned SDK, Java and Gradle wrapper remain the build system.
-See [the event/platform matrix](release-workflows.md) for Apple isolation.
+S1 is direct installation of a signed APK on Android 10–16 (minSdk 29, targetSdk 36),
+downloaded from this repository's GitHub Releases. There is no store upload, AAB
+channel or server deployment. The existing `:app` / `:core`, pinned SDK, Java and
+Gradle wrapper remain the build system. See [the event/platform matrix](release-workflows.md)
+for Apple isolation.
+
+## Publishing a release
+
+1. Choose the commit (the integrated project line once A05–A13 have landed there).
+2. In `src/android/gradle.properties` set `orbitVersionName` (`X.Y.Z[-suffix]`, at
+   most 32 characters) and `orbitVersionCode` (strictly greater than every published
+   `android-v*` release of the package). Commit.
+3. Tag that commit with the release notes and push only the tag:
+
+   ```sh
+   git tag -a android-v0.1.0-internal.2 -m "Orbit Android 0.1.0-internal.2" -m "What changed for testers"
+   git push origin android-v0.1.0-internal.2
+   ```
+
+`android-release.yml` refuses a tag that is not `android-v` + `orbitVersionName`, a
+`versionCode` not above the published history, an existing release for the tag, or
+an APK whose signer differs from `ANDROID_CERT_SHA256`. It publishes a pre-release
+with `orbit-android-<versionName>.apk`, `orbit-android-<versionName>.apk.sha256`
+and `android-update.json`. Never push a `v*` tag for Android; that is the Apple
+release. A tag that failed before publishing can be deleted and pushed again.
 
 ## Version and artifact identity
 
-`gradle.properties` supplies development defaults. A signed build requires explicit
-`ORBIT_ANDROID_VERSION_NAME` and `ORBIT_ANDROID_VERSION_CODE`. `versionName` is
-`X.Y.Z[-suffix]` (for example `0.1.0-internal.2`), at most 32 characters, matching the
-authenticated `X-Orbit-Client: android/<versionName>` telemetry limit. `versionCode`
-is an integer in 1..2100000000. Allocate it monotonically for each application ID;
-every delivered replacement must have a strictly larger code, including retries
-whose APK bytes changed. It is deliberately **not** a branch commit count or a
-workflow run number: neither establishes ordering across independent histories/workflows.
-The release owner checks the previous artifact manifest before approving a build.
-Use a distinct `versionName` for every candidate that must be distinguishable in
-backend telemetry; increasing only `versionCode` leaves the reported header unchanged.
+`versionName` is reported as `X-Orbit-Client: android/<versionName>` (the backend's
+32-character limit). `versionCode` is an integer in 1..2100000000 that only grows
+per application ID; every delivered replacement needs a larger code, including
+rebuilds whose bytes changed. It is deliberately **not** a commit count or run
+number. Use a distinct `versionName` for every release so telemetry tells them apart.
 
-Keep the same approved application ID and signing certificate across upgrades.
-`io.orbitd.android` is the existing development default, not confirmation of the
-final distribution ID. The signed-build script requires an explicit application ID.
-Debug APKs have `.debug`; temporary signing verification uses a separate
-`*.upgradetest` ID and `ORBIT_ANDROID_SIGNING_PURPOSE=test`.
-
-The script refuses an uncommitted source tree, records full Git HEAD and clean
+`build-release.sh` refuses an uncommitted tree, records full Git HEAD and clean
 state, checks APK package/version/min/target SDK, rejects debuggable APKs, verifies
 the signer against an independently supplied SHA-256 fingerprint, and checks the
-source SHA occurs in packaged DEX. Keep `app-release.apk`, `identity.json`,
-`BuildConfig.java`, `badging.txt`, `signing.txt`, and `build.log` together.
-The source SHA is injected at build time; even an otherwise unchanged app rebuilt
-at another commit has a different build identity and usually a different APK hash.
-Two builds with the same source SHA and different version values are distinct APKs;
-their manifest and SHA-256, not a filename or “latest beta”, identify each one.
+source SHA occurs in packaged DEX. The source SHA is injected at build time, so a
+rebuild at another commit is a different artifact; its manifest and SHA-256, not
+a filename, identify it.
 
-## Signing configuration (reviewable setup; no credentials in this repository)
+`android-update.json` (schema 1):
 
-The manual `Android internal APK` workflow uses the `android-internal` GitHub
-environment. Before enabling it, the designated key owner must configure required
-reviewers, prevent self-review where available, and allow only the reviewed release
-branch. Restrict workflow edits through the repository's review policy. Do not put
-these secrets at repository scope for arbitrary branches to consume.
-
-Environment variables:
-
-| Name | Value supplied by the owner |
+| Field | Meaning |
 | --- | --- |
-| `ANDROID_APPLICATION_ID` | Confirmed distribution package ID |
-| `ANDROID_CERT_SHA256` | Approved certificate fingerprint, from the key owner independently of the uploaded keystore |
+| `applicationId`, `versionName`, `versionCode`, `minSdk` | Identity of the APK |
+| `apkName`, `apkUrl`, `apkSize`, `sha256` | The release asset and its SHA-256 |
+| `certSha256` | Signing certificate fingerprint (same as `ANDROID_CERT_SHA256`) |
+| `sourceSha` | Built commit |
+| `publishedAt`, `notes` | UTC publish time; the annotated tag message |
 
-Environment secrets:
+## Signing configuration (no credentials in this repository)
 
-| Name | Meaning |
-| --- | --- |
-| `ANDROID_KEYSTORE_BASE64` | Existing signing keystore, encoded without logging it |
-| `ANDROID_STORE_PASSWORD` | Keystore password |
-| `ANDROID_KEY_ALIAS` | Signing key alias |
-| `ANDROID_KEY_PASSWORD` | Private key password |
+The release key (PKCS12, alias `orbit-android`, RSA 4096) was generated by the
+coordinator and is held outside the repository; the owner stored it in the
+`android-internal` environment. Its certificate SHA-256 is
+`1535cc478f09a4209585518569428c9a0f12bd14add7309fba3547609ca82310`. The environment
+accepts only `android-v*` tags, so branches, dispatches and pull requests cannot
+read it. Never regenerate or replace the key to make an update pass: installed
+apps accept only updates signed by the same certificate, and losing the key
+means users must uninstall to move on.
 
-The workflow materializes the keystore only in its temporary runner directory,
-restricts file permissions, passes passwords through environment variables and
-removes it in an `always()` cleanup step. Only the artifact directory is uploaded.
-Do not enable shell tracing, Gradle debug logs/build scans, or publish Gradle caches
-from the signing job. Do not regenerate/replace an existing key to make an upgrade pass.
-Losing the signing key prevents normal updates under the same package ID.
-
-The final application ID, key custodian, approved certificate and protected secret
-entry point must be supplied before a distribution build can be claimed. This
-document and workflow do not create those resources or authorize a release.
-Ordinary PR CI uses debug signing and requires none of these credentials.
-
-## Local build and verification
-
-Run the original project gate first:
-
-```sh
-env JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ANDROID_HOME=/opt/android-sdk ANDROID_SDK_ROOT=/opt/android-sdk bash src/android/gradlew -p src/android --no-daemon --max-workers=2 test lintDebug assembleDebug
-node --test scripts/ci/release-workflows.test.mjs
-```
-
-For a signed build, use the approved secure environment to export
+For a local signed build (for example a rehearsal with a disposable key), export
 `ORBIT_ANDROID_APPLICATION_ID`, `ORBIT_ANDROID_VERSION_NAME`,
 `ORBIT_ANDROID_VERSION_CODE`, `ORBIT_ANDROID_CERT_SHA256`,
 `ORBIT_ANDROID_KEYSTORE_PATH` (absolute, outside the repository),
 `ORBIT_ANDROID_STORE_PASSWORD`, `ORBIT_ANDROID_KEY_ALIAS`,
-`ORBIT_ANDROID_KEY_PASSWORD`, and `ORBIT_ANDROID_SIGNING_PURPOSE=release`.
-Do not put secret values into command history or Gradle property files.
+`ORBIT_ANDROID_KEY_PASSWORD` and `ORBIT_ANDROID_SIGNING_PURPOSE` (`release`, or
+`test` with an isolated `*.upgradetest` application ID), then run
+`bash src/android/scripts/build-release.sh /absolute/new/artifact-directory`.
+Ordinary PR CI uses debug signing and needs none of these values.
 
-```sh
-bash src/android/scripts/build-release.sh /absolute/new/artifact-directory
-```
+## In-app updates
 
-Raw `assembleRelease` without a signing environment can still produce an unsigned
-development artifact; it is not the verified distribution entry point above.
-The original PR gate continues to run release unit tests without private keys.
+Release builds check GitHub themselves; debug builds (`.debug`) never do.
+
+- **When:** when the app starts and whenever it returns to the foreground, at most
+  once every 6 hours (a clock moved backwards does not postpone the next check);
+  manually from Settings → About → Check for updates at any time.
+- **Source:** `GET https://api.github.com/repos/jianghailong-xy/orbit/releases?per_page=100`
+  (never `releases/latest`, which is the macOS release). Drafts and tags that do not
+  start with `android-v` are ignored; the newest ten candidates' `android-update.json`
+  are read from their release downloads.
+- **Eligible:** schema 1, tag `android-v<versionName>`, the installed application ID,
+  `certSha256` equal to the installed signing certificate, `minSdk` ≤ device API,
+  `versionCode` greater than the installed one, and an `apkUrl` that is that
+  release's own APK asset with the published size. The highest `versionCode` wins.
+- **Prompt:** an automatic check offers the update once (Update / Later); Later
+  hides that version until a higher one appears. Settings → About always shows it.
+- **Install:** the APK downloads into app-private `noBackupFilesDir/updates`, must
+  match `sha256` and the archive's package, `versionCode` and signing certificate
+  must match the installed app, and only then is it written to a PackageInstaller
+  session. Without "Install unknown apps" permission the app explains it and opens
+  that setting; returning with it allowed continues the same verified file.
+  Android shows its own confirmation; data and sign-in stay because it is an
+  in-place update with the same signer.
+- **Failure:** offline, HTTP errors and GitHub's unauthenticated limit (60 requests
+  per hour per IP; `403/429` with `x-ratelimit-reset` or `retry-after`) never
+  interrupt the app. Automatic checks stay silent and wait for the reset; a manual
+  check explains what happened.
+
+The repository is a Gradle property (`orbitUpdateRepository`, default
+`jianghailong-xy/orbit`), exposed as `BuildConfig.UPDATE_REPOSITORY`.
 
 ## Install and replace without losing state
 
-Use only an authorized test device/account. Save the old and new APKs and their
-identities before touching the device. Verify matching package ID and signer,
-increasing code, APK SHA-256, and both source SHAs. Capture the real device's
-model/API/build fingerprint, installed package version, UID, firstInstallTime and
-lastUpdateTime. Never uninstall or `pm clear` between the two versions.
+Use only an authorized test device/account. Save the old and new APK identities
+before touching the device: package ID, signer, increasing code, APK SHA-256 and
+both source SHAs; capture model/API/build fingerprint, installed version, UID,
+`firstInstallTime` and `lastUpdateTime`. Never uninstall or `pm clear` between the
+two versions — an update must keep sign-in, account/server-scoped cache and drafts.
 
-```sh
-adb -s DEVICE install old.apk
-# Login, populate account/server-scoped cache and draft, then stop the app.
-adb -s DEVICE install -r new.apk
-# Relaunch: login restored, correct account/server data retained, foreign cache absent.
-```
+`scripts/upgrade-device-test.sh` is the reproducible `adb install -r` fixture test
+for an isolated `*.upgradetest` package; it uses real Android credential/data
+stores across two processes and leaves emulator settings and ports unchanged. A
+complete device run must own `flock /var/lib/orbit/android/ui.lock`. Temporary test
+signatures prove packaging/update mechanics only; never distribute them.
 
-The reproducible local fixture test is `scripts/upgrade-device-test.sh`; its
-usage lists the two APKs, same-signer instrumentation APK, device and output
-directory. It uses an isolated `*.upgradetest` package, checks an initially absent
-package, uses real Android credential/data stores across two processes, and does
-not change emulator settings or ports. The complete run must own
-`flock /var/lib/orbit/android/ui.lock`. Do not interrupt another task holding it.
-Temporary test signatures prove packaging/update mechanics only; never distribute
-them as the final signed build. Keep test keystores outside source and evidence archives.
+For actual deployment version observation, make an authenticated request after each
+install and inspect `ClientVersion` for that user and `kind=android`. Unauthenticated
+login requests intentionally do not create a row. An unchanged version is throttled
+to one write per hour; a changed version is recorded immediately. Record the exact
+backend SHA, request date and observed row; a local PostgreSQL fixture is not
+evidence from a real deployment.
 
-For actual deployment version observation, make an authenticated request after
-each install and inspect `ClientVersion` for that user and `kind=android`.
-Unauthenticated login requests intentionally do not create a row. An unchanged
-version is throttled to one write per hour; a changed version is recorded
-immediately. The backend is additive for Android and keeps web/iOS/macOS behavior.
-Record the exact backend SHA, request date and observed row; the local PostgreSQL
-fixture is not evidence from a real deployment.
+## Notes accompanying each release
 
-## Notes accompanying each candidate
-
-Include: versionName/code, application ID, APK and certificate SHA-256, client
-source SHA, required backend SHA/capabilities, device/OS tested, previous APK
-identity, install/update results, login/cache/version observations, changes since
-the previous candidate and known gaps. Label temporary-signed fixture artifacts
-“NOT FOR DISTRIBUTION”. Installation is side-loading via the approved internal
-delivery route; never invent a public download or store channel.
-
-A14 establishes this pipeline and local upgrade evidence. Actual signed package,
-target devices and authorized deployment evidence remain explicit when absent.
-A15 rechecks the final integrated feature combination and cross-platform quality;
-this does not make A15 a prerequisite for building or testing A14.
+The release body records package, version/code, minSdk, APK and certificate
+SHA-256, source SHA and the workflow run. Testers install the APK from the release
+page; later releases arrive through the in-app updater. A15 rechecks the final
+integrated feature combination and cross-platform quality; that is not a
+prerequisite for publishing or testing a release.

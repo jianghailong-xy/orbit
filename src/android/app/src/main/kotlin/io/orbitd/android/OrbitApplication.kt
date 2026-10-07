@@ -26,6 +26,7 @@ open class OrbitApplication : Application() {
     internal val processScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val realtime: RealtimeStore by lazy { RealtimeStore(session, processScope).also { RealtimeLifecycle(this, it) } }
     val push: io.orbitd.android.push.PushController by lazy { createPush() }
+    val updates: io.orbitd.android.update.AppUpdater by lazy { createUpdates() }
     private var composerHandle: SessionHandle? = null
     private val composers = mutableMapOf<String, ComposerModel>()
     fun composer(handle: SessionHandle, sessionId: String, target: DraftTarget? = null): ComposerModel {
@@ -38,6 +39,7 @@ open class OrbitApplication : Application() {
         super.onCreate()
         realtime // Register lifecycle/network callbacks before the first Activity starts.
         push.start()
+        updates.start()
         clearAttachmentHandoffs(this)
         processScope.launch { session.state.collect { state ->
             if (state is AuthState.SignedOut || composerHandle != null && state is AuthState.SignedIn && state.handle !== composerHandle) {
@@ -54,4 +56,5 @@ open class OrbitApplication : Application() {
         AndroidSessionDataStore(this), BuildConfig.VERSION_NAME, allowLoopbackHttp = BuildConfig.DEBUG,
     )
     protected open fun createPush() = io.orbitd.android.push.PushController(this, session, realtime, processScope)
+    protected open fun createUpdates() = io.orbitd.android.update.AppUpdater(this, processScope, io.orbitd.android.update.UpdateConfig.forBuild())
 }
