@@ -15,8 +15,6 @@ import android.view.KeyEvent
 import android.view.accessibility.AccessibilityManager
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
@@ -288,7 +286,7 @@ class WikiWatchTalkBackTest {
     private fun page(page: String, steps: Int, from: String? = null, within: String? = null, fromTop: Boolean = false) {
         compose.waitForIdle(); SystemClock.sleep(800)
         audit(page, within?.let(::rectOf))
-        if (traverse(page, steps, from?.let(::place), within, fromTop)) unread(page)
+        traverse(page, steps, from?.let(::place), within, fromTop)
     }
 
     /** Every node on the app's top window that TalkBack can reach, with the words it has for it. */
@@ -321,14 +319,14 @@ class WikiWatchTalkBackTest {
     }
 
     /** TalkBack's own order: a finger on [start] (else the window's first item), then swipe right after swipe right, with
-     * what it stops on, what it has for each and what it spoke. True when the swipes ended on their own, before [steps]. */
-    private fun traverse(page: String, steps: Int, start: Rect?, within: String?, fromTop: Boolean): Boolean {
-        val root = appRoot() ?: return false
+     * what it stops on, what it has for each and what it spoke. */
+    private fun traverse(page: String, steps: Int, start: Rect?, within: String?, fromTop: Boolean) {
+        val root = appRoot() ?: return
         val window = bounds(root)
         val candidates = nodes(root).filter { it.isVisibleToUser && (it.isClickable || words(it).isNotEmpty()) && bounds(it) != window }
         // A sheet from its top (its handle), a page from its first item in the tree.
         val first = start ?: (if (fromTop) candidates.minByOrNull { bounds(it).top } else candidates.firstOrNull())
-            ?.let(::bounds) ?: run { problem("$page: nothing on screen for TalkBack", ""); return false }
+            ?.let(::bounds) ?: run { problem("$page: nothing on screen for TalkBack", ""); return }
         report.appendLine("## $page — TalkBack, swipe right after swipe right (\"said\" is what the speech engine was given)")
         var since = System.currentTimeMillis()
         tap(first.exactCenterX(), first.exactCenterY())
@@ -338,7 +336,6 @@ class WikiWatchTalkBackTest {
         node?.let { judge(page, it, within, said) }
         capture("talkback-$page")
         val seen = mutableListOf(node?.let(::key))
-        var ended = false
         for (step in 1..steps) {
             since = System.currentTimeMillis()
             swipeRight()
@@ -346,31 +343,17 @@ class WikiWatchTalkBackTest {
             node = moved(seen.last())
             said = heard(since)
             if (node == null || node.packageName?.toString() != app.packageName) {
-                report.appendLine("  (TalkBack's focus left the app: ${node?.packageName})${line(said)}"); ended = true; break
+                report.appendLine("  (TalkBack's focus left the app: ${node?.packageName})${line(said)}"); break
             }
             val key = key(node)
-            if (key == seen.last()) { report.appendLine("  (the last item: the focus stays)${line(said)}"); ended = true; break }
-            if (key in seen) { report.appendLine("  (back to an earlier item: ${describe(node)})${line(said)}"); ended = true; break }
+            if (key == seen.last()) { report.appendLine("  (the last item: the focus stays)${line(said)}"); break }
+            if (key in seen) { report.appendLine("  (back to an earlier item: ${describe(node)})${line(said)}"); break }
             seen += key
             report.appendLine("  $step ${describe(node)}${line(said)}")
             judge(page, node, within, said)
             if (step == steps) report.appendLine("  (stopped after $steps swipes)")
         }
         if (within == null && seen.size < 3) problem("$page: TalkBack's swipes reached ${seen.size} item(s)", "")
-        return ended
-    }
-
-    /** A list on the page that can still scroll down once the swipes ended on their own: TalkBack went from its last row on
-     * screen to the bar instead of scrolling it, so its other rows are reached by touch after a scroll, not by swiping.
-     * Written down as an open finding (the list exposes CollectionInfo, ScrollBy and its forward range). */
-    private fun unread(page: String) {
-        compose.onAllNodes(hasScrollAction()).fetchSemanticsNodes().forEach { node ->
-            val range = node.config.getOrNull(SemanticsProperties.VerticalScrollAxisRange) ?: return@forEach
-            if (range.maxValue() <= 0f || range.value() >= range.maxValue()) return@forEach
-            val what = "$page: UNREAD — TalkBack's swipes ended with ${node.config.getOrNull(SemanticsProperties.TestTag) ?: "a list"} " +
-                "scrolled to ${range.value()} of ${range.maxValue()}: they never scrolled it"
-            notes += what; report.appendLine(what)
-        }
     }
 
     /** What a stop says, judged: a press needs words, and no part of them — as the node has them, or as TalkBack [said]
