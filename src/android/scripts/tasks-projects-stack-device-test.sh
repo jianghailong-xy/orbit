@@ -160,7 +160,7 @@ stack_server="${A11_STACK_SERVER:-http://127.0.0.1:3711}"
 stack_port="${stack_server##*:}"
 args_file="${A11_STACK_ARGS:?A11_STACK_ARGS must name a key=value file}"
 curl --fail --silent "$stack_server/api/health" > "$output/stack-health.json"
-cat /var/tmp/a11-stack/SOURCE_SHA > "$output/stack-source-sha.txt" 2>/dev/null || true
+cat "${A11_STACK_DIR:-/var/tmp/a11-stack}/SOURCE_SHA" > "$output/stack-source-sha.txt" 2>/dev/null || true
 instrument_args=()
 while IFS='=' read -r key value; do
   [[ -z "$key" || "$key" == \#* ]] && continue
