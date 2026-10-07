@@ -280,7 +280,10 @@ private struct CompactSections: View {
                     // terminal) are held back until it is the page showing again: same switch, and
                     // same reasoning, as the drawer's own `live:` above. The pushed pages keep their
                     // own cues — this is set on the list, not on the stack.
-                    .environment(\.liveRowCues, model.sectionAtRoot)
+                    //
+                    // Settings is the other way this list is covered: a sheet over the whole shell,
+                    // its own page, with the list still mounted under it (owner, 2026-10-06).
+                    .environment(\.liveRowCues, model.sectionAtRoot && !model.settingsPresented)
                     // New session is a page of its own (not a bottom sheet): it leads into the
                     // session rather than back to a list, so a push reads more naturally and flows
                     // straight into the console once the first message is sent. One destination per
@@ -289,39 +292,47 @@ private struct CompactSections: View {
                     // mechanism's page over it. (The iPad/macOS shells render the same two values
                     // inline in the detail pane: `AgentConsoleDetail`.)
                     .navigationDestination(for: NavNode.self) { node in
-                        switch node {
-                        case .compose(let agentID, let folderID):
-                            AgentComposePage(agentID: agentID, folderID: folderID)
-                        // One folder's page: the sessions filed in it, opened by its row at the top of
-                        // a workspace's session list (§3.3). Its own ✎ pushes a draft over it, and
-                        // the session that draft creates lands in the folder.
-                        case .folder(let address):       SessionFolderPage(address: address)
-                        // A project's sessions page a session list's row pushed is a page over that
-                        // list: the system back button and back-swipe return to it (owner,
-                        // 2026-10-06). Put up as the project's own page — by the drawer's row, the
-                        // merge banner or a notification — it leads like the session list it stands
-                        // in for: the drawer's hamburger, not a back button.
-                        case .sessionProject(let address, asDestination: false): SessionProjectPage(address: address)
-                        case .sessionProject(let address, asDestination: true): SessionProjectPage(address: address)
-                            .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }
-                            .navigationBarBackButtonHidden()
-                            .drawerToggle(open: openDrawer)
-                        // The one place the phone's console is told that what it opens goes on
-                        // this stack (`opensPagesOverConsole`): its links, its Watching card, its
-                        // Tasks created here card — so the back swipe returns to the conversation
-                        // instead of to another section's list. The wide shells never set it.
-                        case .console(let sessionID, _):
-                            AgentConsolePage(sessionID: sessionID)
-                                .environment(\.opensPagesOverConsole, true)
-                        // What a console opens over itself.
-                        case .taskDetail(let taskID):       TaskDetailPage(taskID: taskID)
-                        case .projectDetail(let projectID, _): ProjectDetailView(projectID: projectID)
-                        case .createdTasks(let sessionID):  CreatedTasksPage(sessionID: sessionID)
-                        case .watches:                      FollowingListView(rowNavigation: .push)
-                        case .watchDetail(let watchID):     WatchDetailView(watchID: watchID)
-                        case .wikiEntry(let entryID):       WikiEntryView(entryID: entryID)
-                        // The other sections' pages ride their own stacks, not this one.
-                        default:                         EmptyView()
+                        // A pushed page is a list too, and it is covered the same way the root one is:
+                        // the page a row of it opens — a conversation over a project's or a folder's
+                        // sessions — leaves it mounted under the push, and Settings leaves it mounted
+                        // under the sheet. Its cues follow the page that is *showing*, which is the top
+                        // of the stack, not the page itself (owner, 2026-10-06). The rows read the same
+                        // switch the list's do; `AgentsStackPage` is the second place the shell answers.
+                        AgentsStackPage(node: node) {
+                            switch node {
+                            case .compose(let agentID, let folderID):
+                                AgentComposePage(agentID: agentID, folderID: folderID)
+                            // One folder's page: the sessions filed in it, opened by its row at the top of
+                            // a workspace's session list (§3.3). Its own ✎ pushes a draft over it, and
+                            // the session that draft creates lands in the folder.
+                            case .folder(let address):       SessionFolderPage(address: address)
+                            // A project's sessions page a session list's row pushed is a page over that
+                            // list: the system back button and back-swipe return to it (owner,
+                            // 2026-10-06). Put up as the project's own page — by the drawer's row, the
+                            // merge banner or a notification — it leads like the session list it stands
+                            // in for: the drawer's hamburger, not a back button.
+                            case .sessionProject(let address, asDestination: false): SessionProjectPage(address: address)
+                            case .sessionProject(let address, asDestination: true): SessionProjectPage(address: address)
+                                .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }
+                                .navigationBarBackButtonHidden()
+                                .drawerToggle(open: openDrawer)
+                            // The one place the phone's console is told that what it opens goes on
+                            // this stack (`opensPagesOverConsole`): its links, its Watching card, its
+                            // Tasks created here card — so the back swipe returns to the conversation
+                            // instead of to another section's list. The wide shells never set it.
+                            case .console(let sessionID, _):
+                                AgentConsolePage(sessionID: sessionID)
+                                    .environment(\.opensPagesOverConsole, true)
+                            // What a console opens over itself.
+                            case .taskDetail(let taskID):       TaskDetailPage(taskID: taskID)
+                            case .projectDetail(let projectID, _): ProjectDetailView(projectID: projectID)
+                            case .createdTasks(let sessionID):  CreatedTasksPage(sessionID: sessionID)
+                            case .watches:                      FollowingListView(rowNavigation: .push)
+                            case .watchDetail(let watchID):     WatchDetailView(watchID: watchID)
+                            case .wikiEntry(let entryID):       WikiEntryView(entryID: entryID)
+                            // The other sections' pages ride their own stacks, not this one.
+                            default:                         EmptyView()
+                            }
                         }
                     }
             }
@@ -443,6 +454,27 @@ private struct CompactSections: View {
                     }
             }
         }
+    }
+}
+
+/// One page of the Agents stack, holding its rows to the switch the list under it reads
+/// (`liveRowCues`): a page is showing exactly while it is the top of the stack — a conversation
+/// pushed over a project's or a folder's sessions leaves it mounted without a pixel of it on screen,
+/// and so does Settings' sheet over the whole shell.
+///
+/// The read has to happen in a body. A `navigationDestination` builder runs once, when the frame is
+/// pushed: an environment value computed there freezes at "I am on top" for as long as the page
+/// stays on the stack, and the covered page went on spinning its rows (measured on an iPhone 17 Pro
+/// simulator, `sample`, 20s: a project's sessions page with two running rows draws 7 samples in
+/// `SpinnerGlyph`'s timeline closure under a conversation, against 0 when it is the page showing and
+/// 0 when the cover is another project's page — which SwiftUI replaces rather than layers).
+private struct AgentsStackPage<Content: View>: View {
+    @Environment(AppModel.self) private var model
+    let node: NavNode
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        content.environment(\.liveRowCues, model.nav.path.last == node && !model.settingsPresented)
     }
 }
 

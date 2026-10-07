@@ -1,0 +1,158 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>合入卡的转圈：四种改法</title>
+<style>
+/* 2026-10-07 · 「合入卡上两个转圈」的候选改法。深色，与 iOS 截图同一套颜色。
+   这一页刻意不依赖 kit.css：它要画的是 iOS 上的暗色卡，不是浅色图板。 */
+:root {
+  --accent: #5B8CFF; --accent-bg: rgba(91,140,255,.16);
+  --label: #fff; --l2: rgba(235,235,245,.6); --l3: rgba(235,235,245,.32);
+  --card: #0F1626; --line: rgba(91,140,255,.34); --panel: #0A0A0C;
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 36px 40px 64px; background: var(--panel); color: var(--label); width: max-content;
+       font: 15px/1.55 -apple-system, "SF Pro Text", "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+h1 { font-size: 25px; letter-spacing: -.02em; margin: 0 0 8px; }
+.lede { color: var(--l2); margin: 0 0 30px; max-width: 1500px; font-size: 15px; }
+.lede b { color: var(--label); }
+code { font: 12.5px ui-monospace, "SF Mono", monospace; background: rgba(235,235,245,.12); border-radius: 4px; padding: 1px 5px; }
+.row { display: flex; gap: 30px; align-items: flex-start; }
+
+/* ── 卡（与 iOS ProjectMergeCardView 的合入时刻同构） ───────── */
+.card { width: 340px; border-radius: 14px; padding: 12px; background: var(--card);
+        box-shadow: inset 0 0 0 1px var(--line); }
+.head { display: flex; align-items: center; gap: 8px; }
+.head .tile { width: 26px; height: 26px; border-radius: 7px; background: var(--accent-bg); color: var(--accent);
+              display: flex; align-items: center; justify-content: center; flex: none; }
+.head .slot { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; flex: none; }
+.head h2 { font-size: 16.5px; font-weight: 700; letter-spacing: -.01em; color: var(--accent); margin: 0; white-space: nowrap; }
+.status { font-size: 14px; color: var(--label); margin: 7px 0 0; }
+.lrow { margin-top: 9px; }
+.lrow .top { display: flex; align-items: center; gap: 8px; }
+.lrow .word { font-size: 13.5px; font-weight: 650; color: var(--accent); }
+.lrow .state { font-size: 12.5px; color: var(--l2); margin-left: auto; }
+.lrow .meta { display: flex; align-items: center; font-size: 12.5px; color: var(--l2); margin-top: 5px;
+              font-variant-numeric: tabular-nums; }
+.lrow .meta b { color: var(--accent); font-weight: 650; }
+.lrow .meta .u { margin-left: auto; }
+.note { font-size: 12.5px; color: var(--l2); margin-top: 8px; line-height: 1.45; }
+.foot { display: flex; justify-content: flex-end; margin-top: 11px; }
+.cancel { font-size: 14px; font-weight: 600; color: var(--accent); background: rgba(235,235,245,.14);
+          border-radius: 999px; padding: 7px 18px; }
+.dim { opacity: .45; }
+
+/* ── 图形与动效 ───────────────────────────────────────────── */
+svg.i { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; display: block; flex: none; }
+/* 行内 spinner（SpinnerGlyph）：¾ 弧，0.85s 一圈 —— 会话行的「在跑」就是这个 */
+.arc { animation: spin .85s linear infinite; transform-origin: 50% 50%; }
+/* 项目页 Integrating 的环（arrow.triangle.2.circlepath）：1.6s 一圈 */
+.ring-run { animation: spin 1.6s linear infinite; transform-origin: 50% 50%; }
+@keyframes spin { to { transform: rotate(360deg); } }
+/* 系统的辐条转圈（UIActivityIndicatorView）：iOS 上 ProgressView 的样子 */
+.spokes { animation: spin 1s steps(12) infinite; transform-origin: 50% 50%; }
+@media (prefers-reduced-motion: reduce) { .arc, .ring-run, .spokes { animation: none; } }
+
+/* ── 图注 ─────────────────────────────────────────────────── */
+figure { margin: 0; width: 340px; flex: none; }
+.tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 9px; margin-bottom: 9px; }
+.tag.pick { background: #14428f; color: #cfe0ff; }
+.tag.alt { background: rgba(235,235,245,.14); color: var(--l2); }
+.tag.now { background: #5c1a14; color: #ffb4ab; }
+figcaption { margin-top: 14px; font-size: 13px; line-height: 1.6; color: var(--l2); }
+figcaption > b { color: var(--label); display: block; font-size: 14.5px; margin-bottom: 5px; }
+figcaption ul { margin: 6px 0 0; padding-left: 17px; }
+figcaption li { margin: 3px 0; }
+figcaption li b { color: var(--label); }
+h3 { font-size: 17px; margin: 38px 0 14px; letter-spacing: -.01em; }
+.moment { display: flex; gap: 26px; align-items: flex-start; }
+.mini { width: 250px; }
+.mini .cap { font-size: 12.5px; color: var(--l2); margin-bottom: 8px; }
+</style>
+<body>
+<h1>合入卡的两个转圈：四种改法</h1>
+<p class="lede">
+每张图都是同一个时刻：<b>你按下 Merge to main 之后，runner 在 FETCH（fetching the branches）</b>。四张卡的内容一字不差，只有「谁在转、转的是哪个图形」不同。动效是真的在动（<code>0.85s</code> 是会话行那支弧，<code>1.6s</code> 是项目页 Integrating 的环，系统辐条是 <code>1s</code> 分十二档）。</p>
+
+<h3>先看这张卡在今天长什么样：四个时刻的头部</h3>
+<div class="moment">
+  <div class="mini"><div class="cap">asking —— 有色方块 + 静态图标</div>
+    <div class="card" style="box-shadow:inset 0 0 0 1px rgba(255,149,0,.35)">
+      <div class="head"><span class="tile" style="background:rgba(255,149,0,.16);color:#FF9500">
+        <svg class="i" viewBox="0 0 24 24" style="width:17px;height:17px;stroke-width:2.2"><path d="M8 7l4-4 4 4"/><path d="M12 3v8"/><path d="M12 11c0 3.5-5 4.5-5 9.5"/><path d="M12 11c0 3.5 5 4.5 5 9.5"/></svg></span>
+        <h2 style="color:#FFB340">Merge into main?</h2></div></div></div>
+  <div class="mini"><div class="cap">merging —— <b style="color:#ffb4ab">裸的系统转圈</b>（今天）</div>
+    <div class="card">
+      <div class="head"><span class="slot">
+        <svg class="i spokes" viewBox="0 0 24 24" style="width:19px;height:19px;stroke-width:2"><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><g stroke="none" fill="currentColor">
+          <rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity="1"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".82" transform="rotate(30 12 12)"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".68" transform="rotate(60 12 12)"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".55" transform="rotate(90 12 12)"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".45" transform="rotate(120 12 12)"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".38" transform="rotate(150 12 12)"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".32" transform="rotate(180 12 12)"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".26" transform="rotate(210 12 12)"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".21" transform="rotate(240 12 12)"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".17" transform="rotate(270 12 12)"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".13" transform="rotate(300 12 12)"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".1" transform="rotate(330 12 12)"/></g></svg></span>
+        <h2>Merging into main…</h2></div></div></div>
+  <div class="mini"><div class="cap">blocked —— 有色方块 + 静态图标</div>
+    <div class="card" style="box-shadow:inset 0 0 0 1px rgba(255,149,0,.35)">
+      <div class="head"><span class="tile" style="background:rgba(255,149,0,.16);color:#FF9500">
+        <svg class="i" viewBox="0 0 24 24" style="width:17px;height:17px;stroke-width:2.2"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17v.5"/></svg></span>
+        <h2 style="color:#FFB340">Can’t merge into main yet</h2></div></div></div>
+  <div class="mini"><div class="cap">checking —— 没有头部，只有落地行</div>
+    <div class="card">
+      <div class="lrow" style="margin-top:0">
+        <div class="top">
+          <svg class="i ring-run" viewBox="0 0 24 24" style="width:13px;height:13px;stroke-width:2.3;color:var(--accent)"><path d="M20 11a8 8 0 0 0-14.3-4.9"/><path d="M5.5 2.8v3.5H9"/><path d="M4 13a8 8 0 0 0 14.3 4.9"/><path d="M18.5 21.2v-3.5H15"/></svg>
+          <span class="word">Merge check</span><span class="state">checking</span></div>
+        <div class="meta"><span>Elapsed <b>7m 12s</b></span><span class="u">Updated just now</span></div></div></div></div>
+</div>
+
+<h3>四种改法（同一时刻，同一内容）</h3>
+<div class="row" id="figs"></div>
+
+<script>
+const CARD = (opts) => `<div class="card">
+  <div class="head">${opts.head}<h2>Merging into main…</h2></div>
+  <p class="status">confirmed — fetching the branches</p>
+  <div class="lrow"><div class="top">${opts.rowIcon}<span class="word">Merge to main</span><span class="state">fetching</span></div>
+    <div class="meta"><span>Elapsed <b>0m 14s</b></span><span class="u">Updated just now</span></div></div>
+  <p class="note">Nothing to do — it lands on its own if the re-check passes, and comes back here if it doesn’t.</p>
+  <div class="foot"><span class="cancel">Cancel</span></div></div>`;
+
+const MERGE = (s = 17, c = 'var(--accent)') => `<svg class="i" viewBox="0 0 24 24" style="width:${s}px;height:${s}px;stroke-width:2.2;color:${c}"><path d="M8 7l4-4 4 4"/><path d="M12 3v8"/><path d="M12 11c0 3.5-5 4.5-5 9.5"/><path d="M12 11c0 3.5 5 4.5 5 9.5"/></svg>`;
+const RING = (cls, c = 'var(--accent)') => `<svg class="i ${cls}" viewBox="0 0 24 24" style="width:13px;height:13px;stroke-width:2.3;color:${c}"><path d="M20 11a8 8 0 0 0-14.3-4.9"/><path d="M5.5 2.8v3.5H9"/><path d="M4 13a8 8 0 0 0 14.3 4.9"/><path d="M18.5 21.2v-3.5H15"/></svg>`;
+const ARC = (s = 19) => `<svg class="i arc" viewBox="0 0 24 24" style="width:${s}px;height:${s}px;stroke-width:2.2;color:var(--accent)"><circle cx="12" cy="12" r="9" stroke-opacity=".22"/><path d="M12 3a9 9 0 0 1 9 9"/></svg>`;
+const TILE = (inner) => `<span class="tile">${inner}</span>`;
+const SLOT = (inner) => `<span class="slot">${inner}</span>`;
+
+const options = [
+  { tag: 'pick', label: '方案 A · 推荐', title: '头部换回静态的合入图标，只留行里那个环',
+    card: CARD({ head: TILE(MERGE()), rowIcon: RING('ring-run') }),
+    cap: `<ul>
+      <li>头部回到和 asking / blocked 同一套：<b>有色方块 + 静态 SF Symbol</b>，整张卡在四个时刻之间切换时，头部形状不变、语言不变。</li>
+      <li>全卡<b>只有一个转圈</b>，就是项目页 Integrating 的那个环 —— 它旁边写着 <code>fetching</code>，转的同时说明"哪个作业、到哪一步"，不是空转。</li>
+      <li>checking 时刻这张卡本来就只有这一行，环在 merging 时刻继续转，视觉上是同一件东西在往前走。</li>
+      <li>代价：服务器还没报出 merge 作业的那一小段（<code>mergeLandingLine</code> 为 nil）行不画，这时头部是静态的，"在动"只剩 <code>Elapsed</code> 在走字。</li>
+    </ul>` },
+  { tag: 'alt', label: '方案 B', title: '头部留空，标题左对齐',
+    card: CARD({ head: '', rowIcon: RING('ring-run') }),
+    cap: `<ul>
+      <li>最省事的砍法，和 checking 时刻一致（那个时刻就没有头部）。</li>
+      <li>问题是标题的位置会跳：asking 有方块、merging 没有，<b>同一张卡的标题左右移动 34pt</b>，翻页时会看出来。</li>
+      <li>卡片头部少一个锚点，扫视时不好一眼认出这是合入卡。</li>
+    </ul>` },
+  { tag: 'alt', label: '方案 C', title: '头部换成会话行那支弧，行里的环改成不转',
+    card: CARD({ head: SLOT(ARC()), rowIcon: RING('', 'var(--l2)') }),
+    cap: `<ul>
+      <li>转的那支弧（<b>SpinnerGlyph</b>，0.85s）和会话列表里"正在跑"的行是同一个图形，全 app 的"在动"收敛到一支。</li>
+      <li>代价一：行的 <code>arrow.triangle.2.circlepath</code> 是项目页 Integrating 格子的标记，在项目页它转、在这里不转，同一个图形两种行为。</li>
+      <li>代价二：头部还是裸的，没有方块，仍是"这四个时刻里唯一一个不带方的"。</li>
+      <li>而且它和行里的环仍然<b>并排存在</b>，只是其中一个不动 —— 两个图形的对话没消失，只是少了一半动作。</li>
+    </ul>` },
+  { tag: 'now', label: '方案 D · 现状', title: '头部系统转圈 + 行里环转（不改）',
+    card: CARD({ head: SLOT(`<svg class="i spokes" viewBox="0 0 24 24" style="width:19px;height:19px;stroke-width:2;color:var(--accent)"><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><g stroke="none" fill="currentColor"><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity="1"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".82" transform="rotate(30 12 12)"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".68" transform="rotate(60 12 12)"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".55" transform="rotate(90 12 12)"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".45" transform="rotate(120 12 12)"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".38" transform="rotate(150 12 12)"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".32" transform="rotate(180 12 12)"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".26" transform="rotate(210 12 12)"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".21" transform="rotate(240 12 12)"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".17" transform="rotate(270 12 12)"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".13" transform="rotate(300 12 12)"/><rect x="11" y="1.5" width="2" height="5.6" rx="1" opacity=".1" transform="rotate(330 12 12)"/></g></svg>`), rowIcon: RING('ring-run') }),
+    cap: `<ul>
+      <li>两个圈：系统的（1s、十二档跳）和项目页的环（1.6s、匀速），转速和质感都不一样，挨在 40pt 内。</li>
+      <li>头部那个是 <code>ProgressView</code>：本仓库的 <code>SpinnerGlyph</code> 注释写过它在 <code>List</code> 行 detach / reattach 之后会画成空白，而这张卡正是 List 的一行。</li>
+      <li>它没有多说一个字：标题、状态行、行里的 word + state、走字的 Elapsed 已经四处说了同一件事。</li>
+    </ul>` },
+];
+
+document.getElementById('figs').innerHTML = options.map((o) =>
+  `<figure><span class="tag ${o.tag}">${o.label}</span>${o.card}
+   <figcaption><b>${o.title}</b>${o.cap}</figcaption></figure>`).join('');
+</script>
+</body>
+</html>

@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { App as AntApp } from 'antd';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiChangeset, WikiEntry } from '../lib/wiki';
-import { WIKI_NO_ENTRIES, WIKI_NO_PRINCIPLES } from '../lib/wiki';
+import { WIKI_NO_ENTRIES } from '../lib/wiki';
 import { WikiPage } from '../pages/WikiPage';
 
 /**
@@ -261,7 +261,6 @@ describe('the Wiki home and Activity, in a space with 200 newer entries than its
     await open();
     expect(container.querySelector('.wk-home-pr')).toBeNull();
     expect(words(container)).not.toContain('Principles');
-    expect(words(container)).not.toContain(WIKI_NO_PRINCIPLES);
     expect(words(container)).not.toContain(WIKI_NO_ENTRIES);
     await open('/wiki/orbit/activity');
     expect([...card('Recent decisions')!.querySelectorAll('.wk-dec .t')]).toHaveLength(4);

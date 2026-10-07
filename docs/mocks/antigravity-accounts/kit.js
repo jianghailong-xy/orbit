@@ -93,9 +93,13 @@ function section({ header, trailing, rows, footer, clear, id }) {
 function btnRow(text, dis) { return `<div class="r btn${dis ? ' dis' : ''}">${text}</div>`; }
 
 /** A phone holding the runner sheet: {title, body, scroll, height, back, overlay, cls}. */
-function phone({ title, body, scroll = 0, height = 852, back = true, overlay = '', cls = '' }) {
+function phone({ title, body, scroll = 0, height = 852, back = true, overlay = '', cls = '', status = null }) {
+  // `status` draws another phone's status bar: { time, net, batt } (the evening screenshot: 6:07, 5G, 15).
+  const bar = status
+    ? `<span class="t">${status.time}</span><span class="r">${ICON.signal}<span class="ph-net">${status.net}</span><span class="ph-batt low">${status.batt}</span></span>`
+    : `<span class="t">5:30 ${ICON.bell}</span><span class="r">${ICON.signal}${ICON.wifi}<span class="ph-batt">48</span></span>`;
   return `<div class="ph ${cls}" style="height:${height}px">
-    <div class="ph-sb"><span class="t">5:30 ${ICON.bell}</span><span class="r">${ICON.signal}${ICON.wifi}<span class="ph-batt">48</span></span></div>
+    <div class="ph-sb">${bar}</div>
     <div class="ph-sheet">
       <div class="ph-nav"><span class="ph-gb${back ? '' : ' hide'}">${ICON.back}</span><span class="tt">${title}</span><span class="ph-gb">${ICON.close}</span></div>
       <div class="ph-scroll" style="transform:translateY(${-scroll}px)">${body}</div>

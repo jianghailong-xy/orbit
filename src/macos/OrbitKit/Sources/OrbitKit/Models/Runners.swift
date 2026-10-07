@@ -717,6 +717,12 @@ public struct PlanUsage: Codable, Equatable, Sendable {
     public let rateLimits: [PlanUsageRateLimit]?
     /// Earned Codex reset state on a flat (legacy) provider snapshot.
     public let rateLimitReset: PlanUsageRateLimitReset?
+    /// Every other account's own snapshot, by account id, on a flat (legacy) payload — where this
+    /// object's own windows are Default's. Web's `PlanUsage extends PlanUsageSnapshot`, so a flat
+    /// payload keeps its `accounts` as it is read; a client splitting the two types has to carry
+    /// them across itself, or a machine that reports one provider at a time loses every added
+    /// account's quota while its Default still reads (web `planUsageSnapshotForProvider`).
+    public let accounts: [String: PlanUsageSnapshot]?
     public let claude: PlanUsageSnapshot?
     public let codex: PlanUsageSnapshot?
     public let kimi: PlanUsageSnapshot?
@@ -730,6 +736,7 @@ public struct PlanUsage: Codable, Equatable, Sendable {
                 rateLimitReachedType: String? = nil, credits: PlanUsageCredits? = nil,
                 rateLimits: [PlanUsageRateLimit]? = nil,
                 rateLimitReset: PlanUsageRateLimitReset? = nil,
+                accounts: [String: PlanUsageSnapshot]? = nil,
                 claude: PlanUsageSnapshot? = nil, codex: PlanUsageSnapshot? = nil,
                 kimi: PlanUsageSnapshot? = nil,
                 fetchedAt: String? = nil) {
@@ -747,6 +754,7 @@ public struct PlanUsage: Codable, Equatable, Sendable {
         self.credits = credits
         self.rateLimits = rateLimits
         self.rateLimitReset = rateLimitReset
+        self.accounts = accounts
         self.claude = claude
         self.codex = codex
         self.kimi = kimi
@@ -885,7 +893,7 @@ public extension PlanUsage {
                           rateLimitReachedType: rateLimitReachedType, credits: credits,
                           rateLimits: rateLimits,
                           rateLimitReset: rateLimitReset,
-                          fetchedAt: fetchedAt)
+                          fetchedAt: fetchedAt, accounts: accounts)
     }
 
     /// The runner's own report for one engine. Never Antigravity's, which travels with its engine

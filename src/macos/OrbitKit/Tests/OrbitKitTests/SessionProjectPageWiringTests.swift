@@ -450,6 +450,18 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(banner.contains("return openProjectSessions(projectID, inColumn: projectInColumn)"))
     }
 
+    /// The merge card has one moving mark, and it is the landing row's ring — the project page's
+    /// Integrating mark, beside the word `fetching`. The merging head wears the same tile and merge
+    /// mark as the asking card rather than a spinner (owner decision 2026-10-07): a spinner there
+    /// said "work is happening" a fourth time, in a mark neither this card nor this app uses.
+    func testTheMergingCardsHeadCarriesTheMergeMarkRatherThanASpinner() throws {
+        let page = code(try appSource("Views/SessionProjectPage.swift"))
+        let merging = try slice(page, from: "@ViewBuilder private func merging(_ view: ProjectPromotionView) -> some View {",
+                                to: "\n    }\n")
+        XCTAssertTrue(merging.contains("header(PromotionCards.pageTitle(view), symbol: \"arrow.triangle.merge\")"))
+        XCTAssertFalse(merging.contains("ProgressView"), "the landing row below is this card's moving mark")
+    }
+
     /// A read that failed with no rows in hand says why in one sentence, with Retry, and stays up
     /// through the page's 4-second polls rather than blinking out while each one is in flight.
     func testAFailedReadStaysUpWithItsReasonAndRetry() throws {
