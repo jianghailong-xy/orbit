@@ -1,5 +1,5 @@
 {
-  "rule": "Main drift reference for the P0 regression. Only a P0 screenshot whose every difference from P0.2 was attributed to main product commits may be registered, generated on the tree of its last attributed main commit in the P0.2 environment. A migration change is never registered. Maintenance rules: ../README.md.",
+  "rule": "Main drift reference for the P0 regression. Only a P0 screenshot whose every difference from P0.2 was attributed to main product commits may be registered, generated on the tree of its last attributed main commit in the P0.2 environment. A migration change is never registered; an entry with migrationFix (main drift rule 7) was generated on that tree with a coordinator-confirmed fix of a migration regression applied, and names the fix, its decision and the isolation proofs. Maintenance rules: ../README.md.",
   "screenshots": [
     {
       "screenshot": "chromium-dark-desktop/breakpoint-599-dialog.png",
@@ -146,6 +146,39 @@
         "A1",
         "A2"
       ]
+    },
+    {
+      "screenshot": "chromium-dark-desktop/profile-validation.png",
+      "sha256": "1c4445e446ffa6d8bce5a2f28f0a2880881c992421cdedb02062d6e662c205cc",
+      "p0Baseline": "e52eb8f22549612a8da10d1649bf410fbed39e485d3b2f7036bb78a3aa5e2a37",
+      "mainCommits": [
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+      ],
+      "generatedFrom": {
+        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-maint-xfix-d233a6cd0"
+      },
+      "projectLine": [
+        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+      ],
+      "group": "profile page",
+      "change": [
+        "A6"
+      ],
+      "migrationFix": {
+        "regression": "B1: P2.3 57f792135 (promoted to main by 90e749e72) puts will-change: transform on every .toast and pins the phone notification column with an inline width; every main tree with d233a6cd0 carries it. Fixed on the project line by 3ec9cf83d (delivered as 86db4c886).",
+        "commit": "3ec9cf83def280578481d1b9a4a02fa32359b0e1",
+        "generationTree": "dcb5fd1bdfa7dd235822e050bbc5d9f546dbf89f",
+        "decision": {
+          "taskId": "34bQk0jlytjFYyi4OgLMK",
+          "evidenceRevision": 1,
+          "evidenceDigest": "f20eee2a99a00fa2f7b3d5c827f56b25a465b4c777d81063bc50d88facdd0554",
+          "verdict": "CONFIRM",
+          "document": "p2.3-b1/README.md"
+        },
+        "isolation": "p0-drift-2/isolation/profile-validation-b1-fix.json"
+      }
     },
     {
       "screenshot": "chromium-dark-desktop/profile.png",
@@ -483,6 +516,39 @@
       ]
     },
     {
+      "screenshot": "chromium-dark-phone/profile-validation.png",
+      "sha256": "b731dfb5d4103529a87fce22ee1fe8d6f8e27fa00be2d9ff0abcd6361a1af37f",
+      "p0Baseline": "55270904362b5152509c2053fbff3542273214f349d326d3e3809e43a196fa26",
+      "mainCommits": [
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+      ],
+      "generatedFrom": {
+        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-maint-xfix-d233a6cd0"
+      },
+      "projectLine": [
+        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+      ],
+      "group": "profile page",
+      "change": [
+        "A6"
+      ],
+      "migrationFix": {
+        "regression": "B1: P2.3 57f792135 (promoted to main by 90e749e72) puts will-change: transform on every .toast and pins the phone notification column with an inline width; every main tree with d233a6cd0 carries it. Fixed on the project line by 3ec9cf83d (delivered as 86db4c886).",
+        "commit": "3ec9cf83def280578481d1b9a4a02fa32359b0e1",
+        "generationTree": "dcb5fd1bdfa7dd235822e050bbc5d9f546dbf89f",
+        "decision": {
+          "taskId": "34bQk0jlytjFYyi4OgLMK",
+          "evidenceRevision": 1,
+          "evidenceDigest": "f20eee2a99a00fa2f7b3d5c827f56b25a465b4c777d81063bc50d88facdd0554",
+          "verdict": "CONFIRM",
+          "document": "p2.3-b1/README.md"
+        },
+        "isolation": "p0-drift-2/isolation/profile-validation-b1-fix.json"
+      }
+    },
+    {
       "screenshot": "chromium-dark-phone/profile.png",
       "sha256": "5a266cd0deb90ba08e9bd2503f7ccc2b7ab44a87b225141d513078815a7b6020",
       "p0Baseline": "7fca6448b3d3ed994ee8ad010f7e293dcd0e0d39ca8382bd24ae3b618a6dd906",
@@ -807,6 +873,39 @@
         "A1",
         "A2"
       ]
+    },
+    {
+      "screenshot": "chromium-light-desktop/profile-validation.png",
+      "sha256": "e094d0572b0b3281260503291c25ddb872c5220d354877b40b0c1a018b50efde",
+      "p0Baseline": "c19e7b89a66ce177089708e954d3de8d6d380e049479933d9faf0f240bb3fbf7",
+      "mainCommits": [
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+      ],
+      "generatedFrom": {
+        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-maint-xfix-d233a6cd0"
+      },
+      "projectLine": [
+        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+      ],
+      "group": "profile page",
+      "change": [
+        "A6"
+      ],
+      "migrationFix": {
+        "regression": "B1: P2.3 57f792135 (promoted to main by 90e749e72) puts will-change: transform on every .toast and pins the phone notification column with an inline width; every main tree with d233a6cd0 carries it. Fixed on the project line by 3ec9cf83d (delivered as 86db4c886).",
+        "commit": "3ec9cf83def280578481d1b9a4a02fa32359b0e1",
+        "generationTree": "dcb5fd1bdfa7dd235822e050bbc5d9f546dbf89f",
+        "decision": {
+          "taskId": "34bQk0jlytjFYyi4OgLMK",
+          "evidenceRevision": 1,
+          "evidenceDigest": "f20eee2a99a00fa2f7b3d5c827f56b25a465b4c777d81063bc50d88facdd0554",
+          "verdict": "CONFIRM",
+          "document": "p2.3-b1/README.md"
+        },
+        "isolation": "p0-drift-2/isolation/profile-validation-b1-fix.json"
+      }
     },
     {
       "screenshot": "chromium-light-desktop/profile.png",
@@ -1142,6 +1241,39 @@
       "change": [
         "A4"
       ]
+    },
+    {
+      "screenshot": "chromium-light-phone/profile-validation.png",
+      "sha256": "7dbf1cb9fcf6a0226df7fc47439c92d18e0c846bb3fdd7ad808ae216d4cc5495",
+      "p0Baseline": "a1b7022414a38a54d312788cf4a97956416f44fa38a162f3d194181d86d9479b",
+      "mainCommits": [
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+      ],
+      "generatedFrom": {
+        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-maint-xfix-d233a6cd0"
+      },
+      "projectLine": [
+        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+      ],
+      "group": "profile page",
+      "change": [
+        "A6"
+      ],
+      "migrationFix": {
+        "regression": "B1: P2.3 57f792135 (promoted to main by 90e749e72) puts will-change: transform on every .toast and pins the phone notification column with an inline width; every main tree with d233a6cd0 carries it. Fixed on the project line by 3ec9cf83d (delivered as 86db4c886).",
+        "commit": "3ec9cf83def280578481d1b9a4a02fa32359b0e1",
+        "generationTree": "dcb5fd1bdfa7dd235822e050bbc5d9f546dbf89f",
+        "decision": {
+          "taskId": "34bQk0jlytjFYyi4OgLMK",
+          "evidenceRevision": 1,
+          "evidenceDigest": "f20eee2a99a00fa2f7b3d5c827f56b25a465b4c777d81063bc50d88facdd0554",
+          "verdict": "CONFIRM",
+          "document": "p2.3-b1/README.md"
+        },
+        "isolation": "p0-drift-2/isolation/profile-validation-b1-fix.json"
+      }
     },
     {
       "screenshot": "chromium-light-phone/profile.png",
@@ -1825,6 +1957,39 @@
       ]
     },
     {
+      "screenshot": "webkit-dark-phone/profile-validation.png",
+      "sha256": "ce6c213d39f304c18197c2af5c35b77e85568ba7afad10dbbee18b3d9103e498",
+      "p0Baseline": "5051bae1c5726c5222bfe49f8d2f1abaf111c35efe08067fc77234a255600cfe",
+      "mainCommits": [
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+      ],
+      "generatedFrom": {
+        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-maint-xfix-d233a6cd0"
+      },
+      "projectLine": [
+        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+      ],
+      "group": "profile page",
+      "change": [
+        "A6"
+      ],
+      "migrationFix": {
+        "regression": "B1: P2.3 57f792135 (promoted to main by 90e749e72) puts will-change: transform on every .toast and pins the phone notification column with an inline width; every main tree with d233a6cd0 carries it. Fixed on the project line by 3ec9cf83d (delivered as 86db4c886).",
+        "commit": "3ec9cf83def280578481d1b9a4a02fa32359b0e1",
+        "generationTree": "dcb5fd1bdfa7dd235822e050bbc5d9f546dbf89f",
+        "decision": {
+          "taskId": "34bQk0jlytjFYyi4OgLMK",
+          "evidenceRevision": 1,
+          "evidenceDigest": "f20eee2a99a00fa2f7b3d5c827f56b25a465b4c777d81063bc50d88facdd0554",
+          "verdict": "CONFIRM",
+          "document": "p2.3-b1/README.md"
+        },
+        "isolation": "p0-drift-2/isolation/profile-validation-b1-fix.json"
+      }
+    },
+    {
       "screenshot": "webkit-dark-phone/profile.png",
       "sha256": "c8a40a2b778c4dd00909bcbafc3230fc6e5847b9daeb032431774cb03ef68cb8",
       "p0Baseline": "9790302ed85bb6d415885bf18199bcc3d3fc847687f8e32e8fae4712b37998bf",
@@ -2504,6 +2669,39 @@
       "change": [
         "A4"
       ]
+    },
+    {
+      "screenshot": "webkit-light-phone/profile-validation.png",
+      "sha256": "bfa643b8bbc55d3d3713d2b37eba287ee0306b74a3c93eb35d4c38c7a8d893d8",
+      "p0Baseline": "658610ffbfe446786ed1487d20295706ca8c81760e9b041186ce07b8a612f90f",
+      "mainCommits": [
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+      ],
+      "generatedFrom": {
+        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-maint-xfix-d233a6cd0"
+      },
+      "projectLine": [
+        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+      ],
+      "group": "profile page",
+      "change": [
+        "A6"
+      ],
+      "migrationFix": {
+        "regression": "B1: P2.3 57f792135 (promoted to main by 90e749e72) puts will-change: transform on every .toast and pins the phone notification column with an inline width; every main tree with d233a6cd0 carries it. Fixed on the project line by 3ec9cf83d (delivered as 86db4c886).",
+        "commit": "3ec9cf83def280578481d1b9a4a02fa32359b0e1",
+        "generationTree": "dcb5fd1bdfa7dd235822e050bbc5d9f546dbf89f",
+        "decision": {
+          "taskId": "34bQk0jlytjFYyi4OgLMK",
+          "evidenceRevision": 1,
+          "evidenceDigest": "f20eee2a99a00fa2f7b3d5c827f56b25a465b4c777d81063bc50d88facdd0554",
+          "verdict": "CONFIRM",
+          "document": "p2.3-b1/README.md"
+        },
+        "isolation": "p0-drift-2/isolation/profile-validation-b1-fix.json"
+      }
     },
     {
       "screenshot": "webkit-light-phone/profile.png",

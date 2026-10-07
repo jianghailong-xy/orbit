@@ -189,7 +189,7 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 
 ## main 漂移参考层
 
-**位置**：[reference/registry.json](reference/registry.json) 和 `reference/screenshots/{project}/{name}.png`，共 131 张。
+**位置**：[reference/registry.json](reference/registry.json) 和 `reference/screenshots/{project}/{name}.png`，共 137 张。
 
 | 组 | 截图 | 张数 | mainCommits | 生成树（generatedFrom） |
 | --- | --- | ---: | --- | --- |
@@ -198,6 +198,7 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 | 任务面板与设置 | task-detail、task-action-hover/focus/menu、task-share-dialog、settings、settings-saved（8 项目），breakpoint-599/601-dialog（桌面） | 64 | `4088d37e…` | `4088d37e6`（full2-4088d37e6） |
 | Wiki 961px 暗色 | breakpoint-961-wiki（chromium-dark-desktop） | 1 | `e64d0c72…` | `e64d0c72a`（m5-e64d0c72a） |
 | 资料页（第 2 批，A6） | profile（8 项目），profile-validation（WebKit 桌面 2 个项目） | 10 | `d233a6cd…` | `d233a6cd0`（full-maint-d233a6cd0） |
+| 资料页，第 7 条例外（第 2 批，A6） | profile-validation（Chromium 4 个项目，WebKit 手机 2 个项目） | 6 | `d233a6cd…` | `d233a6cd0` 加 B1 修复 `3ec9cf83d`，即 `dcb5fd1bd`（full-maint-xfix-d233a6cd0），见 `migrationFix` |
 
 **每条登记的字段**：
 
@@ -212,13 +213,15 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 | `generatedFrom.run` | 生成运行的标签 |
 | `projectLine` | 吸收它的项目线提交 |
 | `group`、`change` | 所属组和归因编号 |
+| `migrationFix` | 只有第 7 条例外的条目才有：修复提交 `commit`、实际生成用的树 `generationTree`、迁移回归 `regression`、修复的 CONFIRM 判定 `decision`、隔离证明文件 `isolation` |
 
 **生成方式**：
 - 参考图来自在该 main 提交的树上用 P0 原测试和固定数据跑出的截图（[make-reference.py](tools/make-reference.py)），没有任何加工。
 - 这些 main 树都在 P2.3 晋升（`90e749e72`）之前，不含 B1。
 - 会话组的生成树 `f5bdd7fd3` 含 P1.1/P1.2 的晋升，项目页的 `93d3ec580` 含 P2.1 的晋升。这些晋升提交本身经过同样的运行，确认没有改变对应截图。
+- 第 2 批的生成树都在 P2.3 晋升之后，含 B1。B1 只改变设置页、资料页的成功提示胶囊。所以 profile-validation 中受 B1 影响的 6 张按第 7 条，在 X 加 B1 修复的树上生成，其余截图在 X 的树上生成，不受 B1 影响（见 [p0-drift-2](../p0-drift-2/README.md)）。
 
-**未登记**：其余 121 张仍然对照 P0.2。第 1 批时只有 B1 差异的 profile-validation 6 张，现在另有 main `d233a6cd0` 的改动，它们按第 7 条另行登记。
+**未登记**：其余 115 张仍然对照 P0.2。
 
 **第 2 批**：归因、同环境证明和登记经过见 [p0-drift-2](../p0-drift-2/README.md)。
 
