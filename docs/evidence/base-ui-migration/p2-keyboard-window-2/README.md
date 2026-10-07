@@ -148,7 +148,86 @@
 
 逐组合的完整数字（每个目标的 paced 参照与一致数、burst 错数及其结果、窗口和交接数，修复后的同一组数字）在 [combinations.md](combinations.md)，由 [render-tables.py](render-tables.py) 从 [keyboard-window-summary.json](keyboard-window-summary.json) 生成。下表只列需要处理或记录的组合（Orbit 目标；`20/20` 指 burst 20 个样本全部与 paced 参照不同）。
 
-【待补：逐组合结论表】
+下表列出修复前 burst 与 paced 不同的全部 74 个 Orbit 组合，每个目标一行；其余 59 个 Orbit 组合 burst 本来就与 paced 一致，在 [combinations.md](combinations.md) 里。「对应旧 AntD」：会话菜单对 `antd-session`，其余子菜单目标对 `antd-submenu`，菜单对 `antd-menu`，Select 对 `antd-sample`，Popconfirm 对 `antd-popconfirm`，Dialog 对 `antd-dialog`，ConfirmDialog 对 `antd-confirm`。「修复后」：子菜单取终版 `aed0a7bab` 上的 `after2-sub-*`，其余取 `069601b67` 上的 `after-*`（终版只改了子菜单触发器）。
+
+| 序列 | Orbit 目标 | 对应旧 AntD 的 paced 参照（burst 错） | Orbit paced 参照 | Orbit 修复前 burst | 结论 | 修复后 burst 错 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `dlg-enter-enter`（⏎ ⏎） | `orbit-confirm` | `ran Cancel \| none \| @button:AntD confirm`（0/20） | `ran Cancel \| none \| @button:Orbit confirm` | 20/20：`none \| alertdialog:Delete runner? \| @button:Cancel`×20 | 规则：修 | **0/20** |
+| `dlg-enter-shift-tab`（⏎ Shift+Tab） | `orbit-confirm` | `none \| dialog:Delete runner? \| @button:Delete`（20/20） | `none \| alertdialog:Delete runner? \| @button:Delete` | 20/20：`none \| alertdialog:Delete runner? \| @button:Cancel`×20 | 规则：只记录（旧 modal.confirm 自己的 burst 也 20/20 不同）；Overlay 修复后顺带一致 | **0/20** |
+| `dlg-enter-shift-tab`（⏎ Shift+Tab） | `orbit-dialog` | `none \| dialog:Edit workspace \| @button:Save`（0/20） | `none \| dialog:Edit workspace \| @button:Save` | 20/20：`none \| dialog:Edit workspace \| @dialog（弹层本身）`×20 | 规则：修 | **0/20** |
+| `dlg-enter-space`（⏎ Space） | `orbit-confirm` | `ran Cancel \| none \| @button:AntD confirm`（0/20） | `ran Cancel \| none \| @button:Orbit confirm` | 20/20：`none \| alertdialog:Delete runner? \| @button:Cancel`×20 | 规则：修 | **0/20** |
+| `dlg-enter-tab`（⏎ Tab） | `orbit-confirm` | `none \| dialog:Delete runner? \| @button:Delete`（20/20） | `none \| alertdialog:Delete runner? \| @button:Delete` | 20/20：`none \| alertdialog:Delete runner? \| @button:Cancel`×20 | 规则：只记录（旧 modal.confirm 自己的 burst 也 20/20 不同）；Overlay 修复后顺带一致 | **0/20** |
+| `dlg-enter-tab`（⏎ Tab） | `orbit-dialog` | `none \| dialog:Edit workspace \| @input:`（0/20） | `none \| dialog:Edit workspace \| @button:Close` | 20/20：`none \| dialog:Edit workspace \| @dialog（弹层本身）`×20 | 规则：修 | **0/20** |
+| `dlg-enter-tab-enter`（⏎ Tab ⏎） | `orbit-confirm` | `ran Delete \| none \| @button:AntD confirm`（0/20） | `ran Delete \| none \| @button:Orbit confirm` | 20/20：`none \| alertdialog:Delete runner?+dialog:Delete runner? \| @button:Cancel`×20 | 规则：修 | **0/20** |
+| `dlg-enter-tab-enter`（⏎ Tab ⏎） | `orbit-dialog` | `none \| dialog:Edit workspace \| @input:`（0/20） | `ran Close \| none \| @button:Orbit dialog` | 20/20：`none \| dialog:Edit workspace \| @button:Close`×20 | 规则：修 | **0/20** |
+| `menu-down-end-enter`（↓ End ⏎） | `orbit-menu` | `none \| menu×1 \| @button:Add attachment`（0/20） | `Action=command \| none \| @button:Add attachment` | 20/20：`Action=file \| none \| @button:Add attachment`×20 | 协调者判定 2B：回归，修 | **0/20** |
+| `menu-down-end-enter`（↓ End ⏎） | `orbit-menu-sample` | `none \| menu×1 \| @button:Add attachment`（0/20） | `ran /Command \| none \| @button:Add attachment` | 20/20：`ran File \| none \| @button:Add attachment`×20 | 协调者判定 2B：回归，修 | **0/20** |
+| `menu-enter-end-enter`（⏎ End ⏎） | `orbit-menu` | `none \| none \| @button:Add attachment`（0/20） | `Action=command \| none \| @button:Add attachment` | 20/20：`Action=file \| none \| @button:Add attachment`×20 | 协调者判定 2B：回归，修 | **0/20** |
+| `menu-enter-end-enter`（⏎ End ⏎） | `orbit-menu-sample` | `none \| none \| @button:Add attachment`（0/20） | `ran /Command \| none \| @button:Add attachment` | 20/20：`ran File \| none \| @button:Add attachment`×20 | 协调者判定 2B：回归，修 | **0/20** |
+| `menu-enter-shift-tab`（⏎ Shift+Tab） | `orbit-menu` | `none \| menu×1 \| @menuitem:File`（0/20） | `none \| none \| @button:Add attachment` | 20/20：`none \| none \| @body:darkSwitch themeOpen Dia`×20 | 协调者判定 1-2：按约定修（burst 等于 paced） | **0/20** |
+| `menu-enter-shift-tab`（⏎ Shift+Tab） | `orbit-menu-sample` | `none \| menu×1 \| @menuitem:File`（0/20） | `none \| none \| @button:Add attachment` | 20/20：`none \| none \| @body:darkSwitch themeAdd atta`×20 | 协调者判定 1-2：按约定修（burst 等于 paced） | **0/20** |
+| `menu-enter-shift-tab-enter`（⏎ Shift+Tab ⏎） | `orbit-menu` | `ran File \| none \| @body:darkSwitch themeAdd atta`（0/20） | `none \| menu×1 \| @menuitem:File` | 20/20：`none \| none \| @body:darkSwitch themeOpen Dia`×20 | 规则：修 | **0/20** |
+| `menu-enter-shift-tab-enter`（⏎ Shift+Tab ⏎） | `orbit-menu-sample` | `ran File \| none \| @body:darkSwitch themeAdd atta`（0/20） | `none \| menu×1 \| @menuitem:File` | 20/20：`none \| none \| @body:darkSwitch themeAdd atta`×20 | 规则：修 | **0/20** |
+| `menu-enter-space`（⏎ Space） | `orbit-menu` | `none \| none \| @button:Add attachment`（0/20） | `Action=file \| none \| @button:Add attachment` | 20/20：`none \| none \| @button:Add attachment`×20 | 规则：只记录，不改 | **20/20** |
+| `menu-enter-space`（⏎ Space） | `orbit-menu-sample` | `none \| none \| @button:Add attachment`（0/20） | `ran File \| none \| @button:Add attachment` | 20/20：`none \| none \| @button:Add attachment`×20 | 规则：只记录，不改 | **20/20** |
+| `menu-enter-tab`（⏎ Tab） | `orbit-menu` | `none \| menu×1 \| @menuitem:File`（0/20） | `none \| none \| @button:Open context` | 20/20：`none \| menu×1 \| @menuitem:File`×20 | 协调者判定 1-2：按约定修（burst 等于 paced） | **0/20** |
+| `menu-enter-tab`（⏎ Tab） | `orbit-menu-sample` | `none \| menu×1 \| @menuitem:File`（0/20） | `none \| none \| @button:Switch theme` | 20/20：`none \| menu×1 \| @menuitem:File`×20 | 协调者判定 1-2：按约定修（burst 等于 paced） | **0/20** |
+| `menu-enter-tab-enter`（⏎ Tab ⏎） | `orbit-menu` | `ran File \| none \| @body:darkSwitch themeAdd atta`（0/20） | `none \| dialog:Context \| @dialog（弹层本身）` | 20/20：`Action=file \| none \| @button:Add attachment`×20 | 规则：修 | **0/20** |
+| `menu-enter-tab-enter`（⏎ Tab ⏎） | `orbit-menu-sample` | `ran File \| none \| @body:darkSwitch themeAdd atta`（0/20） | `none \| none \| @button:Switch theme \| theme changed` | 20/20：`ran File \| none \| @button:Add attachment`×20 | 规则：修 | **0/20** |
+| `menu-up-home-enter`（↑ Home ⏎） | `orbit-menu` | `none \| menu×1 \| @button:Add attachment`（0/20） | `Action=file \| none \| @button:Add attachment` | 20/20：`Action=command \| none \| @button:Add attachment`×20 | 协调者判定 2B：回归，修 | **0/20** |
+| `menu-up-home-enter`（↑ Home ⏎） | `orbit-menu-sample` | `none \| menu×1 \| @button:Add attachment`（0/20） | `ran File \| none \| @button:Add attachment` | 20/20：`ran /Command \| none \| @button:Add attachment`×20 | 协调者判定 2B：回归，修 | **0/20** |
+| `pop-enter-enter`（⏎ ⏎） | `orbit-popconfirm` | `none \| none \| @button:Delete task`（0/20） | `none \| dialog:Delete this task? \| @dialog（弹层本身）` | 20/20：`none \| none \| @button:Delete task`×20 | 规则：只记录，不改 | **20/20** |
+| `pop-enter-shift-tab`（⏎ Shift+Tab） | `orbit-popconfirm` | `none \| tooltip:Delete this task?A r \| @button:Switch theme`（0/20） | `none \| dialog:Delete this task? \| @button:Delete task` | 20/20：`none \| none \| @button:Switch theme`×20 | 规则：只记录，不改 | **20/20** |
+| `pop-enter-space`（⏎ Space） | `orbit-popconfirm` | `none \| none \| @button:Delete task`（0/20） | `none \| dialog:Delete this task? \| @dialog（弹层本身）` | 20/20：`none \| none \| @button:Delete task`×20 | 规则：只记录，不改 | **20/20** |
+| `select-down-end-enter`（↓ End ⏎） | `orbit-field` | `Never \| list closed \| none \| @combobox:Sample choice`（0/20） | `never \| list open \| listbox×1 \| @option:30 days` | 20/20：`never \| list closed \| none \| @combobox:Expires`×20 | 规则：只记录，不改 | **20/20** |
+| `select-down-end-enter`（↓ End ⏎） | `orbit-sample` | `Never \| list closed \| none \| @combobox:Sample choice`（0/20） | `Never \| list open \| listbox×1 \| @option:30 days` | 20/20：`Never \| list closed \| none \| @combobox:Sample choice`×20 | 规则：只记录，不改 | **20/20** |
+| `select-down-home-enter`（↓ Home ⏎） | `orbit-field` | `7 days \| list closed \| none \| @combobox:Sample choice`（0/20） | `never \| list closed \| none \| @combobox:Expires` | 20/20：`7 \| list closed \| none \| @combobox:Expires`×20 | 规则：只记录，不改 | **20/20** |
+| `select-down-home-enter`（↓ Home ⏎） | `orbit-sample` | `7 days \| list closed \| none \| @combobox:Sample choice`（0/20） | `Never \| list closed \| none \| @combobox:Sample choice` | 20/20：`7 days \| list closed \| none \| @combobox:Sample choice`×20 | 规则：只记录，不改 | **20/20** |
+| `select-down-shift-tab`（↓ Shift+Tab） | `orbit-field` | `Never \| list closed \| none \| @combobox:Sample choice`（0/20） | `never \| list closed \| none \| @combobox:Expires` | 20/20：`never \| list closed \| none \| @button:Open legacy Modal`×20 | 规则：修 | **0/20** |
+| `select-down-shift-tab`（↓ Shift+Tab） | `orbit-sample` | `Never \| list closed \| none \| @combobox:Sample choice`（0/20） | `Never \| list closed \| none \| @combobox:Sample choice` | 20/20：`Never \| list closed \| none \| @button:Switch theme`×20 | 规则：修 | **0/20** |
+| `select-down-space-from-null`（↓ Space） | `orbit-field` | — | `never \| list closed \| none \| @combobox:Expires` | 20/20：`null \| list closed \| none \| @combobox:Expires`×20 | 无旧样本：只记录，不改 | **20/20** |
+| `select-down-tab`（↓ Tab） | `orbit-field` | `Never \| list closed \| none \| @combobox:Sample choice`（0/20） | `never \| list closed \| none \| @combobox:Workspace` | 20/20：`never \| list closed \| none \| @button:Clear selection`×20 | 规则：修 | **0/20** |
+| `select-down-tab`（↓ Tab） | `orbit-sample` | `Never \| list closed \| none \| @combobox:Sample choice`（0/20） | `Never \| list closed \| none \| @combobox:Sample choice` | 20/20：`Never \| list open \| listbox×1 \| @option:Never`×20 | 规则：修 | **0/20** |
+| `select-enter-tab`（⏎ Tab） | `orbit-field` | `Never \| list closed \| none \| @combobox:Sample choice`（0/20） | `never \| list closed \| none \| @combobox:Workspace` | 20/20：`never \| list closed \| none \| @button:Clear selection`×20 | 规则：修 | **0/20** |
+| `select-enter-tab`（⏎ Tab） | `orbit-sample` | `Never \| list closed \| none \| @combobox:Sample choice`（0/20） | `Never \| list closed \| none \| @combobox:Sample choice` | 20/20：`Never \| list open \| listbox×1 \| @option:Never`×20 | 规则：修 | **0/20** |
+| `sub-enter-down-enter`（⏎ ↓ ⏎） | `orbit-session` | `Picked=claude \| menu×1 \| @menuitem:Claude`（20/20） | `Picked=claude \| none \| @button:Session actions` | 20/20：`Picked=group \| none \| @button:Session actions`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-enter-down-enter`（⏎ ↓ ⏎） | `orbit-submenu` | `ran Claude \| menu×1 \| @menuitem:Claude`（20/20） | `Action=claude \| none \| @button:Session actions` | 20/20：`Tag=true \| menu×1 \| @menuitemcheckbox:Important tag`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-enter-down-enter`（⏎ ↓ ⏎） | `orbit-submenu-sample` | `ran Claude \| menu×1 \| @menuitem:Claude`（20/20） | `ran Claude \| none \| @button:Add attachment` | 20/20：`none \| menu×2 \| @menuitem:Codex`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-enter-enter`（⏎ ⏎） | `orbit-session` | `Picked=codex \| menu×1 \| @menuitem:Codex`（20/20） | `Picked=codex \| none \| @button:Session actions` | 20/20：`none \| menu×2 \| @menuitem:Codex`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-enter-enter`（⏎ ⏎） | `orbit-submenu` | `ran Codex \| menu×1 \| @menuitem:Codex`（20/20） | `Action=codex \| none \| @button:Session actions` | 20/20：`none \| menu×2 \| @menuitem:Codex`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-enter-enter`（⏎ ⏎） | `orbit-submenu-sample` | `ran Codex \| menu×1 \| @menuitem:Codex`（20/20） | `ran Codex \| none \| @button:Add attachment` | 20/20：`none \| menu×2 \| @menuitem:Codex`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-c-enter`（→ c ⏎） | `orbit-session` | `Picked=codex \| menu×1 \| @menuitem:Codex`（20/20） | `Picked=claude \| none \| @button:Session actions` | 20/20：`none \| menu×2 \| @menuitem:Claude`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-c-enter`（→ c ⏎） | `orbit-submenu` | `ran Codex \| menu×1 \| @menuitem:Codex`（20/20） | `Action=claude \| none \| @button:Session actions` | 20/20：`none \| menu×2 \| @menuitem:Claude`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-c-enter`（→ c ⏎） | `orbit-submenu-sample` | `ran Codex \| menu×1 \| @menuitem:Codex`（20/20） | `ran Claude \| none \| @button:Add attachment` | 20/20：`none \| menu×2 \| @menuitem:Claude`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-down-enter`（→ ↓ ⏎） | `orbit-session` | `Picked=claude \| menu×1 \| @menuitem:Claude`（20/20） | `Picked=claude \| none \| @button:Session actions` | 20/20：`Picked=group \| none \| @button:Session actions`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-down-enter`（→ ↓ ⏎） | `orbit-submenu` | `ran Claude \| menu×1 \| @menuitem:Claude`（20/20） | `Action=claude \| none \| @button:Session actions` | 20/20：`Tag=true \| menu×1 \| @menuitemcheckbox:Important tag`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-down-enter`（→ ↓ ⏎） | `orbit-submenu-sample` | `ran Claude \| menu×1 \| @menuitem:Claude`（20/20） | `ran Claude \| none \| @button:Add attachment` | 20/20：`none \| menu×2 \| @menuitem:Codex`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-end-enter`（→ End ⏎） | `orbit-session` | `Picked=claude \| menu×1 \| @menuitem:Claude`（20/20） | `Picked=claude \| none \| @button:Session actions` | 20/20：`Picked=delete \| none \| @button:Session actions`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-end-enter`（→ End ⏎） | `orbit-submenu` | `ran Claude \| menu×1 \| @menuitem:Claude`（20/20） | `Action=claude \| none \| @button:Session actions` | 20/20：`Action=delete \| none \| @button:Session actions`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-end-enter`（→ End ⏎） | `orbit-submenu-sample` | `ran Claude \| menu×1 \| @menuitem:Claude`（20/20） | `ran Claude \| none \| @button:Add attachment` | 20/20：`none \| menu×2 \| @menuitem:Codex`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-enter`（→ ⏎） | `orbit-session` | `Picked=codex \| menu×1 \| @menuitem:Codex`（20/20） | `Picked=codex \| none \| @button:Session actions` | 20/20：`none \| menu×2 \| @menuitem:Codex`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-enter`（→ ⏎） | `orbit-submenu` | `ran Codex \| menu×1 \| @menuitem:Codex`（20/20） | `Action=codex \| none \| @button:Session actions` | 20/20：`none \| menu×2 \| @menuitem:Codex`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-enter`（→ ⏎） | `orbit-submenu-sample` | `ran Codex \| menu×1 \| @menuitem:Codex`（20/20） | `ran Codex \| none \| @button:Add attachment` | 20/20：`none \| menu×2 \| @menuitem:Codex`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-home-enter`（→ Home ⏎） | `orbit-session` | `Picked=codex \| menu×1 \| @menuitem:Codex`（20/20） | `Picked=codex \| none \| @button:Session actions` | 20/20：`Picked=default \| none \| @button:Session actions`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-home-enter`（→ Home ⏎） | `orbit-submenu` | `ran Codex \| menu×1 \| @menuitem:Codex`（20/20） | `Action=codex \| none \| @button:Session actions` | 20/20：`Action=default \| none \| @button:Session actions`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-home-enter`（→ Home ⏎） | `orbit-submenu-sample` | `ran Codex \| menu×1 \| @menuitem:Codex`（20/20） | `ran Codex \| none \| @button:Add attachment` | 20/20：`none \| menu×2 \| @menuitem:Codex`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-left`（→ ←） | `orbit-session` | `none \| menu×1 \| @menuitem:Provider`（20/20） | `none \| menu×1 \| @menuitem:Provider` | 20/20：`none \| menu×2 \| @menuitem:Codex`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-left`（→ ←） | `orbit-submenu` | `none \| menu×1 \| @menuitem:Provider`（20/20） | `none \| menu×1 \| @menuitem:Provider` | 20/20：`none \| menu×2 \| @menuitem:Codex`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-left`（→ ←） | `orbit-submenu-sample` | `none \| menu×1 \| @menuitem:Provider`（20/20） | `none \| menu×1 \| @menuitem:Provider` | 20/20：`none \| menu×2 \| @menuitem:Codex`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-shift-tab`（→ Shift+Tab） | `orbit-session` | `none \| menu×1 \| @button:Switch theme`（20/20） | `none \| menu×1 \| @menuitem:Provider` | 20/20：`none \| none \| @button:Session actions`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-shift-tab`（→ Shift+Tab） | `orbit-submenu` | `none \| menu×1 \| @button:Switch theme`（20/20） | `none \| menu×1 \| @menuitem:Provider` | 20/20：`none \| none \| @button:Session actions`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-shift-tab`（→ Shift+Tab） | `orbit-submenu-sample` | `none \| menu×1 \| @button:Switch theme`（20/20） | `none \| menu×1 \| @menuitem:Provider` | 20/20：`none \| none \| @button:Add attachment`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-space`（→ Space） | `orbit-session` | `none \| menu×2 \| @menuitem:Codex`（0/20） | `Picked=codex \| none \| @button:Session actions` | 20/20：`none \| menu×2 \| @menuitem:Codex`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-space`（→ Space） | `orbit-submenu` | `none \| menu×2 \| @menuitem:Codex`（0/20） | `Action=codex \| none \| @button:Session actions` | 20/20：`none \| menu×2 \| @menuitem:Codex`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-space`（→ Space） | `orbit-submenu-sample` | `none \| menu×2 \| @menuitem:Codex`（0/20） | `ran Codex \| none \| @button:Add attachment` | 20/20：`none \| menu×2 \| @menuitem:Codex`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-tab`（→ Tab） | `orbit-session` | `none \| menu×1 \| @body:darkSwitch themeSession `（20/20） | `none \| none \| @button:Switch theme` | 20/20：`none \| menu×2 \| @menuitem:Codex`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-tab`（→ Tab） | `orbit-submenu` | `none \| menu×1 \| @body:darkSwitch themeAdd atta`（20/20） | `none \| none \| @button:Add attachment` | 20/20：`none \| menu×2 \| @menuitem:Codex`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-tab`（→ Tab） | `orbit-submenu-sample` | `none \| menu×1 \| @body:darkSwitch themeAdd atta`（20/20） | `none \| none \| @button:Switch theme` | 20/20：`none \| menu×2 \| @menuitem:Codex`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-up-enter`（→ ↑ ⏎） | `orbit-session` | `Picked=claude \| menu×1 \| @menuitem:Claude`（20/20） | `Picked=claude \| none \| @button:Session actions` | 20/20：`Picked=default \| none \| @button:Session actions`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-up-enter`（→ ↑ ⏎） | `orbit-submenu` | `ran Claude \| menu×1 \| @menuitem:Claude`（20/20） | `Action=claude \| none \| @button:Session actions` | 20/20：`Action=default \| none \| @button:Session actions`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+| `sub-right-up-enter`（→ ↑ ⏎） | `orbit-submenu-sample` | `ran Claude \| menu×1 \| @menuitem:Claude`（20/20） | `ran Claude \| none \| @button:Add attachment` | 20/20：`none \| menu×2 \| @menuitem:Codex`×20 | 协调者判定 1B：子菜单回归，修 | **0/20** |
+
+合计：要修的 62 个组合修复后都是 0/20；只记录的 12 个里，ConfirmDialog 的 2 个因 Overlay 修复顺带变成 0/20，其余 10 个仍是 20/20，结果与修复前逐样本相同；74 个组合的 paced 参照都没有变。
 
 ## 改动
 
@@ -204,7 +283,37 @@ burst 也一样：`after-sub-a` 里会话菜单和字段页的 →⏎、→↑�
 
 ## 已验收行为的回归
 
-【待补：回归】
+都用各自的原有命令和配置，经 [prod-runs.sh](prod-runs.sh) 在生产构建上跑，每次只跑一个，各在自己的网络命名空间里，`nice -n -10`。修复前在 `0594f6d2c` 上跑：它只加了测试和探针，没改组件。第一版在 `069601b67` 上跑，终版在 `aed0a7bab` 的源码上跑（记录里的提交是当时的 HEAD，之后只多了证据提交，Web 树不变）。终版的运行在 [final-queue.sh](final-queue.sh) 里排队。原件在 `/var/tmp/kw2-246921c8/runs/<步骤>-<标签>`，这里是瘦身副本和 `checks/prod-<标签>-<步骤>.*` 记录。
+
+| 检查 | 修复前 | 第一版 | 终版 |
+| --- | --- | --- | --- |
+| choices 原入口，八环境（`test:ui-choices -- --grep "Dialog owns choices\|Dialog keeps composition\|Dialog Popover Select exits"`，32 个用例） | 32/32 | 30/32：`no-preference Dialog Popover Select exits restore one layer at a time` 在 chromium-light-desktop 和 webkit-dark-phone 各失败一次（负载 48.7，与另外两个探针同时跑） | **32/32**（负载 10.8） |
+| 上面那条用例在这两个环境各重复 10 次（`--repeat-each 10`，40 次） | — | — | 终版 **40/40**（[entry-repeat-final](checks/prod-final-entry-repeat.txt)）；三个组件换回修复前（`0638f1944` 的 Overlay/Select/Menu，只换工作区，记录里是 dirty）也是 **40/40**（[entry-repeat-prefix](checks/prod-prefix-entry-repeat.txt)） |
+| overlays 矩阵（`test:ui-overlays`，96 个用例：初始焦点、焦点归还、逐层 Esc、滚动锁、Drawer 等） | 96/96 | 96/96（负载 62.8） | **96/96** |
+| choices 测试列表（`playwright --list`） | 520 个用例 | 逐字节相同 | **逐字节相同**（sha256 `869171286b2f…`） |
+| 完整 choices 矩阵（`test:ui-choices`，按项目分 8 次跑） | — | — | 【待补】 |
+| 试点（P3.2 pilot，生产构建，每棵树两次） | 72/72、72/72 | — | 72/72、【待补】 |
+| P0（`npm run test:ui-migration`，原命令） | 93 通过、8 失败、11 跳过；失败的都是 `profile`（`GET /api/auth/methods` 没有浏览器 fixture，P0 fixture 漂移） | — | 【待补】 |
+| 相关单测 | — | 16 个文件 260 个用例（[unit-related-after](checks/unit-related-after.txt)） | 合并检查里的完整 Vitest，见[合入项目 tip 之后](#合入项目-tip-之后) |
+
+choices 入口那两次失败，不是第一版修复造成的：
+- 终版在低负载下 32/32；
+- 那条用例在两个环境各跑 10 次，终版和修复前的组件都是 40/40；
+- 两次失败的断言都取决于时间（[checks/prod-after-choices-entry](checks/prod-after-choices-entry.txt)）：
+  - chromium-light-desktop：最后一层关上后，页面滚动 320ms 后才动，上限是 250ms（滚动锁释放的时限）；
+  - webkit-dark-phone：退出动画的帧采样里，没有一帧处在半透明（0 < opacity < 1），也就是没采到中间帧。
+
+**试点**（[pilot-summary.json](pilot-summary.json)，由 [summarize-pilot.py](summarize-pilot.py) 对 `../p3.2/compare_runs.py` 的输出分类）：
+
+| 对比 | 截图（相同 / 抗锯齿级 / 超出） | trace（相同 / 请求不同 / 只有快照字段不同） | 计算样式差异 |
+| --- | --- | --- | --- |
+| 修复前第 1 次 vs 第 2 次（同一棵树的噪声） | 223 / 32 / 1 | 57/64 / 0 / 9 | 0 |
+| 修复前第 1 次 vs 终版第 1 次 | 224 / 31 / 1 | 58/64 / 0 / 8 | 0 |
+【待补：试点其余两行】
+
+- 修复前后那 1 张超出抗锯齿级的截图是 chromium-light-desktop 的 `pilot-delete-confirm.png`：5 个像素，最大通道差 20，位置是 x 1246–1247、y 28–39。
+- 同一棵树两次运行之间也有 1 张超出，是 chromium-dark-desktop 的同一张图，像素位置完全相同（最大差 15），所以这是运行间的噪声。
+- trace 里没有请求不同的步骤。只有快照字段不同的几步，都是动作后立即采的焦点或列表快照，与噪声对比里出现的是同一类。
 
 ## 清单复扫与 2026-10-07d.json
 
@@ -247,4 +356,40 @@ burst 也一样：`after-sub-a` 里会话菜单和字段页的 →⏎、→↑�
 
 ## 文件与原始数据
 
-【待补：文件】
+脚本：
+
+| 文件 | 用途 |
+| --- | --- |
+| [keyboard-window-2.browser.mjs](keyboard-window-2.browser.mjs)、[keyboard-window-2.config.mjs](keyboard-window-2.config.mjs) | burst/paced 探针 |
+| [held-frames-2.browser.mjs](held-frames-2.browser.mjs)、[held-frames-2.config.mjs](held-frames-2.config.mjs) | 冻结帧探针（八环境） |
+| [prior-select-keys.config.mjs](prior-select-keys.config.mjs)、[prior-menu-held-frames.config.mjs](prior-menu-held-frames.config.mjs) | 前两个任务的探针，原文件不改，只换结果目录 |
+| [run-chunks.py](run-chunks.py)、[slim.py](slim.py) | 分块运行、原件留在 `/var/tmp`、这里放瘦身副本和运行记录 |
+| [prod-runs.sh](prod-runs.sh)、[final-queue.sh](final-queue.sh) | 生产构建上的回归检查；终版树上的排队（一次一个，可续跑，每步要 6 GB 空闲） |
+| [record-check.py](record-check.py) | 把一个 `mcp__orbit__bg_run` 作业的原始输出和退出码记成 `checks/<名字>.json/.txt` |
+| [summarize.py](summarize.py)、[render-tables.py](render-tables.py) | 判定与 [keyboard-window-summary.json](keyboard-window-summary.json)；逐组合表 [combinations.md](combinations.md) |
+| [summarize-pilot.py](summarize-pilot.py) | 试点对比分类，写 [pilot-summary.json](pilot-summary.json) |
+| [antd-audit.sh](antd-audit.sh)、[antd-audit-compare.py](antd-audit-compare.py) | 清单复扫与对照 [antd-audit.json](antd-audit.json) |
+| [build-inventory-record.py](build-inventory-record.py)、[inventory-check.sh](inventory-check.sh) | 生成并核对 `inventory-delta/2026-10-07d.json` |
+| [index-artifacts.py](index-artifacts.py) | 本目录每个文件的 SHA-256 清单 [artifact-index.json](artifact-index.json)，`--verify <提交>` 从 Git 对象复核 |
+
+数据目录（每个都有 `report.summary.json`、`environment.json`，探针还有 `samples.csv`；对应的 `checks/<名字>.json/.txt` 是命令、提交、Web 树、时间、负载、退出码和原始输出）：
+
+| 目录 | 内容 |
+| --- | --- |
+| `dev-check/` | 探针开发时的自检。它早于 `inPopup` 字段，判定不用它 |
+| `baseline-menu-{a,b,c}/`、`baseline-sub-{a,b,c,d}/`、`baseline-select-{a,b,c}/`、`baseline-pop/`、`baseline-dlg/` | 基线，8680 个样本（`0594f6d2c`、`4d54fbe5f`、`9975b1f55` 上，组件都未改）。记录里的 dirty 项是当时一个未跟踪的临时目录 `src/web/src/components/kw2scratch/`：jsdom 试验，没有任何页面引用，修复前已删 |
+| `after-menu/`、`after-select-{a,b,c}/`、`after-dlg/`、`after-pop/` | `069601b67` 上的修复后对照（3200 个样本） |
+| `after-sub-a/` | `069601b67` 上子菜单第一块，留作第一版焦点问题的记录 |
+| `after2-sub-{a,b,c}-{field,sample,session}/` | 终版 `aed0a7bab` 上的子菜单（1800 个样本） |
+| `fix-held-frames-{before,before-home-end,after,after2}/` | 冻结帧：修复前、修复前补 Home/End、第一版、终版 |
+| `prior-select-keys-{before,after}/`、`prior-menu-held-frames-{before,after,after2}/` | 前两个任务的探针 |
+| `choices-entry-{before,after,final}/`、`entry-repeat-{final,prefix}/`、`overlays-{before,after,final}/`、`choices-full-<项目>-final/`、`pilot-{before,final}-{1,2}/`、`p0-{before,final}/` | 生产构建上的回归检查 |
+| `pilot-{compare,compare-again,noise-before,noise-after}.json` | `../p3.2/compare_runs.py` 的输出 |
+| `checks/` | 每次运行的记录与原始输出（单测、清单、合并检查也在这里） |
+
+原件：
+- `/var/tmp/kw2-246921c8/runs/<名字>` 里是完整的 `report.json`（含附件正文）和失败时的 trace；`/var/tmp/kw2-246921c8/pilot/<标签>-<n>-shots` 里是试点截图。
+- 按协调者要求，这些原件留到证据判定之后；`report.summary.json` 里记了每个附件正文的 SHA-256，可以对照。
+- 本目录没有提交 trace.zip、带附件正文的 report.json 或截图。
+
+【待补：大小与清点】

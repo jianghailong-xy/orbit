@@ -1,4 +1,75 @@
 {
+ "compare": {
+  "scope": "before-fix run 1 vs fixed run 1",
+  "screenshots": {
+   "total": 256,
+   "identical": 224,
+   "antialias": 31,
+   "beyond": {
+    "chromium-light-desktop/pilot-delete-confirm.png": {
+     "pixels": 5,
+     "pixelsAtMost2": 0,
+     "maxChannelDiff": 20
+    }
+   }
+  },
+  "traces": {
+   "traces": 64,
+   "identical": 58,
+   "requestsDiffer": [],
+   "snapshotOnly": [
+    {
+     "step": "chromium-dark-phone :: task detail pilot › fields, pickers and the panel header :: list pick Later",
+     "fields": [
+      "focus"
+     ]
+    },
+    {
+     "step": "chromium-light-desktop :: task detail pilot › dependencies, inputs and comments :: prerequisite added",
+     "fields": [
+      "listbox"
+     ]
+    },
+    {
+     "step": "chromium-light-desktop :: task detail pilot › fields, pickers and the panel header :: suggested pick L",
+     "fields": [
+      "focus"
+     ]
+    },
+    {
+     "step": "chromium-light-phone :: task detail pilot › fields, pickers and the panel header :: suggested pick L",
+     "fields": [
+      "focus"
+     ]
+    },
+    {
+     "step": "webkit-light-desktop :: share dialog pilot › from Only you to a public link and back :: expiry 30 days",
+     "fields": [
+      "focus"
+     ]
+    },
+    {
+     "step": "webkit-light-desktop :: share dialog pilot › from Only you to a public link and back :: turned off",
+     "fields": [
+      "focus"
+     ]
+    },
+    {
+     "step": "webkit-light-phone :: share dialog pilot › from Only you to a public link and back :: expiry 30 days",
+     "fields": [
+      "focus"
+     ]
+    },
+    {
+     "step": "webkit-light-phone :: share dialog pilot › from Only you to a public link and back :: turned off",
+     "fields": [
+      "focus"
+     ]
+    }
+   ]
+  },
+  "capturesWithStyleDeltas": 0
+ },
  "noise-before": {
   "scope": "before-fix run 1 vs before-fix run 2 (same tree)",
   "screenshots": {
