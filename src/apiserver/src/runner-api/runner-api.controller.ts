@@ -2439,7 +2439,12 @@ export class RunnerApiController {
             : ((await this.queue.resolveLoginPool(this.prisma, s, declared!)) ??
               (await this.queue.resolvePoolMember(this.prisma, s, declared!)) ??
               (await this.queue.resolveSharedPool(this.prisma, s, declared!)))));
-      if (!declaredIsBuiltin && (!customRow?.enabled
+      // As on the claim: a Claude pool of the owner's own that none of its members can run is rebuilt on
+      // the Claude default, as the line resolvePoolMember owed says; any other slug no enabled row holds
+      // is left out, unavailable.
+      const poolFallback = !declaredIsBuiltin && !customRow && !maintenance
+        && (await accountPoolRuntime(this.prisma, s.ownerId, declared!)) === AgentProvider.CLAUDE;
+      if (!declaredIsBuiltin && !poolFallback && (!customRow?.enabled
         || !['claude', 'codex', 'kimi', 'antigravity', 'dsh'].includes(customRow.runtime))) {
         await this.markProviderUpgradeRequired(runner.id, { id: s.id }, PROVIDER_UNAVAILABLE_ERROR,
           s.status === RunStatus.PENDING ? [{ id: s.id, error: s.error }] : []);
@@ -2448,8 +2453,8 @@ export class RunnerApiController {
       const openCodeKeys = declared === AgentProvider.OPENCODE ? await openCodeKeyRows(this.prisma, s.ownerId) : undefined;
       const resolveExec = (sessionModel: string | null) =>
         resolveProviderExec({
-          declaredProvider: declared,
-          declaredProviderBuiltin: s.providerBuiltin,
+          declaredProvider: poolFallback ? AgentProvider.CLAUDE : declared,
+          declaredProviderBuiltin: poolFallback || s.providerBuiltin,
           customRow,
           openCodeKeys,
           sessionModel,
@@ -3820,9 +3825,13 @@ export class RunnerApiController {
         (await this.queue.resolveLoginPool(tx, session, session.provider!)) ??
         (await this.queue.resolvePoolMember(tx, session, session.provider!)) ??
         (await this.queue.resolveSharedPool(tx, session, session.provider!)));
+    // As on the claim: a Claude pool of the owner's own that none of its members can run re-spawns on
+    // the Claude default, as the line resolvePoolMember owed says; any other slug nothing holds is refused.
+    const poolFallback = !customRow && !isBuiltinProvider(session.provider, session.providerBuiltin)
+      && (await accountPoolRuntime(tx, session.ownerId, session.provider!)) === AgentProvider.CLAUDE;
     const exec = resolveProviderExec({
-      declaredProvider: session.provider,
-      declaredProviderBuiltin: session.providerBuiltin,
+      declaredProvider: poolFallback ? AgentProvider.CLAUDE : session.provider,
+      declaredProviderBuiltin: poolFallback || session.providerBuiltin,
       customRow,
       openCodeKeys:
         session.provider === AgentProvider.OPENCODE && openCodeKeyOf(session.model)

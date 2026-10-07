@@ -2569,6 +2569,11 @@ final class ConsoleModel {
     /// Whose those words are, when the server's answer says they are another Orbit session's
     /// (`RetryMessage.sessionMessage`): what routes the Retry to the server (`RetryRoute`).
     private(set) var serverRetrySender: SessionMessage?
+    /// …and whether the server said there is nothing at all for a re-send to carry
+    /// (`RetryMessage.nothingToResend`). The card swaps its verb for a continue then, and the press
+    /// sends the platform's own sentence (`AutoRetryLogic.continueMessage`) rather than any words
+    /// read from this window.
+    private(set) var serverNothingToResend = false
 
     /// What a retry sends: what is on screen when that answers it, and the server's answer when
     /// nothing on screen does.
@@ -2583,6 +2588,7 @@ final class ConsoleModel {
         let answer = try? await api.retryMessage(sessionID: sessionID)
         serverRetryText = answer?.text ?? ""
         serverRetrySender = answer?.sessionMessage
+        serverNothingToResend = answer?.nothingToResend ?? false
     }
 
     /// Re-send that message once the runner is signed back in (web's "Retry — re-send my last
@@ -2596,6 +2602,18 @@ final class ConsoleModel {
         // window — the server's words stand in, and there are no files to carry with them.
         let last = lastUserMessage
         guard !sending, !retryInFlight else { return }
+        // Nothing of anybody's to re-send — the failure landed on a turn nobody sent, and the server
+        // said so. The press sends the platform's own sentence in the reader's name
+        // (`AutoRetryLogic.continueMessage`, quoted under the button they pressed), through the same
+        // send as anything typed, so the composer's provider pick travels with it.
+        if last.text.isEmpty, serverRetryText.isEmpty, serverNothingToResend {
+            retryInFlight = true
+            defer { retryInFlight = false }
+            sendingAutoRetry = true
+            defer { sendingAutoRetry = false }
+            await send(overrideText: AutoRetryLogic.continueMessage, overrideAttachments: [])
+            return
+        }
         switch RetryRoute.of(loadedText: last.text, loadedSender: last.sessionMessage,
                              serverText: serverRetryText, serverSender: serverRetrySender) {
         case .nothing:
@@ -2644,6 +2662,13 @@ final class ConsoleModel {
     var armedRetryAt: Date? { worktree.detail?.retryAt.flatMap(RelativeTime.parse) }
     /// Attempts already spent on the current outage — what separates "never armed" from "gave up".
     var retryAttempts: Int { worktree.detail?.retryAttempts ?? 0 }
+    /// The provider whose outage the card names: the SESSION's own, never the composer's pending
+    /// pick. Picking a provider for the next turn — exactly what a person does when a quota is spent
+    /// — writes the same `provider` this console otherwise shows, and it renamed the provider that
+    /// had failed, so a card about claude's spent window read as deepseek's. The detail is the
+    /// freshest word on what the session runs; the console's own provider is the fallback for a
+    /// detail that has not loaded.
+    var outageProvider: String { worktree.detail?.provider ?? provider }
 
     /// Re-read the armed retry. Called when an auto-retry card appears: the server arms the retry as
     /// the failing turn settles, and a session that just went terminal is exactly the one the

@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>批量建任务确认页「Create 3 tasks?」— iPhone 效果图</title>
+<style>
+  /* 字体：Mac 上打开直接走 SF Pro / PingFang。Linux 渲染机没有它们，用 Inter + Noto Sans SC 代替
+     （render 时 Chromium 带 --allow-file-access-from-files 读 /tmp 里的字体；文件不在就落回系统字体）。 */
+  @font-face { font-family:"MockInter"; src:url("file:///tmp/mockfonts-batch-1Dtv/Inter.ttf"); font-weight:100 900; }
+  @font-face { font-family:"MockNotoSC"; src:url("file:///tmp/mockfonts-batch-1Dtv/NotoSansSC.ttf"); font-weight:100 900; }
+  @font-face { font-family:"MockMono"; src:url("file:///tmp/mockfonts-batch-1Dtv/JetBrainsMono.ttf"); font-weight:100 800; }
+
+  /* 颜色取自截图：主色 #3E69F6（Create 按钮与 ✕ 的实测值），橙 #F09242 / #FCEDDE（卡头图标与徽标）。
+     其余是 iOS 系统色：分组底 #F2F2F7、secondaryLabel 60%、separator。 */
+  :root {
+    --accent:#3E69F6; --orange:#F09242; --orange-bg:#FCEDDE;
+    --green:#34C759; --amber:#FF9500; --red:#E5484D;
+    --label:#000; --label-2:rgba(60,60,67,.6); --label-3:rgba(60,60,67,.3);
+    --sep:rgba(60,60,67,.16); --grouped:#F2F2F7; --cell:#fff;
+    --fill:rgba(120,120,128,.12); --fill-2:rgba(120,120,128,.08);
+    --ui:-apple-system,"SF Pro Text","MockInter","PingFang SC","MockNotoSC",sans-serif;
+    --mono:ui-monospace,"SF Mono","MockMono",Menlo,monospace;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:40px 32px 56px; background:#e9e9ee; color:#16161a; font:15px/1.55 var(--ui);
+         -webkit-font-smoothing:antialiased; }
+  h1 { font-size:26px; letter-spacing:-.02em; margin:0 0 8px; }
+  .lede { color:#55555e; max-width:1180px; margin:0; font-size:15px; }
+  .lede b { color:#16161a; }
+  code { font-family:var(--mono); font-size:12.5px; background:#dedee6; border-radius:4px; padding:1px 5px; }
+  .row { display:flex; gap:36px; align-items:flex-start; margin-top:26px; }
+  figure { margin:0; width:393px; }
+  .tag { display:inline-block; font-weight:700; font-size:13px; padding:4px 10px; border-radius:7px; margin-bottom:12px; }
+  .tag.now { background:#ffe4e0; color:#b3261e; }
+  .tag.new { background:#dfe8ff; color:#2449c7; }
+  figcaption { margin-top:16px; font-size:13.5px; line-height:1.6; color:#4a4a52; }
+  figcaption ol, figcaption ul { margin:0; padding-left:20px; }
+  figcaption li { margin-top:5px; }
+  figcaption li::marker { font-weight:700; color:#b3261e; }
+  figcaption.ok li::marker { color:#2449c7; }
+  figcaption b { color:#16161a; }
+
+  /* ── 手机与 sheet ─────────────────────────────────────────────── */
+  .phone { width:393px; height:852px; border-radius:55px; overflow:hidden; position:relative;
+           background:#c6c8c8; box-shadow:0 14px 44px rgba(0,0,0,.18); font-family:var(--ui); color:var(--label); }
+  .shots .phone { border-radius:0; box-shadow:none; }
+  .status { position:absolute; top:0; left:0; right:0; height:59px; display:flex; align-items:center;
+            justify-content:space-between; padding:0 30px 0 52px; font-size:17px; font-weight:600; }
+  .status .r { display:flex; align-items:center; gap:7px; font-size:15px; }
+  .bars { display:flex; gap:2px; align-items:flex-end; }
+  .bars i { display:block; width:3.5px; background:#000; border-radius:1px; }
+  .batt { width:27px; height:13px; border-radius:4px; background:#000; color:#c6c8c8; font-size:10px; font-weight:700;
+          display:grid; place-items:center; position:relative; }
+  .batt::after { content:""; position:absolute; right:-3px; top:4px; width:1.5px; height:5px; border-radius:1px; background:#8b8c8c; }
+  .sheet { position:absolute; top:59px; left:0; right:0; bottom:0; background:var(--grouped);
+           border-radius:38px 38px 0 0; overflow:hidden; }
+  .grabber { width:36px; height:5px; border-radius:3px; background:rgba(60,60,67,.22); margin:5px auto 0; }
+  .nav { position:relative; height:44px; margin-top:11px; display:flex; align-items:center; justify-content:center; }
+  .nav .t { font-size:17px; font-weight:600; letter-spacing:-.01em; }
+  /* iOS 26 工具栏玻璃按钮的中性态：白色半透明 + 细边 + 软投影，图形用 label 色 */
+  .glass { position:absolute; top:0; width:44px; height:44px; border-radius:50%; display:grid; place-items:center;
+           background:rgba(255,255,255,.82); box-shadow:0 0 0 .5px rgba(0,0,0,.07), 0 3px 12px rgba(0,0,0,.08); }
+  .glass.r { right:16px; } .glass.l { left:16px; }
+  .glass svg { width:17px; height:17px; }
+  .content { padding:10px 16px 0; }
+  .sechead { font-size:13px; line-height:18px; color:var(--label-2); padding:0 16px 7px; }
+  .group { background:var(--cell); border-radius:22px; overflow:hidden; margin-bottom:22px; }
+
+  /* 后果卡：同一句文案，在 " — " 处拆成粗体结论 + 灰字原因 */
+  .impact { display:flex; gap:12px; align-items:center; padding:13px 16px; position:relative; }
+  .impact + .impact::before { content:""; position:absolute; top:0; left:58px; right:0; border-top:.5px solid var(--sep); }
+  .impact .ic { flex:none; width:30px; height:30px; border-radius:8px; display:grid; place-items:center; }
+  .impact .ic svg { width:17px; height:17px; }
+  .ic.gray { background:#ececf0; color:#636366; }
+  .ic.green { background:rgba(52,199,89,.16); color:#1f9d45; }
+  .ic.amber { background:rgba(255,149,0,.16); color:#b26a00; }
+  .impact .k { font-size:16px; line-height:21px; font-weight:600; letter-spacing:-.01em; }
+  .impact .why { font-size:14px; line-height:19px; color:var(--label-2); margin-top:1px; }
+
+  /* 任务行 */
+  .task { display:flex; gap:12px; align-items:flex-start; padding:11px 14px 11px 14px; position:relative; }
+  .list-flat .task + .task::before { content:""; position:absolute; top:0; left:50px; right:0; border-top:.5px solid var(--sep); }
+  .num { flex:none; width:24px; height:24px; border-radius:50%; background:var(--fill); color:#3c3c43;
+         font-size:13px; font-weight:600; display:grid; place-items:center; margin-top:-1px; position:relative; z-index:1; }
+  .task .tt { flex:1; min-width:0; font-size:16px; line-height:22px; letter-spacing:-.005em; }
+  .task .sub { font-size:13px; line-height:18px; color:var(--label-2); margin-top:2px; }
+  .chev { flex:none; width:8px; align-self:center; color:#c4c4c7; }
+  .chev svg { width:8px; height:14px; display:block; }
+  /* 树：连接线是真的线，不再是等宽字体里的 ├─ */
+  .tree .task { padding-top:10px; padding-bottom:10px; }
+  .tree .ln { position:absolute; background:rgba(60,60,67,.24); }
+
+  /* 底部动作栏（safeAreaInset .bar） */
+  .bar { position:absolute; left:0; right:0; bottom:0; padding:12px 16px 50px; background:rgba(248,248,249,.96);
+         border-top:.5px solid rgba(60,60,67,.18); display:flex; flex-direction:column; gap:10px; }
+  .btn { height:34px; border-radius:17px; display:grid; place-items:center; font-size:17px; font-weight:450; letter-spacing:-.01em; }
+  .btn.primary { background:var(--accent); color:#fff; }
+  .btn.second { background:rgba(120,120,128,.14); color:var(--accent); }
+  .home { position:absolute; left:50%; bottom:8px; width:134px; height:5px; margin-left:-67px; border-radius:3px; background:#000; z-index:5; }
+
+  /* 详情页 */
+  .dt-title { font-size:20px; line-height:26px; font-weight:650; letter-spacing:-.015em; padding:2px 4px 0; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; padding:10px 4px 18px; }
+  .chip { font-size:12.5px; line-height:16px; padding:4px 9px; border-radius:99px; background:#e5e5ea; color:#3c3c43; }
+  .prose { padding:12px 16px 14px; font-size:15px; line-height:22px; }
+  .prose p { margin:0; }
+  .prose p + p, .prose ol { margin-top:8px; }
+  .prose ol { padding-left:20px; margin-bottom:0; }
+  .prose code { font-family:var(--mono); font-size:13px; background:var(--fill-2); border-radius:4px; padding:1px 4px; }
+
+  /* ① 的标注 */
+  .shot { position:absolute; inset:0; width:393px; height:852px; }
+  .mk { position:absolute; border:2px dashed var(--red); border-radius:10px; }
+  .mk b { position:absolute; width:22px; height:22px; border-radius:50%; background:var(--red); color:#fff;
+          font:700 13px/22px var(--ui); text-align:center; box-shadow:0 0 0 2px #fff; }
+  .mk .lab { position:absolute; white-space:nowrap; font:600 12px/1 var(--ui); color:#fff; background:var(--red);
+             padding:5px 8px; border-radius:7px; }
+
+  .notes { margin-top:34px; display:grid; grid-template-columns:1.25fr 1fr; gap:22px; max-width:1680px; }
+  .note { padding:18px 20px; background:#fff; border:1px solid #dcdce2; border-radius:14px; font-size:14px; line-height:1.65; color:#3c3c43; }
+  .note h3 { margin:0 0 8px; font-size:16px; color:#16161a; }
+  .note ol, .note ul { margin:4px 0 0; padding-left:20px; }
+  .note li { margin-top:6px; }
+  .note li b { color:#16161a; }
+
+  /* ── 依赖：按层 ─────────────────────────────────────────────── */
+  /* 层 = 本批里最深的前置 + 1（与 Web buildBatchGraph 的 longest-path layering 同一算法）。
+     左侧细线把各层串起来，表示先后；同层的任务彼此不依赖，可以并行。 */
+  .lvblock { position:relative; padding:0 0 10px 22px; }
+  .lvblock:not(:last-child)::before { content:""; position:absolute; left:6.25px; top:14px; bottom:-4px; width:1.5px;
+                                      background:rgba(60,60,67,.2); }
+  .lv { position:relative; font-size:13px; line-height:18px; color:var(--label-2); padding:0 0 6px 2px; }
+  .lv b { font-weight:600; }
+  .lv .dot { position:absolute; left:-20px; top:4px; width:10px; height:10px; border-radius:50%; background:#c4c4c9; }
+  .lvblock .group { margin-bottom:0; }
+  .wait { font-size:13px; line-height:18px; color:var(--label-2); margin-top:2px; display:flex; flex-wrap:wrap;
+          align-items:center; gap:4px; }
+  .mini { display:inline-grid; place-items:center; width:18px; height:18px; border-radius:50%; background:var(--fill);
+          color:#3c3c43; font-size:11px; font-weight:650; }
+  .st { font-size:11.5px; line-height:16px; font-weight:650; padding:1px 7px; border-radius:6px; margin-right:2px; }
+  .st.run { background:rgba(52,199,89,.17); color:#1d8a3c; }
+  .st.hold { background:var(--fill); color:#55555e; }
+  .more { margin-top:0; padding:11px 16px; border-radius:16px; border:1.5px dashed rgba(60,60,67,.22);
+          font-size:13px; line-height:18px; color:var(--label-2); }
+
+  /* 形状小卡：去掉手机框，只保留 sheet 里的那一块 */
+  .shapes { display:grid; grid-template-columns:repeat(4, 393px); gap:28px 36px; margin-top:22px; align-items:start; }
+  .shape h4 { margin:0 0 10px; font-size:14px; color:#16161a; }
+  .shape h4 span { font-weight:400; color:#6b6b74; }
+  .panel { background:var(--grouped); border-radius:22px; padding:16px 16px 4px; font-family:var(--ui); color:var(--label);
+           box-shadow:0 0 0 1px rgba(0,0,0,.05); }
+  .shape p { margin:10px 2px 0; font-size:13.5px; line-height:1.6; color:#4a4a52; }
+  h2 { font-size:19px; margin:40px 0 0; letter-spacing:-.01em; }
+  .lede2 { color:#55555e; margin:6px 0 0; max-width:1180px; }
+</style>
+
+<h1>批量建任务确认页「Create 3 tasks?」：先看结论，再看任务，任务能点开</h1>
+<p class="lede">截图里这张 sheet 有三个硬伤：<b>右上角 ✕ 被画成了蓝色主按钮</b>，和「Create them」抢着当确认键；
+<b>标题说了两遍</b>（外加 <code>new tasks</code> 徽标），真正要你判断的后果却塞在一颗像按钮的蓝药丸里；
+<b>三个任务标题是等宽灰字</b>，挤成一坨、分不清边界，而且点不开 —— 每个任务的描述和验收标准明明就在卡片的 input 里。
+下面 ② ③ 用的就是这三个任务的真实标题、验收标准和描述（项目「Google 账号登录与开放注册」，10-07 00:40 建的那批）；④ 是同一套样式遇到有依赖的批次时的样子（示例数据）。</p>
+
+<div class="row">
+
+  <!-- ① 现状 ─────────────────────────────────────────────────── -->
+  <figure>
+    <span class="tag now">① 现状（你的截图）</span>
+    <div class="phone" id="today">
+      <img class="shot" src="today.png" alt="">
+      <div class="mk" style="left:327px;top:69px;width:56px;height:56px;border-radius:50%"><b style="left:-14px;top:-10px">1</b></div>
+      <div class="mk" style="left:10px;top:139px;width:375px;height:34px"><b style="left:-9px;top:-12px">2</b></div>
+      <div class="mk" style="left:10px;top:175px;width:337px;height:31px"><b style="left:-9px;top:-11px">3</b></div>
+      <div class="mk" style="left:10px;top:207px;width:150px;height:22px"><b style="left:156px;top:-1px">4</b></div>
+      <div class="mk" style="left:10px;top:233px;width:375px;height:115px"><b style="left:356px;top:-12px">5</b></div>
+      <div class="mk" style="left:10px;top:358px;width:375px;height:342px;border-color:rgba(229,72,77,.55)">
+        <b style="left:-9px;top:-12px">6</b><span class="lab" style="left:113px;top:158px">≈ 370pt 空白</span></div>
+      <div class="mk" style="left:10px;top:718px;width:375px;height:90px"><b style="left:-9px;top:-12px">7</b></div>
+    </div>
+    <figcaption>
+      <ol>
+        <li><b>✕ 是蓝色实心的</b>：它放在 <code>.confirmationAction</code> 位，iOS 26 会把这个位置画成主按钮，看上去像「确认」。</li>
+        <li><b>标题第二遍</b>：导航栏已经是「Create 3 tasks?」，正文又画一遍，再加一个 <code>new tasks</code> 徽标。</li>
+        <li><b>后果在蓝药丸里</b>：主色浅底，像一个能点的标签；一句长英文挤在里面，没有轻重。</li>
+        <li><b>孤立的「·」</b>：没有清单名、没有依赖边时，前缀 <code>" · "</code> 照样加上。</li>
+        <li><b>等宽灰字</b>：三条标题连成一片，看不出哪条从哪开始；中文在等宽字体里很散；也点不开。</li>
+        <li><b>大片白</b>：sheet 是 <code>.large</code>，内容只占上面三分之一。</li>
+        <li><b>按钮</b>：主按钮不说数量；「Chat about this」白底放在浅灰栏上，几乎看不出是按钮。</li>
+      </ol>
+    </figcaption>
+  </figure>
+
+  <!-- ② 建议 · 默认 ─────────────────────────────────────────── -->
+  <figure>
+    <span class="tag new">② 建议 · 打开时</span>
+    <div class="phone" id="proposal">
+      <div class="status"><span>8:40</span><span class="r"><span class="bars"><i style="height:5px"></i><i style="height:7.5px"></i><i style="height:10px"></i><i style="height:12px;opacity:.35"></i></span>5G<span class="batt">41</span></span></div>
+      <div class="sheet">
+        <div class="grabber"></div>
+        <div class="nav">
+          <span class="t">Create 3 tasks?</span>
+          <span class="glass r"><svg viewBox="0 0 17 17"><path d="M3.5 3.5l10 10M13.5 3.5l-10 10" stroke="#1d1d1f" stroke-width="2.1" stroke-linecap="round"/></svg></span>
+        </div>
+        <div class="content">
+          <div class="group">
+            <div class="impact">
+              <span class="ic gray"><svg viewBox="0 0 17 17"><circle cx="8.5" cy="8.5" r="7.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M6.6 5.6v5.8M10.4 5.6v5.8" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span>
+              <div><div class="k">3 need a manual start</div><div class="why">Nothing will trigger them</div></div>
+            </div>
+          </div>
+          <div class="sechead">3 independent tasks</div>
+          <div class="group list-flat">
+            <div class="task"><span class="num">1</span><div class="tt">管理员共享模型提供方的 API key 会下发到任何账号的 runner（开放注册前需所有者决定）</div>
+              <span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+            <div class="task"><span class="num">2</span><div class="tt">池网关原样转发 OpenAI-Organization / OpenAI-Project，池成员能让别人贡献的 key 被标为 INVALID</div>
+              <span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+            <div class="task"><span class="num">3</span><div class="tt">T1 用户路由普查补读 JWT 路由的 id 头与无类型请求体，并在 pg 里演示 JWT 门上的同类修复</div>
+              <span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+          </div>
+        </div>
+        <div class="bar">
+          <div class="btn primary">Create 3 tasks</div>
+          <div class="btn second">Chat about this</div>
+        </div>
+      </div>
+      <div class="home"></div>
+    </div>
+    <figcaption class="ok">
+      <ol>
+        <li><b>✕ 回到中性</b>：白色玻璃圆钮，确认只剩底部一个蓝色按钮。</li>
+        <li><b>标题只在导航栏</b>：正文不再画卡头和徽标，第一眼就是后果。</li>
+        <li><b>后果卡</b>：图标 + 粗体结论 + 灰字原因。文案不改，只在「 — 」处拆成两行（第二行首字母大写）。</li>
+        <li><b>形状句当分组标题</b>：「3 independent tasks」，前面不再有孤立的点。</li>
+        <li><b>任务是列表</b>：黑色比例字、序号、分隔线，一眼数得清；每行带 ›，点开看详情（③）。</li>
+        <li><b>分组灰底 + 白卡片</b>：下面的空余是底色，不再是一整块白。</li>
+        <li><b>按钮</b>：「Create 3 tasks」写明数量；「Chat about this」换成看得见的灰底。</li>
+      </ol>
+    </figcaption>
+  </figure>
+
+  <!-- ③ 建议 · 点开第 1 条 ───────────────────────────────────── -->
+  <figure>
+    <span class="tag new">③ 建议 · 点开第 1 条</span>
+    <div class="phone" id="detail">
+      <div class="status"><span>8:40</span><span class="r"><span class="bars"><i style="height:5px"></i><i style="height:7.5px"></i><i style="height:10px"></i><i style="height:12px;opacity:.35"></i></span>5G<span class="batt">41</span></span></div>
+      <div class="sheet">
+        <div class="grabber"></div>
+        <div class="nav">
+          <span class="glass l"><svg viewBox="0 0 17 17"><path d="M10.8 2.8L5 8.5l5.8 5.7" fill="none" stroke="#1d1d1f" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="t">Task 1 of 3</span>
+          <span class="glass r"><svg viewBox="0 0 17 17"><path d="M3.5 3.5l10 10M13.5 3.5l-10 10" stroke="#1d1d1f" stroke-width="2.1" stroke-linecap="round"/></svg></span>
+        </div>
+        <div class="content">
+          <div class="dt-title">管理员共享模型提供方的 API key 会下发到任何账号的 runner（开放注册前需所有者决定）</div>
+          <div class="chips"><span class="chip">Judged by · submitted evidence</span><span class="chip">google-sign-in</span></div>
+          <div class="sechead">Done when</div>
+          <div class="group"><div class="prose"><p>任务评论里记录了所有者的决定。scripts/run-pg-spec.sh 跑的 pg spec 全部通过、零跳过，并显示：按该决定未获准的账号用共享提供方 slug 建会话或被派发均被拒绝，且该账号任何会话的注入环境里没有该提供方的 key；获准的账号照常可用。项目合并检查在最终提交上通过。</p></div></div>
+          <div class="sechead">Description</div>
+          <div class="group"><div class="prose">
+            <p>背景：T2 租户隔离普查（任务 34bRA94WvvYHXeB74nFsI）发现，owner_id 为空的模型提供方，即管理员的共享提供方（RealtimeService.publishForAllUsers 注释称之为 "the shared (admin-owned) model providers"），对所有账号都可用。会话的 provider 按 <code>OR: [{ ownerId: null }, { ownerId }]</code> 解析：src/apiserver/src/providers/custom-provider.ts 第 156 行 sessionExecRuntime、第 186 行 providerSlugsOn，以及 src/apiserver/src/queue/queue.service.ts 第 733 行的派发路径。派发时 custom-provider.ts 第 240 行 injectedEnv 把该行的 apiKeyEnc 解密，放进交给 runner 的会话环境（第 473 行）。任何账号都可以在自己注册的 runner 上用这样的 slug 开会话，再从引擎的环境变量里读出管理员的 key。</p>
+            <p>要做：</p>
+            <ol><li>用 ask_owner 请所有者决定策略，不要自行选择。</li><li>按决定实现，覆盖上面列出的所有解析点（会话创建、派发认领、运行时解析、列表）。</li><li>写 pg spec，用 scripts/run-pg-spec.sh 跑。</li></ol>
+          </div></div>
+        </div>
+      </div>
+      <div class="home"></div>
+    </div>
+    <figcaption class="ok">
+      <ul>
+        <li>点 ② 的任意一行，在同一个 sheet 里推进来一页；左上 ‹ 返回，✕ 直接关掉。</li>
+        <li><b>先「Done when」，再描述</b>：验收标准是你判断的尺子，放前面；描述是写给执行 agent 的长文，放后面、可往下滚。</li>
+        <li>标签行用任务详情里已有的说法（<code>Judged by · submitted evidence</code>）。</li>
+        <li><b>这一页不放 Create 按钮</b>：在单个任务的页面上按「Create」，容易被理解成只建这一个。决定回到 ② 再做。</li>
+        <li>数据全在卡片 input 的 <code>tasks[0]</code> 里（标题、验收标准、描述、判定方式、标签），不用多请求一次服务端。</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+  <!-- ④ 建议 · 有依赖的批次 ─────────────────────────────────── -->
+  <figure>
+    <span class="tag new">④ 建议 · 有依赖的批次（示例数据，细节见 dependencies.html）</span>
+    <div class="phone" id="dag"><div class="status"><span>8:40</span><span class="r"><span class="bars"><i style="height:5px"></i><i style="height:7.5px"></i><i style="height:10px"></i><i style="height:12px;opacity:.35"></i></span>5G<span class="batt">41</span></span></div><div class="sheet"><div class="grabber"></div><div class="nav"><span class="t">Create 4 tasks?</span><span class="glass r"><svg viewBox="0 0 17 17"><path d="M3.5 3.5l10 10M13.5 3.5l-10 10" stroke="#1d1d1f" stroke-width="2.1" stroke-linecap="round"/></svg></span></div><div class="content"><div class="group"><div class="impact"><span class="ic green"><svg viewBox="0 0 17 17"><path d="M5.2 3.3v10.4c0 .5.5.8.9.5l8-5.2c.4-.2.4-.8 0-1L6.1 2.8c-.4-.3-.9 0-.9.5z" fill="currentColor"/></svg></span><div><div class="k">1 starts running within the minute</div></div></div><div class="impact"><span class="ic gray"><svg viewBox="0 0 17 17"><path d="M4.3 1.8h8.4M4.3 15.2h8.4M5.2 1.8c0 3.6 3.3 4.6 3.3 6.7S5.2 11.6 5.2 15.2M11.8 1.8c0 3.6-3.3 4.6-3.3 6.7s3.3 3.1 3.3 6.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span><div><div class="k">3 wait on a prerequisite</div></div></div></div><div class="sechead">into Backlog · 5 dependency edges · 3 levels, up to 2 in parallel</div><div class="levels"><div class="lvblock"><div class="lv"><i class="dot"></i><b>Level 1</b></div><div class="group list-flat"><div class="task"><span class="num">1</span><div class="tt">Google OAuth 回调与身份落库<div class="wait">Waits on a task outside</div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div><div class="lvblock"><div class="lv"><i class="dot"></i><b>Level 2</b> · 2 in parallel</div><div class="group list-flat"><div class="task"><span class="num">2</span><div class="tt">登录页加「用 Google 登录」按钮<div class="wait">Waits on <span class="mini">1</span></div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="task"><span class="num">3</span><div class="tt">首次登录自动建账号与默认 workspace<div class="wait">Waits on <span class="mini">1</span></div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div><div class="lvblock"><div class="lv"><i class="dot"></i><b>Level 3</b></div><div class="group list-flat"><div class="task"><span class="num">4</span><div class="tt">开放注册 e2e：新账号看不到别人的 runner<div class="wait">Waits on <span class="mini">2</span><span class="mini">3</span></div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div></div></div><div class="bar"><div class="btn primary">Create 4 tasks</div><div class="btn second">Chat about this</div></div></div><div class="home"></div></div>
+    <figcaption class="ok">
+      <ul>
+        <li><b>四种后果各有图标和色调</b>，与 Web 卡片的 run / block 色调一致：马上开跑 = 绿色播放，等前置 = 灰色沙漏，需手动启动 = 灰色暂停，跑不了 = 橙色感叹号。</li>
+        <li><b>按层排</b>：第几层 = 它在本批里最深的前置 + 1，和 Web 依赖图同一个算法；同一层的互不依赖，可以并行。</li>
+        <li><b>每行写全它在等哪几条</b>（第 4 条写「Waits on 2 3」）；一个任务等两个前置也不丢信息。</li>
+        <li>编号按层往下数，和任务页标题「Task 4 of 4」对得上。各种形状（链、扇出、大批次）见 <code>dependencies.html</code>。</li>
+      </ul>
+    </figcaption>
+  </figure>
+</div>
+
+<div class="notes">
+  <div class="note">
+    <h3>落到代码上（只动 iOS/macOS 的 SwiftUI 层，服务端和数据不变）</h3>
+    <ol>
+      <li><b>✕</b>：<code>ApprovalReview.swift</code> 的关闭按钮从 <code>.confirmationAction</code> 换到 <code>.topBarTrailing</code>（macOS 保持原样）—— <code>ShareSheet</code> 已经这么分过平台。</li>
+      <li><b>不重复标题</b>：sheet 里（<code>inApprovalReview</code>）批卡的 <code>details</code> 不再画 <code>ApprovalHeader</code>；对话里那张紧凑卡照旧有卡头。</li>
+      <li><b>后果卡</b>：<code>ImpactPill</code> → 带图标的行；<code>batchImpactLines</code> 的字符串不变，按「 — 」拆粗体 / 灰字。单任务卡也用这颗药丸，跟着一起换，两张卡仍是一家。</li>
+      <li><b>孤立的「·」</b>：清单名、边数、形状三段先过滤空串再用 <code>" · "</code> 连接（现在 <code>shapeSuffix</code> 无条件带前缀）。</li>
+      <li><b>任务列表</b>：<code>OrbitAskBody</code> 的 <code>mono</code> 树行换成按层分组的列表（分层算法从 Web 的 <code>batchGraph.ts</code> 搬到 OrbitKit，替掉 <code>batchTreeRows</code>），比例字 + 序号 + 「Waits on」；每行 <code>NavigationLink</code> 推入任务页，读 <code>approval.input["tasks"][i]</code>。</li>
+      <li><b>底色</b>：review 模式的 ScrollView 用分组底色，内容放白卡片。</li>
+      <li><b>按钮文案</b>：「Create them」→「Create N tasks」，Web 的 <code>ApprovalPanel.tsx</code> 同一个按钮一起改，两端说法一致。</li>
+    </ol>
+  </div>
+  <div class="note">
+    <h3>刻意没改的</h3>
+    <ul>
+      <li><b>后果文案本身</b>：「3 need a manual start — nothing will trigger them」两端共用、有测试锁着，这里只改排版。</li>
+      <li><b>sheet 高度</b>：仍是 <code>.large</code>。所有审批共用这个 sheet，有的很长；按内容自适应高度会在展开 / 收起时跳，收益不值。</li>
+      <li><b>按钮高度</b>：34pt 是 <code>ApprovalMetrics</code> 注释里定下来的，这次不碰。</li>
+      <li><b>每个任务单独标「马上开跑 / 等待」</b>：服务端预览只给总数，不给逐条结果；要做得先改预览接口，不在这次范围里。</li>
+    </ul>
+  </div>
+</div>
+</html>
