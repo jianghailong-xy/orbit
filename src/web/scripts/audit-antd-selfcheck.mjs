@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { retirementBlockers, scanText } from './audit-antd.mjs';
+import { ownerGaps, retirementBlockers, scanText } from './audit-antd.mjs';
 
 const mixed = scanText('src/web/src/fixture.test.tsx', `import {
   App as AntApp,
@@ -67,3 +67,25 @@ assert.equal(scanText('src/web/src/test.spec.ts', '').category, 'test');
 assert.deepEqual(scanText('src/web/src/index.css', '@import "antd/dist/reset.css";').imports.map((item) => item.kind), ['css-import']);
 assert.deepEqual(scanText(mixed.path, 'same text'), scanText(mixed.path, 'same text'));
 console.log('audit-antd self-check passed: imports, aliases, types, mocks, selectors, refs, deterministic output and icon-safe retirement gate.');
+
+// --check-owners: P0.1 owners hold until a file gains a symbol or kind; index.css goes by line text.
+const owned = scanText('src/web/src/components/Old.tsx', "import { Button } from 'antd';");
+const grown = scanText('src/web/src/components/Old.tsx', "import { Button, Modal } from 'antd';");
+const fresh = scanText('src/web/src/components/New.tsx', "import { Table } from 'antd';");
+const css = (text) => scanText('src/web/src/index.css', text);
+const gapsOf = (files, records = []) => ownerGaps({ files }, {
+  baseline: { files: [owned, css('.a .ant-btn {')] }, ownership: { files: { [owned.path]: { phase: 'P4.3' } } },
+  css: { groups: [{ from: 1, to: 1, phase: 'P4.2' }] }, testPhases: new Map(), records,
+});
+assert.deepEqual(gapsOf([owned, css('.a .ant-btn {')]).unowned, []);
+assert.deepEqual(gapsOf([grown]).unowned.map((point) => point.path), [owned.path]);
+assert.deepEqual(gapsOf([fresh, css('.b .ant-tag {\n.a .ant-btn {')]).unowned.map((point) => point.line ?? point.path), [fresh.path, 1]);
+const record = {
+  name: '2026-01-01.json', inactiveOwners: { 'P4.3': 'split' },
+  files: { [fresh.path]: { owner: 'P4.1' }, [owned.path]: { owner: null, pending: { candidates: ['P4.3a', 'P4.3b'] } } },
+  css: [{ kind: 'ant-class', text: '.b .ant-tag {', count: 1, owner: 'P4.2', status: 'new' }],
+};
+const judged = gapsOf([grown, fresh, css('.b .ant-tag {\n.a .ant-btn {')], [record]);
+assert.deepEqual([judged.unowned, judged.pending.map((point) => point.path), judged.owners], [[], [owned.path], { 'P4.1': 1, 'P4.2': 2 }]);
+assert.equal(gapsOf([owned], [{ name: record.name, inactiveOwners: record.inactiveOwners }]).unowned[0].reason, 'owner P4.3: split');
+console.log('audit-antd owner self-check passed: P0.1 owners, growth since P0.1, delta records, pending and inactive owners, index.css by text.');

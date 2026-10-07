@@ -60,7 +60,7 @@ export interface EnginePreflightRunner {
   capabilities?: readonly string[];
 }
 
-function bringsOwnEnvCredential(engine: LoginEngine, workspaceEnv: unknown): boolean {
+export function bringsOwnEnvCredential(engine: LoginEngine, workspaceEnv: unknown): boolean {
   if (!workspaceEnv || typeof workspaceEnv !== 'object') return false;
   const env = workspaceEnv as Record<string, unknown>;
   const has = (key: string) => typeof env[key] === 'string' && env[key].trim() !== '';

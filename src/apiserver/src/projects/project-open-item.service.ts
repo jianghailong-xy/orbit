@@ -769,6 +769,16 @@ export class ProjectOpenItemService {
    * that has just started. The plan is checked under it and a plan that is not ready is refused with
    * every finding, writing nothing; one that is ready supersedes the request already open, if any,
    * and files this one — unless it is that same request again, which writes nothing.
+   *
+   * The check's warnings are the COORDINATOR's, and only its: they come back in this answer and are
+   * not filed with the request (the owner, 2026-10-07). Every one of them is about how the plan is
+   * written — work that looks codeless, tasks set to start by hand, no merge check — which only the
+   * coordinator can change, and a card that opened on a freshly planned project with a column of
+   * warnings the owner could do nothing about was the experience being removed. So the stored
+   * payload carries none, which is also what the two clients draw from.
+   *
+   * Automatic left out is on: the owner's card opens with it on whatever is sent, and a coordinator
+   * that would keep it off says so in `why`.
    */
   async requestStart(
     ownerId: string,
@@ -790,7 +800,7 @@ export class ProjectOpenItemService {
     const settings: ProjectStartSettings = {
       line: body.line,
       ...(body.projectBranchName != null ? { projectBranchName: body.projectBranchName } : {}),
-      automatic: body.automatic,
+      automatic: body.automatic ?? true,
       maxConcurrentTasks: body.maxConcurrentTasks,
       mergeCheckCommand: body.mergeCheckCommand?.trim() || null,
     };
@@ -844,14 +854,22 @@ export class ProjectOpenItemService {
         criteriaDigest: plan.criteriaDigest,
         planDigest: plan.planDigest,
         repository: plan.repository,
-        warnings: findings,
+        // The coordinator's, returned below and not filed: see above.
+        warnings: [],
       };
       const open = await tx.projectOpenItem.findFirst({
         where: { projectId, kind: START_REQUEST_KIND, state: 'OPEN' },
         select: { id: true, payload: true },
       });
       if (open && canonicalJson(open.payload) === canonicalJson(request)) {
-        return { ...request, itemId: open.id, state: 'OPEN', alreadyOpen: true, superseded: null };
+        return {
+          ...request,
+          warnings: findings,
+          itemId: open.id,
+          state: 'OPEN',
+          alreadyOpen: true,
+          superseded: null,
+        };
       }
       const now = new Date();
       // Named before either write, so the request it replaces can say which one did — a row that is
@@ -893,6 +911,7 @@ export class ProjectOpenItemService {
       });
       return {
         ...request,
+        warnings: findings,
         itemId,
         state: 'OPEN',
         alreadyOpen: false,

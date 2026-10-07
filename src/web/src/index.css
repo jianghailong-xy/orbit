@@ -8905,6 +8905,30 @@ button.chat-jump-start:hover {
   color: var(--brand);
 }
 
+/* The refusal card over a conversation whose run never started (RunNeverStartedCard). Same
+   skeleton as the remedy cards above — that is the point, one fact one card — plus the three
+   lines they do not have: the line that names the situation (the weight the repair cards give
+   their title, carried here by the sentence under it), the ref the run was pinned to, and the one
+   step that changes the answer, set off by a rule because it is the card's conclusion. */
+.run-never-started-why {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.run-never-started-subject {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+.run-never-started-next {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--warning-border);
+  color: var(--text-1);
+}
+.run-never-started-foot {
+  margin-top: 9px;
+}
+
 /* Provider quota exhausted. Not an error — a pause — and the card's weight follows one
    question: does the reader still have to do something? While a retry is armed the answer is
    no, so this sits neutral, a status line rather than an alarm; a card that stays orange for
@@ -10314,9 +10338,10 @@ button.chat-jump-start:hover {
 }
 
 /* ── Start this project? ─────────────────────────────────────────────────────────────────
-   `StartProjectCard.tsx`: the settlement card's shell, with three sections under it — the
-   criteria, the plan, and How it runs, drawn with the integration settings card's own rows
-   (`.project-integration-setting`) in a raised panel. Mock: start-mock/board2-start-web.html. */
+   `StartProjectCard.tsx`: the settlement card's shell, answering three questions in order — what
+   done is (the criteria), how much is delegated and what still comes to the owner (How it runs),
+   and the plan by level — with Start held at the bottom of the scroll and a line under it saying
+   what the press does. Mocks: docs/mocks/start-card-redesign (v2, approved 2026-10-07). */
 /* On a phone the start card rises as a sheet (`ProjectStartDialog`), whose own title already asks
    the card's question: the card does not ask it twice. */
 .start-card-sheet .settlement-card-head {
@@ -10336,18 +10361,123 @@ button.chat-jump-start:hover {
 .start-card-section + .settlement-card-criteria {
   margin-top: 4px;
 }
-.start-card-section-aside {
-  margin-left: auto;
+.start-card-project {
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.35;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+/* The coordinator's own words, three lines until More. */
+.start-card-quote {
+  margin-top: 10px;
+  padding: 8px 12px 9px;
+  border-radius: 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+}
+.start-card-quote-head {
   font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--brand);
+  color: var(--text-3);
+}
+.start-card-quote-text {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-1);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.start-card-quote-text.is-open {
+  display: block;
+}
+.start-card-quote .start-card-link {
+  margin-left: 0;
+  font-size: 12.5px;
 }
 .start-card-plan {
   font-size: 13px;
   line-height: 1.65;
   color: var(--text-1);
+}
+/* The plan by level: a number per level, and the levels joined by a thin line down the left. */
+.start-card-levels {
+  position: relative;
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+}
+.start-card-levels::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 12px;
+  bottom: 12px;
+  width: 1px;
+  background: var(--border-subtle);
+}
+.start-card-level {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+}
+.start-card-level-number {
+  flex: none;
+  z-index: 1;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-raised);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 19px;
+  text-align: center;
+  color: var(--text-3);
+}
+.start-card-task {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.start-card-task b {
+  flex: none;
+  font-weight: 650;
+}
+.start-card-task-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.start-card-parallel {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.start-card-pill {
+  flex: none;
+  margin-left: auto;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 18px;
+}
+.start-card-pill.is-now {
+  color: var(--success);
+  background: var(--success-bg);
+}
+.start-card-pill.is-you {
+  color: var(--brand);
+  background: var(--brand-tint);
 }
 .start-card-link {
   margin-left: 6px;
@@ -10372,26 +10502,98 @@ button.chat-jump-start:hover {
   color: var(--warning);
 }
 .start-card-settings {
-  padding: 0 12px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 8px;
   background: var(--bg-raised);
 }
+/* One setting per row: its name, and its value or control at the end. */
+.start-card-row {
+  padding: 10px 12px;
+}
+.start-card-row + .start-card-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.start-card-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13.5px;
+  color: var(--text-1);
+}
+.start-card-row-button {
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.start-card-row-value {
+  color: var(--text-3);
+}
+.start-card-row .start-card-mono {
+  margin-top: 8px;
+}
+.start-card-hint {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.start-card-line {
+  min-width: 170px;
+}
+.start-card-line-option {
+  max-width: 340px;
+  white-space: normal;
+}
+.start-card-line-option .start-card-branch {
+  margin-left: 6px;
+}
+/* What a start with Automatic on does for a project with no coordinator: opens one. */
+.start-card-opens {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+/* What still comes to the owner, under the switch: the switch's consequence, as a list. */
+.start-card-comes {
+  margin-top: 10px;
+  padding: 8px 12px 9px;
+  border-radius: 8px;
+  background: var(--brand-tint);
+}
+.start-card-comes-head {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+.start-card-comes ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-1);
+}
+.start-card-comes-detail {
+  color: var(--text-3);
+}
 /* The two lines, one under the other; the class makes these rules outrank antd's own
-   `.ant-radio-group` / `.ant-radio-wrapper` ones, which would otherwise win on order. How it runs
-   (`.project-run-settings`) draws the same two. */
-.start-card-settings .start-card-lines,
+   `.ant-radio-group` / `.ant-radio-wrapper` ones, which would otherwise win on order. */
 .project-run-settings .project-run-lines {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.start-card-settings .start-card-lines .ant-radio-wrapper,
 .project-run-settings .project-run-lines .ant-radio-wrapper {
   align-items: flex-start;
   margin-inline-end: 0;
 }
-.start-card-settings .start-card-lines .ant-radio,
 .project-run-settings .project-run-lines .ant-radio {
   align-self: flex-start;
   margin-top: 3px;
@@ -10430,25 +10632,14 @@ button.chat-jump-start:hover {
   line-height: 1.5;
   color: var(--text-3);
 }
-.start-card-checked {
-  display: flex;
-  gap: 7px;
-  margin: 12px 0 0;
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--text-2);
-}
-.start-card-tick {
-  flex: none;
-  font-weight: 700;
-  color: var(--success);
-}
-/* 443px and the like: the settings rows go to one column at the integration card's own 640px
-   breakpoint, and the lines keep their names and lose their descriptions. */
-@media (max-width: 640px) {
-  .start-card-option-hint {
-    display: none;
-  }
+/* Start, with the line saying what pressing it does under it. (The card's own `overflow: hidden`
+   rules out holding it at the bottom of a scrolling dialog; iOS pins it.) */
+.start-card-caption {
+  margin: 4px 14px 8px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--text-3);
 }
 
 /* ── Confirm the new criteria? ───────────────────────────────────────────────────────────
@@ -17202,6 +17393,54 @@ button.chat-jump-start:hover {
   color: var(--text-2);
   font-weight: 600;
 }
+/* A refused-start blocker (SOURCE_UNRESOLVED): the sentence that names the situation, the kind and
+   ref it is about, and the rows of the runs the line refused. Same type scale as the row's other
+   lines — this is one more thing the blocker says, not a card inside a card. */
+.project-blockers-why {
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.project-blockers-refusal {
+  margin-top: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace;
+  font-size: 11.5px;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+.project-blockers-tasks {
+  margin: 7px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.project-blockers-tasks li {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 3px 0;
+  font-size: 12.5px;
+}
+.project-blockers-task-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--danger, #c53b3b);
+  transform: translateY(-1px);
+}
+.project-blockers-task-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-blockers-task-state {
+  flex: none;
+  color: var(--text-3);
+  font-size: 12px;
+}
 .project-blockers-paths {
   margin-top: 6px;
   font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace;
@@ -18697,37 +18936,12 @@ div.landing-jobs-open {
     justify-content: flex-start;
   }
 }
-/* A card drawn without AntD, which components/ui has none of (docs/evidence/base-ui-migration/
-   component-contracts.md: Card → a native section and its own styles): the box, head and padding of
-   the AntD Card it sits beside on the profile page, from the same tokens. */
-.orbit-card {
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: var(--bg-raised);
+/* Profile → Sign-in methods (docs/google-sign-in-design.md §8.1), a card (components/ui/Card) between
+   Basic information and Change password: one row per way in, what it is on the left and its action on
+   the right. */
+.profile-signin {
   margin-bottom: 16px;
 }
-.orbit-card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 56px;
-  padding: 0 24px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.orbit-card-title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 24px;
-  color: var(--text-1);
-}
-.orbit-card-body {
-  padding: 24px;
-}
-
-/* Profile → Sign-in methods (docs/google-sign-in-design.md §8.1): one row per way in, what it is on
-   the left and its action on the right. */
 .signin-method {
   display: flex;
   align-items: center;
@@ -18792,8 +19006,10 @@ div.landing-jobs-open {
 .admin-page > .page-title {
   margin-bottom: 16px;
 }
+/* Its form is a card (the class names of components/ui/Card, which a form root cannot render). */
 .admin-signin {
   max-width: 640px;
+  margin-bottom: 16px;
 }
 .admin-signin-fields {
   display: grid;
@@ -18947,7 +19163,7 @@ div.landing-jobs-open {
   gap: 6px;
   justify-items: stretch;
 }
-.access-token-field .ant-radio-group {
+.access-token-field .orbit-radio-group {
   justify-self: start;
 }
 .access-token-label {
@@ -18974,6 +19190,89 @@ div.landing-jobs-open {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+/* Unitless line height, as the dialog this one replaced had: its 12px help keeps its own proportional
+   line. The shared Dialog shell stays at 22px. */
+.access-token-dialog.orbit-overlay {
+  line-height: 1.5714285714285714;
+}
+/* /cli-login (CliLoginPage): the requested token as a bordered two-column table with 136px labels on
+   the alternate fill, and where the request ended up, centred under a 72px status icon. */
+.cli-login-details {
+  margin-bottom: 16px;
+  border: 1px solid var(--orbit-border-split);
+  border-radius: 8px;
+  color: var(--text-1);
+  font-size: 14px;
+  line-height: 1.5714285714285714;
+}
+.cli-login-details table {
+  min-width: 100%;
+  table-layout: auto;
+  border-collapse: collapse;
+}
+.cli-login-details tr {
+  border-bottom: 1px solid var(--orbit-border-split);
+}
+.cli-login-details tr:last-child {
+  border-bottom: none;
+}
+.cli-login-details th,
+.cli-login-details td {
+  box-sizing: border-box;
+  padding: 8px 16px;
+  text-align: start;
+}
+.cli-login-details th {
+  width: 136px;
+  border-inline-end: 1px solid var(--orbit-border-split);
+  background: var(--orbit-fill-alter);
+  color: var(--text-2);
+  font-weight: normal;
+  white-space: nowrap;
+}
+.cli-login-details td {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.cli-login-details tr:first-child > th {
+  border-start-start-radius: 8px;
+}
+.cli-login-details tr:last-child > th {
+  border-end-start-radius: 8px;
+}
+.cli-login-result {
+  padding: 48px 32px;
+}
+.cli-login-result-icon {
+  margin-bottom: 24px;
+  text-align: center;
+}
+.cli-login-result-icon > .anticon {
+  font-size: 72px;
+}
+.cli-login-result[data-status='success'] .cli-login-result-icon {
+  color: var(--orbit-badge-success);
+}
+.cli-login-result[data-status='info'] .cli-login-result-icon {
+  color: var(--orbit-control-primary);
+}
+.cli-login-result[data-status='warning'] .cli-login-result-icon {
+  color: var(--orbit-badge-warning);
+}
+.cli-login-result-title {
+  margin-block: 8px;
+  color: var(--text-1);
+  font-size: 24px;
+  /* The replaced title's 32px line, in pixels: the build would round a 1.3333 ratio short of it. */
+  line-height: 32px;
+  text-align: center;
+}
+.cli-login-result-subtitle {
+  color: var(--text-3);
+  font-size: 14px;
+  line-height: 1.5714285714285714;
+  text-align: center;
 }
 .watch-card {
   overflow: hidden;

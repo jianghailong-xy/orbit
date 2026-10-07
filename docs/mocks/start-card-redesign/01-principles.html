@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Start 卡片重新设计：原理</title>
+<link rel="stylesheet" href="../start-card-plan-warnings/kit.css">
+<link rel="stylesheet" href="kit.css">
+<script src="../start-card-plan-warnings/kit.js"></script>
+<script src="kit.js"></script>
+<style>
+  body { width: 1760px; }
+  .main { display: flex; gap: 28px; align-items: flex-start; }
+  .main > .left { width: 1100px; flex: none; }
+  .main > .right { flex: 1; min-width: 0; }
+  .cmp { gap: 14px; }
+  table.mx td:first-child, table.mx th:first-child { width: 230px; }
+</style>
+</head>
+<body>
+<h1>Start 卡片重新设计：从“按下 Start 到底改变了什么”出发（第 2 版）</h1>
+<p class="lede">上一版只修了黄字。这一版从头问：<b>owner 在这张卡上要做什么决定？</b>页面的每一部分都要回答其中一个决定需要的问题；回答不了的，挪走或压成一行。</p>
+<p class="lede">依据是代码里 Start 的实际行为（<code>POST /projects/:id/start</code>、Automatic 对证据审核和问题分派的影响）和产品文档里写下的理念，出处都标在下面。</p>
+<p class="lede"><b>第 2 版按 owner 10-07 的决定改过：</b>① Automatic 默认开；② 卡片上不放 owner 不关心的提醒，刚建好的项目不该一打开就有警告；③ 合并检查可以为空；④ 项目还没有协调者时，按下 Start 顺手建一个。</p>
+
+<div class="main">
+<div class="left">
+
+<div class="panel">
+  <h2>第一性原理：按下 Start，实际发生三件事</h2>
+  <p class="hint">一次写入：标准的 seal、四项设置、它回答的那份请求。</p>
+  <div class="three">
+    <div class="c own"><div class="k">1 · 只有你能做</div><h3>确认“做完”的定义</h3>
+      <p>7 条验收标准被封存（seal）。之后项目是不是 done，只从这 7 条推出来：每条都满足、都落到 main，而且你确认的是当前这一版。改标准、确认标准，是产品里只能由你做的两件事（HUMAN_ONLY）。</p></div>
+    <div class="c"><div class="k">2 · 默认放手</div><h3>决定放多少手</h3>
+      <p>Automatic 默认开：任务做没做完、路上的冲突和检查失败、分支进不进 main，都由协调者处理；会找你的只剩 P10 的确认、标准变更、它 2 小时内解决不了的问题。关掉是你的选择，关掉后 11 次证据审核都会找你。项目还没有协调者时，开始时顺手建一个，Automatic 才有人跑。</p></div>
+    <div class="c"><div class="k">3 · 开始花资源</div><h3>让工作开始</h3>
+      <p>P1a 马上开工，其余 11 个按依赖接着跑，最多 3 个同时跑。协调者开始用 runner 和模型额度。</p></div>
+  </div>
+  <p class="hint" style="margin:14px 0 0">其余设置（落到哪条线、并发数、合并检查）开始以后都能在项目页的 How it runs 里改，落地线在第一次落地前也能改。所以它们不必在这里展开讲。</p>
+</div>
+
+<div class="panel">
+  <h2>所以这一页只回答三个问题</h2>
+  <p class="hint">按决定排，不按数据类型排。结果在前，过程在后。第四个问题“有没有要先处理的”，不该在这张卡上问你。</p>
+  <table class="mx">
+    <thead><tr><th>你要回答的问题</th><th class="new">新页面的一节</th><th>现在的卡片</th></tr></thead>
+    <tbody>
+      <tr><th>① 做完是什么样？</th><td class="new"><span class="k">Done when</span>：放在第一位，不折叠；下面一句写明 done 只从这几条推出。</td><td>有，但和计划、设置、提醒一样分量，排在中间。</td></tr>
+      <tr><th>② 放多少手？以后什么会找我？</th><td class="new"><span class="k">How it runs</span>：Automatic 默认开，下面直接列出“会找你的事”，开关一拨清单就变；其余设置一项一行。</td><td>开关跟着协调者的建议（这次是关），加一段 6 行说明，看不出后果；四项设置平铺。</td></tr>
+      <tr><th>③ 打算怎么做？</th><td class="new"><span class="k">Plan</span>：按层列出 12 个任务，P1a 标 Now，P10 标 You。</td><td>一行顺序字符串，编号认错，读不出先后。</td></tr>
+      <tr><th>④ 有没有要先处理的？</th><td class="new"><span class="k">不在这张卡上</span>：协调者能修的，在请求前修好（检查直接拒绝请求）；只跟协调者有关的，只告诉协调者。到你面前的卡片默认没有警告。</td><td>✓ 是底部一行小字；⚠ 是 6 段橙色原句，插在计划中间。这次 6 条全是误判。</td></tr>
+      <tr><th>→ 开始</th><td class="new"><span class="k">Start</span> 固定在底部，下面一行写明按下等于什么；右上角 Chat 用来先改点什么。</td><td>在 2,650 pt 长卡的最底下，要滑三屏多才能按到；项目页打开的 sheet 里没有 Chat。</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="panel">
+  <h2>产品理念 → 这一页的设计决定</h2>
+  <p class="hint">每条理念都摘自仓库里的文档或代码注释。</p>
+  <table class="mx">
+    <thead><tr><th>理念</th><th class="new">这一页怎么做</th></tr></thead>
+    <tbody>
+      <tr><th>Mission control：监督、可见、能干预，不承诺全自动<span class="src">docs/project-maturity.md</span></th><td class="new">默认放手（Automatic 开），但“会找你的事”写成清单，干预点一眼看得到；Start 下面写明按下等于什么。</td></tr>
+      <tr><th>标准和不可逆的事归你<span class="src">Automatic 的说明 · docs/human-only-authority.md</span></th><td class="new">标准放第一位；要你确认的 P10 在“会找你的事”和计划里都标出来。</td></tr>
+      <tr><th>任务完成是过程，验收是结果<span class="src">docs/ux/project-acceptance-consolidation.html</span></th><td class="new">结果（Done when）在前，过程（Plan）在后；计划只给大概，细节去 View tasks。</td></tr>
+      <tr><th>既不什么都不问，也不什么都问：给你一个拨盘<span class="src">docs/product-intro.md</span></th><td class="new">拨盘默认在 Automatic；两档各会找你几件事，按下之前就能看到。协调者建议关时只在说明里提一句。</td></tr>
+      <tr><th>平静、精确、对边界诚实<span class="src">docs/project-maturity.md</span></th><td class="new">卡片上只放你要决定、能决定的东西：不放内部词，不放你做不了什么的检查结果，刚建好的项目不带警告。</td></tr>
+      <tr><th>在手机上批<span class="src">docs/product-intro.md</span></th><td class="new">Start 固定在底部；开始后还能改的设置压成一行一项。</td></tr>
+      <tr><th>折叠的清单等于请人不读就签<span class="src">ApprovalCards.swift 的 criteriaList 注释</span></th><td class="new">标准不折叠，仍是每条两行加 Read all。</td></tr>
+      <tr><th>被请求才出现；一次按下，一次写入<span class="src">StartProject.swift 文件头</span></th><td class="new">保留：仍由协调者请求，Start 仍是一次写入，计划变了请求就作废。</td></tr>
+    </tbody>
+  </table>
+</div>
+
+</div>
+<div class="right">
+<div class="panel">
+  <h2>结构对比</h2>
+  <p class="hint">同一份请求的完整长度，按回答的问题上色。虚线是一屏。</p>
+  <div class="cmp">
+    <div class="col"><p class="cap">现在 <span data-fill="len-old"></span></p><div class="thumb" data-thumb="old"></div></div>
+    <div class="lab" data-lab="old" style="width:118px"></div>
+    <div class="col"><p class="cap">新页面 <span data-fill="len-new"></span></p><div class="thumb" data-thumb="new"></div></div>
+    <div class="lab" data-lab="new" style="width:112px"></div>
+  </div>
+  <ul class="rules" style="margin-top:16px">
+    <li><b style="color:#3E69F6">蓝</b> ① 做完是什么样 · <b style="color:#1F9D46">绿</b> ② 放多少手 · <b style="color:#9B3FD1">紫</b> ③ 计划 · <b style="color:#C86A10">橙</b> 检查和提醒 · <b>灰</b> 开始</li>
+    <li>新页面没有橙色：检查的结果和提醒不再上卡片。Start 一直在屏幕底部（缩略图里画在最后）。</li>
+  </ul>
+</div>
+</div>
+</div>
+
+<script>
+const SCALE = 0.245, VIEW = 794;
+function band(host, labCol, fromEl, toEl, cls, text) {
+  const inner = host.querySelector('.inner');
+  const base = inner.getBoundingClientRect().top;
+  const a = fromEl.getBoundingClientRect(), b = toEl.getBoundingClientRect();
+  const top = a.top - base - 2, h = b.bottom - a.top + 4;
+  const seg = document.createElement('div');
+  seg.className = `seg ${cls}`;
+  seg.style.top = `${top}px`;
+  seg.style.height = `${h}px`;
+  host.appendChild(seg);
+  const lab = document.createElement('div');
+  lab.className = cls;
+  lab.style.top = `${top + 22}px`;
+  lab.innerHTML = text;
+  labCol.appendChild(lab);
+}
+function folds(host, h) {
+  for (let y = VIEW, n = 1; y < h; y += VIEW, n += 1) {
+    const f = document.createElement('div');
+    f.className = 'fold';
+    f.style.top = `${(y + 58) * SCALE}px`;
+    host.appendChild(f);
+  }
+}
+window.__layout = () => {
+  const fmt = (h) => `约 ${(Math.round(h / 10) * 10).toLocaleString('en-US')} pt`;
+  // 现在：上一版图板里的卡片（../start-card-plan-warnings/kit.js 的 card('today')）
+  const oldHost = document.querySelector('[data-thumb="old"]');
+  const oldLab = document.querySelector('[data-lab="old"]');
+  oldLab.innerHTML = '';
+  thumb(oldHost, 'today', SCALE);
+  const oi = oldHost.querySelector('.inner');
+  const oh = oi.querySelector('.cd').offsetHeight;
+  oldLab.style.height = `${oi.offsetHeight * SCALE}px`;
+  const sh = oi.querySelectorAll('.cd > .sh');
+  const q = (s) => oi.querySelector(s);
+  band(oldHost, oldLab, sh[0], q('.cd > .rl'), 'q1', 'Done when');
+  band(oldHost, oldLab, q('[data-anchor]'), q('[data-plan] .ord').parentElement.querySelector('.vt'), 'q3', 'Plan（一行顺序）');
+  band(oldHost, oldLab, q('[data-mk-warns]'), q('[data-mk-warns]'), 'q4', '6 段提醒<br>约 990 pt');
+  band(oldHost, oldLab, q('[data-howhead]'), q('.cd > .coq'), 'q2', 'How it runs<br>四项平铺');
+  band(oldHost, oldLab, q('.cd > .ck'), q('.cd > .ck'), 'q4', '✓ 检查一行');
+  band(oldHost, oldLab, q('.cd > .go'), q('.cd > .go'), 'q5', `Start 在第 ${Math.ceil(oh / VIEW)} 屏`);
+  folds(oldHost, oh);
+  // 新页面
+  const newHost = document.querySelector('[data-thumb="new"]');
+  const newLab = document.querySelector('[data-lab="new"]');
+  newLab.innerHTML = '';
+  const nh = rThumb(newHost, { suggestedOff: true }, SCALE);
+  const ni = newHost.querySelector('.inner');
+  newLab.style.height = `${ni.offsetHeight * SCALE}px`;
+  const k = (s) => ni.querySelector(`[data-k="${s}"]`);
+  band(newHost, newLab, k('done'), k('donebody'), 'q1', '① Done when');
+  band(newHost, newLab, k('how'), k('howbody'), 'q2', '② How it runs<br>+ 会找你的事');
+  band(newHost, newLab, k('plan'), k('planbody'), 'q3', '③ Plan 按层');
+  band(newHost, newLab, ni.querySelector('.r-bar'), ni.querySelector('.r-bar'), 'q5', 'Start 固定在<br>屏幕底部');
+  folds(newHost, nh);
+  document.querySelector('[data-fill="len-old"]').textContent = fmt(oh);
+  document.querySelector('[data-fill="len-new"]').textContent = fmt(nh);
+};
+document.fonts.ready.then(() => window.__layout());
+</script>
+</body>
+</html>

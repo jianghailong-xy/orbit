@@ -491,7 +491,7 @@ export class ProjectAcceptanceService {
     projectId: string,
     input: StartProjectRequestBody,
     actingSessionId?: string,
-  ): Promise<StartProjectResponse> {
+  ): Promise<Omit<StartProjectResponse, 'coordinator'>> {
     const refusal = refuseSessionAuthoredConfirmation(actingSessionId);
     if (refusal) throw new ForbiddenException(refusal);
     if (input.line === 'MAIN' && input.projectBranchName !== undefined) {

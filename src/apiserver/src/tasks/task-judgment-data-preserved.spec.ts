@@ -1987,6 +1987,26 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // named. No INSERT, UPDATE or DELETE: no stored row is read, locked, backfilled or rewritten —
       // the columns are catalog-only, and every existing row keeps the flag false.
       '0393_integration_job_skip_merge_check',
+      // Closing the shells a SOURCE refusal left RUNNING (0394, docs/project-source-contract.md
+      // §10.3 / SR50): pure DML, and the first later migration that writes a preserved relation —
+      // three statements over one row set, a session that is `source_state = 'REFUSED' AND
+      // status = 'RUNNING'` with `run_claimed_at` still set. It UPDATEs those `session` rows
+      // (terminal status, the `<code>: <reason>` error line, the claim markers, the running-work
+      // sets), UPDATEs the `inbox_lease_generation` tombstone each held, and INSERTs the project's
+      // `SOURCE_UNRESOLVED` `project_blocker` item for the ones whose task is in a project. No DDL
+      // of any kind: no table, column, constraint, index, type, function or trigger is created,
+      // replaced, altered or dropped, so it is not another writer of the DONE fence (0230's body
+      // remains the only one this file accounts for) and it names none of the six preserved
+      // objects. `task` is READ — its `project_id`, to find the project to file the item against —
+      // and never written; no `session_merge_receipt`, `project_acceptance_*` or 0177 relation is
+      // touched, and `task.acceptance_command`, `task.acceptance_expected_exit_code`,
+      // `task_executable_acceptance_pair` and `task_completion_criterion` are not named, so the
+      // preserved pair and the criterion labels cannot move. One indirect write, and it is 0122's:
+      // a session leaving the live set fires `session_project_capacity_serialize`, which bumps
+      // `project.updated_at` — a display column no criterion reads. Every statement is scoped to a
+      // row set that stops matching the moment it has run, so re-applying the file is a no-op: the
+      // repair is idempotent, not a job.
+      '0394_close_refused_running_shells',
       // `task_project_rollup_covering_idx`, rebuilt (0395): 0178's five key columns and its
       // predicate kept exactly, and the six columns the rollup's classifier reads
       // (`completion_policy`, `verifies_task_id`, `assignee_id`, `dispatch_hold`, `terminal_reason`,
@@ -2010,7 +2030,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // writer of the DONE fence and names none of the six preserved objects; `runner` is not a
       // preserved relation, and no `task`, `project` or `project_acceptance_*` object is named. No
       // INSERT, UPDATE or DELETE: no stored row is read, locked, backfilled or rewritten.
-      '0397_runner_login_region'],
+      '0397_runner_login_region',
+      // Managed runners (0399): two new enum types and one new table, managed_runner, with its own
+      // unique indexes, CHECKs and three ON DELETE RESTRICT foreign keys — to `user`, and composite
+      // with owner_id to `runner` (0231's runner_id_owner_id_key) and `workspace` (0307's
+      // workspace_id_owner_id_key). No existing table, column, constraint, function, trigger or type
+      // is altered or dropped; no task, project, acceptance or DONE fence object is named, and no
+      // row is written.
+      '0399_managed_runner'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

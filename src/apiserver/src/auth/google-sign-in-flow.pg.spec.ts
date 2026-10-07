@@ -20,8 +20,10 @@
  *       verifier, past its two minutes, or from a LINK flow is spent and refused;
  *   (4) the callback ends the flow it refuses — a missing or foreign binding cookie, Google's error,
  *       a failed code exchange, a claim that does not pass — and a state is used once;
- *   (5) /start sweeps the rows past their end, and past GOOGLE_PENDING_FLOW_CAP flows in flight it is
- *       refused 503 and writes nothing;
+ *   (5) /start sweeps the rows past their end; a start it cannot take — a bad challenge or
+ *       client_state, the address's budget spent, GOOGLE_PENDING_FLOW_CAP flows in flight — sends the
+ *       client back with GOOGLE_BAD_REQUEST, GOOGLE_RATE_LIMITED or GOOGLE_SIGN_IN_BUSY and sends the
+ *       database nothing but reads;
  *   (6) deleting a user deletes their identity and the LINK flows naming them, and nothing else.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/auth/google-sign-in-flow.pg.spec.ts
@@ -60,7 +62,7 @@ import { FakeGoogle, type FakeGoogleAccount } from '../test-support/fake-google'
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { GoogleAuthController } from './google-auth.controller';
-import { GOOGLE_PENDING_FLOW_CAP, GoogleLoginService } from './google-login.service';
+import { GOOGLE_PENDING_FLOW_CAP, GOOGLE_START_RATE_LIMIT, GoogleLoginService } from './google-login.service';
 import { GoogleOAuthClient, s256 } from './google-oauth.client';
 import { PatService } from './pat.service';
 import { SignInProvidersService } from './sign-in-providers.service';
@@ -546,7 +548,7 @@ test('Google sign-in on PostgreSQL: the 0391 tables, the flow end to end, a tick
     await sql.query('DELETE FROM oauth_login_flow');
   });
 
-  await t.test('(5) /start sweeps the rows past their end, and past the cap of flows in flight is refused 503 and writes nothing', async () => {
+  await t.test('(5) /start sweeps the rows past their end; refused for a bad request, a spent budget or the cap of flows in flight, it sends the client back with the code and writes nothing', async () => {
     const challenge = s256(generateToken(32));
     const insert = (status: string, expiresIn: string, count = 1) => sql.query(
       `INSERT INTO oauth_login_flow (id, provider, intent, client, state_hash, binding_hash, nonce, provider_code_verifier,
@@ -571,17 +573,52 @@ test('Google sign-in on PostgreSQL: the 0391 tables, the flow end to end, a tick
       'the two rows past their end were swept; the live ones and the new one remain',
     );
 
-    await insert('PENDING', '5 minutes', GOOGLE_PENDING_FLOW_CAP - 2);
+    /**
+     * A start refused for a client that named itself: sent back to it with the code (§4.2's failure
+     * redirect), no cookie, no body to read — and only reads sent to the database, every row as it was.
+     */
+    const refused = async (query: string, location: string, address?: string) => {
+      const table = await flows();
+      statements.reset();
+      const answer = await call('GET', `/api/auth/google/start?${query}`, { address });
+      assert.equal(answer.status, 302, `${query}: ${answer.status} ${answer.text}`);
+      assert.equal(answer.location, location, query);
+      assert.equal(answer.setCookie, null, query);
+      assert.equal(answer.json, null, query);
+      assert.ok(statements.sql.length > 0, `${query}: the log saw the start's reads`);
+      assert.deepEqual(statements.sql.filter((statement) => !/^\s*SELECT\b/i.test(statement)), [], `${query}: nothing but reads`);
+      assert.deepEqual(await flows(), table, `${query}: nothing written`);
+    };
+    await refused(`client=web&code_challenge=${challenge}A`, '/login?google_error=GOOGLE_BAD_REQUEST');
+    await refused(`client=native&code_challenge=${challenge}&client_state=${'s'.repeat(513)}`, 'orbit://auth/google?error=GOOGLE_BAD_REQUEST');
+
+    // One address spends its budget; its next start is sent back, and another address's is not.
+    const spender = '203.0.113.77';
+    for (let i = 0; i < GOOGLE_START_RATE_LIMIT.max; i += 1) {
+      assert.equal((await call('GET', `/api/auth/google/start?client=web&code_challenge=${challenge}`, { address: spender })).status, 302);
+    }
+    await refused(`client=web&code_challenge=${challenge}`, '/login?google_error=GOOGLE_RATE_LIMITED', spender);
+    await refused(`client=native&code_challenge=${challenge}&client_state=app-${RUN}`, `orbit://auth/google?error=GOOGLE_RATE_LIMITED&state=app-${RUN}`, spender);
+    assert.equal((await call('GET', `/api/auth/google/start?client=ios&code_challenge=${challenge}`, { address: spender })).status, 400, 'no client to send back to');
+
+    const [{ n: live }] = await rows(`SELECT count(*)::int AS n FROM oauth_login_flow WHERE status = 'PENDING'`);
+    await insert('PENDING', '5 minutes', GOOGLE_PENDING_FLOW_CAP - live);
     const before = await rows(`SELECT count(*)::int AS n FROM oauth_login_flow WHERE status = 'PENDING'`);
     assert.deepEqual(before, [{ n: GOOGLE_PENDING_FLOW_CAP }]);
-    const busy = await call('GET', `/api/auth/google/start?client=native&code_challenge=${challenge}`);
-    assert.equal(busy.status, 503, busy.text);
-    assert.equal(busy.json?.code, 'GOOGLE_SIGN_IN_BUSY');
-    assert.equal(busy.setCookie, null);
-    assert.deepEqual(await rows(`SELECT count(*)::int AS n FROM oauth_login_flow WHERE status = 'PENDING'`), before, 'nothing was written');
-    // A flow that ends makes room for the next start.
-    await sql.query(`UPDATE oauth_login_flow SET expires_at = now() - interval '1 second' WHERE id = (SELECT id FROM oauth_login_flow WHERE status = 'PENDING' LIMIT 1)`);
+    // Beside them a row past its end, which a refused start leaves where it is.
+    await insert('PENDING', '-1 second');
+    await refused(`client=web&code_challenge=${challenge}`, '/login?google_error=GOOGLE_SIGN_IN_BUSY');
+    await refused(`client=native&code_challenge=${challenge}&client_state=app-${RUN}`, `orbit://auth/google?error=GOOGLE_SIGN_IN_BUSY&state=app-${RUN}`);
+    // A flow that ends makes room for the next start, which sweeps the rows past their end.
+    await sql.query(`UPDATE oauth_login_flow SET expires_at = now() - interval '1 second' WHERE id = (SELECT id FROM oauth_login_flow WHERE status = 'PENDING' AND expires_at > now() LIMIT 1)`);
+    statements.reset();
     assert.equal((await call('GET', `/api/auth/google/start?client=web&code_challenge=${challenge}`)).status, 302);
+    assert.ok(
+      statements.sql.some((statement) => /^\s*INSERT\b/i.test(statement) && statement.includes('"oauth_login_flow"')),
+      'the log sees the writes of a start that opens a flow',
+    );
+    assert.deepEqual(await rows(`SELECT count(*)::int AS n FROM oauth_login_flow WHERE expires_at < now()`), [{ n: 0 }]);
+    assert.deepEqual(await rows(`SELECT count(*)::int AS n FROM oauth_login_flow WHERE status = 'PENDING'`), before);
     await sql.query('DELETE FROM oauth_login_flow');
   });
 

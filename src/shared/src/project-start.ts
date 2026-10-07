@@ -71,6 +71,12 @@ export interface ProjectStartRecord {
 
 /** The door's answer to a start. A start that did not happen is a 4xx, never this body. */
 export interface StartProjectResponse extends ProjectStartRecord {
+  /**
+   * The conversation that coordinates the project now. A start with Automatic on opens one when the
+   * project had none — it is the coordinator who runs an Automatic project — and says so with
+   * `created`; null when Automatic is off and there was none to report.
+   */
+  coordinator: { sessionId: string; created: boolean } | null;
   projectId: string;
   /** When the project was started: this start's own time, and from now on the project's. */
   startedAt: string;
@@ -88,9 +94,11 @@ export interface StartProjectResponse extends ProjectStartRecord {
 /**
  * What `project_request_start` sends (`POST /runner/projects/:id/start-requests`): the settings the
  * coordinator suggests the project start with, and one sentence on why. The merge check may be left
- * out, which suggests none.
+ * out, which suggests none; Automatic may be left out, which is on — the owner's card opens with it
+ * on either way (the owner, 2026-10-07).
  */
-export type ProjectStartRequestBody = Omit<ProjectStartSettings, 'mergeCheckCommand'> & {
+export type ProjectStartRequestBody = Omit<ProjectStartSettings, 'mergeCheckCommand' | 'automatic'> & {
+  automatic?: boolean;
   mergeCheckCommand?: string | null;
   why: string;
 };
@@ -150,7 +158,12 @@ export interface ProjectStartRequest {
   planDigest: string;
   /** The repository the check found the project integrating into, or null for a project with none. */
   repository: string | null;
-  /** The check's `WARN` findings: what the owner should know before pressing Start. */
+  /**
+   * The check's `WARN` findings. Filed empty since 2026-10-07: they are about how the plan is
+   * written, which only the coordinator can change, so they come back to it in
+   * `ProjectStartRequestFiled` and the owner's card shows none. A request filed before then may
+   * still carry some; the cards ignore them.
+   */
   warnings: ProjectStartFinding[];
 }
 

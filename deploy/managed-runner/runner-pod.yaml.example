@@ -1,0 +1,103 @@
+# Optional TEST template only. Replace every __...__ value from an authorized environment
+# record; do not apply before the per-PVC single-writer admission/cessation gates are ready.
+# Uses an EXISTING per-user PVC; installs no Ceph/CSI/StorageClass or server infrastructure.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: __FIXED_USER_POD_NAME__
+  namespace: __AUTHORIZED_TEST_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: orbit-managed-runner
+    orbit-test-environment: __TEST_ENVIRONMENT_ID__
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  enableServiceLinks: false
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  terminationGracePeriodSeconds: 240
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  initContainers:
+    - name: private-volume-directories
+      image: __RUNNER_IMAGE_AT_SHA256_DIGEST__
+      args: [init-volume]
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+        runAsNonRoot: false
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+          add: [CHOWN, FOWNER, DAC_OVERRIDE]
+      resources:
+        requests:
+          cpu: __INIT_CPU_REQUEST__
+          memory: __INIT_MEMORY_REQUEST__
+        limits:
+          cpu: __INIT_CPU_LIMIT__
+          memory: __INIT_MEMORY_LIMIT__
+      volumeMounts:
+        - name: user-state
+          mountPath: /var/lib/orbit
+        - name: temporary
+          mountPath: /tmp
+  containers:
+    - name: runner
+      image: __RUNNER_IMAGE_AT_SHA256_DIGEST__
+      args: [run]
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+      env:
+        - name: ORBIT_RUNNER_SERVER_URL
+          value: __AUTHORIZED_TEST_ORBIT_HTTPS_URL__
+        - name: ORBIT_RUNNER_NAME
+          value: __STABLE_USER_RUNNER_NAME__
+        - name: ORBIT_RUNNER_MAX_CONCURRENT
+          value: "__AUTHORIZED_SESSION_CONCURRENCY__"
+        - name: ORBIT_RUNNER_ENROLLMENT_TOKEN_FILE
+          value: /run/orbit-enrollment/token
+        # On rebuild set ORBIT_RUNNER_EXPECTED_ID to the recorded ID and remove the
+        # enrollment env/mount/volume. Missing credentials must never cause re-enrollment.
+        # Supply an explicitly authorized test model credential separately; this template
+        # deliberately contains no model key, kubeconfig, Ceph key, or account-home mount.
+      resources:
+        requests:
+          cpu: __RUNNER_CPU_REQUEST__
+          memory: __RUNNER_MEMORY_REQUEST__
+        limits:
+          cpu: __RUNNER_CPU_LIMIT__
+          memory: __RUNNER_MEMORY_LIMIT__
+      volumeMounts:
+        - name: user-state
+          mountPath: /var/lib/orbit
+        - name: temporary
+          mountPath: /tmp
+        - name: enrollment
+          mountPath: /run/orbit-enrollment
+          readOnly: true
+  volumes:
+    - name: user-state
+      persistentVolumeClaim:
+        claimName: __EXISTING_PER_USER_TEST_PVC__
+    - name: temporary
+      emptyDir:
+        sizeLimit: __AUTHORIZED_TMP_SIZE__
+    - name: enrollment
+      secret:
+        secretName: __TARGET_USERS_ONE_TIME_TEST_ENROLLMENT_SECRET__
+        # Only this bootstrap Secret is readable by the runner. Do not use fsGroup:
+        # recursive group-mode expansion can invalidate private ORBIT_HOME permissions.
+        defaultMode: 0444
+        items:
+          - key: token
+            path: token

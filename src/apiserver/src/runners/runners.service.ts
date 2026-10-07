@@ -39,6 +39,7 @@ import { loginCodeRelay } from './login-code-relay';
 import { engineKeepsAccounts } from '../common/runner-engines';
 import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunnerDto } from './dto';
 import { accountPauseUntil } from '../common/account-pause';
+import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
 
 // Three missed 30s heartbeats — a runner quieter than this reads as offline.
 const OFFLINE_AFTER_MS = 90_000;
@@ -319,7 +320,7 @@ export class RunnersService {
     // user knows approving re-issues its credential rather than adding a 2nd machine.
     const runnerName = s.name;
     const nameConflict =
-      (await this.prisma.runner.count({ where: { ownerId, name: runnerName } })) > 0;
+      (await this.prisma.runner.count({ where: { ownerId, name: runnerName, managedRunner: { is: null } } })) > 0;
     return {
       userCode: s.userCode,
       name: s.name,
@@ -360,8 +361,9 @@ export class RunnersService {
       status: 'ONLINE' as const,
       lastHeartbeatAt: new Date(),
     };
+    // Never a managed runner: its identity and credential belong to its mapping, not to a name.
     const existing = await this.prisma.runner.findFirst({
-      where: { ownerId, name: runnerName },
+      where: { ownerId, name: runnerName, managedRunner: { is: null } },
       orderBy: { enrolledAt: 'desc' },
     });
     const runner = existing
@@ -930,6 +932,7 @@ export class RunnersService {
   async removeRunner(ownerId: string, id: string) {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
     if (!runner) throw new NotFoundException('runner not found');
+    await refuseManagedRunnerDeletion(this.prisma, id);
     await this.prisma.runner.delete({ where: { id } });
     return { ok: true };
   }

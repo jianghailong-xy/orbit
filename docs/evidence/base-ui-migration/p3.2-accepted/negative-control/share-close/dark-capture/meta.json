@@ -1,0 +1,16 @@
+{
+ "commit": "2a919514520f90b871cdb63fff13a72cc478d299",
+ "args": "pages.browser.mjs -g task --project=chromium-dark-desktop --project=chromium-dark-phone --project=webkit-dark-desktop --project=webkit-dark-phone",
+ "started": "2026-10-07T10:40:39Z",
+ "finished": "2026-10-07T10:40:57Z",
+ "exit": 0,
+ "environmentSha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+ "environmentEqualsP02": true,
+ "screenshots": 20,
+ "stats": {
+  "expected": 4,
+  "unexpected": 0,
+  "flaky": 0,
+  "skipped": 0
+ }
+}

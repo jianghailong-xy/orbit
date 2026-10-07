@@ -47,6 +47,12 @@ export const DEFAULT_AGENT_PROVIDER: AgentProviderSeed = {
  * scan that grows with the session table. One `LIMIT 1` per id instead walks
  * session_workspace_id_created_at_idx and stops at the first row — measured on a copy of a live
  * database: 4.7ms and 930 rows scanned → 0.3ms and one row per workspace.
+ *
+ * One kind of workspace has a default before it has history: a managed runner's default workspace,
+ * once its runner became READY with a runtime installed and signed in (`managed_runner.initial_provider`,
+ * docs/managed-runner-design.md "Provisioning retry wake and sleep" 3). Its first session starts there
+ * rather than on the floor below, which that runner may not have; from then on its history decides,
+ * as everywhere. No other workspace is affected — the floor stays Claude.
  */
 export async function lastProviderByWorkspace(
   // Only the raw query, so a caller inside a transaction can hand over its own client.
@@ -58,8 +64,9 @@ export async function lastProviderByWorkspace(
   const rows = await prisma.$queryRaw<
     Array<{ workspace_id: string; provider: string; provider_builtin: boolean }>
   >(Prisma.sql`
+    WITH a(id) AS (SELECT unnest(ARRAY[${Prisma.join(ids)}]::uuid[]))
     SELECT a.id AS workspace_id, s.provider, s.provider_builtin
-    FROM unnest(ARRAY[${Prisma.join(ids)}]::uuid[]) AS a(id)
+    FROM a
     CROSS JOIN LATERAL (
       SELECT provider, provider_builtin
       FROM "session"
@@ -67,6 +74,14 @@ export async function lastProviderByWorkspace(
       ORDER BY created_at DESC
       LIMIT 1
     ) s
+    UNION ALL
+    SELECT a.id, m.initial_provider, true
+    FROM a
+    JOIN managed_runner m ON m.default_workspace_id = a.id AND m.initial_provider IS NOT NULL
+    WHERE NOT EXISTS (
+      SELECT 1 FROM "session"
+      WHERE workspace_id = a.id AND task_id IS NULL AND parent_session_id IS NULL
+    )
   `);
   return new Map(
     rows.map((r) => [r.workspace_id, { provider: r.provider, providerBuiltin: r.provider_builtin }]),

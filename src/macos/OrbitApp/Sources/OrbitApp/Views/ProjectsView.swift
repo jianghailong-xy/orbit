@@ -1524,6 +1524,15 @@ struct ProjectDetailView: View {
                     if let paths = ProjectPage.blockerPathsLine(blocker.detail.paths) {
                         Text(paths).font(.orbitMeta.monospaced()).foregroundStyle(.secondary).lineLimit(1)
                     }
+                    // A refused SOURCE names the code and the ref that could not be resolved, then
+                    // one line per task whose runs are refused while it stands — the tasks the
+                    // page already holds, named by title.
+                    ForEach(ProjectPage.blockerSourceLines(blocker, titleFor: { id in
+                        store.tasks.first { $0.id == id }?.title
+                    }), id: \.self) { line in
+                        Text(line).font(.orbitMeta).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 Spacer(minLength: 6)
                 Button(ProjectPage.resolveBlockerPress(blocker)) {
@@ -2198,8 +2207,12 @@ struct OwnerStartProjectSheet: View {
                     ProjectCriteriaDocument.Item(id: $0.id, ordinal: $0.ordinal, text: $0.text,
                                                  satisfied: $0.satisfied)
                 },
-                plan: StartProject.planView(graph: store.graph, request: request,
-                                            fallbackCount: document.taskCount),
+                plan: StartProject.planView(graph: store.graph, fallbackCount: document.taskCount),
+                // A project nobody coordinates yet gets its first coordinator from a start with
+                // Automatic on, and the card says so.
+                hasCoordinator: document.coordinatorSessionId != nil,
+                escalationSeconds: document.integration?.escalationSeconds
+                    ?? StartProject.defaultEscalationSeconds,
                 draft: draft,
                 // A project started at another end meanwhile is the door's to refuse, 409, and the
                 // card says so over the door's words.

@@ -1,0 +1,2 @@
+audit-antd self-check passed: imports, aliases, types, mocks, selectors, refs, deterministic output and icon-safe retirement gate.
+audit-antd owner self-check passed: P0.1 owners, growth since P0.1, delta records, pending and inactive owners, index.css by text.

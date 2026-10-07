@@ -1,6 +1,11 @@
-import { Alert, Button, Card, Descriptions, Result, Space, Spin, Tag } from 'antd';
-import { useEffect, useState } from 'react';
+import { CheckCircleFilled, ExclamationCircleFilled, WarningFilled } from '@ant-design/icons';
+import { useEffect, useState, type ReactNode } from 'react';
 import { approveCliLogin, denyCliLogin, getCliLoginRequest, type CliLoginRequest } from '../api';
+import { Alert } from '../components/ui/Alert';
+import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
+import { Card } from '../components/ui/Card';
+import { Spinner } from '../components/ui/Spinner';
 import { NEVER_EXPIRES, NEVER_EXPIRES_WARNING, fullDate, scopeSummary } from '../lib/accessTokens';
 import { useToast } from '../lib/toast';
 
@@ -14,35 +19,57 @@ export function lifetimeLine(expiresInDays: number | null, now: number): string 
 
 /** The token being asked for, and from where: everything a person approves it on. */
 export function CliLoginDetails({ request, now }: { request: CliLoginRequest; now: number }) {
-  return (
-    <Descriptions
-      column={1}
-      size="small"
-      bordered
-      style={{ marginBottom: 16 }}
-      styles={{ label: { width: 136, whiteSpace: 'nowrap' } }}
-    >
-      <Descriptions.Item label="Token name">{request.name}</Descriptions.Item>
-      <Descriptions.Item label="Scopes">
+  const rows: [string, ReactNode][] = [
+    ['Token name', request.name],
+    [
+      'Scopes',
+      <>
         <div>{scopeSummary(request.scopes)}</div>
         <div style={{ marginTop: 6 }}>
           {request.scopes.map((scope) => (
-            <Tag key={scope} style={{ marginBottom: 4 }}>
+            <Badge key={scope} style={{ marginBottom: 4 }}>
               {scope}
-            </Tag>
+            </Badge>
           ))}
         </div>
-      </Descriptions.Item>
-      <Descriptions.Item label="Expires">
-        {request.expiresInDays === null ? (
-          <Tag color="warning">{NEVER_EXPIRES}</Tag>
-        ) : (
-          lifetimeLine(request.expiresInDays, now)
-        )}
-      </Descriptions.Item>
-      <Descriptions.Item label="Requested from">{request.hostname ?? 'Unknown host'}</Descriptions.Item>
-      <Descriptions.Item label="Code">{request.userCode}</Descriptions.Item>
-    </Descriptions>
+      </>,
+    ],
+    [
+      'Expires',
+      request.expiresInDays === null ? <Badge tone="warning">{NEVER_EXPIRES}</Badge> : lifetimeLine(request.expiresInDays, now),
+    ],
+    ['Requested from', request.hostname ?? 'Unknown host'],
+    ['Code', request.userCode],
+  ];
+  return (
+    <div className="cli-login-details">
+      <table>
+        <tbody>
+          {rows.map(([label, value]) => (
+            <tr key={label}>
+              <th scope="row">{label}</th>
+              <td>{value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// The replaced result's icons: info is the exclamation circle, warning the triangle.
+const RESULT_ICONS = { success: <CheckCircleFilled />, info: <ExclamationCircleFilled />, warning: <WarningFilled /> };
+
+/** Where the request ended up, centred under a large status icon. */
+function CliLoginResult({ status, title, subTitle }: { status: keyof typeof RESULT_ICONS; title: string; subTitle: string }) {
+  return (
+    <div className="cli-login-result" data-status={status}>
+      <div className="cli-login-result-icon" aria-hidden>
+        {RESULT_ICONS[status]}
+      </div>
+      <div className="cli-login-result-title">{title}</div>
+      <div className="cli-login-result-subtitle">{subTitle}</div>
+    </div>
   );
 }
 
@@ -100,18 +127,18 @@ export function CliLoginPage() {
       <Card title="🔑 Approve orbit login" style={{ width: 500 }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: 24 }}>
-            <Spin />
+            <Spinner />
           </div>
         ) : error ? (
-          <Result status="warning" title="Cannot approve this login" subTitle={error} />
+          <CliLoginResult status="warning" title="Cannot approve this login" subTitle={error} />
         ) : decision === 'APPROVED' ? (
-          <Result
+          <CliLoginResult
             status="success"
             title="Login approved"
             subTitle={`Return to your terminal — orbit login collects the token "${request?.name}" and finishes by itself.`}
           />
         ) : decision === 'DENIED' ? (
-          <Result
+          <CliLoginResult
             status="info"
             title="Login denied"
             subTitle="No token was issued. orbit login in that terminal stops and says the request was denied."
@@ -125,14 +152,13 @@ export function CliLoginPage() {
               </p>
               <CliLoginDetails request={request} now={now} />
               {request.expiresInDays === null && (
-                <Alert type="warning" showIcon style={{ marginBottom: 16 }} message={NEVER_EXPIRES_WARNING} />
+                <Alert type="warning" style={{ marginBottom: 16 }} title={NEVER_EXPIRES_WARNING} />
               )}
               {request.nameInUse && (
                 <Alert
                   type="error"
-                  showIcon
                   style={{ marginBottom: 16 }}
-                  message={`You already have an access token named "${request.name}".`}
+                  title={`You already have an access token named "${request.name}".`}
                   description={
                     <>
                       Revoke it under Settings → Access tokens, or run <code>orbit login --name</code> with
@@ -141,19 +167,19 @@ export function CliLoginPage() {
                   }
                 />
               )}
-              <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
                 <Button disabled={submitting !== null} loading={submitting === 'DENIED'} onClick={() => decide('DENIED')}>
                   Deny
                 </Button>
                 <Button
-                  type="primary"
+                  variant="primary"
                   disabled={request.nameInUse || submitting !== null}
                   loading={submitting === 'APPROVED'}
                   onClick={() => decide('APPROVED')}
                 >
                   Approve
                 </Button>
-              </Space>
+              </div>
             </>
           )
         )}

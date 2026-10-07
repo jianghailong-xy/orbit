@@ -429,23 +429,39 @@ test('/start over http: the binding cookie is not Secure when PUBLIC_ORIGIN is n
   assert.equal(new URL(started.location!).searchParams.get('redirect_uri'), 'http://localhost:2086/api/auth/google/callback');
 });
 
-test('/start refuses a request it cannot start a flow for — 400, nothing written, no cookie — and takes no return address from it', async (t) => {
+test('/start sends a request it cannot start a flow for back to its client with GOOGLE_BAD_REQUEST — no cookie, nothing written — and takes no return address from it', async (t) => {
   const { db, browser } = await boot(t);
   const challenge = s256(generateToken(32));
-  for (const query of [
-    'client=web',
-    `client=web&code_challenge=${challenge.slice(1)}`,
-    `client=web&code_challenge=${challenge}A`,
-    `client=web&code_challenge=${challenge.slice(1)}%2B`,
-    `client=web&code_challenge=${challenge}&code_challenge=${challenge}`,
-    `client=native&code_challenge=${challenge}&client_state=${'s'.repeat(513)}`,
+  const web = '/login?google_error=GOOGLE_BAD_REQUEST';
+  const native = 'orbit://auth/google?error=GOOGLE_BAD_REQUEST';
+  for (const [query, location] of [
+    ['client=web', web],
+    [`client=web&code_challenge=${challenge.slice(1)}`, web],
+    [`client=web&code_challenge=${challenge}A`, web],
+    [`client=web&code_challenge=${challenge.slice(1)}%2B`, web],
+    [`client=web&code_challenge=${challenge}&code_challenge=${challenge}`, web],
+    [`client=web&code_challenge=${challenge}&client_state=${'s'.repeat(513)}`, web],
+    // The app's state comes back with the code, as from the callback — unless it is the state that was refused.
+    ['client=native&client_state=app%20state%2B1', `${native}&state=app%20state%2B1`],
+    [`client=native&code_challenge=${challenge}A&client_state=${'s'.repeat(512)}`, `${native}&state=${'s'.repeat(512)}`],
+    [`client=native&code_challenge=${challenge}&client_state=${'s'.repeat(513)}`, native],
+    [`client=native&code_challenge=${challenge}A&client_state=${'s'.repeat(513)}`, native],
   ]) {
     const refused = await browser().get(`/api/auth/google/start?${query}`);
-    assert.equal(refused.status, 400, `${query.slice(0, 80)}: ${refused.status} ${refused.text}`);
-    assert.equal(refused.location, null);
-    assert.equal(refused.setCookie, null);
+    assert.equal(refused.status, 302, `${query.slice(0, 80)}: ${refused.status} ${refused.text}`);
+    assert.equal(refused.location, location, query.slice(0, 80));
+    assert.equal(refused.setCookie, null, `${query.slice(0, 80)}: no flow is bound to the browser`);
+    assert.equal(refused.json, null, `${query.slice(0, 80)}: no JSON for the browser to show`);
   }
-  assert.equal(db.flows.size, 0);
+  // No client, or one that is neither: there is nowhere to send the browser back to, whatever else is wrong.
+  for (const query of [`code_challenge=${challenge}A`, `client=ios&code_challenge=${challenge}A`, 'client=web&client=native']) {
+    const refused = await browser().get(`/api/auth/google/start?${query}`);
+    assert.equal(refused.status, 400, `${query}: ${refused.status} ${refused.text}`);
+    assert.equal(refused.json?.message, 'client must be web or native', query);
+    assert.equal(refused.location, null, query);
+    assert.equal(refused.setCookie, null, query);
+  }
+  assert.equal(db.flows.size, 0, 'nothing written');
 
   // A request that names somewhere to return to is started as any other: Google is told the one
   // callback this deployment has, and the flow keeps nothing of what was named.
@@ -458,7 +474,7 @@ test('/start refuses a request it cannot start a flow for — 400, nothing writt
   assert.ok(!JSON.stringify([...db.flows.values()]).includes('evil'));
 });
 
-test('/start sweeps the flows past their end and keeps the rest; past the cap of flows in flight it is refused 503', async (t) => {
+test('/start sweeps the flows past their end and keeps the rest; past the cap of flows in flight it sends the client back with GOOGLE_SIGN_IN_BUSY, writing nothing', async (t) => {
   const { db, browser } = await boot(t);
   const challenge = s256(generateToken(32));
   const flow = (over: Row) => {
@@ -485,32 +501,61 @@ test('/start sweeps the flows past their end and keeps the rest; past the cap of
 
   // The cap counts the flows waiting on Google, and refuses the start that would pass it.
   for (let i = db.flows.size - 1; i < GOOGLE_PENDING_FLOW_CAP; i += 1) flow({ expiresAt: soon });
-  const pending = () => [...db.flows.values()].filter((row) => row.status === 'PENDING').length;
+  const pending = () => [...db.flows.values()].filter((row) => row.status === 'PENDING' && row.expiresAt > new Date()).length;
   assert.equal(pending(), GOOGLE_PENDING_FLOW_CAP);
-  const busy = await browser().get(`/api/auth/google/start?client=native&code_challenge=${challenge}&client_state=s`);
-  assert.equal(busy.status, 503, busy.text);
-  assert.equal(busy.json?.code, 'GOOGLE_SIGN_IN_BUSY');
-  assert.equal(busy.setCookie, null);
-  assert.equal(pending(), GOOGLE_PENDING_FLOW_CAP, 'nothing was written past the cap');
+  // Beside them a row past its end, which a refused start leaves where it is: it writes nothing, the sweep included.
+  const ended = flow({ expiresAt: past });
+  const table = structuredClone([...db.flows.values()]);
+  for (const [query, location] of [
+    [`client=web&code_challenge=${challenge}`, '/login?google_error=GOOGLE_SIGN_IN_BUSY'],
+    [`client=native&code_challenge=${challenge}&client_state=s`, 'orbit://auth/google?error=GOOGLE_SIGN_IN_BUSY&state=s'],
+    [`client=native&code_challenge=${challenge}`, 'orbit://auth/google?error=GOOGLE_SIGN_IN_BUSY'],
+  ]) {
+    const busy = await browser().get(`/api/auth/google/start?${query}`);
+    assert.equal(busy.status, 302, `${query}: ${busy.status} ${busy.text}`);
+    assert.equal(busy.location, location, query);
+    assert.equal(busy.setCookie, null, query);
+    assert.equal(busy.json, null, query);
+  }
+  const nowhere = await browser().get(`/api/auth/google/start?client=ios&code_challenge=${challenge}`);
+  assert.equal(nowhere.status, 400, `no client to send back to: ${nowhere.text}`);
+  assert.equal(nowhere.location, null);
+  assert.deepEqual([...db.flows.values()], table, 'nothing was written past the cap');
 
-  // Flows that end make room: one past its end is swept by the next start, which then fits.
+  // Flows that end make room: the next start sweeps the ones past their end, and then fits.
   livePending.expiresAt = past;
   const roomy = await browser().get(`/api/auth/google/start?client=web&code_challenge=${challenge}`);
   assert.equal(roomy.status, 302, roomy.text);
-  assert.ok(!db.flows.has(livePending.id));
+  assert.match(roomy.location ?? '', /^https:\/\/accounts\.google\.com\//);
+  assert.ok(!db.flows.has(livePending.id) && !db.flows.has(ended.id));
   assert.equal(pending(), GOOGLE_PENDING_FLOW_CAP);
+  assert.equal(db.flows.size, GOOGLE_PENDING_FLOW_CAP + 1, 'the cap, and the ticket waiting on its exchange');
 });
 
-test('/start and /exchange are budgeted per address: past the budget 429, and another address is not affected', async (t) => {
+test('/start and /exchange are budgeted per address: past the budget /start sends the client back with GOOGLE_RATE_LIMITED, writing nothing, and /exchange answers 429; another address is not affected', async (t) => {
   const { db, call, exchange } = await boot(t);
   const challenge = s256(generateToken(32));
-  const start = (address: string) => call('GET', `/api/auth/google/start?client=web&code_challenge=${challenge}`, { address });
+  const start = (address: string, query = `client=web&code_challenge=${challenge}`) =>
+    call('GET', `/api/auth/google/start?${query}`, { address });
   for (let i = 0; i < GOOGLE_START_RATE_LIMIT.max; i += 1) assert.equal((await start('203.0.113.10')).status, 302);
-  const limited = await start('203.0.113.10');
-  assert.equal(limited.status, 429, limited.text);
-  assert.equal(limited.setCookie, null);
-  assert.equal(db.flows.size, GOOGLE_START_RATE_LIMIT.max, 'a refused start writes nothing');
-  assert.equal((await start('203.0.113.11')).status, 302, 'another address');
+  const table = structuredClone([...db.flows.values()]);
+  for (const [query, location] of [
+    [`client=web&code_challenge=${challenge}`, '/login?google_error=GOOGLE_RATE_LIMITED'],
+    [`client=native&code_challenge=${challenge}&client_state=app%20state%2B1`, 'orbit://auth/google?error=GOOGLE_RATE_LIMITED&state=app%20state%2B1'],
+    [`client=native&code_challenge=${challenge}`, 'orbit://auth/google?error=GOOGLE_RATE_LIMITED'],
+  ]) {
+    const limited = await start('203.0.113.10', query);
+    assert.equal(limited.status, 302, `${query}: ${limited.status} ${limited.text}`);
+    assert.equal(limited.location, location, query);
+    assert.equal(limited.setCookie, null, query);
+    assert.equal(limited.json, null, query);
+  }
+  const nowhere = await start('203.0.113.10', `client=ios&code_challenge=${challenge}`);
+  assert.equal(nowhere.status, 400, `no client to send back to: ${nowhere.text}`);
+  assert.equal(nowhere.location, null);
+  assert.deepEqual([...db.flows.values()], table, 'a refused start writes nothing');
+  assert.equal(db.flows.size, GOOGLE_START_RATE_LIMIT.max);
+  assert.match((await start('203.0.113.11')).location ?? '', /^https:\/\/accounts\.google\.com\//, 'another address');
 
   for (let i = 0; i < GOOGLE_EXCHANGE_RATE_LIMIT.max; i += 1) {
     assert.equal((await exchange(generateToken(32), generateToken(32), '203.0.113.10')).status, 400);

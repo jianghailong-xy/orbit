@@ -1,0 +1,137 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2-keyboard-window/regression-repeat-overlays-scroll/<name>",
+ "files": [
+  {
+   "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--focus-form-motion-scroll.json",
+   "bytes": 168,
+   "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e",
+   "fields": {
+    "explicitFocus": true,
+    "requiredValidation": true,
+    "nativeEnter": true,
+    "motionCompleted": true,
+    "scrollMethod": "wheel",
+    "scrollLockedUntilClose": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-1--focus-form-motion-scroll.json",
+   "bytes": 168,
+   "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e",
+   "fields": {
+    "explicitFocus": true,
+    "requiredValidation": true,
+    "nativeEnter": true,
+    "motionCompleted": true,
+    "scrollMethod": "wheel",
+    "scrollLockedUntilClose": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-2--focus-form-motion-scroll.json",
+   "bytes": 168,
+   "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e",
+   "fields": {
+    "explicitFocus": true,
+    "requiredValidation": true,
+    "nativeEnter": true,
+    "motionCompleted": true,
+    "scrollMethod": "wheel",
+    "scrollLockedUntilClose": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-3--focus-form-motion-scroll.json",
+   "bytes": 168,
+   "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e",
+   "fields": {
+    "explicitFocus": true,
+    "requiredValidation": true,
+    "nativeEnter": true,
+    "motionCompleted": true,
+    "scrollMethod": "wheel",
+    "scrollLockedUntilClose": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-4--focus-form-motion-scroll.json",
+   "bytes": 168,
+   "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e",
+   "fields": {
+    "explicitFocus": true,
+    "requiredValidation": true,
+    "nativeEnter": true,
+    "motionCompleted": true,
+    "scrollMethod": "wheel",
+    "scrollLockedUntilClose": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-5--focus-form-motion-scroll.json",
+   "bytes": 168,
+   "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e",
+   "fields": {
+    "explicitFocus": true,
+    "requiredValidation": true,
+    "nativeEnter": true,
+    "motionCompleted": true,
+    "scrollMethod": "wheel",
+    "scrollLockedUntilClose": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-6--focus-form-motion-scroll.json",
+   "bytes": 168,
+   "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e",
+   "fields": {
+    "explicitFocus": true,
+    "requiredValidation": true,
+    "nativeEnter": true,
+    "motionCompleted": true,
+    "scrollMethod": "wheel",
+    "scrollLockedUntilClose": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-7--focus-form-motion-scroll.json",
+   "bytes": 168,
+   "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e",
+   "fields": {
+    "explicitFocus": true,
+    "requiredValidation": true,
+    "nativeEnter": true,
+    "motionCompleted": true,
+    "scrollMethod": "wheel",
+    "scrollLockedUntilClose": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-8--focus-form-motion-scroll.json",
+   "bytes": 168,
+   "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e",
+   "fields": {
+    "explicitFocus": true,
+    "requiredValidation": true,
+    "nativeEnter": true,
+    "motionCompleted": true,
+    "scrollMethod": "wheel",
+    "scrollLockedUntilClose": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--repeat-9--focus-form-motion-scroll.json",
+   "bytes": 168,
+   "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e",
+   "fields": {
+    "explicitFocus": true,
+    "requiredValidation": true,
+    "nativeEnter": true,
+    "motionCompleted": true,
+    "scrollMethod": "wheel",
+    "scrollLockedUntilClose": true
+   }
+  }
+ ]
+}
