@@ -278,6 +278,37 @@ class WikiWatchDeviceTest {
         assertEquals("one confirmation, not two", 1, requests("POST", "/confirm").size)
     }
 
+    /** The plan's Edit sheet: a section is moved by dragging its handle (the owner's decision, card
+     * 34bs0PdYUHHwiKHYn3rCp), and the draft it saves carries the new order — the one edit sent. */
+    @Test fun aPlanSectionIsMovedByDraggingItsHandle() = journey("plan-drag", { "orbit://wiki/${it.string("space")}" }) { _, _ ->
+        http("/__control", """{"draft":"v2"}""")
+        val stored = http("/__stats").getValue("plan").jsonObject.getValue("draft").jsonObject.getValue("docs").jsonArray
+            .map { it.jsonObject }.first { it.string("slug") == "session-runtime" }.getValue("sections").jsonArray.map { it.jsonObject.string("key") }
+        press("wiki-bar-contents")
+        awaitTag("wiki-contents-sheet")
+        press("wiki-contents-plan")
+        pressIn("wiki-plan-page", "wiki-plan-doc:session-runtime")
+        awaitTag("wiki-plan-doc-page")
+        press("wiki-plan-doc-edit")
+        awaitTag("wiki-plan-edit-sheet")
+        compose.onNodeWithTag("wiki-plan-edit-list").performScrollToNode(hasTestTag("wiki-plan-edit-row:1"))
+        val height = compose.onNodeWithTag("wiki-plan-edit-row:0").fetchSemanticsNode().boundsInRoot.height
+        compose.onNodeWithTag("wiki-plan-edit-drag:0").performTouchInput {
+            down(center)
+            repeat(12) { moveBy(androidx.compose.ui.geometry.Offset(0f, height * 0.11f)); advanceEventTime(30) }
+            up()
+        }
+        compose.waitForIdle()
+        capture("plan-drag-moved")
+        press("wiki-plan-edit-save")
+        compose.waitUntil(15_000) { requests("POST", "/plan/edits").isNotEmpty() }
+        val sent = requests("POST", "/plan/edits").single().getValue("body").jsonObject.getValue("doc").jsonObject.getValue("sections").jsonArray
+            .map { it.jsonObject.string("key") }
+        assertEquals(listOf(stored[1], stored[0]) + stored.drop(2), sent)
+        compose.waitUntil(15_000) { compose.onAllNodesWithTag("wiki-plan-edit-sheet").fetchSemanticsNodes().isEmpty() }
+        capture("plan-drag-saved")
+    }
+
     /** Wiki settings from the home's gear: the review mode is written as the owner picks it, and spot checks — greyed
      * outside Automatic — become available once the mode is Automatic. */
     @Test fun settingsWriteTheReviewModeAndSpotChecksAsPicked() = journey("settings", { "orbit://wiki/${it.string("space")}" }) { _, _ ->
