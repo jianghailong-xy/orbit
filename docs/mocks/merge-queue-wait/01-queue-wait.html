@@ -75,14 +75,14 @@ const s = `<div class="dimbg"></div><div class="sheet"><div class="grab"></div>
 <div class="sn">Queue for main<span class="x">${ic('x', 15, 'rgba(60,60,67,.75)', 2.6)}</span></div><div class="sb">
 <div class="qhead">1 running · 3 waiting · the order the queue takes them</div>
 ${qrow({ run: true, title: '“' + HOLDER_PROJ + '”', right: '2h 3m',
-        sub: 'Merge into main · fetching · no report since 23:38 — it may be stuck', amber: true })}
+        sub: 'Merge to main · fetching · no report since 23:38 — it may be stuck', amber: true })}
 ${qrow({ title: '“' + PROJ + '”', chips: '<span class="chip you">You</span>', right: '1h 10m',
-        sub: 'Merge into main · queued' })}
+        sub: 'Merge to main · queued' })}
 ${qrow({ title: '“Google 账号登录与开放注册”', chips: '<span class="chip">Automatic</span>', right: '1h 0m',
-        sub: 'Merge into main · queued' })}
+        sub: 'Merge to main · queued' })}
 ${qrow({ title: '“Runners 与 Providers 合并为 Infrastructure”', chips: '<span class="chip">Automatic</span>', right: '48m',
-        sub: 'Merge into main · queued' })}
-</div><div class="bar"><span class="btn sec">Cancel</span></div></div>`;
+        sub: 'Merge to main · queued' })}
+</div></div>`;
 const d = phone(`${statusBar('01:42')}${navReal(6)}<div class="list">${progCard(3, 4, 0)}${cardQueued()}</div>${s}`);
 
 document.getElementById('figs').innerHTML = [
@@ -102,7 +102,7 @@ document.getElementById('figs').innerHTML = [
 <li>${n(1)}顺序就是队列取活的顺序（入队先后）。每条一行：环（在跑的转、排队的静）+ 名字 + 状态行 + 右侧时长；在跑的那条是 fetching，排队的写 queued。</li>
 <li>${n(2)}超过 10 分钟没上报的那条，状态行转琥珀并说明（“no report since 23:38 — it may be stuck”）——你这次的真实队头。</li>
 <li>${n(3)}自己的那条带 <b>You</b> 标；Automatic 自动合入的带 <b>Automatic</b> 标；任务落地在列表里写作 “Landing · ‘任务名’ · rebasing”。自己的项目/任务可点进去，另一个账号的只说 “Another account’s merge into main”，不可点。</li>
-<li>${n(4)}合入详情（Details）里的 Queue 行也开这同一张表；Cancel 仍然只取消自己那条。</li></ol>`),
+<li>${n(4)}这张表只读：取消还在下面那张卡上（实现里也是）。</li></ol>`),
 ].join('');
 
 // shot.sh 从 title 里读 SIZE
