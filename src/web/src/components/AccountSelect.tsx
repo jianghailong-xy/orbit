@@ -1,9 +1,9 @@
-import { Select } from 'antd';
 import { withEnginePlanUsage, type LoginEngine, type RunnerEngineAccount } from '@orbit/shared';
 import { accountDir, accountNameOf, accountPlanUsage, runsOnEnvKey } from '../lib/engineAccounts';
 import { bindingPlanUsageRow, currentPlanUsageRows } from '../lib/planUsage';
 import { tildePath } from './RunnerEngines';
 import type { Runner } from './TasksSidePanel';
+import { Select } from './ui/Select';
 
 /** The account every runner has: the directory its own environment selects. */
 const DEFAULT = 'default';
@@ -145,15 +145,17 @@ export function AccountSelect({
   return (
     <div className="rd-form-field">
       <div className="rd-form-label">{copy.label}</div>
-      <Select<string, AccountOption>
+      <Select
         className="rd-codex-account"
         value={value ?? (automatic ? AUTOMATIC : DEFAULT)}
-        onChange={(next) => onChange(next === AUTOMATIC || (!automatic && next === DEFAULT) ? null : next)}
+        onValueChange={(next) => {
+          if (next !== null) onChange(next === AUTOMATIC || (!automatic && next === DEFAULT) ? null : next);
+        }}
         options={options}
-        optionRender={(option) => (
+        renderOption={(option) => (
           <div>
-            <div>{option.data.label}</div>
-            <div className="rd-codex-account-status">{option.data.status}</div>
+            <div>{option.label}</div>
+            <div className="rd-codex-account-status">{options.find((row) => row.value === option.value)?.status}</div>
           </div>
         )}
       />

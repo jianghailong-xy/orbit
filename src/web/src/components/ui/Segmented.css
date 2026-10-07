@@ -1,0 +1,35 @@
+/* Compact segmented control, as the replaced one measured: 2px track, 4px track radius,
+   2px item radius, 20px items with 7px label padding; hover/active wash under the label. */
+.orbit-segmented {
+  display: inline-block; box-sizing: border-box; margin: 0; padding: 2px;
+  color: var(--text-2); background: var(--orbit-segmented-track); border-radius: var(--orbit-radius-sm);
+  font-family: var(--orbit-font-family); font-size: var(--orbit-font-size); line-height: 1.5714285714285714;
+  transition: all .2s;
+}
+.orbit-segmented-group { position: relative; display: flex; flex-direction: row; align-items: stretch; justify-items: flex-start; width: 100%; }
+.orbit-segmented-item {
+  position: relative; box-sizing: border-box; text-align: center; cursor: pointer; border-radius: 2px;
+  outline: none; transition: color .2s;
+  /* The old control's Safari paint fix; it also keeps the hover wash inside the item. */
+  transform: translateZ(0);
+}
+.orbit-segmented-item::after {
+  content: ''; position: absolute; z-index: -1; top: 0; inset-inline-start: 0; width: 100%; height: 100%;
+  border-radius: inherit; opacity: 0; pointer-events: none; transition: opacity .2s, background-color .2s;
+}
+.orbit-segmented-item:not([data-checked]):not([data-disabled]):is(:hover, :active) { color: var(--text-1); }
+.orbit-segmented-item:not([data-checked]):not([data-disabled]):hover::after { opacity: 1; background-color: var(--orbit-segmented-hover-bg); }
+.orbit-segmented-item:not([data-checked]):not([data-disabled]):active::after { opacity: 1; background-color: var(--orbit-control-active-bg); }
+.orbit-segmented-item[data-checked] { color: var(--orbit-segmented-selected-color); background: var(--orbit-segmented-selected-bg); box-shadow: var(--orbit-segmented-shadow); }
+.orbit-segmented-item:focus-visible { outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: 1px; transition: outline-offset 0s, outline 0s; }
+.orbit-segmented-item[data-disabled] { color: var(--orbit-control-disabled-text); cursor: not-allowed; }
+.orbit-segmented-label { display: block; min-height: 20px; padding: 0 7px; line-height: 20px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* While the selection slides, the thumb carries it; the new item shows only its colour. */
+.orbit-segmented-thumb {
+  position: absolute; top: 0; inset-inline-start: 0; box-sizing: border-box; width: 0; height: 100%; padding: 4px 0;
+  border-radius: 2px; background: var(--orbit-segmented-selected-bg); box-shadow: var(--orbit-segmented-shadow);
+  will-change: transform, width;
+}
+.orbit-segmented-group[data-motion] .orbit-segmented-item[data-checked] { background: transparent; box-shadow: none; }
+.orbit-segmented-group[data-motion] .orbit-segmented-item:not([data-checked])::after { background-color: transparent; }
+@media (prefers-reduced-motion: reduce) { .orbit-segmented, .orbit-segmented-item, .orbit-segmented-item::after { transition: none; } }

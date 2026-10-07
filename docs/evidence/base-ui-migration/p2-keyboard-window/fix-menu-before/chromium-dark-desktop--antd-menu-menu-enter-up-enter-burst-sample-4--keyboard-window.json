@@ -1,0 +1,47 @@
+{
+  "target": "antd-menu",
+  "sequence": "menu-enter-up-enter",
+  "control": null,
+  "mode": "burst",
+  "run": 4,
+  "keys": [
+    "Enter",
+    "ArrowUp",
+    "Enter"
+  ],
+  "from": null,
+  "before": null,
+  "after": null,
+  "result": "closed",
+  "listOpen": false,
+  "active": "button:Add attachment",
+  "keyLog": [
+    {
+      "key": "Enter",
+      "t": 24.6,
+      "target": "button:Add attachment",
+      "trusted": true,
+      "focused": "button:Add attachment",
+      "listbox": false,
+      "highlighted": null
+    },
+    {
+      "key": "ArrowUp",
+      "t": 80.2,
+      "target": "button:Add attachment",
+      "trusted": true,
+      "focused": "button:Add attachment",
+      "listbox": true,
+      "highlighted": null
+    },
+    {
+      "key": "Enter",
+      "t": 80.5,
+      "target": "button:Add attachment",
+      "trusted": true,
+      "focused": "button:Add attachment",
+      "listbox": true,
+      "highlighted": null
+    }
+  ]
+}

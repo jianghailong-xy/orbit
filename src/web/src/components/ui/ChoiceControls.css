@@ -8,7 +8,8 @@
   font-family: var(--orbit-font-family);
   font-size: var(--orbit-font-size);
   font-weight: 400;
-  line-height: var(--orbit-line-height);
+  /* Unitless like the replaced controls: a label in another font size keeps its own line. */
+  line-height: 1.5714285714285714;
 }
 
 .orbit-choice {

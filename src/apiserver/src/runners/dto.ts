@@ -67,5 +67,5 @@ export class RenameAccountDto {
 
 /** Which CLI to install on the runner. Required — there is no historical default here. */
 export class StartInstallDto {
-  @IsIn(['claude', 'codex', 'kimi', 'antigravity', 'dsh']) engine!: InstallEngine;
+  @IsIn(['claude', 'codex', 'kimi', 'antigravity', 'opencode', 'dsh']) engine!: InstallEngine;
 }

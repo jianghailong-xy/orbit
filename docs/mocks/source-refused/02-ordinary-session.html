@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>Effect: the same card on an ordinary session — the causes are the machine's</title>
+<style>
+  :root {
+    --orange: #FF9500;
+    --blue: #007AFF;
+    --red: #FF3B30;
+    --green: #34C759;
+    --label: #000;
+    --label-2: rgba(60, 60, 67, .6);
+    --label-3: rgba(60, 60, 67, .3);
+    --sep: rgba(60, 60, 67, .16);
+    --surface: #fff;
+    --fill: rgba(120, 120, 128, .12);
+    --fill-2: rgba(120, 120, 128, .08);
+    --glass: rgba(255, 255, 255, .55);
+    --mark: rgba(255, 59, 48, .85);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; width: 1410px; padding: 40px 40px 56px; background: #ececef; color: #16161a;
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Liberation Sans",
+          "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 24px; letter-spacing: -.02em; margin: 0 0 8px; }
+  .lede { color: #55555e; max-width: 1330px; margin: 0 0 26px; }
+  .lede code, figcaption code, .note code, .subject code, .detail code {
+    font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: rgba(0,0,0,.06); padding: 1px 4px; border-radius: 4px;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 34px; align-items: flex-start; margin-bottom: 30px; }
+  figure { margin: 0; }
+  figcaption { margin-top: 14px; width: 393px; font-size: 13.5px; line-height: 1.5; color: #55555e; }
+  figcaption b { color: #16161a; display: block; font-size: 14px; margin-bottom: 3px; }
+  figcaption b:not(:first-child) { display: inline; font-size: inherit; margin: 0; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px;
+         padding: 1px 8px; margin-bottom: 6px; }
+  .tag.now { background: #ffd9d4; color: #8f1d13; }
+  .tag.a { background: #d6e4ff; color: #14428f; }
+  .tag.b { background: #d9f2e0; color: #14532d; }
+  .mark { outline: 1.5px dashed var(--mark); outline-offset: 3px; border-radius: 10px; }
+
+  .phone {
+    width: 393px; background: var(--surface); overflow: hidden; border-radius: 30px;
+    box-shadow: 0 18px 44px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.07); color: var(--label);
+    display: flex; flex-direction: column;
+  }
+  .status { height: 54px; display: flex; align-items: flex-end; justify-content: space-between;
+            padding: 0 26px 6px; font-size: 15px; font-weight: 600; letter-spacing: .01em; }
+  .status .r { display: flex; align-items: center; gap: 5px; font-weight: 500; font-size: 14px; }
+  .bars { display: flex; align-items: flex-end; gap: 1.5px; height: 10px; }
+  .bars i { width: 3px; background: var(--label); border-radius: 1px; }
+  .batt { display: flex; align-items: center; justify-content: center; width: 24px; height: 12px;
+          border: 1.5px solid var(--label-3); border-radius: 4px; font-size: 9px; font-weight: 700;
+          position: relative; }
+  .batt::after { content: ""; position: absolute; right: -3.5px; width: 2px; height: 4px;
+                 background: var(--label-3); border-radius: 0 1px 1px 0; }
+  .ico { width: 19px; height: 19px; fill: none; stroke: var(--label); stroke-width: 1.9;
+         stroke-linecap: round; stroke-linejoin: round; }
+  .nav { padding: 2px 14px 10px; display: flex; align-items: center; gap: 10px; }
+  .platter { display: flex; align-items: center; justify-content: center; height: 40px;
+             background: var(--glass); border-radius: 999px;
+             box-shadow: 0 1px 3px rgba(0,0,0,.06), inset 0 0 0 .5px rgba(0,0,0,.04); }
+  .platter.circle { width: 40px; }
+  .nav .titles { flex: 1; text-align: center; line-height: 1.15; min-width: 0; }
+  .nav .t { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis; }
+  .nav .s { font-size: 11.5px; color: var(--label-2); white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis; }
+  .chiprun { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600;
+             border-radius: 999px; padding: 1px 8px; margin-right: 5px; }
+  .chiprun.starting { background: rgba(0,122,255,.12); color: #0a58ca; }
+  .chiprun.refused { background: rgba(255,59,48,.12); color: #b3261e; }
+  .spinner { width: 9px; height: 9px; border-radius: 50%; border: 1.6px solid rgba(0,122,255,.45);
+             border-top-color: transparent; }
+
+  .thread { flex: 1; padding: 10px 14px 0; display: flex; flex-direction: column;
+            min-height: 0; overflow: hidden; }
+  .ask { font-size: 13px; color: var(--label-2); padding-bottom: 9px; margin-bottom: 12px;
+         border-bottom: 1px solid var(--sep); }
+  .ask b { color: var(--label); font-weight: 600; }
+  .prose { font-size: 13.5px; line-height: 1.5; margin-bottom: 10px; }
+
+  .waiting { border: 1px solid var(--sep); border-radius: 14px; padding: 13px 14px;
+             margin-bottom: 12px; background: var(--fill-2); }
+  .waiting .top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .waiting .lbl { font-size: 13.5px; font-weight: 700; color: #0a58ca; }
+  .waiting .el { font-size: 12.5px; color: var(--label-2); margin-left: auto;
+                 font-variant-numeric: tabular-nums; }
+  .waiting .ttl { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+  .waiting .desc { font-size: 12.5px; line-height: 1.45; color: var(--label-2); }
+
+  .card { padding: 13px; border-radius: 14px; background: rgba(255,59,48,.05);
+          border: 1px solid rgba(255,59,48,.28); margin-bottom: 10px; }
+  .card .head { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .card .icon { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center;
+                font-size: 12px; background: rgba(255,59,48,.14); color: #b3261e; flex: none; }
+  .card .title { font-size: 15px; font-weight: 700; flex: 1; white-space: nowrap; overflow: hidden;
+                 text-overflow: ellipsis; }
+  .prov { font-size: 12px; color: var(--label-2); margin-bottom: 7px; letter-spacing: .04em; }
+  .why { font-size: 13.5px; font-weight: 600; line-height: 1.45; }
+  .body2 { font-size: 12.5px; line-height: 1.5; color: var(--label); margin-top: 6px; }
+  .subject { font-size: 13px; line-height: 1.45; color: var(--label-2); margin-top: 3px; }
+  .next { font-size: 12.5px; line-height: 1.5; margin-top: 8px; }
+  .btn { min-height: 40px; border-radius: 20px; display: flex; align-items: center;
+         justify-content: center; font-size: 15px; margin-top: 9px; }
+  .btn.primary { background: var(--blue); color: #fff; }
+  .btn.tinted { background: var(--fill); color: var(--blue); }
+  .card .foot { font-size: 12px; color: var(--label-2); margin-top: 9px; }
+
+  .mini { padding: 11px 13px; border-radius: 14px; background: var(--fill-2);
+          border: 1px solid var(--sep); margin-bottom: 9px; }
+  .mini .mh { display: flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 600; }
+  .mini .mi { width: 18px; height: 18px; border-radius: 5px; background: rgba(255,149,0,.16);
+              color: #b26a00; display: grid; place-items: center; font-size: 11px; flex: none; }
+  .mini .md { font-size: 12px; color: var(--label-2); line-height: 1.45; margin-top: 4px; }
+  .mini .mb { min-height: 32px; border-radius: 16px; background: var(--fill); color: var(--blue);
+              display: inline-flex; align-items: center; padding: 0 14px; font-size: 13px;
+              margin-top: 7px; }
+  .vsep { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--label-3);
+          margin: 4px 0 10px; }
+  .vsep::before, .vsep::after { content: ""; height: 1px; background: var(--sep); flex: 1; }
+
+  .tail { padding: 8px 14px 22px; }
+  .composer { display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+              border: 1px solid var(--sep); border-radius: 22px; color: var(--label-3); font-size: 15px; }
+  .composer .send { margin-left: auto; width: 30px; height: 30px; border-radius: 9px;
+                    background: var(--blue); color: #fff; display: grid; place-items: center; font-size: 13px; }
+
+  .note { width: 1330px; font-size: 13.5px; line-height: 1.65; color: #55555e; margin-top: 8px; }
+  .note b { color: #16161a; }
+  table { border-collapse: collapse; table-layout: fixed; width: 1330px; font-size: 13px; margin: 10px 0 4px; }
+  td, th { border: 1px solid var(--sep); padding: 6px 10px; text-align: left; vertical-align: top;
+           background: #fff; white-space: normal; word-break: break-word; }
+  th { background: var(--fill-2); font-weight: 600; }
+  td code { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+</style>
+
+<h1>普通会话「没跑起来」：同一张卡，原因全是机器侧的</h1>
+<p class="lede">
+  补 01 那张图缺的一格：<b>没有任务、没有项目的普通会话</b>。它的「起跑被拒」不可能来自项目线，
+  只会来自机器 —— 这台 runner 跑不了这个引擎（没装 / 没登录 / runner 太旧）、runner 掉线、引擎起来就死。
+  好消息是这些原因<b>每一句都已经在仓库里</b>（<code>runner-provider-support.ts</code> 的四条升级句、
+  <code>Transcript.tsx</code> 的 repair 卡、reaper 的 <code>runner offline</code>）；
+  缺的不是句库，是<b>这句话要落在一条从未开口的会话上</b>：今天这条路径上页面只有 Starting。
+</p>
+
+<div class="row">
+
+  <!-- ① now -->
+  <figure>
+    <span class="tag now">① 现在</span>
+    <div class="phone" style="height:700px">
+      <div class="status"><span>16:22</span>
+        <span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i>
+          <i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">31</span></span>
+      </div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
+        <span class="titles"><span class="t">帮我看看今天的抓取日志</span>
+          <span class="s"><span class="chiprun starting"><span class="spinner"></span>Starting</span>Open · 12m</span></span>
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M8 8l4-4 4 4M5 20h14"/></svg></span>
+      </div>
+      <div class="thread">
+        <div class="ask"><b>↑ Your message</b>　帮我看看今天的抓取日志，为什么少了 30%</div>
+        <div class="waiting">
+          <div class="top"><span class="spinner"></span><span class="lbl">Starting…</span><span class="el">12m 04s</span></div>
+          <div class="ttl">Getting the session ready</div>
+          <div class="desc">The runner has this session, but the engine has not started your message yet.
+            Usually seconds — a long conversation can take several minutes to get going.</div>
+        </div>
+        <div class="prose" style="color:var(--label-2)">（同样：没有引擎起过，没有事件，没有回合。）</div>
+      </div>
+      <div class="tail"><div class="composer">＋ Message…<span class="send">↑</span></div></div>
+    </div>
+    <figcaption><b>① 今天：普通会话也没比任务会话好</b>
+      同一个 <code>sessionIsStarting()</code>（<code>runnerSlots.ts:157</code>）读的是
+      「运行中但引擎还没说话」。普通会话没有 SOURCE 那一列，所以连 <code>source_refusal_code</code>
+      这种线索都没有 —— 页面只有一句 Starting。
+      <br><br>列表行同理：<code>statusLabel</code> 里 <code>waitingNoticeFor</code> 排在 FAILED 之前
+      （<code>WorkspaceView.tsx:1441</code>），所以只要还挂着 claim，永远先显示 Starting。</figcaption>
+  </figure>
+
+  <!-- ② after: machine-side causes -->
+  <figure>
+    <span class="tag a">② 我建议 · 机器侧原因</span>
+    <div class="phone" style="height:700px">
+      <div class="status"><span>16:22</span>
+        <span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i>
+          <i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">31</span></span>
+      </div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
+        <span class="titles"><span class="t">帮我看看今天的抓取日志</span>
+          <span class="s"><span class="chiprun refused">✕ Not started</span>Open · 12m</span></span>
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M8 8l4-4 4 4M5 20h14"/></svg></span>
+      </div>
+      <div class="thread">
+        <div class="ask"><b>↑ Your message</b>　帮我看看今天的抓取日志，为什么少了 30%</div>
+        <div class="card mark">
+          <div class="head"><div class="icon">⚠</div><div class="title">This run never started</div></div>
+          <div class="prov">FROM ORBIT</div>
+          <div class="why">Waiting for a newer runner</div>
+          <div class="body2">longdeMac-mini.local runs Orbit runner 0.1.120; OpenCode needs 0.1.82 or newer.
+            The runner updates itself when no session is running on it, and this run starts then.</div>
+          <div class="btn tinted">Open the runner</div>
+          <div class="foot">No engine ran · your message is still here</div>
+        </div>
+        <div class="vsep">同一张卡 · 按原因只出其中一张</div>
+        <div class="mini">
+          <div class="mh"><span class="mi">⚠</span>OpenCode isn’t installed on longdeMac-mini.local</div>
+          <div class="md">Install it from Providers, then send your message again.</div>
+          <div class="mb">Install</div>
+        </div>
+      </div>
+      <div class="tail"><div class="composer">＋ Message…<span class="send">↑</span></div></div>
+    </div>
+    <figcaption><b>② 卡片标题与 01 一致，原因和动作换机器侧</b>
+      「This run never started」是同一个事实，所以是同一张卡；<b>why / body / 按钮</b>来自原因。
+      三句正文全部照抄仓库现成的字：升级句在 <code>runner-provider-support.ts</code>
+      （<code>OPENCODE_RUNNER_UPGRADE_ERROR</code> 等），未安装/未登录两句在
+      <code>Transcript.tsx</code> 的 repair 卡里（<code>Install</code> / <code>Sign in</code> 也是现成动作）。
+      <br><br>今天这些卡只画在<b>引擎说过话</b>的 transcript 里；这里要求的是同一条句子能落在
+      <b>没有 transcript 的会话</b>上 —— 文案一个字不新写，只是换个位置。</figcaption>
+  </figure>
+
+  <!-- ③ after: runner gone / died at spawn -->
+  <figure>
+    <span class="tag b">③ 我建议 · 机器没了 / 引擎起来就死</span>
+    <div class="phone" style="height:700px">
+      <div class="status"><span>16:22</span>
+        <span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i>
+          <i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">31</span></span>
+      </div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
+        <span class="titles"><span class="t">帮我看看今天的抓取日志</span>
+          <span class="s"><span class="chiprun refused">✕ Not started</span>Open · 12m</span></span>
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M8 8l4-4 4 4M5 20h14"/></svg></span>
+      </div>
+      <div class="thread">
+        <div class="ask"><b>↑ Your message</b>　帮我看看今天的抓取日志，为什么少了 30%</div>
+        <div class="card mark">
+          <div class="head"><div class="icon">⚠</div><div class="title">This run never started</div></div>
+          <div class="prov">FROM ORBIT</div>
+          <div class="why">The runner holding this session went offline</div>
+          <div class="body2">longdeMac-mini.local stopped reporting while this run was starting. Nothing was
+            produced, and nothing was sent anywhere.</div>
+          <div class="btn primary">Send it again</div>
+          <div class="btn tinted">Open the runner</div>
+          <div class="foot">Disconnected — runner went offline</div>
+        </div>
+        <div class="mini">
+          <div class="mh"><span class="mi">⚠</span>Same card — the engine died before it could read your message</div>
+          <div class="md">The CLI exited on startup with no output. Retrying on this runner rarely helps;
+            the runner's own report says what it has.</div>
+          <div class="mb">Send it again</div>
+        </div>
+      </div>
+      <div class="tail"><div class="composer">＋ Message…<span class="send">↑</span></div></div>
+    </div>
+    <figcaption><b>③ 这两类的词今天已经有了，缺的只是「摆在面前」</b>
+      <code>Disconnected — runner went offline</code> 是列表行 tooltip 现成的词
+      （<code>WorkspaceView.tsx:1466</code>），reaper 也会把这类 run 收尾成 <code>runner offline</code>，
+      所以它比 ② 更接近「已经有了」；0 轮的引擎猝死在库里就是
+      <code>num_turns=0</code> 的 FAILED，同样只需要摆到卡上。
+      和任务会话一样：<b>先收尾、再显形</b>（否则状态还是 RUNNING，卡片画不出来）。</figcaption>
+  </figure>
+</div>
+
+<p class="note">
+  <b>三类原因、三种动作、今天各自的处境：</b>
+  <table>
+    <colgroup><col style="width:19%"><col style="width:37%"><col style="width:25%"><col style="width:19%"></colgroup>
+    <tr><th>原因</th><th>句子（现成）</th><th>用户的动作</th><th>今天</th></tr>
+    <tr><td>runner 太旧，跑不了这个引擎</td><td><code>Waiting for a newer runner</code> + runner 版本句</td>
+        <td>什么都不用按：runner 空闲时自更新，这次运行随后自己开始</td><td>只有 antigravity/dsh 的 transcript 卡</td></tr>
+    <tr><td>引擎没装 / 没登录</td><td><code>… isn’t installed on &lt;machine&gt;</code> / <code>… needs authentication</code></td>
+        <td>Install / Sign in（Providers、runner 登录）</td><td>同上，且只在被 claim 门挡下的会话上</td></tr>
+    <tr><td>runner 掉线 / 引擎起来就死</td><td><code>Disconnected — runner went offline</code> / 引擎自己的 stderr</td>
+        <td>Send it again（掉线的会自动重试）</td><td>词有了；0 轮猝死没有卡</td></tr>
+  </table>
+  <br>
+  <b>普通会话与任务会话的差别只有两点：</b>原因集合（这里全是机器侧，没有「线不存在」这一类）；
+  恢复语义（任务会话的 <code>Start it again</code> 要新建一次运行，普通会话直接重发即可 ——
+  会话本身可续，所以按钮是 <code>Send it again</code>）。
+  <b>相同的两点：</b>同一张卡（同一个事实）；同样依赖「拒绝/失败时把这次运行收尾」，
+  否则会话永远挂在 run_claimed_at 上，卡片和 <code>Retrying</code> 状态都画不出来。
+</p>
+
+<script>
+  addEventListener('load', function () {
+    var r = document.body.getBoundingClientRect();
+    document.title = 'SIZE ' + Math.ceil(r.width) + 'x' + Math.ceil(r.height);
+  });
+</script>
+</html>

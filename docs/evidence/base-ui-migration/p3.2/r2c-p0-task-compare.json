@@ -1,0 +1,2157 @@
+{
+ "screenshots": {
+  "chromium-dark-desktop/task-action-focus.png": {
+   "equal": true,
+   "sha256": "71af01e7da52f4daa68d71fc5befd7d2cc79ae28f9658586ce227f1eec74e423"
+  },
+  "chromium-dark-desktop/task-action-hover.png": {
+   "equal": true,
+   "sha256": "c546d69ce0158ddcba07d225d9c653da5e3911caf97225bc28943818de4e9bca"
+  },
+  "chromium-dark-desktop/task-action-menu.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 45,
+     "pixels": 455,
+     "x": [
+      1192,
+      1231
+     ],
+     "y": [
+      14,
+      58
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      1054,
+      1055
+     ],
+     "y": [
+      56,
+      58
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      1054,
+      1056
+     ],
+     "y": [
+      153,
+      155
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      1225,
+      1227
+     ],
+     "y": [
+      153,
+      155
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      312,
+      313
+     ],
+     "y": [
+      175,
+      176
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 45,
+   "pixels": 466,
+   "pixelsAtMost2": 21,
+   "sha256Del": "fe9a650f2062b605980ddc8612ac9e5b87a02fe7eb38cbd379047bfc8c1806cc",
+   "sha256Ref": "7af4c91081813d74bebd31f87e1cdb8ce87b8b239ccbd85e061e0c1034796b45"
+  },
+  "chromium-dark-desktop/task-detail.png": {
+   "equal": true,
+   "sha256": "17ad7c0c2036f375b4665025014c3ceb08d0afd32d624e3d13d5060993fd7a4e"
+  },
+  "chromium-dark-desktop/task-public-share.png": {
+   "missingInDelivery": true
+  },
+  "chromium-dark-desktop/task-share-dialog.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 36,
+     "pixels": 450,
+     "x": [
+      852,
+      891
+     ],
+     "y": [
+      108,
+      147
+     ]
+    },
+    {
+     "maxChannelDiff": 186,
+     "pixels": 1168,
+     "x": [
+      438,
+      605
+     ],
+     "y": [
+      150,
+      179
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 186,
+   "pixels": 1618,
+   "pixelsAtMost2": 7,
+   "sha256Del": "9d0e9dbdef954cd75929e0b499a717db75334a58df52055979248a459a64145f",
+   "sha256Ref": "968292dc6b62d6b3bfa03c717b824299434b16b6a0866662a3fafab5d45ea905"
+  },
+  "chromium-dark-phone/task-action-focus.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 2,
+     "pixels": 34,
+     "x": [
+      346,
+      357
+     ],
+     "y": [
+      246,
+      257
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 34,
+     "x": [
+      346,
+      357
+     ],
+     "y": [
+      279,
+      290
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 68,
+   "pixelsAtMost2": 68,
+   "sha256Del": "b84799263fee89ccf7f8088fc99d7fa125327d5d896f255d662977588ad0d17c",
+   "sha256Ref": "928e2aa3ba9a7a94bfb78121544b866bc55ba0ede54ee70c56fd8e24c4020c6a"
+  },
+  "chromium-dark-phone/task-action-hover.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 2,
+     "pixels": 34,
+     "x": [
+      346,
+      357
+     ],
+     "y": [
+      246,
+      257
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 34,
+     "x": [
+      346,
+      357
+     ],
+     "y": [
+      279,
+      290
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 68,
+   "pixelsAtMost2": 68,
+   "sha256Del": "832020df658d2d727559043faeee4c6680f6a2d799835bac100329298c638256",
+   "sha256Ref": "3e47867e4cdf3710a16b92938ac20ef59aa94ade1de5f703e7e3378142011a44"
+  },
+  "chromium-dark-phone/task-action-menu.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 45,
+     "pixels": 551,
+     "x": [
+      286,
+      333
+     ],
+     "y": [
+      14,
+      66
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      156,
+      157
+     ],
+     "y": [
+      64,
+      66
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      156,
+      158
+     ],
+     "y": [
+      161,
+      163
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      327,
+      329
+     ],
+     "y": [
+      161,
+      163
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 34,
+     "x": [
+      346,
+      357
+     ],
+     "y": [
+      246,
+      257
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 34,
+     "x": [
+      346,
+      357
+     ],
+     "y": [
+      279,
+      290
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 45,
+   "pixels": 627,
+   "pixelsAtMost2": 86,
+   "sha256Del": "e5bbd20d11e74d07e03df024cf8cfe4a6c539dbfae711a810a8446551b530830",
+   "sha256Ref": "e77181cf1e960d5963338baf99832793b2ce71c21bebcb5e4b4c04427eea4396"
+  },
+  "chromium-dark-phone/task-detail.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 2,
+     "pixels": 34,
+     "x": [
+      346,
+      357
+     ],
+     "y": [
+      246,
+      257
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 34,
+     "x": [
+      346,
+      357
+     ],
+     "y": [
+      279,
+      290
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 68,
+   "pixelsAtMost2": 68,
+   "sha256Del": "feddbad5d9380c31a61900e5d4db4934220384b9179e12bba1816c12f0d90cea",
+   "sha256Ref": "576c9b73f78356ac8f27f52e0aa76eaf0096267743998f7d1507df6ecedaef87"
+  },
+  "chromium-dark-phone/task-public-share.png": {
+   "missingInDelivery": true
+  },
+  "chromium-dark-phone/task-share-dialog.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 186,
+     "pixels": 21183,
+     "x": [
+      0,
+      389
+     ],
+     "y": [
+      103,
+      709
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 186,
+   "pixels": 21183,
+   "pixelsAtMost2": 19572,
+   "sha256Del": "bb55267219f6de7b8c2fbcade41ad6dc1f91e55651a5ec34f3c173bfbf32e5b8",
+   "sha256Ref": "ad63aae00f5e909509e32ae9c4298b3b34fa7628221ec816d046efe81be358d3"
+  },
+  "chromium-light-desktop/task-action-focus.png": {
+   "equal": true,
+   "sha256": "987815c3fe82d504f42c9c5db3a195d47c6586af6e84fd0d8db278e9bfc8c4b7"
+  },
+  "chromium-light-desktop/task-action-hover.png": {
+   "equal": true,
+   "sha256": "4a55895f1b960e2fe323e7282a6ed5493a2451ead6df2fedea5b4570f0a42857"
+  },
+  "chromium-light-desktop/task-action-menu.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 82,
+     "pixels": 454,
+     "x": [
+      1192,
+      1231
+     ],
+     "y": [
+      14,
+      58
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      1054,
+      1056
+     ],
+     "y": [
+      56,
+      58
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      1054,
+      1055
+     ],
+     "y": [
+      153,
+      155
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      1226,
+      1227
+     ],
+     "y": [
+      153,
+      155
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      312,
+      313
+     ],
+     "y": [
+      174,
+      176
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 82,
+   "pixels": 466,
+   "pixelsAtMost2": 16,
+   "sha256Del": "82e929f91db530ce8dafc4f688a479a1942236725558465dc2df26456fa89a9a",
+   "sha256Ref": "a96c90d797da2516fed17d9a236df05942ccdeb16752a73aaa36de00f87de355"
+  },
+  "chromium-light-desktop/task-detail.png": {
+   "equal": true,
+   "sha256": "114cd2911df6e1186e81765b6fffe7bf8d038c87952219394cd45bbe2a2ab951"
+  },
+  "chromium-light-desktop/task-public-share.png": {
+   "missingInDelivery": true
+  },
+  "chromium-light-desktop/task-share-dialog.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 82,
+     "pixels": 450,
+     "x": [
+      852,
+      891
+     ],
+     "y": [
+      108,
+      147
+     ]
+    },
+    {
+     "maxChannelDiff": 239,
+     "pixels": 778,
+     "x": [
+      439,
+      604
+     ],
+     "y": [
+      151,
+      178
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 239,
+   "pixels": 1228,
+   "pixelsAtMost2": 8,
+   "sha256Del": "be72a14ec72403d5e9963395b758a3f8bd33be52612ebf39a0463c0e21f5de23",
+   "sha256Ref": "92299e24144fcee027dc6e471b2c429bdb1a464b60afe857681db7197be1c787"
+  },
+  "chromium-light-phone/task-action-focus.png": {
+   "equal": true,
+   "sha256": "a5cc6b5ff4e3271fba1a28fa363198a68088f93e7503719debfc9c45cdbd8780"
+  },
+  "chromium-light-phone/task-action-hover.png": {
+   "equal": true,
+   "sha256": "943385fabd800c138a907017f3b448b8e11502f44a37c509c62c905f9566fe79"
+  },
+  "chromium-light-phone/task-action-menu.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 82,
+     "pixels": 550,
+     "x": [
+      286,
+      333
+     ],
+     "y": [
+      14,
+      66
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      156,
+      158
+     ],
+     "y": [
+      64,
+      66
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      156,
+      157
+     ],
+     "y": [
+      161,
+      163
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      328,
+      329
+     ],
+     "y": [
+      161,
+      163
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 82,
+   "pixels": 557,
+   "pixelsAtMost2": 11,
+   "sha256Del": "e56a4013d7ca61276147b755cd38afdb2109d0f7711b553982e096cb599e906b",
+   "sha256Ref": "0c3321ffc316ed378af8ec6a533bc9d0b654e920010d035d4fe1f457a8c5bc34"
+  },
+  "chromium-light-phone/task-detail.png": {
+   "equal": true,
+   "sha256": "6feae9c387374442f7c327031c13f39e2a48f7e4d592c3ec35973c2596821990"
+  },
+  "chromium-light-phone/task-public-share.png": {
+   "missingInDelivery": true
+  },
+  "chromium-light-phone/task-share-dialog.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 239,
+     "pixels": 31258,
+     "x": [
+      0,
+      389
+     ],
+     "y": [
+      89,
+      723
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 51,
+     "x": [
+      4,
+      34
+     ],
+     "y": [
+      90,
+      95
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 239,
+   "pixels": 31309,
+   "pixelsAtMost2": 30089,
+   "sha256Del": "d723b3ad6778af0d572eb71569b58e8e889a66241a86cacab8037c95e3e26af0",
+   "sha256Ref": "d2017f8c825f82664ac17408fb3baff1d1342b7d0a60b1629499136eced86c02"
+  },
+  "webkit-dark-desktop/task-action-focus.png": {
+   "equal": true,
+   "sha256": "f05eeb9b19eab04d4670b6372863ce4cfe2bd6556f0289a733f6c0b1da407009"
+  },
+  "webkit-dark-desktop/task-action-hover.png": {
+   "equal": true,
+   "sha256": "d4d41cbb300feadfc5980c487f8e001b1467d96018f2139daae12f4839975fa0"
+  },
+  "webkit-dark-desktop/task-action-menu.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 45,
+     "pixels": 454,
+     "x": [
+      1192,
+      1231
+     ],
+     "y": [
+      14,
+      58
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      1054,
+      1056
+     ],
+     "y": [
+      56,
+      58
+     ]
+    },
+    {
+     "maxChannelDiff": 36,
+     "pixels": 29,
+     "x": [
+      1070,
+      1081
+     ],
+     "y": [
+      100,
+      108
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      1226,
+      1227
+     ],
+     "y": [
+      153,
+      155
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      1055,
+      1055
+     ],
+     "y": [
+      155,
+      155
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 45,
+   "pixels": 489,
+   "pixelsAtMost2": 23,
+   "sha256Del": "4bef0aae71a0d09bafe2ec12b6f24d3adda32c331823a09e8b8cdb05b219ec34",
+   "sha256Ref": "bc9adad4cf04c7645a341086ac12f630e58586155fa044e4733380d5708ea406"
+  },
+  "webkit-dark-desktop/task-detail.png": {
+   "equal": true,
+   "sha256": "716e5d93bb3a20b6d36255c19e0d9b9f779cb505bb004e45c9d210d9fa074542"
+  },
+  "webkit-dark-desktop/task-public-share.png": {
+   "missingInDelivery": true
+  },
+  "webkit-dark-desktop/task-share-dialog.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      380,
+      385
+     ],
+     "y": [
+      101,
+      105
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      899,
+      899
+     ],
+     "y": [
+      105,
+      105
+     ]
+    },
+    {
+     "maxChannelDiff": 36,
+     "pixels": 450,
+     "x": [
+      852,
+      891
+     ],
+     "y": [
+      108,
+      147
+     ]
+    },
+    {
+     "maxChannelDiff": 138,
+     "pixels": 796,
+     "x": [
+      438,
+      605
+     ],
+     "y": [
+      150,
+      179
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      380,
+      384
+     ],
+     "y": [
+      593,
+      597
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      895,
+      898
+     ],
+     "y": [
+      593,
+      597
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 138,
+   "pixels": 1260,
+   "pixelsAtMost2": 21,
+   "sha256Del": "d4e4fa462335e925d1612eb297d34d57d495652ef476b0b14440d5156ae9f7eb",
+   "sha256Ref": "ea2a58bfa6cf9220c36ee051b59e264656a1a9e9e77de0722ce105fdb58a766c"
+  },
+  "webkit-dark-phone/task-action-focus.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 33,
+     "x": [
+      338,
+      349
+     ],
+     "y": [
+      246,
+      257
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 33,
+     "x": [
+      338,
+      349
+     ],
+     "y": [
+      279,
+      290
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 66,
+   "pixelsAtMost2": 66,
+   "sha256Del": "b9edf27f85d9304718043b232450b4d9ff3ced817e0f0bd828d7aea23337cc1f",
+   "sha256Ref": "13ca053623da6f62927955f55fa180f6107e1e979c2270e7bc7d14c9558cd3a1"
+  },
+  "webkit-dark-phone/task-action-hover.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 33,
+     "x": [
+      338,
+      349
+     ],
+     "y": [
+      246,
+      257
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 33,
+     "x": [
+      338,
+      349
+     ],
+     "y": [
+      279,
+      290
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 66,
+   "pixelsAtMost2": 66,
+   "sha256Del": "f02a4c45316f9edda3043baaad3cb35aac7a2589adb65d6eb4f836ed5a5b9b75",
+   "sha256Ref": "e9220c872625dbd51f7ab7b37c71601a6bd11feff91e9723b00ecbfe10afbd71"
+  },
+  "webkit-dark-phone/task-action-menu.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 45,
+     "pixels": 550,
+     "x": [
+      286,
+      333
+     ],
+     "y": [
+      14,
+      66
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      156,
+      158
+     ],
+     "y": [
+      64,
+      66
+     ]
+    },
+    {
+     "maxChannelDiff": 36,
+     "pixels": 29,
+     "x": [
+      172,
+      183
+     ],
+     "y": [
+      108,
+      116
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      156,
+      157
+     ],
+     "y": [
+      161,
+      163
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      327,
+      329
+     ],
+     "y": [
+      161,
+      163
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 33,
+     "x": [
+      338,
+      349
+     ],
+     "y": [
+      246,
+      257
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 33,
+     "x": [
+      338,
+      349
+     ],
+     "y": [
+      279,
+      290
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 45,
+   "pixels": 655,
+   "pixelsAtMost2": 93,
+   "sha256Del": "213ec5ec43e0851f2ada09159bfeace4effe72f365472a86a63dd6eda271ba30",
+   "sha256Ref": "14491174b4c4c8a2cf0d58d529486f5e0f3c611cf5a25a75dfdeab2bc14334cd"
+  },
+  "webkit-dark-phone/task-detail.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 33,
+     "x": [
+      338,
+      349
+     ],
+     "y": [
+      246,
+      257
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 33,
+     "x": [
+      338,
+      349
+     ],
+     "y": [
+      279,
+      290
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 66,
+   "pixelsAtMost2": 66,
+   "sha256Del": "1a41a568778acba3a00e435f20732406d55b240f641043ddeabb16cf05510044",
+   "sha256Ref": "2f4e3bf6e61142a194da499676fe95fa2eb51a3a83133220f329b928e231c982"
+  },
+  "webkit-dark-phone/task-public-share.png": {
+   "missingInDelivery": true
+  },
+  "webkit-dark-phone/task-share-dialog.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      8,
+      8
+     ],
+     "y": [
+      113,
+      113
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      381,
+      381
+     ],
+     "y": [
+      113,
+      113
+     ]
+    },
+    {
+     "maxChannelDiff": 36,
+     "pixels": 450,
+     "x": [
+      334,
+      373
+     ],
+     "y": [
+      116,
+      155
+     ]
+    },
+    {
+     "maxChannelDiff": 138,
+     "pixels": 796,
+     "x": [
+      66,
+      233
+     ],
+     "y": [
+      158,
+      187
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      8,
+      12
+     ],
+     "y": [
+      681,
+      685
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      377,
+      380
+     ],
+     "y": [
+      681,
+      685
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 138,
+   "pixels": 1257,
+   "pixelsAtMost2": 18,
+   "sha256Del": "84a89608274273b2acf006b2df4492b655ed8ba3df2ea7e5a536fb7d2bb423d7",
+   "sha256Ref": "4d288210241c7b34240e1cccea137541927394a60aac176abdd0b06d4b7c493b"
+  },
+  "webkit-light-desktop/task-action-focus.png": {
+   "equal": true,
+   "sha256": "064cc3e3f1dd4d4f8cc4c4752a906ae624722b4822330c2cb696cacc102b94fe"
+  },
+  "webkit-light-desktop/task-action-hover.png": {
+   "equal": true,
+   "sha256": "94df294c82e9f0c7b049184a4fe27feeffe6891dacfccafa10b35ff9fc73b4b0"
+  },
+  "webkit-light-desktop/task-action-menu.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 82,
+     "pixels": 454,
+     "x": [
+      1192,
+      1231
+     ],
+     "y": [
+      14,
+      58
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      1056,
+      1056
+     ],
+     "y": [
+      56,
+      56
+     ]
+    },
+    {
+     "maxChannelDiff": 59,
+     "pixels": 31,
+     "x": [
+      1070,
+      1081
+     ],
+     "y": [
+      100,
+      108
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      1225,
+      1226
+     ],
+     "y": [
+      153,
+      155
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      1056,
+      1056
+     ],
+     "y": [
+      155,
+      155
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 82,
+   "pixels": 489,
+   "pixelsAtMost2": 16,
+   "sha256Del": "8379a8c00abae3054fe3891bd6ef8c46d50e4e634a29d7ae451c883681d8f679",
+   "sha256Ref": "36b9d7ee7bff653f16c5f96e7c2e2efaf68edf659eec5761d4578f71fb4c7194"
+  },
+  "webkit-light-desktop/task-detail.png": {
+   "equal": true,
+   "sha256": "096de3fe7b8170c165464098051c9bc6793bb872bf0593715d51267bee3bf058"
+  },
+  "webkit-light-desktop/task-public-share.png": {
+   "missingInDelivery": true
+  },
+  "webkit-light-desktop/task-share-dialog.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      382,
+      384
+     ],
+     "y": [
+      101,
+      104
+     ]
+    },
+    {
+     "maxChannelDiff": 82,
+     "pixels": 188,
+     "x": [
+      865,
+      898
+     ],
+     "y": [
+      101,
+      147
+     ]
+    },
+    {
+     "maxChannelDiff": 82,
+     "pixels": 265,
+     "x": [
+      852,
+      888
+     ],
+     "y": [
+      108,
+      147
+     ]
+    },
+    {
+     "maxChannelDiff": 163,
+     "pixels": 796,
+     "x": [
+      438,
+      605
+     ],
+     "y": [
+      150,
+      179
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      894,
+      899
+     ],
+     "y": [
+      593,
+      597
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      385,
+      385
+     ],
+     "y": [
+      597,
+      597
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 163,
+   "pixels": 1254,
+   "pixelsAtMost2": 14,
+   "sha256Del": "fc3fd53ba727008be6a5ed7dbc424b802fbfcce031f9ac4bbd52eafb05ee3d7b",
+   "sha256Ref": "b00b2e75752f686758a01cad195802571c152af25ad3db3059161bbe92eaa932"
+  },
+  "webkit-light-phone/task-action-focus.png": {
+   "equal": true,
+   "sha256": "64f5b2f9c9f00018242c5310c4dad11917fbf9afd7cb6e9a10d962fdfd377479"
+  },
+  "webkit-light-phone/task-action-hover.png": {
+   "equal": true,
+   "sha256": "601b5038dd0d6fb4327ef991d11a964626efa3307cdca2942d887f9ac3a92329"
+  },
+  "webkit-light-phone/task-action-menu.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 82,
+     "pixels": 550,
+     "x": [
+      286,
+      333
+     ],
+     "y": [
+      14,
+      66
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      158,
+      158
+     ],
+     "y": [
+      64,
+      64
+     ]
+    },
+    {
+     "maxChannelDiff": 59,
+     "pixels": 31,
+     "x": [
+      172,
+      183
+     ],
+     "y": [
+      108,
+      116
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      157,
+      158
+     ],
+     "y": [
+      161,
+      163
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      327,
+      328
+     ],
+     "y": [
+      161,
+      163
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 82,
+   "pixels": 586,
+   "pixelsAtMost2": 17,
+   "sha256Del": "b76ada09c93876dbafd24922c0925821413b2fc37381795c68889bbe7e31e802",
+   "sha256Ref": "2d9968586ceced3ebd162925c124857952d3d86e4cd579dae2af860aef79085e"
+  },
+  "webkit-light-phone/task-detail.png": {
+   "equal": true,
+   "sha256": "6eec7569389d085b263fe4af2d4ab2405bd75443327bd5f49227660d1af87fca"
+  },
+  "webkit-light-phone/task-public-share.png": {
+   "missingInDelivery": true
+  },
+  "webkit-light-phone/task-share-dialog.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      10,
+      12
+     ],
+     "y": [
+      109,
+      112
+     ]
+    },
+    {
+     "maxChannelDiff": 82,
+     "pixels": 188,
+     "x": [
+      347,
+      380
+     ],
+     "y": [
+      109,
+      155
+     ]
+    },
+    {
+     "maxChannelDiff": 82,
+     "pixels": 265,
+     "x": [
+      334,
+      370
+     ],
+     "y": [
+      116,
+      155
+     ]
+    },
+    {
+     "maxChannelDiff": 163,
+     "pixels": 796,
+     "x": [
+      66,
+      233
+     ],
+     "y": [
+      158,
+      187
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      376,
+      381
+     ],
+     "y": [
+      681,
+      685
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      13,
+      13
+     ],
+     "y": [
+      685,
+      685
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 163,
+   "pixels": 1254,
+   "pixelsAtMost2": 14,
+   "sha256Del": "b371953e5659dd42f0e4b676f872cff71d000ce27c6cdd919a5b21834247044b",
+   "sha256Ref": "b7a683ce933d7d5c4453f9dd05234ce5055ff3133fed09726b313e4f1b266890"
+  }
+ },
+ "styles": {
+  "chromium-dark-desktop/task-action-focus": {},
+  "chromium-dark-desktop/task-action-hover": {},
+  "chromium-dark-desktop/task-action-menu": {},
+  "chromium-dark-desktop/task-detail": {
+   "select": {
+    "fontSize": [
+     "14px",
+     "13px"
+    ],
+    "lineHeight": [
+     "22px",
+     "20.4286px"
+    ]
+   }
+  },
+  "chromium-dark-desktop/task-share-dialog": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-dark-phone/task-action-focus": {},
+  "chromium-dark-phone/task-action-hover": {},
+  "chromium-dark-phone/task-action-menu": {},
+  "chromium-dark-phone/task-detail": {
+   "select": {
+    "fontSize": [
+     "14px",
+     "13px"
+    ],
+    "lineHeight": [
+     "22px",
+     "20.4286px"
+    ]
+   }
+  },
+  "chromium-dark-phone/task-share-dialog": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-light-desktop/task-action-focus": {},
+  "chromium-light-desktop/task-action-hover": {},
+  "chromium-light-desktop/task-action-menu": {},
+  "chromium-light-desktop/task-detail": {
+   "select": {
+    "fontSize": [
+     "14px",
+     "13px"
+    ],
+    "lineHeight": [
+     "22px",
+     "20.4286px"
+    ]
+   }
+  },
+  "chromium-light-desktop/task-share-dialog": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-light-phone/task-action-focus": {},
+  "chromium-light-phone/task-action-hover": {},
+  "chromium-light-phone/task-action-menu": {},
+  "chromium-light-phone/task-detail": {
+   "select": {
+    "fontSize": [
+     "14px",
+     "13px"
+    ],
+    "lineHeight": [
+     "22px",
+     "20.4286px"
+    ]
+   }
+  },
+  "chromium-light-phone/task-share-dialog": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/task-action-focus": {},
+  "webkit-dark-desktop/task-action-hover": {},
+  "webkit-dark-desktop/task-action-menu": {
+   "menu": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/task-detail": {
+   "select": {
+    "fontSize": [
+     "14px",
+     "13px"
+    ],
+    "lineHeight": [
+     "22px",
+     "20.428589px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/task-share-dialog": {
+   "access": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   },
+   "input": {
+    "lineHeight": [
+     "19.642857px",
+     "19.642874px"
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/task-action-focus": {},
+  "webkit-dark-phone/task-action-hover": {},
+  "webkit-dark-phone/task-action-menu": {
+   "menu": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/task-detail": {
+   "select": {
+    "fontSize": [
+     "14px",
+     "13px"
+    ],
+    "lineHeight": [
+     "22px",
+     "20.428589px"
+    ]
+   }
+  },
+  "webkit-dark-phone/task-share-dialog": {
+   "access": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   },
+   "input": {
+    "lineHeight": [
+     "19.642857px",
+     "19.642874px"
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/task-action-focus": {},
+  "webkit-light-desktop/task-action-hover": {},
+  "webkit-light-desktop/task-action-menu": {
+   "menu": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/task-detail": {
+   "select": {
+    "fontSize": [
+     "14px",
+     "13px"
+    ],
+    "lineHeight": [
+     "22px",
+     "20.428589px"
+    ]
+   }
+  },
+  "webkit-light-desktop/task-share-dialog": {
+   "access": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   },
+   "input": {
+    "lineHeight": [
+     "19.642857px",
+     "19.642874px"
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/task-action-focus": {},
+  "webkit-light-phone/task-action-hover": {},
+  "webkit-light-phone/task-action-menu": {
+   "menu": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/task-detail": {
+   "select": {
+    "fontSize": [
+     "14px",
+     "13px"
+    ],
+    "lineHeight": [
+     "22px",
+     "20.428589px"
+    ]
+   }
+  },
+  "webkit-light-phone/task-share-dialog": {
+   "access": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   },
+   "input": {
+    "lineHeight": [
+     "19.642857px",
+     "19.642874px"
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  }
+ },
+ "tests": {
+  "chromium-dark-desktop :: P0.2-FOCUS-1: task share Escape restores focus": {
+   "del": null,
+   "ref": "failed"
+  },
+  "chromium-dark-desktop :: P0.2-FOCUS-2: task share Done restores focus": {
+   "del": null,
+   "ref": "failed"
+  },
+  "chromium-dark-desktop :: P2.3 production notification compatibility": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: both sides of existing 600, 640 and 960px rules": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: controlled error \u203a projects error and retry": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: controlled loading \u203a projects loading and release": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: profile": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: projects": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: record browser performance baseline": {
+   "del": null,
+   "ref": "skipped"
+  },
+  "chromium-dark-desktop :: session": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: settings": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: share": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: task": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: wiki": {
+   "del": null,
+   "ref": "failed"
+  },
+  "chromium-dark-phone :: P0.2-FOCUS-1: task share Escape restores focus": {
+   "del": null,
+   "ref": "failed"
+  },
+  "chromium-dark-phone :: P0.2-FOCUS-2: task share Done restores focus": {
+   "del": null,
+   "ref": "failed"
+  },
+  "chromium-dark-phone :: P2.3 production notification compatibility": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: both sides of existing 600, 640 and 960px rules": {
+   "del": null,
+   "ref": "skipped"
+  },
+  "chromium-dark-phone :: controlled error \u203a projects error and retry": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: controlled loading \u203a projects loading and release": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: profile": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: projects": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: record browser performance baseline": {
+   "del": null,
+   "ref": "skipped"
+  },
+  "chromium-dark-phone :: session": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: settings": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: share": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: task": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: wiki": {
+   "del": null,
+   "ref": "failed"
+  },
+  "chromium-light-desktop :: P0.2-FOCUS-1: task share Escape restores focus": {
+   "del": null,
+   "ref": "failed"
+  },
+  "chromium-light-desktop :: P0.2-FOCUS-2: task share Done restores focus": {
+   "del": null,
+   "ref": "failed"
+  },
+  "chromium-light-desktop :: P2.3 production notification compatibility": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: both sides of existing 600, 640 and 960px rules": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: controlled error \u203a projects error and retry": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: controlled loading \u203a projects loading and release": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: profile": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: projects": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: record browser performance baseline": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: session": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: settings": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: share": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: task": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: wiki": {
+   "del": null,
+   "ref": "failed"
+  },
+  "chromium-light-phone :: P0.2-FOCUS-1: task share Escape restores focus": {
+   "del": null,
+   "ref": "failed"
+  },
+  "chromium-light-phone :: P0.2-FOCUS-2: task share Done restores focus": {
+   "del": null,
+   "ref": "failed"
+  },
+  "chromium-light-phone :: P2.3 production notification compatibility": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-light-phone :: both sides of existing 600, 640 and 960px rules": {
+   "del": null,
+   "ref": "skipped"
+  },
+  "chromium-light-phone :: controlled error \u203a projects error and retry": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-light-phone :: controlled loading \u203a projects loading and release": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-light-phone :: profile": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-light-phone :: projects": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-light-phone :: record browser performance baseline": {
+   "del": null,
+   "ref": "skipped"
+  },
+  "chromium-light-phone :: session": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-light-phone :: settings": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-light-phone :: share": {
+   "del": null,
+   "ref": "passed"
+  },
+  "chromium-light-phone :: task": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: wiki": {
+   "del": null,
+   "ref": "failed"
+  },
+  "webkit-dark-desktop :: P0.2-FOCUS-1: task share Escape restores focus": {
+   "del": null,
+   "ref": "failed"
+  },
+  "webkit-dark-desktop :: P0.2-FOCUS-2: task share Done restores focus": {
+   "del": null,
+   "ref": "failed"
+  },
+  "webkit-dark-desktop :: P2.3 production notification compatibility": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: both sides of existing 600, 640 and 960px rules": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: controlled error \u203a projects error and retry": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: controlled loading \u203a projects loading and release": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: profile": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: projects": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: record browser performance baseline": {
+   "del": null,
+   "ref": "skipped"
+  },
+  "webkit-dark-desktop :: session": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: settings": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: share": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: task": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: wiki": {
+   "del": null,
+   "ref": "failed"
+  },
+  "webkit-dark-phone :: P0.2-FOCUS-1: task share Escape restores focus": {
+   "del": null,
+   "ref": "failed"
+  },
+  "webkit-dark-phone :: P0.2-FOCUS-2: task share Done restores focus": {
+   "del": null,
+   "ref": "failed"
+  },
+  "webkit-dark-phone :: P2.3 production notification compatibility": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: both sides of existing 600, 640 and 960px rules": {
+   "del": null,
+   "ref": "skipped"
+  },
+  "webkit-dark-phone :: controlled error \u203a projects error and retry": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: controlled loading \u203a projects loading and release": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: profile": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: projects": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: record browser performance baseline": {
+   "del": null,
+   "ref": "skipped"
+  },
+  "webkit-dark-phone :: session": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: settings": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: share": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: task": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: wiki": {
+   "del": null,
+   "ref": "failed"
+  },
+  "webkit-light-desktop :: P0.2-FOCUS-1: task share Escape restores focus": {
+   "del": null,
+   "ref": "failed"
+  },
+  "webkit-light-desktop :: P0.2-FOCUS-2: task share Done restores focus": {
+   "del": null,
+   "ref": "failed"
+  },
+  "webkit-light-desktop :: P2.3 production notification compatibility": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: both sides of existing 600, 640 and 960px rules": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: controlled error \u203a projects error and retry": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: controlled loading \u203a projects loading and release": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: profile": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: projects": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: record browser performance baseline": {
+   "del": null,
+   "ref": "skipped"
+  },
+  "webkit-light-desktop :: session": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: settings": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: share": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: task": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: wiki": {
+   "del": null,
+   "ref": "failed"
+  },
+  "webkit-light-phone :: P0.2-FOCUS-1: task share Escape restores focus": {
+   "del": null,
+   "ref": "failed"
+  },
+  "webkit-light-phone :: P0.2-FOCUS-2: task share Done restores focus": {
+   "del": null,
+   "ref": "failed"
+  },
+  "webkit-light-phone :: P2.3 production notification compatibility": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-light-phone :: both sides of existing 600, 640 and 960px rules": {
+   "del": null,
+   "ref": "skipped"
+  },
+  "webkit-light-phone :: controlled error \u203a projects error and retry": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-light-phone :: controlled loading \u203a projects loading and release": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-light-phone :: profile": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-light-phone :: projects": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-light-phone :: record browser performance baseline": {
+   "del": null,
+   "ref": "skipped"
+  },
+  "webkit-light-phone :: session": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-light-phone :: settings": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-light-phone :: share": {
+   "del": null,
+   "ref": "passed"
+  },
+  "webkit-light-phone :: task": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: wiki": {
+   "del": null,
+   "ref": "failed"
+  }
+ },
+ "traces": {}
+}

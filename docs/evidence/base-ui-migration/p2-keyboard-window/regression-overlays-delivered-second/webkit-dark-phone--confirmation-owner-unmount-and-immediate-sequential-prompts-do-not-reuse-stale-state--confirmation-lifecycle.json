@@ -1,0 +1,6 @@
+{
+  "unmountSettlesFalse": true,
+  "staleCompletionIgnored": true,
+  "sequentialFreshState": true,
+  "synchronousFailureVisible": true
+}

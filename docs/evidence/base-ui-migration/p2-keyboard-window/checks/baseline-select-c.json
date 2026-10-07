@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869 && NO_COLOR=1 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.config.mjs --project chromium-dark-desktop --grep \" select-down-(pageup|pagedown)-enter (burst|paced) \"",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_dc6c922103e0",
+ "cwd": "/root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869",
+ "commit": "7ad82e10aa625ab8b26fccea79aba4fc685048f3",
+ "webTree": "1780d071a6b402eef7d34ea74185684d73db3a85",
+ "outputLastWritten": "2026-10-06T12:45:40.697877+00:00",
+ "exitCode": 1,
+ "outputSha256": "a9c7c49ecaf3e08fe988af793f416e3c5255ed4933a75cb60f16a847713ce45f",
+ "outputBytes": 50300,
+ "note": "238 passed / 2 failed: orbit-sample select-down-pageup-enter paced 2 and orbit-field select-down-pagedown-enter burst 19 never mounted the fixture; their traces (baseline-select-c-traces.json) show 12 and 11 module requests aborted with net::ERR_NETWORK_CHANGED, and the last actions are newPage, goto and the theme expect, before any key. Rerun in baseline-rerun."
+}

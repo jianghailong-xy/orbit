@@ -1,0 +1,37 @@
+{
+  "target": "orbit-field",
+  "sequence": "select-down-space-from-null",
+  "control": null,
+  "mode": "paced",
+  "run": 15,
+  "keys": [
+    "ArrowDown",
+    "Space"
+  ],
+  "from": null,
+  "before": "null",
+  "after": "never",
+  "result": "never | list closed",
+  "listOpen": false,
+  "active": "combobox:Expires",
+  "keyLog": [
+    {
+      "key": "ArrowDown",
+      "t": 31,
+      "target": "combobox:Expires",
+      "trusted": true,
+      "focused": "combobox:Expires",
+      "listbox": false,
+      "highlighted": null
+    },
+    {
+      "key": " ",
+      "t": 356.8,
+      "target": "option:Never",
+      "trusted": true,
+      "focused": "option:Never",
+      "listbox": true,
+      "highlighted": "Never"
+    }
+  ]
+}

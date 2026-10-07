@@ -32,7 +32,12 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /projects/:id/open-items/:itemId/return-to-coordinator',
   'POST /projects/:id/open-items/:itemId/resolve',
   // The integration line: every field of this route is the one `PATCH /projects/:id` refuses a token
-  // as `integration` (and an agent session as INTEGRATION_SETTINGS_OWNER_ONLY).
+  // as `integration`, and an agent session as INTEGRATION_SETTINGS_OWNER_ONLY. That last one is
+  // this route's rule and no longer the update route's: a session may propose a project's MERGE
+  // CHECK on `PATCH /projects/:id` when the owner has answered a card for exactly that change
+  // (`project-integration-approval.ts`), while a token is refused the whole object there. A token
+  // is not a session, so there is nothing for a card to be bound to — and one change would then be
+  // two rules, which is the door this list exists to close rather than a gap in it.
   'PATCH /projects/:id/integration',
   // The wiki's owner channel: each refuses an agent session WIKI_OWNER_CHANNEL_ONLY.
   'POST /wiki/entries/:id/reject',

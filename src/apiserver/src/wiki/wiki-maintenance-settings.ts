@@ -11,7 +11,7 @@ import {
 } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import type { PrismaService } from '../prisma/prisma.service';
-import { execRuntime, isBuiltinProvider } from '../providers/custom-provider';
+import { adminOnlyProviderRefusal, execRuntime, isBuiltinProvider, usableProviderScope } from '../providers/custom-provider';
 import type { FactPosition } from './wiki-maintenance';
 
 /**
@@ -76,7 +76,7 @@ export interface WikiMaintenanceProviderProblem {
 
 /** Why `slug` cannot carry a maintenance run of `ownerId`'s, or null when it can. */
 export async function wikiMaintenanceProviderProblem(
-  db: Pick<Prisma.TransactionClient, 'modelProvider' | 'providerPool'>,
+  db: Pick<Prisma.TransactionClient, 'modelProvider' | 'providerPool' | 'user'>,
   ownerId: string,
   slug: string,
 ): Promise<WikiMaintenanceProviderProblem | null> {
@@ -95,7 +95,7 @@ export async function wikiMaintenanceProviderProblem(
     };
   }
   const row = await db.modelProvider.findFirst({
-    where: { slug, OR: [{ ownerId: null }, { ownerId }] },
+    where: { slug, ...(await usableProviderScope(db, ownerId)) },
     select: { runtime: true, baseUrl: true, apiKeyEnc: true, defaultModel: true, enabled: true },
   });
   if (row) {
@@ -112,6 +112,9 @@ export async function wikiMaintenanceProviderProblem(
       unavailable: false,
     };
   }
+  // A shared provider is there, and runs an admin's sessions only (usableProviderScope): refused where it is named.
+  const adminOnly = await adminOnlyProviderRefusal(db, ownerId, slug);
+  if (adminOnly) return { why: adminOnly, unavailable: false };
   return { why: `no provider of this account is called '${slug}', and a Wiki maintenance run falls back to no other`, unavailable: true };
 }
 
@@ -122,13 +125,13 @@ export async function wikiMaintenanceProviderProblem(
  * or a name no provider has is not.
  */
 export async function wikiMaintenanceProviderIsLocal(
-  db: Pick<Prisma.TransactionClient, 'modelProvider'>,
+  db: Pick<Prisma.TransactionClient, 'modelProvider' | 'user'>,
   ownerId: string,
   slug: string,
 ): Promise<boolean> {
   if (isBuiltinProvider(slug)) return false;
   const row = await db.modelProvider.findFirst({
-    where: { slug, OR: [{ ownerId: null }, { ownerId }] },
+    where: { slug, ...(await usableProviderScope(db, ownerId)) },
     select: { baseUrl: true, presetSlug: true },
   });
   return row !== null && row.presetSlug === null && wikiMaintenanceEndpointIsLocal(row.baseUrl);

@@ -1,9 +1,10 @@
 import { DeleteOutlined, FileOutlined, PaperClipOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Button, Popconfirm, Upload } from 'antd';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { deleteAttachment, fetchAttachmentObjectUrl, uploadAttachment } from '../api';
 import { useToast } from '../lib/toast';
+import { Button } from './ui/Button';
+import { Popconfirm } from './ui/Popconfirm';
 
 export interface TaskInput {
   id: string;
@@ -74,6 +75,11 @@ export function TaskInputs({ taskId, inputs }: { taskId: string; inputs: TaskInp
     onSuccess: invalidate,
     onError: (e: Error) => toast.error("Couldn't remove the input", e.message),
   });
+  // Each file picked or dropped on the button is its own upload, so each failure is its own toast.
+  const picker = useRef<HTMLInputElement>(null);
+  const add = (files: FileList | null) => {
+    for (const file of Array.from(files ?? [])) upload.mutate(file);
+  };
 
   return (
     <section className="tdp-section">
@@ -93,30 +99,39 @@ export function TaskInputs({ taskId, inputs }: { taskId: string; inputs: TaskInp
               <Popconfirm
                 title="Remove this input?"
                 description="Runs already started keep their copy."
-                okText="Remove"
+                confirmText="Remove"
                 onConfirm={() => remove.mutate(input.id)}
-              >
-                <Button type="text" size="small" icon={<DeleteOutlined />} aria-label="Remove input" />
-              </Popconfirm>
+                trigger={<Button variant="text" size="small" icon={<DeleteOutlined />} aria-label="Remove input" />}
+              />
             </div>
           ))}
         </div>
       )}
-      <Upload
-        // The bytes go through `uploadAttachment` (multipart + bearer), not antd's own XHR.
-        customRequest={({ file, onSuccess, onError }) => {
-          upload.mutate(file as File, {
-            onSuccess: () => onSuccess?.({}),
-            onError: (e) => onError?.(e as Error),
-          });
+      {/* The bytes go through `uploadAttachment` (multipart + bearer). Files dropped on the button
+          are taken too, as the upload control here always did. */}
+      <span
+        className="tdp-input-add"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          add(e.dataTransfer.files);
         }}
-        showUploadList={false}
-        multiple
       >
-        <Button size="small" icon={<PaperClipOutlined />} loading={upload.isPending}>
+        <input
+          ref={picker}
+          type="file"
+          multiple
+          hidden
+          onChange={(e) => {
+            add(e.target.files);
+            // Cleared, so picking the same file again is a new upload rather than no change.
+            e.target.value = '';
+          }}
+        />
+        <Button size="small" icon={<PaperClipOutlined />} loading={upload.isPending} onClick={() => picker.current?.click()}>
           Add file
         </Button>
-      </Upload>
+      </span>
     </section>
   );
 }
