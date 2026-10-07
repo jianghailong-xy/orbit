@@ -191,6 +191,33 @@
       }
     },
     {
+      "screenshot": "webkit-dark-phone/profile-validation.png",
+      "sha256": "53f9152dc1deb11916165b1d3047761e4e72d7eda934b595adf35f949759bb18",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "ce6c213d39f304c18197c2af5c35b77e85568ba7afad10dbbee18b3d9103e498"
+      },
+      "decision": {
+        "taskId": "34Za39Do3N6tkmIMP0GBP",
+        "evidenceRevision": 1,
+        "evidenceDigest": "9477611a4499f613621b9dcc7e7c99a7dce050f1caca7ffa22fd95ca60467d57",
+        "verdict": "CONFIRM",
+        "document": "p4.1/README.md"
+      },
+      "difference": "P4.1 把资料页的表单换成 Orbit 字段组件和原生表单。P0 profile 场景保存名字后截取 profile-validation：顶部“Name saved”通知胶囊在 after 中比 before 右移 4px（通知列宽 358 对 350，胶囊 x 127.14 对 123.14），差异只在胶囊及其阴影的区域。根因：lib/toast 第一次提示时往 body 末尾加读屏 live region，资料页文档从 844px 变成 845px；Linux WebKit 手机模拟里，全局 8px ::-webkit-scrollbar 让溢出之后才排版的固定定位元素按 382 宽排，之前排好的保持 390（P2.3-B1 复现过的现象）。before 的 AntD 表单在 live region 与通知列插入之间读了 4 个 .ant-form-item 的 offsetParent，这次同步布局先看到了溢出，通知列按 382 排；Orbit 的 Field 不读布局，通知列按溢出前的 390 排，与 Chromium 手机、与设置页“Setting saved”的位置一致。由测试注入一次布局读取后，after 与 P0 期望（即 before）逐像素一致。真机 iOS 用覆盖式滚动条，不受影响。协调者判定接受为本批的迁移差异，不为测试环境复刻那次布局读取。出处：p4.1/README.md「P0 页面矩阵（同提交）」profile-validation 行与「WebKit 手机 profile-validation：根因与隔离」；P4.1 第 1 版证据 compare/f-p0-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "sameCommit": {
+        "before": {
+          "commit": "a84bc61e7913b1ecae26c0a5a74d4c4887454e99",
+          "sha256": "ce6c213d39f304c18197c2af5c35b77e85568ba7afad10dbbee18b3d9103e498"
+        },
+        "after": {
+          "commit": "3aa26fb97644f24551dc9c70149021f7f7f9453f",
+          "sha256": "53f9152dc1deb11916165b1d3047761e4e72d7eda934b595adf35f949759bb18"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
       "screenshot": "webkit-dark-phone/task-share-dialog.png",
       "sha256": "aca1f92577e858e3dc309c07c0a4748aa568fe2ca059376d6cad0995e3676478",
       "replaces": {
@@ -267,6 +294,33 @@
         "after": {
           "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
           "sha256": "4634e7383d149329a3e04748bdfead764ba32fe269f8b31f7fd0c688d9730f21"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
+      "screenshot": "webkit-light-phone/profile-validation.png",
+      "sha256": "0fc4f654253d7a41ec2cb664221f70105190aafc6c9c89238ff86f7f51d328db",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "bfa643b8bbc55d3d3713d2b37eba287ee0306b74a3c93eb35d4c38c7a8d893d8"
+      },
+      "decision": {
+        "taskId": "34Za39Do3N6tkmIMP0GBP",
+        "evidenceRevision": 1,
+        "evidenceDigest": "9477611a4499f613621b9dcc7e7c99a7dce050f1caca7ffa22fd95ca60467d57",
+        "verdict": "CONFIRM",
+        "document": "p4.1/README.md"
+      },
+      "difference": "P4.1 把资料页的表单换成 Orbit 字段组件和原生表单。P0 profile 场景保存名字后截取 profile-validation：顶部“Name saved”通知胶囊在 after 中比 before 右移 4px（通知列宽 358 对 350，胶囊 x 127.14 对 123.14），差异只在胶囊及其阴影的区域。根因：lib/toast 第一次提示时往 body 末尾加读屏 live region，资料页文档从 844px 变成 845px；Linux WebKit 手机模拟里，全局 8px ::-webkit-scrollbar 让溢出之后才排版的固定定位元素按 382 宽排，之前排好的保持 390（P2.3-B1 复现过的现象）。before 的 AntD 表单在 live region 与通知列插入之间读了 4 个 .ant-form-item 的 offsetParent，这次同步布局先看到了溢出，通知列按 382 排；Orbit 的 Field 不读布局，通知列按溢出前的 390 排，与 Chromium 手机、与设置页“Setting saved”的位置一致。由测试注入一次布局读取后，after 与 P0 期望（即 before）逐像素一致。真机 iOS 用覆盖式滚动条，不受影响。协调者判定接受为本批的迁移差异，不为测试环境复刻那次布局读取。出处：p4.1/README.md「P0 页面矩阵（同提交）」profile-validation 行与「WebKit 手机 profile-validation：根因与隔离」；P4.1 第 1 版证据 compare/f-p0-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "sameCommit": {
+        "before": {
+          "commit": "a84bc61e7913b1ecae26c0a5a74d4c4887454e99",
+          "sha256": "bfa643b8bbc55d3d3713d2b37eba287ee0306b74a3c93eb35d4c38c7a8d893d8"
+        },
+        "after": {
+          "commit": "3aa26fb97644f24551dc9c70149021f7f7f9453f",
+          "sha256": "0fc4f654253d7a41ec2cb664221f70105190aafc6c9c89238ff86f7f51d328db"
         },
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
       }

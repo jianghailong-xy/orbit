@@ -264,8 +264,11 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 | 批次与判定 | 截图 | 条数 | 替换的期望 | 同提交原件 | 登记证据 |
 | --- | --- | ---: | --- | --- | --- |
 | P3.2（[34Za39ACSBoCkYKc80Md8](orbit-task:34Za39ACSBoCkYKc80Md8)）第 2 版证据，`evidenceDigest` `302ca1f5…09bc`，CONFIRM，文档 [p3.2/README.md](../p3.2/README.md) | task-share-dialog（8 个项目）；task-action-menu（4 个浅色项目） | 12 | 第 1 批 A4 的 main 漂移参考（`4088d37e6`） | before `fffcdb532`（P3.2 落地前的项目 tip），after `2925958ae` | [p3.2-accepted](../p3.2-accepted/README.md) |
+| P4.1（[34Za39Do3N6tkmIMP0GBP](orbit-task:34Za39Do3N6tkmIMP0GBP)）第 1 版证据，`evidenceDigest` `9477611a…7d57`，CONFIRM，文档 [p4.1/README.md](../p4.1/README.md) | profile-validation（webkit-light-phone、webkit-dark-phone） | 2 | 第 2 批 A6 的 main 漂移参考（`d233a6cd0`，第 7 条例外，生成于 `dcb5fd1bd`） | before `a84bc61e7`（P4.1 的起点），after `3aa26fb97`（P4.1 落地后的项目 tip） | [p4.1-accepted](../p4.1-accepted/README.md) |
 
 P3.2 另有 11 张截图的变化低于 P0 比较器阈值（深色 task-action-menu 4 张，webkit-dark-phone 的 task-detail、task-action-hover、task-action-focus，WebKit 桌面的 breakpoint-599/601-dialog 4 张）。登记工具不收这类截图，它们仍对照 main 漂移参考并通过，逐张见 p3.2-accepted。
+
+P4.1 的同提交对照里，其余 250 张截图 before → after 232 张逐字节相同、18 张是 Chromium 噪声，都通过 P0 比较器，逐张见 p4.1-accepted。
 
 ## 维护规则
 
