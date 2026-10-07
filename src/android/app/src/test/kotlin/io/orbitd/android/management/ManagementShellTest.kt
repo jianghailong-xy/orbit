@@ -68,6 +68,17 @@ class ManagementShellTest {
         assertEquals("Web alias", fixture.runnerAlias)
     }
 
+    @Test fun aNameTypedOnTheRunnerNamePageIsSavedWhenThePageGoes() {
+        signIn()
+        runnerNamePage()
+        name("Old alias")
+        compose.onNode(hasSetTextAction()).performTextReplacement("Typed alias")
+        back()
+        await("About")
+        compose.waitUntil(10_000) { fixture.runnerAlias == "Typed alias" }
+        assertEquals(listOf("PATCH runners/${fixture.RUNNER}"), fixture.writes("runners/${fixture.RUNNER}"))
+    }
+
     @Test fun theSharePanelStopsWritingWhenTheDirectoryIsNoLongerCurrent() {
         signIn()
         compose.onNodeWithTag("workspace:${fixture.WORKSPACE}").performClick()

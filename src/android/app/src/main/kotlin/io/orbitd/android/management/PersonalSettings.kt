@@ -17,6 +17,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -392,14 +393,13 @@ fun NotificationsPreferences(api: ManagementApi, revision: Long) {
         listOf(Triple("notifySessionFinished", "When a session finishes", "Alert your devices when a run finishes on its own or fails for good."),
             Triple("notifyAgentMessage", "When an agent asks for you", "Let a running agent alert your devices itself — to ask something only you can answer, or to report what you were waiting for. At most one per session per minute.")
         ).forEach { (key, title, hint) ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Absent means on: only the switch that moved is written. The row is the switch, read once by TalkBack.
+            val on = (preferences?.get(key) as? JsonPrimitive)?.booleanOrNull != false
+            Row(Modifier.fillMaxWidth().toggleable(value = on, enabled = record.ready, role = Role.Switch) { checked ->
+                scope.launch { record.mutate { api.patch("users/me/preferences", buildJsonObject { put(key, checked) }) } }
+            }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(title, Modifier.weight(1f))
-                // Absent means on: only the switch that moved is written.
-                Switch(modifier = Modifier.semantics { contentDescription = title },
-                    checked = (preferences?.get(key) as? JsonPrimitive)?.booleanOrNull != false, enabled = record.ready,
-                    onCheckedChange = { checked -> scope.launch { record.mutate {
-                        api.patch("users/me/preferences", buildJsonObject { put(key, checked) })
-                    } } })
+                Switch(checked = on, onCheckedChange = null, enabled = record.ready)
             }
             Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

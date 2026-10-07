@@ -606,15 +606,15 @@ private fun RunnerNamePage(api: ManagementApi, id: String, revision: Long, back:
     var name by rememberSaveable(id) { mutableStateOf<String?>(null) }
     var seeded by rememberSaveable(id) { mutableStateOf<String?>(null) }
     LaunchedEffect(runner) { if (name == null) RunnerPage.displayName(runner).let { name = it; seeded = it } }
-    val latest by rememberUpdatedState(name)
-    val untouched by rememberUpdatedState(seeded)
     val current by rememberUpdatedState(RunnerPage.displayName(runner))
     var saved by remember { mutableStateOf(false) }
     fun save() {
-        val typed = latest?.trim() ?: return
+        // The field's own state, not a copy made at the last composition: a page that goes right after a keystroke
+        // is disposed before it recomposes.
+        val typed = name?.trim() ?: return
         // Only what was typed here goes out. iOS sends any difference from the live name (RunnerNamePage.save), which
         // writes an untouched field back over a rename made elsewhere while the page was open.
-        if (saved || typed == untouched?.trim() || typed == current) return
+        if (saved || typed == seeded?.trim() || typed == current) return
         saved = true
         api.background.launch { try { api.patch("runners/$id", buildJsonObject { put("displayName", typed) }) } catch (_: Exception) { } }
     }
