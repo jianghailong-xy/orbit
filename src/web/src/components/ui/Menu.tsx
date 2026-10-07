@@ -61,7 +61,11 @@ function Submenu({ item, contents, container, zIndex }: { item: MenuAction; cont
       // the parent menu would take these keys, an arrow, Home or End moving to another of its items for the next
       // Enter to run. Opened by hover, nothing in it is highlighted and the keys stay the parent's.
       const target = layer.open ? popup.current?.querySelector<HTMLElement>('[data-highlighted]') : null;
-      if (target) handOver(event, target, ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', ' ', 'ArrowLeft', 'Tab']);
+      if (!target) return;
+      // An item run from here takes focus as it runs; doing that while the menus close stops Base UI giving
+      // focus back to the menu button, so Enter and Space first move focus to the item, as the next frame would.
+      if (event.key === 'Enter' || event.key === ' ') target.focus({ preventScroll: true });
+      handOver(event, target, ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', ' ', 'ArrowLeft', 'Tab']);
     }}>{contents}<RightOutlined className="orbit-menu-submenu-icon" aria-hidden /></BaseMenu.SubmenuTrigger>
     <BaseMenu.Portal container={container()}>
       <BaseMenu.Positioner side="right" align="start" sideOffset={4} collisionPadding={8} className="orbit-floating-positioner" style={{ zIndex: zIndex + 1 }}>
