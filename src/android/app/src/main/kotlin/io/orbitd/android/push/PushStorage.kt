@@ -20,6 +20,7 @@ class PushStorage(private val directory: File) {
         val token: String? = null,
         val binding: PushBinding? = null,
         val installations: Map<String, String> = emptyMap(),
+        val permissionPrompted: Boolean = false,
     )
 
     private val file = File(directory, "registration.json")
@@ -27,6 +28,13 @@ class PushStorage(private val directory: File) {
 
     @Synchronized fun token(): String? = state.token
     @Synchronized fun binding(): PushBinding? = state.binding
+
+    /** Once per installation: true only for the first caller, which then shows the system request. */
+    @Synchronized fun claimPermissionPrompt(): Boolean {
+        if (state.permissionPrompted) return false
+        save(state.copy(permissionPrompted = true))
+        return true
+    }
 
     @Synchronized fun installationId(server: String): String {
         state.installations[server]?.let { return it }

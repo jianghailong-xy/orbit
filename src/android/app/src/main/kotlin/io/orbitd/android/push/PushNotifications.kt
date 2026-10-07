@@ -26,13 +26,19 @@ class PushNotifications(private val context: Context) {
         .getOrDefault(emptyList()).takeLast(128).toMutableList()
 
     init {
-        listOf(NEEDS_YOU to "Needs your reply", SESSIONS to "Sessions", UPDATES to "Project and account updates").forEach { (id, title) ->
-            manager.createNotificationChannel(NotificationChannel(id, title, NotificationManager.IMPORTANCE_DEFAULT))
+        // Needs-you alerts block an agent, so they pop up like the iOS banner; the user can change
+        // any channel in Android settings, after which Orbit never raises it again.
+        listOf(Triple(NEEDS_YOU, "Needs your reply", NotificationManager.IMPORTANCE_HIGH),
+            Triple(SESSIONS, "Sessions", NotificationManager.IMPORTANCE_DEFAULT),
+            Triple(UPDATES, "Project and account updates", NotificationManager.IMPORTANCE_DEFAULT)).forEach { (id, title, importance) ->
+            manager.createNotificationChannel(NotificationChannel(id, title, importance))
         }
     }
 
-    fun allowed(channel: String? = null): Boolean = manager.areNotificationsEnabled() &&
-        (Build.VERSION.SDK_INT < 33 || context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) &&
+    fun permitted(): Boolean = Build.VERSION.SDK_INT < 33 ||
+        context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+    fun allowed(channel: String? = null): Boolean = manager.areNotificationsEnabled() && permitted() &&
         (channel == null || manager.getNotificationChannel(channel)?.importance?.let { it != NotificationManager.IMPORTANCE_NONE } == true)
 
     @Synchronized fun hasSeen(message: PushMessage) = "${message.registrationKey}:${message.eventId}" in seen
@@ -51,11 +57,11 @@ class PushNotifications(private val context: Context) {
         if (!allowed(channel)) return false
         val tag = tag(message)
         // A unique identifier prevents PendingIntent extras from one notification replacing another.
-        val pending = link?.let {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(it), context, MainActivity::class.java)
-                .setIdentifier(tag).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        }
+        // Without an object route (a headless agent message) the tap still opens Orbit, as on iOS.
+        val intent = (link?.let { Intent(Intent.ACTION_VIEW, Uri.parse(it), context, MainActivity::class.java) }
+            ?: Intent(Intent.ACTION_MAIN, null, context, MainActivity::class.java).addCategory(Intent.CATEGORY_LAUNCHER))
+            .setIdentifier(tag).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        val pending = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val extras = Bundle().apply { putBundle(DATA, Bundle().apply { data.forEach { (key, value) -> putString(key, value) } }) }
         val notification = Notification.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_notification).setContentTitle(message.payload.title)

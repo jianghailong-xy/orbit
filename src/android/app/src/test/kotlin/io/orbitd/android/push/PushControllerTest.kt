@@ -117,6 +117,15 @@ class PushControllerTest {
         assertTrue(fixture.requests.any { it.path == listOf("push", "unregister") })
     }
 
+    @Test fun permissionPromptNeedsSignInConfigurationAndARuntimePermission() = runBlocking {
+        assertFalse(fixture.push.claimPermissionPrompt()) // Signed out.
+        fixture.signIn()
+        // API 29–32 grant notifications at install; there is no runtime request to spend.
+        assertFalse(fixture.push.claimPermissionPrompt())
+        fixture.available = false
+        assertFalse(fixture.push.claimPermissionPrompt())
+    }
+
     @Test fun disabledBuildRejectsAPersistedBindingAndBackgroundWorkExpires() = runBlocking {
         fixture.signIn()
         val data = fixture.data()

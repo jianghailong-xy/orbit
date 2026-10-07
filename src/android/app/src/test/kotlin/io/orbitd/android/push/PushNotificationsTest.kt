@@ -118,13 +118,23 @@ class PushNotificationsTest {
         assertTrue(manager.activeNotifications.isEmpty())
     }
 
-    @Test fun headlessAgentMessageDoesNotInventASessionDestination() {
+    @Test fun headlessAgentMessageOpensOrbitWithoutInventingADestination() {
         val data = changedKind("agent-message", removeSession = true)
         val message = PushMessage.parse(data)!!
         assertTrue(notifications.show(message, data))
         val notification = manager.activeNotifications.single().notification
-        assertNull(notification.contentIntent)
+        val pending = shadowOf(notification.contentIntent)
+        assertTrue(pending.isImmutable)
+        assertEquals(Intent.ACTION_MAIN, pending.savedIntent.action)
+        assertNull(pending.savedIntent.data)
+        assertEquals(MainActivity::class.java.name, pending.savedIntent.component!!.className)
         assertEquals(PushNotifications.UPDATES, notification.channelId)
+    }
+
+    @Test fun needsYouChannelPopsUpLikeTheIosBannerWhileOthersStayDefault() {
+        assertEquals(NotificationManager.IMPORTANCE_HIGH, manager.getNotificationChannel(PushNotifications.NEEDS_YOU).importance)
+        assertEquals(NotificationManager.IMPORTANCE_DEFAULT, manager.getNotificationChannel(PushNotifications.SESSIONS).importance)
+        assertEquals(NotificationManager.IMPORTANCE_DEFAULT, manager.getNotificationChannel(PushNotifications.UPDATES).importance)
     }
 
     private fun changedKind(kind: String, removeSession: Boolean = false): Map<String, String> {

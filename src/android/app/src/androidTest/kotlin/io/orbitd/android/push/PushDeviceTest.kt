@@ -330,9 +330,12 @@ class PushDeviceTest {
         instrument.runOnMainSync { currentActivity!!.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("orbit-session:${fixture.sessionId}"), app, MainActivity::class.java)) }
         compose.waitUntil(10_000) { ObjectId.same(fixture.sessionId, app.realtime.state.value.session?.id) }
     }
+    /** Actions are disabled while a refresh this module requested is in flight; wait for the fresh card. */
     private fun awaitCard() {
-        compose.waitUntil(15_000) { compose.onAllNodes(hasTestTag("approval:a1:ALLOW") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("approval:a1:ALLOW").performScrollTo().assertIsEnabled()
+        val enabled = hasTestTag("approval:a1:ALLOW") and isEnabled()
+        compose.waitUntil(15_000) { compose.onAllNodes(enabled).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("approval:a1:ALLOW").performScrollTo()
+        compose.waitUntil(15_000) { compose.onAllNodes(enabled).fetchSemanticsNodes().isNotEmpty() }
     }
     private fun awaitText(text: String) = compose.waitUntil(15_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
     private fun background() {
@@ -531,7 +534,10 @@ private class PushHttpFixture(corpus: String) {
                     put("hasMore", false); put("after", JsonNull)
                 })
                 path == "/api/tasks/evidence-decisions/pending" -> json(buildJsonObject { put("count", 0); put("pending", JsonArray(emptyList())) })
-                path.endsWith("/events") -> MockResponse().setHeader("Content-Type", "text/event-stream").setBody(": controlled\n\n")
+                // Held open like the server's streams: a body that ends makes the client reconnect and
+                // re-read the session in a loop, which keeps the card's actions flickering.
+                path.endsWith("/events") -> MockResponse().setHeader("Content-Type", "text/event-stream")
+                    .setBody(": controlled\n\n" + ": keepalive\n\n".repeat(3_600)).throttleBody(13, 1, TimeUnit.SECONDS)
                 else -> json(JsonArray(emptyList()))
             }
         }

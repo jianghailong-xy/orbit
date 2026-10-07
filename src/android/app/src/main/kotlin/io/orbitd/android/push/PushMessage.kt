@@ -37,7 +37,9 @@ data class PushPayload(
             (if (kind == "confirmation-problems" && recordId != null) "?at=$recordId" else "")
         projectId != null -> "orbit-project:$projectId"
         taskId != null -> "orbit-task:$taskId"
-        // wikiSpaceID is a space, not an entry. A12 must supply its existing-entry extension.
+        // A space, never an entry: the URI handed to A12 (task comment 34aIrgslPhvEl3IPNty9m). Until its
+        // OrbitLinks branch is integrated, the tap opens Orbit without navigating, as iOS does.
+        wikiSpaceId != null -> "orbit://wiki/$wikiSpaceId"
         else -> null
     }
 

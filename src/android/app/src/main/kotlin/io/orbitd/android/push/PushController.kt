@@ -2,6 +2,7 @@ package io.orbitd.android.push
 
 import android.app.Activity
 import android.app.Application
+import android.os.Build
 import android.os.Bundle
 import io.orbitd.android.core.auth.AuthSession
 import io.orbitd.android.core.auth.AuthState
@@ -36,10 +37,18 @@ class PushController(
     private val mutableNotice = MutableStateFlow<PushMessage?>(null)
     val notice = mutableNotice.asStateFlow()
     fun dismissNotice() { mutableNotice.value = null }
-    val registration = PushRegistration(session, PushStorage(File(app.noBackupFilesDir, "push")), app.packageName, {
+    private val storage = PushStorage(File(app.noBackupFilesDir, "push"))
+    val registration = PushRegistration(session, storage, app.packageName, {
         notifications.clear(); dismissNotice()
     })
     val configured: Boolean get() = tokenSource.available
+    val signedIn = session.state.map { it is AuthState.SignedIn }.distinctUntilChanged()
+
+    /** iOS asks at launch (NotificationManager.configure). Android 13+ shows nothing until asked, so
+     * a configured build asks once per installation, in context: the first signed-in foreground.
+     * A refusal is final here; asking again is the user's choice from NotificationSettings. */
+    fun claimPermissionPrompt(): Boolean = configured && Build.VERSION.SDK_INT >= 33 &&
+        session.state.value is AuthState.SignedIn && !notifications.permitted() && storage.claimPermissionPrompt()
     private val work = Mutex()
     private val refresh = Channel<Unit>(Channel.CONFLATED)
     @Volatile private var foreground = false

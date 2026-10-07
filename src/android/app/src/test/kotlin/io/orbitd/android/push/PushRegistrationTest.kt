@@ -227,6 +227,16 @@ class PushRegistrationTest {
         assertNull(reopened.binding())
     }
 
+    @Test fun permissionPromptIsClaimedOncePerInstallationAcrossRestartAndAccountChanges() {
+        val directory = temporary.newFolder()
+        val storage = PushStorage(directory)
+        assertTrue(storage.claimPermissionPrompt())
+        assertFalse(storage.claimPermissionPrompt())
+        storage.setToken(token)
+        storage.setBinding(null)
+        assertFalse(PushStorage(directory).claimPermissionPrompt())
+    }
+
     private fun session(transport: HttpTransport, dispatcher: CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO,
         credentials: MemoryCredentials = MemoryCredentials()) = AuthSession(transport, credentials,
         object : InstanceStore {
