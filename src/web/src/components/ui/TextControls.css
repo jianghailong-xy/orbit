@@ -162,3 +162,23 @@
     transition: none;
   }
 }
+
+/* PasswordInput's show/hide toggle, and what follows it in the suffix 8px further on. */
+.orbit-password-toggle {
+  display: flex;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.orbit-password-toggle:hover {
+  color: var(--text-1);
+}
+
+.orbit-password-toggle:not(:last-child) {
+  margin-inline-end: 8px;
+}
+
+.orbit-input[data-disabled] .orbit-password-toggle {
+  cursor: not-allowed;
+}

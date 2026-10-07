@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircleFilled, CopyOutlined } from '@ant-design/icons';
-import { Button, Spin } from 'antd';
 import { useSearchParams } from 'react-router-dom';
 import { issueAccessToken, revokeAccessToken, type AccessToken, type IssuedAccessToken } from '../api';
 import { AccessTokenTable } from '../components/AccessTokenTable';
 import { NewAccessTokenDialog, type NewAccessToken } from '../components/NewAccessTokenDialog';
+import { Button } from '../components/ui/Button';
+import { Spinner } from '../components/ui/Spinner';
 import { copyText } from '../lib/clipboard';
 import { accessTokensQuery, workspacesQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
@@ -71,7 +72,7 @@ export function AccessTokensPage() {
           </p>
         </div>
         <Button
-          type="primary"
+          variant="primary"
           onClick={() => {
             setDialogKey((key) => key + 1);
             setCreating(true);
@@ -102,7 +103,7 @@ export function AccessTokensPage() {
       <div role="tabpanel">
         {tokensQ.isPending ? (
           <div className="following-empty">
-            <Spin />
+            <Spinner />
           </div>
         ) : tokensQ.isError ? (
           <div className="following-empty">

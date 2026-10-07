@@ -47,10 +47,16 @@ func projectStartRequestBody(args map[string]interface{}) (map[string]interface{
 		return nil, errors.New("line must be PROJECT_BRANCH (tasks land on the project's own branch " +
 			"first) or MAIN (directly into main)")
 	}
-	automatic, ok := args["automatic"].(bool)
-	if !ok {
-		return nil, errors.New("automatic is required: true to have the coordinator run the project " +
-			"for the owner, false to bring those decisions to them")
+	// Left out is on — the owner's card opens with Automatic on whatever is sent — but a value that is
+	// not a boolean is a mistake, not a suggestion.
+	automatic := true
+	if raw, present := args["automatic"]; present && raw != nil {
+		value, ok := raw.(bool)
+		if !ok {
+			return nil, errors.New("automatic must be true (the coordinator runs the project for the " +
+				"owner) or false (those decisions go to them); leave it out for true")
+		}
+		automatic = value
 	}
 	maxConcurrent, err := getBoundedOptionalNumber(args, "maxConcurrentTasks", maxProjectConcurrentTasks)
 	if err != nil {
@@ -137,7 +143,8 @@ func projectStartRequestFiled(raw json.RawMessage) string {
 		"task_start is refused for its tasks. Changing the plan — its tasks, their dependencies or the " +
 		"criteria — voids this request: ask again once the plan is ready again.\n")
 	if len(filed.Warnings) > 0 {
-		b.WriteString("The owner reads these beside it:\n")
+		b.WriteString("Check these before the owner presses Start — they are for you, and the owner's " +
+			"card does not show them:\n")
 		b.WriteString(formatStartFindings(filed.Warnings))
 	}
 	return b.String() + prettyJSON(raw)
@@ -162,7 +169,8 @@ func projectStartRequestRefusal(err error) string {
 		"Fix each of these, then call project_request_start again:\n")
 	b.WriteString(formatStartFindings(refusals))
 	if len(warnings) > 0 {
-		b.WriteString("And these would not refuse it, but the owner will read them beside it:\n")
+		b.WriteString("And these would not refuse it; they are for you, and the owner's card does not " +
+			"show them:\n")
 		b.WriteString(formatStartFindings(warnings))
 	}
 	return strings.TrimRight(b.String(), "\n")

@@ -736,6 +736,10 @@ model Runner {
   // Codex only: the name of a NEW account the runner is to add and sign in, kept so every
   // redelivered start asks for the same one.
   loginAccountName String? @map("login_account_name")
+  // Kimi only: the site to sign in on, 'mainland-cn' (kimi.com) or 'global' (kimi.ai), kept so every
+  // redelivered start asks for the same one. NULL is a bare `kimi login`, which goes wherever the CLI
+  // decides — what every sign-in was before the choice, and what any other engine's is.
+  loginRegion   String?   @map("login_region")
   loginUrl      String?   @map("login_url")
   // The device flow's one-time code, which the user types on loginUrl's page. Runner → user,
   // the opposite direction from loginCode.
@@ -4753,9 +4757,12 @@ model Task {
   @@index([projectId])
   @@index([fixesOpenItemId], map: "task_fixes_open_item_idx")
   @@index([parentTaskId])
-  /// Cover GET /projects' page-wide rollup without visiting the wide Task heap (154 MB for 111k
-  /// rows on the production workload). Created PARTIAL for project tasks in migration 0178; the
-  /// schema cannot express that predicate, just like the two task-tree indexes below.
+  /// Cover GET /projects' page-wide rollup without visiting the wide Task heap (254 MB for 111k
+  /// rows on the production workload). Created PARTIAL for project tasks in migration 0178, and
+  /// given the six columns the classifier reads as INCLUDE payload in 0395 — the rollup's CASE
+  /// reads eleven Task columns, and an index that carries five answers it with a heap fetch per
+  /// row. Neither the predicate nor INCLUDE is something this schema can spell, just like the two
+  /// task-tree indexes below; both live in the migrations.
   @@index([ownerId, projectId, status, id, updatedAt], map: "task_project_rollup_covering_idx")
   /// The two reads `GET /projects/:id/tasks/page` makes: one project's top-level tasks, and one
   /// task's direct children, both in cursor order. They need SEPARATE indexes because the top

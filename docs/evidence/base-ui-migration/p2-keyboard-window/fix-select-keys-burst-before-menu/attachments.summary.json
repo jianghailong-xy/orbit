@@ -1,0 +1,490 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2-keyboard-window/fix-select-keys-burst-before-menu/<name>",
+ "files": [
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-0--select-keys.json",
+   "bytes": 801,
+   "sha256": "9b069a8af7dd244c495aaa1eb82242ba1422381646436f2569fe5c34b5e9f1ce",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 0,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "none",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-1--select-keys.json",
+   "bytes": 801,
+   "sha256": "e91320227b0c9e39a58862a038613d938a7729dfa9e97473946461dd90f0ec5b",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 1,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "none",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-10--select-keys.json",
+   "bytes": 802,
+   "sha256": "38a90e5b5105adb377751c541a775e5d8b9b362cc0951ea4ddbd9372fdc53a2a",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 10,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "none",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-11--select-keys.json",
+   "bytes": 800,
+   "sha256": "9fec1030e008e18373e995a2582203935ca9e9fca0da9f26051986bde243983c",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 11,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "none",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-12--select-keys.json",
+   "bytes": 800,
+   "sha256": "72b1be71a93811449652cee103691fb28ce189d3ca86c9d58c43a91f3a9e43e7",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 12,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "none",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-13--select-keys.json",
+   "bytes": 802,
+   "sha256": "ffc3061791b0219223719216ae9311fca99e44afe8ee0cf785dbcf450033c519",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 13,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "none",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-14--select-keys.json",
+   "bytes": 802,
+   "sha256": "c3c83d3c178f3c5e229ac8a701c1520b09d3c38b473a75251a8e59211c6cac8d",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 14,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "none",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-15--select-keys.json",
+   "bytes": 802,
+   "sha256": "0b640b1c2e025c2146b82d1d6808ebb580e078d5356a1fb9ba85076e1b165703",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 15,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "none",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-16--select-keys.json",
+   "bytes": 800,
+   "sha256": "cbf7a7a26feeb513e5b3f79bd6410b8fefa91102eb56acb4fd4d11cd64362c99",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 16,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "none",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-17--select-keys.json",
+   "bytes": 802,
+   "sha256": "967a52ed2c14c0e3bf888594cecf0c7b8fdbeed8da14109a1e4329082106538a",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 17,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "none",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-18--select-keys.json",
+   "bytes": 800,
+   "sha256": "1144638f711b2016a56a06b41874fc79c8797b41dba720a684a657d5f9aa31d6",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 18,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "none",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-19--select-keys.json",
+   "bytes": 800,
+   "sha256": "fea2f35fc6b2850bbdea9c75c3f3c93d93bc5f133f9af7be654f7bb6b67fbb91",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 19,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "none",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-2--select-keys.json",
+   "bytes": 801,
+   "sha256": "025d8d440c6b8e1555ef1e336ecf603704d1144be68d4bdf806eab3a407a41d8",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 2,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "none",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-3--select-keys.json",
+   "bytes": 801,
+   "sha256": "a48e6714433eb55aeee090d4148a3370cacc06c6d2c6408edc59ddee6e12c824",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 3,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "none",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-4--select-keys.json",
+   "bytes": 799,
+   "sha256": "b7a892bac8cbe51c95477a99d47fd20705e3a462398e6aabda02185a29c83784",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 4,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "none",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-5--select-keys.json",
+   "bytes": 801,
+   "sha256": "729b44b30445640f46dc826859450ddf45f9eaefd86a89097386b42a883357de",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 5,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "none",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-6--select-keys.json",
+   "bytes": 801,
+   "sha256": "e1d9a69fae177cb02db9da1623676b6cd41ed9f4c877497ff6e0d0f631271e74",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 6,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "none",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-7--select-keys.json",
+   "bytes": 799,
+   "sha256": "967bab406e98102381b0f1a090bc86f92680c151ab9543ba6cbebc0f29109587",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 7,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "none",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-8--select-keys.json",
+   "bytes": 801,
+   "sha256": "a765367a756027913f51bb8a97f491a251fdcc32c2cc33a220fb9d271ac3c098",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 8,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "none",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-burst-sample-9--select-keys.json",
+   "bytes": 799,
+   "sha256": "5c9a35f099c21b68d2197690613ac38421f0989a746d03152bdcd3f30612ede4",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "burst",
+    "run": 9,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "none",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-paced-sample-0--select-keys.json",
+   "bytes": 790,
+   "sha256": "3985fbb1af1465d8ceb17ad49775d6e7ef4441660548a2a15d3153ad2d10179c",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "paced",
+    "run": 0,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "image",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-paced-sample-1--select-keys.json",
+   "bytes": 788,
+   "sha256": "6c82933f04858caf3d867c48d2248ff2e50ba1bcb2f0e4fccb25ff0a82dbb73c",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "paced",
+    "run": 1,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "image",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-menu-down-down-enter-paced-sample-2--select-keys.json",
+   "bytes": 790,
+   "sha256": "89dfc9763acfed3d089872d0fc4d71ac9580e829443f5e4adb2ac2bd11549c83",
+   "fields": {
+    "target": "orbit-menu",
+    "sequence": "down-down-enter",
+    "mode": "paced",
+    "run": 2,
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "before": "none",
+    "after": "image",
+    "expected": null,
+    "listboxOpen": false,
+    "active": "button:Add attachment"
+   }
+  }
+ ]
+}

@@ -78,6 +78,9 @@ import {
   SessionState,
   type SessionProjectMembership,
   type SessionSearchHit,
+  type SessionSourceRefusalDetail,
+  type SourceRefusalCode,
+  type SourceState,
   supportsMidTurnSteer,
   supportsTargetBoundCurrentWorkSteer,
   uuidToBase62,
@@ -2981,6 +2984,9 @@ export class SessionsService {
       lastToolUse: string | null;
       lastUserText: string | null;
       mergeStatus: string | null;
+      sourceState: SourceState;
+      sourceRefusalCode: SourceRefusalCode | null;
+      sourceRefusalDetail: SessionSourceRefusalDetail | null;
       pinnedAt: Date | null;
       folderId: string | null;
       shared: boolean;
@@ -3060,6 +3066,14 @@ export class SessionsService {
         s.last_tool_use   AS "lastToolUse",
         left(s.last_user_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastUserText",
         s.merge_status    AS "mergeStatus",
+        -- The SOURCE snapshot (migration 0231), for the "this run never started" card: which
+        -- baseline this run was to start from, and — when a runner refused it — the code, and the
+        -- diagnosis carrying §10.1's fixAction. On the row rather than behind a second request,
+        -- because the card is drawn over a list and a refused run is otherwise a row that says
+        -- nothing is wrong. UNBOUND + nulls on every Legacy session.
+        s.source_state    AS "sourceState",
+        s.source_refusal_code   AS "sourceRefusalCode",
+        s.source_refusal_detail AS "sourceRefusalDetail",
         s.pinned_at       AS "pinnedAt",
         -- The folder this session is filed in (0348), which the clients group the list by.
         s.folder_id       AS "folderId",
@@ -3217,6 +3231,11 @@ export class SessionsService {
         lastToolUse: r.lastToolUse,
         lastUserText: r.lastUserText,
         mergeStatus: r.mergeStatus,
+        // The SOURCE snapshot, passed through as the columns hold it: a row that resolves nothing
+        // is `UNBOUND` with nulls, which is the shape a card tests before it draws anything.
+        sourceState: r.sourceState,
+        sourceRefusalCode: r.sourceRefusalCode ?? null,
+        sourceRefusalDetail: r.sourceRefusalDetail ?? null,
         pinnedAt: r.pinnedAt,
         folderId: r.folderId,
         shared: r.shared === true,

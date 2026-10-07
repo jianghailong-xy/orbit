@@ -8,6 +8,7 @@ import {
   withEnginePlanUsage,
   type InstallEngine,
   type LoginEngine,
+  type PlanUsage,
   type PlanUsageSnapshot,
   type RunnerAccountRemoveState,
   type RunnerEngineAccount,
@@ -35,11 +36,12 @@ import {
 } from '../lib/planUsage';
 import { formatResetTime } from '../lib/providerPools';
 import { runnersQuery } from '../lib/queries';
+import { runnerEngineNext } from '../lib/runnerCopy';
 import { ago, engineVersionNumber, updateNoteOf } from '../lib/runnerEngines';
 import { ENGINE_PRESET, ENGINE_SLUGS } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 import { ProviderTile } from './ProviderGallery';
-import { ENGINE_NAME, GoogleSignInTerms, RunnerSignIn } from './RunnerSignIn';
+import { ENGINE_NAME, GoogleSignInTerms, KIMI_SITE, RunnerSignIn } from './RunnerSignIn';
 import type { Runner } from './TasksSidePanel';
 
 const ENGINES = Object.keys(ENGINE_NAME) as LoginEngine[];
@@ -49,9 +51,18 @@ const ENGINES = Object.keys(ENGINE_NAME) as LoginEngine[];
 // this remembers the ones worth keeping open, like the sidebar's width.
 const EXPANDED_KEY = 'orbit:providers-expanded-runners';
 
-function readExpanded(): string[] {
+// Which engines' accounts the user opened on which runner (accountsGroup). An engine with several
+// accounts lists each with every window of its quota, which runs long, and folded its row still says
+// what they come to — how many can run, the one a new session starts on and that one's tightest
+// window — so a group starts folded too, and this remembers the ones opened.
+const OPEN_ACCOUNTS_KEY = 'orbit:providers-open-accounts';
+
+/** One engine's accounts on one runner, as OPEN_ACCOUNTS_KEY remembers them. */
+const accountsGroup = (runnerId: string, engine: string) => `${runnerId}/${engine}`;
+
+function readExpanded(key = EXPANDED_KEY): string[] {
   try {
-    const raw: unknown = JSON.parse(localStorage.getItem(EXPANDED_KEY) ?? '[]');
+    const raw: unknown = JSON.parse(localStorage.getItem(key) ?? '[]');
     return Array.isArray(raw) ? raw.filter((id): id is string => typeof id === 'string') : [];
   } catch {
     return [];
@@ -123,6 +134,9 @@ function metaFor(kind: RowKind, engine: LoginEngine, health?: RunnerEngineHealth
     return kind === 'missing' ? 'Not installed — Orbit can install it here' : 'Not installed';
   }
   if (kind === 'unknown') return `${versionOf(engine, health)} · the CLI wouldn't say`;
+  // Which of Kimi's two sites the login is on: the same CLI signs in to either, and a session spends
+  // that site's subscription.
+  if (engine === 'kimi' && health.kimiRegion) return `${versionOf(engine, health)} · ${KIMI_SITE[health.kimiRegion].domain}`;
   return versionOf(engine, health);
 }
 
@@ -254,10 +268,11 @@ function available(kind: RowKind, quota: Quota): boolean {
 }
 
 /** The quota column: each window with how much of it is used and when it resets, or why there is
- *  nothing to show. */
-function QuotaCell({ kind, quota }: { kind: RowKind; quota: Quota }) {
+ *  nothing to show — under the name of the account it is, when the row speaks for several (`next`). */
+function QuotaCell({ kind, quota, next }: { kind: RowKind; quota: Quota; next?: string }) {
   return (
     <div className="re-quota">
+      {next && <div className="re-quota-head re-quota-next">{runnerEngineNext(next)}</div>}
       {quota.windows.length > 0 ? (
         <>
           {quota.windows.map((row) => (
@@ -321,6 +336,57 @@ function RunnerAccountMenu({ onRename, onSignIn, onRemove, offline, removing, pa
   return pause ? <AccountPauseActions {...pause}>{menu}</AccountPauseActions> : menu();
 }
 
+/**
+ * A folded group's status and quota, in the columns its accounts' rows use: that one of them needs
+ * signing in again, which a fold must never hide — otherwise the state of the account a new session
+ * starts on (the NEXT among the rows), and that account's window nearest its limit, named. The runner
+ * page says the same for the engine, and an account pool's head for its next account.
+ */
+function FoldedAccounts({
+  runner,
+  engine,
+  health,
+  accounts,
+  next,
+  usage,
+  now,
+}: {
+  runner: Runner;
+  engine: LoginEngine;
+  health?: RunnerEngineHealth;
+  /** The group's accounts, less any on its way out. */
+  accounts: RunnerEngineAccount[];
+  next?: string | null;
+  usage: PlanUsage | null;
+  now: number;
+}) {
+  const signedOut = accounts.filter((account) => accountKindOf(account) === 'out' && !runsOnEnvKey(health, account)).length;
+  const account = accounts.find((entry) => entry.id === next);
+  const kind: RowKind = account ? (runsOnEnvKey(health, account) ? 'in' : accountKindOf(account)) : 'out';
+  const quota = account
+    ? quotaOf(kind, accountPlanUsage(usage, engine, account.id), !!runner.online, now)
+    : { windows: [], stale: null };
+  const binding = bindingPlanUsageRow(quota.windows);
+  return (
+    <>
+      {signedOut > 0 ? (
+        <div className="re-status">
+          <Tag color="orange">{signedOut} signed out</Tag>
+        </div>
+      ) : account ? (
+        <AccountPauseStatus until={account.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={statusOf(kind, quota, now)} />
+      ) : (
+        <div className="re-status" />
+      )}
+      <QuotaCell
+        kind={kind}
+        quota={{ windows: binding ? [binding] : [], stale: quota.stale }}
+        next={account && accountNameOf(account)}
+      />
+    </>
+  );
+}
+
 /** One engine on one runner: what it is, what state it's in, what it costs, and the way out. */
 function EngineRow({
   runner,
@@ -330,6 +396,9 @@ function EngineRow({
   signIn,
   onSignIn,
   focused,
+  next,
+  open,
+  onFold,
 }: {
   runner: Runner;
   engine: LoginEngine;
@@ -341,6 +410,11 @@ function EngineRow({
   onSignIn: (panel: string | null) => void;
   /** This is the row a deep link came here for: mark it and bring it into view. */
   focused?: boolean;
+  /** The account a session nobody picked one for starts on (accountToStartOn), of a group. */
+  next?: string | null;
+  /** Whether this engine's accounts are listed under it, or folded into it. */
+  open: boolean;
+  onFold: (open: boolean) => void;
 }) {
   const message = useToast();
   const qc = useQueryClient();
@@ -372,15 +446,20 @@ function EngineRow({
   // comes with its engine's health, folded in beside the rest.
   const usage = withEnginePlanUsage(runner.planUsage, runner.engines);
   const single = engineKeepsAccounts(engine) && health?.accounts?.length === 1 ? health.accounts[0] : undefined;
-  const now = usePauseClock(single?.pausedUntil);
-  const snapshot = planUsageSnapshotForProvider(usage, engine);
-  const quota = quotaOf(kind, snapshot, !!runner.online, now);
   // More than one Codex account: this row heads their group, and each account is a row of its own
-  // below it (AccountRow), with its own state.
+  // below it (AccountRow), with its own state — or, folded, the head says what they come to.
   const grouped = accounts.length > 0;
+  const folded = grouped && !open;
   // What the head says for its group: how many of its accounts could take a session now, out of
   // those staying — one being removed is counted as gone already.
   const kept = accounts.filter((account) => !beingRemoved(runner, engine, account.id));
+  // A group's head counts its paused accounts out, and folded there are no account rows to keep
+  // time for them: it keeps the earliest pause's itself.
+  const now = usePauseClock(
+    single?.pausedUntil ?? kept.map((account) => account.pausedUntil).filter((until) => accountIsPaused(until)).sort()[0],
+  );
+  const snapshot = planUsageSnapshotForProvider(usage, engine);
+  const quota = quotaOf(kind, snapshot, !!runner.online, now);
   const ready = kept.filter((account) => {
     // Antigravity's Default on the machine's Gemini key says no for a Google sign-in it does not
     // need: it takes sessions on the key.
@@ -448,45 +527,79 @@ function EngineRow({
     }
   };
 
+  const meta = (
+    <>
+      {grouped ? (
+        <>
+          {versionOf(engine, health)} ·{' '}
+          <b>
+            {ready} of {kept.length} accounts available
+          </b>
+        </>
+      ) : (
+        <>{metaFor(kind, engine, health)}</>
+      )}
+      {/* Whether this CLI is being kept current, next to what it currently is — the two
+          halves of the same question, and useless apart. */}
+      {/* The machine's own sentence, on hover. The line itself stays short enough to sit
+          after a version string, and everything it had to leave out — which path, which
+          owner, which error — is one pointer away instead of gone. Absent for a healthy
+          engine, which has nothing further to say. */}
+      {note && (
+        <span className={`re-upd${warn ? ' warn' : ''}`} title={health?.update?.message}>
+          {/* Folded, the head shares its width with a status and a quota, so the note takes a line
+              of its own (.re-grp.folded) rather than leave half of itself on the next. */}
+          {folded ? note.text : <>{' '}· {note.text}</>}
+        </span>
+      )}
+    </>
+  );
+
   return (
-    <div className={`re-row${grouped ? ' re-grp' : ''}${focused ? ' focused' : ''}${accountIsPaused(single?.pausedUntil, now) ? ' account-paused' : ''}`} ref={row} data-engine={engine}>
-      <div className="re-id">
-        <ProviderTile slug={ENGINE_PRESET[engine] ?? engine} label={ENGINE_NAME[engine]} size={28} />
-        <div style={{ minWidth: 0 }}>
-          <div className="re-name">{ENGINE_NAME[engine]}</div>
-          <div className="re-meta">
-            {grouped ? (
-              <>
-                {versionOf(engine, health)} ·{' '}
-                <b>
-                  {ready} of {kept.length} accounts available
-                </b>
-              </>
-            ) : (
-              <>{metaFor(kind, engine, health)}</>
-            )}
-            {/* Whether this CLI is being kept current, next to what it currently is — the two
-                halves of the same question, and useless apart. */}
-            {/* The machine's own sentence, on hover. The line itself stays short enough to sit
-                after a version string, and everything it had to leave out — which path, which
-                owner, which error — is one pointer away instead of gone. Absent for a healthy
-                engine, which has nothing further to say. */}
-            {note && (
-              <span className={`re-upd${warn ? ' warn' : ''}`} title={health?.update?.message}>
-                {' '}
-                · {note.text}
+    <div className={`re-row${grouped ? ' re-grp' : ''}${folded ? ' folded' : ''}${focused ? ' focused' : ''}${accountIsPaused(single?.pausedUntil, now) ? ' account-paused' : ''}`} ref={row} data-engine={engine}>
+      {grouped ? (
+        // A group folds under its head. The toggle is the identity alone, as a runner card's is, so
+        // Add account beside it stays a button of its own.
+        <button className="re-id re-grp-toggle" type="button" aria-expanded={open} onClick={() => onFold(!open)}>
+          <ProviderTile slug={ENGINE_PRESET[engine] ?? engine} label={ENGINE_NAME[engine]} size={28} />
+          <span className="re-grp-copy">
+            <span className="re-name">
+              {ENGINE_NAME[engine]}
+              <span className={`re-grp-chev${open ? ' open' : ''}`} aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="m9 5 7 7-7 7"
+                    stroke="currentColor"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </span>
-            )}
+            </span>
+            <span className="re-meta">{meta}</span>
+          </span>
+        </button>
+      ) : (
+        <div className="re-id">
+          <ProviderTile slug={ENGINE_PRESET[engine] ?? engine} label={ENGINE_NAME[engine]} size={28} />
+          <div style={{ minWidth: 0 }}>
+            <div className="re-name">{ENGINE_NAME[engine]}</div>
+            <div className="re-meta">{meta}</div>
           </div>
         </div>
-      </div>
-      {/* Signed in and quota are each account's, not the engine's: a group's head has no columns
-          for them, and its line runs the width of the row instead. */}
+      )}
+      {/* Signed in and quota are each account's, not the engine's: an open group's head has no
+          columns for them, and its line runs the width of the row instead. Folded, it speaks for
+          its accounts in those columns. */}
       {!grouped && (
         <>
           <AccountPauseStatus until={single?.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={antigravity?.supported === false ? { color: 'orange', label: 'Update runner' } : statusOf(kind, quota, now)} />
           {envKey ? <div className="re-quota re-meta">env key · runs on your Gemini key</div> : <QuotaCell kind={kind} quota={quota} />}
         </>
+      )}
+      {folded && (
+        <FoldedAccounts runner={runner} engine={engine} health={health} accounts={kept} next={next} usage={usage} now={now} />
       )}
       <div className="re-act">
         {addsAccounts && (
@@ -495,7 +608,12 @@ function EngineRow({
             className="re-action re-add-account"
             icon={<PlusOutlined aria-hidden />}
             disabled={offline}
-            onClick={() => onSignIn(signIn === addAccountPanel(engine) ? null : addAccountPanel(engine))}
+            onClick={() => {
+              if (signIn === addAccountPanel(engine)) return onSignIn(null);
+              onSignIn(addAccountPanel(engine));
+              // The account this adds lands as a row of the group: open it, so that row is there to see.
+              onFold(true);
+            }}
           >
             Add account
           </Button>
@@ -1006,12 +1124,17 @@ function RunnerEngineCard({
   collapsed,
   onToggle,
   focusEngine,
+  openAccounts,
+  onFoldAccounts,
 }: {
   runner: Runner;
   collapsed: boolean;
   onToggle: () => void;
   /** The engine a deep link named for this runner, if this is the runner it named. */
   focusEngine?: InstallEngine | null;
+  /** The groups of accounts the user opened, on every runner (accountsGroup). */
+  openAccounts: string[];
+  onFoldAccounts: (engine: LoginEngine, open: boolean) => void;
 }) {
   const [signIn, setSignIn] = useState<string | null>(null);
   const engines = runner.engines ?? null;
@@ -1083,6 +1206,7 @@ function RunnerEngineCard({
             engineKeepsAccounts(engine) && accounts.length > 0
               ? accountToStartOn(engine, accounts, withEnginePlanUsage(runner.planUsage, runner.engines), new Date())
               : null;
+          const open = openAccounts.includes(accountsGroup(runner.id, engine));
           return (
             <Fragment key={engine}>
               <EngineRow
@@ -1093,8 +1217,11 @@ function RunnerEngineCard({
                 signIn={signIn}
                 onSignIn={setSignIn}
                 focused={engine === focusEngine}
+                next={next}
+                open={open}
+                onFold={(opened) => onFoldAccounts(engine, opened)}
               />
-              {accounts.map((account, index) => (
+              {open && accounts.map((account, index) => (
                 <AccountRow
                   key={account.id}
                   runner={runner}
@@ -1136,9 +1263,10 @@ function RunnerEngineCard({
  */
 export function RunnerEngines() {
   const [expanded, setExpanded] = useState<string[]>(readExpanded);
-  const write = (next: string[]) => {
+  const [openAccounts, setOpenAccounts] = useState<string[]>(() => readExpanded(OPEN_ACCOUNTS_KEY));
+  const write = (next: string[], key = EXPANDED_KEY) => {
     try {
-      localStorage.setItem(EXPANDED_KEY, JSON.stringify(next));
+      localStorage.setItem(key, JSON.stringify(next));
     } catch {
       // Private mode / full quota: the fold still works, it just won't outlive the page.
     }
@@ -1146,11 +1274,17 @@ export function RunnerEngines() {
   };
   const toggle = (id: string) =>
     setExpanded((prev) => write(prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const foldAccounts = (group: string, open: boolean) =>
+    setOpenAccounts((prev) =>
+      prev.includes(group) === open
+        ? prev
+        : write(open ? [...prev, group] : prev.filter((x) => x !== group), OPEN_ACCOUNTS_KEY),
+    );
 
   // Where a "Not signed in" row in the new-session picker sends the user: this exact engine on
   // this exact machine. Cards start folded, so the one row they came for is exactly what's
-  // hidden — arriving opens that card, and the open sticks, because it is the same edit they'd
-  // have made by hand.
+  // hidden — arriving opens that card, and that engine's accounts in it, and the open sticks,
+  // because it is the same edit they'd have made by hand.
   const [params] = useSearchParams();
   const focusRunner = routeId(params.get('runner'));
   const engineParam = params.get('engine');
@@ -1158,8 +1292,9 @@ export function RunnerEngines() {
   useEffect(() => {
     if (!focusRunner) return;
     setExpanded((prev) => (prev.includes(focusRunner) ? prev : write([...prev, focusRunner])));
+    if (focusEngine) foldAccounts(accountsGroup(focusRunner, focusEngine), true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusRunner]);
+  }, [focusRunner, focusEngine]);
   const runners = useQuery({
     ...runnersQuery(),
     // An install is minutes long and its progress lives on the runner row, so poll while one is
@@ -1242,6 +1377,8 @@ export function RunnerEngines() {
             collapsed={!expanded.includes(runner.id)}
             onToggle={() => toggle(runner.id)}
             focusEngine={runner.id === focusRunner ? focusEngine : null}
+            openAccounts={openAccounts}
+            onFoldAccounts={(engine, open) => foldAccounts(accountsGroup(runner.id, engine), open)}
           />
         ))
       )}

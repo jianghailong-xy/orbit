@@ -1,8 +1,0 @@
-{
-  "explicitFocus": true,
-  "requiredValidation": true,
-  "nativeEnter": true,
-  "motionCompleted": true,
-  "scrollMethod": "PageDown",
-  "scrollLockedUntilClose": true
-}

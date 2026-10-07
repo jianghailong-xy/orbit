@@ -1,0 +1,55 @@
+-- 0395 — the project list's rollup can be classified from the index alone.
+--
+-- `GET /projects` counts every task of every project into seven lanes (project-list-rollup.ts).
+-- Migration 0178 built `task_project_rollup_covering_idx` so that read would be index-only, but the
+-- classifier has grown since: the CASE reads ELEVEN Task columns and the index carried five, so
+-- PostgreSQL fetched a heap row per task to get the other six and the read cost the table's pages
+-- again. Measured on production 2026-10-07 with `EXPLAIN (ANALYZE, BUFFERS)`, read-only:
+--
+--   ->  Nested Loop  (actual time=0.226..708.485 rows=104 loops=1)
+--         ->  Aggregate  (actual time=1.135..6.128 rows=1 loops=107)
+--               ->  Index Scan using task_project_id_idx on task t
+--                     (actual rows=1044 loops=107)         ← 111,708 heap rows for 107 projects
+--                     Buffers: shared hit=9149 read=22015  ← 243 MB: the table's whole 254 MB
+--
+-- (The five key columns are still the ones 0178 chose, and the plan still seeks them; what the heap
+-- fetch is for is the projection.) 13,750 calls over the 26 hours to 2026-10-07 08:00, 696 ms
+-- mean, 16% of the instance's total statement time (pg_stat_statements).
+--
+-- The six columns the classifier reads and the index did not carry become INCLUDE payload: they are
+-- not keys because nothing filters or orders by them — they are read after the row is found — and
+-- keeping the key columns unchanged leaves every other reader of this index (the exact count of one
+-- project's rows, the busiest-assignee grouping) on the same access path.
+--
+-- Reproduced before and after on a disposable PostgreSQL 16.14 the same day, with `jit = off` as
+-- production runs it: the same shape — 111,698 project tasks, 218 MB of heap, 27,925 pages, one
+-- project holding 109,882 and 106 small ones, VACUUM ANALYZE'd on both sides:
+--
+--   BEFORE   656.8 ms   Index Scan using task_project_id_idx on task t (rows=1044 loops=107)
+--                         Buffers: shared hit=1556 read=28016
+--   AFTER    131.3 ms   Index Only Scan using task_project_rollup_covering_idx on task t
+--                         (rows=1044 loops=107) Heap Fetches: 0
+--                         Buffers: shared hit=317 read=1418
+--
+-- 5x the statement and 17x fewer buffers, with the project rows identical on both sides, and the
+-- rebuild itself 1.1 s over those rows (the index goes 9.4 MB → 11 MB).
+--
+-- Index-only is available because `task`'s visibility map is fully set on this deployment
+-- (pg_class: relallvisible = relpages = 32,503), so the scan reports `Heap Fetches: 0`; without a
+-- fresh map the same plan falls back to the heap, which is why the spec beside this migration
+-- (`project-rollup-covering-plan.pg.spec.ts`) VACUUMs its own fixture before it asserts.
+--
+-- A rebuild, not a new index: INCLUDE payload cannot be added to an index in place, so this drops
+-- and recreates it. Deliberately not CONCURRENTLY, as in 0178 — Prisma runs the migration in a
+-- transaction and both statements are inside it, so no reader ever sees the index missing, but the
+-- table is locked for the build. That is seconds over 111,698 rows / 32,503 pages (migration 0178's
+-- own measurement of this index: 28 MB), and the apiserver is restarting for this deploy anyway,
+-- since migrations apply at boot. A deployment whose Task table makes that lock unacceptable has to
+-- treat this as its own swap (build the eleven-column index CONCURRENTLY under a temporary name,
+-- drop the old one, rename) before deploying this migration — the statements below are not guarded,
+-- because a guard that skipped a shape it could not verify is how an index ends up narrow forever.
+DROP INDEX IF EXISTS "task_project_rollup_covering_idx";
+CREATE INDEX "task_project_rollup_covering_idx"
+  ON "task" ("owner_id", "project_id", "status", "id", "updated_at")
+  INCLUDE ("completion_policy", "verifies_task_id", "assignee_id", "dispatch_hold", "terminal_reason", "superseded_by_task_id")
+  WHERE "project_id" IS NOT NULL;

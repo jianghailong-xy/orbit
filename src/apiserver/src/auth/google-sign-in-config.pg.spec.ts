@@ -16,6 +16,9 @@
  *   (4) saved and switched off, or switched on without a client ID or a secret: the answers of
  *       (2), password doors included. Switched on with both, /auth/methods offers Google — sign-up
  *       only under OPEN — and /start stops answering GOOGLE_NOT_CONFIGURED; switched off again, (2);
+ *       and a secret the PROVIDER_SECRET_KEY in force cannot decrypt — what rotating it leaves
+ *       behind — is answered `secretUnreadable: true` while the setting stands, until it is entered
+ *       again (null, §7.1);
  *   (5) only a signed-in ADMIN reaches the setting: nobody is 401, a MEMBER 403, and an access token
  *       holding every scope 403 PAT_FORBIDDEN ADMIN; none of them changes it (the token's refused PUT
  *       is recorded as `pat.request.denied`, as every refused write by a token is: pat-request-audit.ts);
@@ -45,7 +48,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
-import { decryptSecret } from '../providers/provider-crypto';
+import { decryptSecret, encryptSecret } from '../providers/provider-crypto';
 import { call, startApiserver, type Apiserver, type Reply } from './pat-test-apiserver';
 import { PAT_SCOPES, PatService } from './pat.service';
 import { SignInProvidersService } from './sign-in-providers.service';
@@ -65,6 +68,17 @@ const SECRET = `GOCSPX-${RUN}-not-a-real-secret`;
 const OFF = { password: true, google: false, googleSignup: false };
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
+
+/** The ciphertext some other `PROVIDER_SECRET_KEY` wrote: what a rotation leaves in the row. */
+function encryptWithOtherKey(plaintext: string): string {
+  const inForce = process.env.PROVIDER_SECRET_KEY;
+  process.env.PROVIDER_SECRET_KEY = `${inForce}-the-key-before-the-rotation`;
+  try {
+    return encryptSecret(plaintext);
+  } finally {
+    process.env.PROVIDER_SECRET_KEY = inForce;
+  }
+}
 
 /** The claims of a JWT, unverified: what the token carries is the shape under test, not its signature. */
 function claimsOf(jwt: string): Record<string, unknown> {
@@ -247,9 +261,9 @@ test('Google sign-in configuration: off until an administrator turns it on, the 
   await t.test('(3) the admin setting saves and reads back, the secret encrypted, a save without one keeping it, one statement per save', async () => {
     const empty = await ask('GET', '/api/admin/sign-in/google', admin.accessToken);
     assert.equal(empty.status, 200, empty.text);
-    assert.deepEqual(empty.json, { enabled: false, clientId: '', hasSecret: false, signupPolicy: 'EXISTING_ACCOUNTS', redirectUri: REDIRECT_URI });
+    assert.deepEqual(empty.json, { enabled: false, clientId: '', hasSecret: false, secretUnreadable: false, signupPolicy: 'EXISTING_ACCOUNTS', redirectUri: REDIRECT_URI });
 
-    const view = { enabled: false, clientId: CLIENT_ID, hasSecret: true, signupPolicy: 'OPEN', redirectUri: REDIRECT_URI };
+    const view = { enabled: false, clientId: CLIENT_ID, hasSecret: true, secretUnreadable: false, signupPolicy: 'OPEN', redirectUri: REDIRECT_URI };
     const saved = await ask('PUT', '/api/admin/sign-in/google', admin.accessToken,
       { enabled: false, clientId: CLIENT_ID, clientSecret: SECRET, signupPolicy: 'OPEN' });
     assert.equal(saved.status, 200, saved.text);
@@ -295,7 +309,7 @@ test('Google sign-in configuration: off until an administrator turns it on, the 
     const noClientId = await ask('PUT', '/api/admin/sign-in/google', admin.accessToken,
       { enabled: true, clientId: '  ', signupPolicy: 'OPEN' });
     assert.equal(noClientId.status, 200, noClientId.text);
-    assert.deepEqual(noClientId.json, { enabled: true, clientId: '', hasSecret: true, signupPolicy: 'OPEN', redirectUri: REDIRECT_URI });
+    assert.deepEqual(noClientId.json, { enabled: true, clientId: '', hasSecret: true, secretUnreadable: false, signupPolicy: 'OPEN', redirectUri: REDIRECT_URI });
     await assertOff('switched on without a client ID');
 
     // No door saves an empty secret (a save without one keeps the old), so the row is made so here.
@@ -324,8 +338,36 @@ test('Google sign-in configuration: off until an administrator turns it on, the 
     const off = await ask('PUT', '/api/admin/sign-in/google', admin.accessToken,
       { enabled: false, clientId: CLIENT_ID, signupPolicy: 'OPEN' });
     assert.equal(off.status, 200, off.text);
-    assert.deepEqual(off.json, { enabled: false, clientId: CLIENT_ID, hasSecret: true, signupPolicy: 'OPEN', redirectUri: REDIRECT_URI });
+    assert.deepEqual(off.json, { enabled: false, clientId: CLIENT_ID, hasSecret: true, secretUnreadable: false, signupPolicy: 'OPEN', redirectUri: REDIRECT_URI });
     await assertOff('switched off again');
+
+    // A rotation of PROVIDER_SECRET_KEY, as it reaches this deployment: the row still holds the
+    // ciphertext the key before it wrote, and the apiserver in force cannot read it. The setting
+    // stands, and now says so — rather than the admin area still calling it on and saved (§7.1).
+    await sql.query(
+      `UPDATE sign_in_provider SET client_secret_enc = $1, enabled = true WHERE provider = 'google'`,
+      [encryptWithOtherKey(SECRET)],
+    );
+    const [rotatedRow] = await providerRows();
+    stored.add(rotatedRow.client_secret_enc);
+    const rotated = await ask('GET', '/api/admin/sign-in/google', admin.accessToken);
+    assert.equal(rotated.status, 200, rotated.text);
+    assert.deepEqual(rotated.json, {
+      enabled: true, clientId: CLIENT_ID, hasSecret: true, secretUnreadable: true,
+      signupPolicy: 'OPEN', redirectUri: REDIRECT_URI,
+    }, 'the rotated secret is reported unreadable, in one answer the admin area can act on');
+    assert.deepEqual((await ask('GET', '/api/auth/methods')).json, { password: true, google: true, googleSignup: true });
+
+    // Entering the secret again clears it, as the admin area's warning tells an administrator to.
+    const again = await ask('PUT', '/api/admin/sign-in/google', admin.accessToken,
+      { enabled: true, clientId: CLIENT_ID, clientSecret: SECRET, signupPolicy: 'OPEN' });
+    assert.equal(again.status, 200, again.text);
+    assert.equal(again.json.secretUnreadable, false);
+    assert.equal((await ask('GET', '/api/admin/sign-in/google', admin.accessToken)).json.secretUnreadable, false);
+    const [afterAgain] = await providerRows();
+    stored.add(afterAgain.client_secret_enc);
+    assert.equal(decryptSecret(afterAgain.client_secret_enc), SECRET, 'a secret entered again reads with the key in force');
+    await sql.query(`UPDATE sign_in_provider SET enabled = false WHERE provider = 'google'`);
   });
 
   await t.test('(5) only a signed-in ADMIN reaches the setting; nobody, a MEMBER and an access token change nothing in it', async () => {

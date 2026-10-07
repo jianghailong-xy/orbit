@@ -1,0 +1,300 @@
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/RunStartProbe.build/Debug/RunStartMacProbeUITests.build/RunStartMacProbeUITests.xctest.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest
+
+Touch /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app/Contents/PlugIns/RunStartMacProbeUITests.xctest
+
+CodeSign /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app (in target 'RunStartMacProbeUITests' from project 'RunStartProbe')
+    cd /Users/runner/work/orbit/orbit/.sr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Intermediates.noindex/RunStartProbe.build/Debug/RunStartMacProbeUITests.build/RunStartMacProbeUITests.xctest.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app
+/Users/runner/work/orbit/orbit/.sr-probe/.dd-mac/Build/Products/Debug/RunStartMacProbeUITests-Runner.app: replacing existing signature
+
+2026-10-07 14:11:00.275366+0000 RunStartMacProbeUITests-Runner[10908:37765] [Default] Running tests...
+Test Suite 'All tests' started at 2026-10-07 14:11:02.865.
+Test Suite 'RunStartMacProbeUITests.xctest' started at 2026-10-07 14:11:02.866.
+Test Suite 'RunStartShotTests' started at 2026-10-07 14:11:02.867.
+Test Case '-[RunStartMacProbeUITests.RunStartShotTests testMacShowsWhyTheRunNeverStarted]' started.
+    t =     0.00s Start Test at 2026-10-07 14:11:02.869
+    t =     5.25s Set Up
+    t =     5.88s Open io.orbitd.crossingsmacprobe
+    t =     5.88s     Launch io.orbitd.crossingsmacprobe
+2026-10-07 14:11:09.946 xcodebuild[3270:15895] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-07 14:11:09.946 xcodebuild[3270:15895] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     9.75s         Wait for accessibility to load
+    t =    10.72s         Setting up automation session
+    t =    10.85s         Wait for io.orbitd.crossingsmacprobe to idle
+    t =    10.87s Get number of matches for: Descendants matching type Window
+    t =    11.74s Get number of matches for: Descendants matching type Window
+    t =    12.27s Get number of matches for: Descendants matching type Window
+    t =    12.80s Get number of matches for: Descendants matching type Window
+    t =    13.32s Get number of matches for: Descendants matching type Window
+    t =    13.85s Get number of matches for: Descendants matching type Window
+    t =    14.38s Get number of matches for: Descendants matching type Window
+    t =    14.92s Get number of matches for: Descendants matching type Window
+    t =    15.44s Get number of matches for: Descendants matching type Window
+    t =    15.97s Get number of matches for: Descendants matching type Window
+    t =    16.50s Get number of matches for: Descendants matching type Window
+    t =    17.04s Get number of matches for: Descendants matching type Window
+    t =    17.57s Get number of matches for: Descendants matching type Window
+    t =    18.21s Get number of matches for: Descendants matching type Window
+    t =    18.74s Get number of matches for: Descendants matching type Window
+    t =    19.27s Get number of matches for: Descendants matching type Window
+    t =    19.81s Get number of matches for: Descendants matching type Window
+    t =    20.35s Get number of matches for: Descendants matching type Window
+    t =    20.88s Get number of matches for: Descendants matching type Window
+    t =    21.41s Get number of matches for: Descendants matching type Window
+    t =    21.93s Get number of matches for: Descendants matching type Window
+    t =    22.48s Get number of matches for: Descendants matching type Window
+    t =    23.01s Get number of matches for: Descendants matching type Window
+    t =    23.54s Get number of matches for: Descendants matching type Window
+    t =    24.07s Get number of matches for: Descendants matching type Window
+    t =    24.61s Get number of matches for: Descendants matching type Window
+    t =    25.14s Get number of matches for: Descendants matching type Window
+    t =    25.68s Get number of matches for: Descendants matching type Window
+    t =    26.25s Type 'n' key with modifiers '⌘' (0x10)
+    t =    26.25s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    26.26s     Find the Target Application 'io.orbitd.crossingsmacprobe'
+    t =    26.30s     Check for interrupting elements affecting "RunStartMacProbe" Application
+    t =    26.31s     Synthesize event
+    t =    29.14s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    29.15s Get number of matches for: Descendants matching type Window
+    t =    29.33s Checking existence of `Any (First Match)`
+    t =    29.51s Checking existence of `StaticText (First Match)`
+    t =    29.60s Checking existence of `Any (First Match)`
+    t =    30.25s Checking existence of `Any (First Match)`
+    t =    30.52s Checking existence of `StaticText (First Match)`
+    t =    30.77s Checking existence of `Any (First Match)`
+    t =    31.31s Checking existence of `Any (First Match)`
+    t =    31.51s Checking existence of `StaticText (First Match)`
+    t =    31.55s Checking existence of `StaticText (First Match)`
+    t =    33.12s Checking existence of `Any (First Match)`
+    t =    33.23s Checking existence of `StaticText (First Match)`
+    t =    33.32s Checking existence of `StaticText (First Match)`
+    t =    33.39s Checking existence of `Any (First Match)`
+    t =    33.50s Checking existence of `Any (First Match)`
+    t =    33.60s Checking existence of `Any (First Match)`
+    t =    33.66s Checking existence of `Any (First Match)`
+    t =    33.76s Checking existence of `Any (First Match)`
+    t =    33.85s Checking existence of `Any (First Match)`
+    t =    33.93s Checking existence of `Any (First Match)`
+    t =    33.96s Checking existence of `Any (First Match)`
+    t =    34.04s Checking existence of `Any (First Match)`
+    t =    34.08s Checking existence of `Any (First Match)`
+    t =    34.15s Checking existence of `Any (First Match)`
+    t =    34.26s Checking existence of `StaticText (First Match)`
+    t =    34.34s Checking existence of `Window (First Match)`
+    t =    35.66s Checking existence of `Window (First Match)`
+    t =    35.78s Checking existence of `Any (First Match)`
+    t =    35.81s Checking existence of `Any (First Match)`
+    t =    35.87s Find the Any (First Match)
+    t =    36.40s Checking existence of `Window (First Match)`
+    t =    36.49s Click "session-run-start" Button
+    t =    36.49s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    36.50s     Find the "session-run-start" Button
+    t =    36.53s     Check for interrupting elements affecting "session-run-start" Button
+    t =    36.71s     Synthesize event
+    t =    37.12s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    40.85s Checking existence of `Window (First Match)`
+    t =    40.98s Added attachment named 'mac-requests.txt'
+    t =    41.01s Terminate io.orbitd.crossingsmacprobe:11087
+    t =    43.18s Open io.orbitd.crossingsmacprobe
+    t =    43.18s     Launch io.orbitd.crossingsmacprobe
+2026-10-07 14:11:47.010 xcodebuild[3270:15895] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-07 14:11:47.011 xcodebuild[3270:15895] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    47.46s         Wait for accessibility to load
+    t =    47.70s         Setting up automation session
+    t =    47.78s         Wait for io.orbitd.crossingsmacprobe to idle
+    t =    47.79s Get number of matches for: Descendants matching type Window
+    t =    48.67s Get number of matches for: Descendants matching type Window
+    t =    49.21s Get number of matches for: Descendants matching type Window
+    t =    49.75s Get number of matches for: Descendants matching type Window
+    t =    50.27s Get number of matches for: Descendants matching type Window
+    t =    50.80s Get number of matches for: Descendants matching type Window
+    t =    51.33s Get number of matches for: Descendants matching type Window
+    t =    51.86s Get number of matches for: Descendants matching type Window
+    t =    52.39s Get number of matches for: Descendants matching type Window
+    t =    52.91s Get number of matches for: Descendants matching type Window
+    t =    53.43s Get number of matches for: Descendants matching type Window
+    t =    53.97s Get number of matches for: Descendants matching type Window
+    t =    54.48s Get number of matches for: Descendants matching type Window
+    t =    55.01s Get number of matches for: Descendants matching type Window
+    t =    55.54s Get number of matches for: Descendants matching type Window
+    t =    56.07s Get number of matches for: Descendants matching type Window
+    t =    56.59s Get number of matches for: Descendants matching type Window
+    t =    57.12s Get number of matches for: Descendants matching type Window
+    t =    57.66s Get number of matches for: Descendants matching type Window
+    t =    58.18s Get number of matches for: Descendants matching type Window
+    t =    58.72s Get number of matches for: Descendants matching type Window
+    t =    59.26s Get number of matches for: Descendants matching type Window
+    t =    59.78s Get number of matches for: Descendants matching type Window
+    t =    60.31s Get number of matches for: Descendants matching type Window
+    t =    60.84s Get number of matches for: Descendants matching type Window
+    t =    61.38s Get number of matches for: Descendants matching type Window
+    t =    61.90s Get number of matches for: Descendants matching type Window
+    t =    62.43s Get number of matches for: Descendants matching type Window
+    t =    62.96s Type 'n' key with modifiers '⌘' (0x10)
+    t =    62.96s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    62.96s     Find the Target Application 'io.orbitd.crossingsmacprobe'
+    t =    62.99s     Check for interrupting elements affecting "RunStartMacProbe" Application
+    t =    63.00s     Synthesize event
+    t =    63.92s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    63.93s Get number of matches for: Descendants matching type Window
+    t =    64.05s Checking existence of `Any (First Match)`
+    t =    64.29s Checking existence of `StaticText (First Match)`
+    t =    64.74s Checking existence of `Any (First Match)`
+    t =    65.30s Checking existence of `Any (First Match)`
+    t =    65.42s Checking existence of `StaticText (First Match)`
+    t =    65.44s Checking existence of `StaticText (First Match)`
+    t =    67.00s Checking existence of `Any (First Match)`
+    t =    67.07s Checking existence of `Any (First Match)`
+    t =    67.12s Checking existence of `Any (First Match)`
+    t =    67.27s Checking existence of `StaticText (First Match)`
+    t =    67.39s Checking existence of `Window (First Match)`
+    t =    68.74s Checking existence of `Window (First Match)`
+    t =    68.83s Terminate io.orbitd.crossingsmacprobe:12033
+    t =    70.36s Open io.orbitd.crossingsmacprobe
+    t =    70.36s     Launch io.orbitd.crossingsmacprobe
+2026-10-07 14:12:13.344 xcodebuild[3270:15895] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-07 14:12:13.356 xcodebuild[3270:15895] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    75.13s         Wait for accessibility to load
+    t =    75.28s         Setting up automation session
+    t =    75.32s         Wait for io.orbitd.crossingsmacprobe to idle
+    t =    75.33s Get number of matches for: Descendants matching type Window
+    t =    76.03s Get number of matches for: Descendants matching type Window
+    t =    76.56s Get number of matches for: Descendants matching type Window
+    t =    77.11s Get number of matches for: Descendants matching type Window
+    t =    77.64s Get number of matches for: Descendants matching type Window
+    t =    78.18s Get number of matches for: Descendants matching type Window
+    t =    78.71s Get number of matches for: Descendants matching type Window
+    t =    79.26s Get number of matches for: Descendants matching type Window
+    t =    79.78s Get number of matches for: Descendants matching type Window
+    t =    80.31s Get number of matches for: Descendants matching type Window
+    t =    80.83s Get number of matches for: Descendants matching type Window
+    t =    81.36s Get number of matches for: Descendants matching type Window
+    t =    81.88s Get number of matches for: Descendants matching type Window
+    t =    82.41s Get number of matches for: Descendants matching type Window
+    t =    82.94s Get number of matches for: Descendants matching type Window
+    t =    83.49s Get number of matches for: Descendants matching type Window
+    t =    84.01s Get number of matches for: Descendants matching type Window
+    t =    84.54s Get number of matches for: Descendants matching type Window
+    t =    85.09s Get number of matches for: Descendants matching type Window
+    t =    85.62s Get number of matches for: Descendants matching type Window
+    t =    86.14s Get number of matches for: Descendants matching type Window
+    t =    86.67s Get number of matches for: Descendants matching type Window
+    t =    87.20s Get number of matches for: Descendants matching type Window
+    t =    87.74s Get number of matches for: Descendants matching type Window
+    t =    88.27s Get number of matches for: Descendants matching type Window
+    t =    88.81s Get number of matches for: Descendants matching type Window
+    t =    89.33s Get number of matches for: Descendants matching type Window
+    t =    89.86s Get number of matches for: Descendants matching type Window
+    t =    90.39s Type 'n' key with modifiers '⌘' (0x10)
+    t =    90.39s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    90.39s     Find the Target Application 'io.orbitd.crossingsmacprobe'
+    t =    90.42s     Check for interrupting elements affecting "RunStartMacProbe" Application
+    t =    90.42s     Synthesize event
+    t =    91.24s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =    91.24s Get number of matches for: Descendants matching type Window
+    t =    91.33s Checking existence of `Any (First Match)`
+    t =    91.36s Checking existence of `StaticText (First Match)`
+    t =    91.40s Checking existence of `Any (First Match)`
+    t =    91.95s Checking existence of `Any (First Match)`
+    t =    92.34s Checking existence of `Any (First Match)`
+    t =    93.89s Checking existence of `Any (First Match)`
+    t =    93.99s Checking existence of `Window (First Match)`
+    t =    95.28s Checking existence of `Window (First Match)`
+    t =    95.37s Terminate io.orbitd.crossingsmacprobe:12690
+    t =    96.49s Open io.orbitd.crossingsmacprobe
+    t =    96.49s     Launch io.orbitd.crossingsmacprobe
+2026-10-07 14:12:39.381 xcodebuild[3270:15895] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-07 14:12:39.382 xcodebuild[3270:15895] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   101.80s         Wait for accessibility to load
+    t =   102.16s         Setting up automation session
+    t =   102.24s         Wait for io.orbitd.crossingsmacprobe to idle
+    t =   102.25s Get number of matches for: Descendants matching type Window
+    t =   103.01s Get number of matches for: Descendants matching type Window
+    t =   103.54s Get number of matches for: Descendants matching type Window
+    t =   104.08s Get number of matches for: Descendants matching type Window
+    t =   104.60s Get number of matches for: Descendants matching type Window
+    t =   105.13s Get number of matches for: Descendants matching type Window
+    t =   105.67s Get number of matches for: Descendants matching type Window
+    t =   106.21s Get number of matches for: Descendants matching type Window
+    t =   106.73s Get number of matches for: Descendants matching type Window
+    t =   107.26s Get number of matches for: Descendants matching type Window
+    t =   107.80s Get number of matches for: Descendants matching type Window
+    t =   108.33s Get number of matches for: Descendants matching type Window
+    t =   108.86s Get number of matches for: Descendants matching type Window
+    t =   109.38s Get number of matches for: Descendants matching type Window
+    t =   109.92s Get number of matches for: Descendants matching type Window
+    t =   110.45s Get number of matches for: Descendants matching type Window
+    t =   110.97s Get number of matches for: Descendants matching type Window
+    t =   111.51s Get number of matches for: Descendants matching type Window
+    t =   112.04s Get number of matches for: Descendants matching type Window
+    t =   112.56s Get number of matches for: Descendants matching type Window
+    t =   113.09s Get number of matches for: Descendants matching type Window
+    t =   113.62s Get number of matches for: Descendants matching type Window
+    t =   114.15s Get number of matches for: Descendants matching type Window
+    t =   114.67s Get number of matches for: Descendants matching type Window
+    t =   115.20s Get number of matches for: Descendants matching type Window
+    t =   115.73s Get number of matches for: Descendants matching type Window
+    t =   116.26s Get number of matches for: Descendants matching type Window
+    t =   116.79s Get number of matches for: Descendants matching type Window
+    t =   117.31s Type 'n' key with modifiers '⌘' (0x10)
+    t =   117.31s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =   117.32s     Find the Target Application 'io.orbitd.crossingsmacprobe'
+    t =   117.35s     Check for interrupting elements affecting "RunStartMacProbe" Application
+    t =   117.35s     Synthesize event
+    t =   118.80s     Wait for io.orbitd.crossingsmacprobe to idle
+    t =   118.81s Get number of matches for: Descendants matching type Window
+    t =   118.91s Checking existence of `Any (First Match)`
+    t =   119.00s Checking existence of `StaticText (First Match)`
+    t =   119.04s Checking existence of `Any (First Match)`
+    t =   119.57s Checking existence of `Any (First Match)`
+    t =   119.66s Checking existence of `StaticText (First Match)`
+    t =   119.71s Checking existence of `Any (First Match)`
+    t =   120.26s Checking existence of `Any (First Match)`
+    t =   120.35s Checking existence of `StaticText (First Match)`
+    t =   120.45s Checking existence of `Any (First Match)`
+    t =   121.00s Checking existence of `Any (First Match)`
+    t =   121.07s Checking existence of `StaticText (First Match)`
+    t =   121.14s Checking existence of `Any (First Match)`
+    t =   121.77s Checking existence of `Any (First Match)`
+    t =   122.05s Checking existence of `StaticText (First Match)`
+    t =   122.16s Checking existence of `StaticText (First Match)`
+    t =   122.21s Checking existence of `Any (First Match)`
+    t =   122.31s Checking existence of `StaticText (First Match)`
+    t =   122.37s Checking existence of `StaticText (First Match)`
+    t =   122.45s Checking existence of `Any (First Match)`
+    t =   122.52s Checking existence of `Any (First Match)`
+    t =   122.60s Checking existence of `Any (First Match)`
+    t =   122.68s Checking existence of `StaticText (First Match)`
+    t =   122.75s Checking existence of `Window (First Match)`
+    t =   124.06s Checking existence of `Window (First Match)`
+    t =   124.22s Added attachment named 'mac-project-requests.txt'
+    t =   124.25s Tear Down
+    t =   124.26s     Added attachment named 'RunStartShotTeststestMacShowsWhyTheRunNeverStarted-notes.txt'
+Test Case '-[RunStartMacProbeUITests.RunStartShotTests testMacShowsWhyTheRunNeverStarted]' passed (125.105 seconds).
+Test Suite 'RunStartShotTests' passed at 2026-10-07 14:13:07.974.
+	 Executed 1 test, with 0 failures (0 unexpected) in 125.105 (125.108) seconds
+Test Suite 'RunStartMacProbeUITests.xctest' passed at 2026-10-07 14:13:07.976.
+	 Executed 1 test, with 0 failures (0 unexpected) in 125.105 (125.110) seconds
+Test Suite 'All tests' passed at 2026-10-07 14:13:07.976.
+	 Executed 1 test, with 0 failures (0 unexpected) in 125.105 (125.111) seconds
+2026-10-07 14:13:08.919 xcodebuild[3270:15895] [MT] IDETestOperationsObserverDebug: 142.530 elapsed -- Testing started completed.
+2026-10-07 14:13:08.919 xcodebuild[3270:15895] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-07 14:13:08.919 xcodebuild[3270:15895] [MT] IDETestOperationsObserverDebug: 142.530 sec, +142.530 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.sr-probe/results/mac.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

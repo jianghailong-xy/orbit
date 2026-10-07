@@ -23,7 +23,10 @@ import {
   SessionFilingState,
   SessionLifecycleState,
   SessionRunState,
+  SessionSourceRefusalDetail,
   SessionState,
+  SourceRefusalCode,
+  SourceState,
 } from '@orbit/shared';
 import { Observable, Subject, filter, map, mergeMap } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
@@ -950,6 +953,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         },
         workspaceId: true,
         folderId: true,
+        // The SOURCE snapshot, which the "this run never started" card reads: the state this run's
+        // baseline was left in, and — when a runner refused it — §10.1's code and the diagnosis
+        // (with the `fixAction` the control plane wrote beside it) that says what to do about it.
+        // `UNBOUND` + nulls on a Legacy session, which is every session that resolves no baseline.
+        sourceState: true,
+        sourceRefusalCode: true,
+        sourceRefusalDetail: true,
         lastTurnAt: true,
         workspace: { select: { id: true, name: true, model: true, effort: true } },
         coordinatorForProject: { select: { id: true, title: true } },
@@ -1001,6 +1011,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // Null is a value here: a session moved out of its folder reaches the owner's other clients
       // by this key going null.
       folderId: s.folderId ?? null,
+      // The same three keys the list row and the detail carry, so a client folding this summary
+      // into a row it holds cannot be handed a refused run that looks like one still queued. Sent
+      // on every summary — a session that resolves nothing is `UNBOUND` with nulls, which is what
+      // clears a row that was showing a refusal.
+      sourceState: s.sourceState as SourceState,
+      sourceRefusalCode: (s.sourceRefusalCode as SourceRefusalCode | null) ?? null,
+      sourceRefusalDetail: (s.sourceRefusalDetail as SessionSourceRefusalDetail | null) ?? null,
       projectId: s.coordinatorForProject?.id ?? null,
       projectTitle: s.coordinatorForProject?.title ?? null,
       projectMembership: await readSessionProjectMembership(this.prisma, sessionId),

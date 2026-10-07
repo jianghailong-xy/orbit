@@ -28,6 +28,7 @@ export * from './sessionCreatedTasks';
 export * from './session-message';
 export * from './session-request';
 export * from './source';
+export * from './source-refusal';
 export * from './task-start';
 export * from './task-run-reason';
 export * from './watch';

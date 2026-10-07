@@ -72,7 +72,8 @@ import { TasksService } from './tasks.service';
  * worktree on the pin (admitted) or report the refusal through `RunnerApiController.finalize` in the
  * runner's own words (refused). Nothing below writes a refusal, a wake or a comment by hand.
  *
- *   (a) the prerequisite's work reached `main` directly and the project branch has not absorbed it:
+ *   (a) the prerequisite's work reached `main` directly and the project branch — a line that
+ *       exists, with one landing of its own and nothing from main yet (v1.2) — has not absorbed it:
  *       the start is refused, the TASK records it — code, time, the pinned commit, the missing
  *       commit and the prerequisite that landed it — the timeline says what to do instead of "run it
  *       again", and the project's standing coordinator conversation is sent one message naming the
@@ -89,7 +90,9 @@ import { TasksService } from './tasks.service';
  *       start — before any run exists — so nothing here widened the gate;
  *
  * plus the switched-off coordinator (the refusal is still on the task, the wake is refused on the
- * switch and nobody is told) and an ordinary run failure (not mistaken for a refused start).
+ * switch and nobody is told), an ordinary run failure (not mistaken for a refused start), and the
+ * PROJECT's own side of a resolution refusal (SR50): one `SOURCE_UNRESOLVED` item per line and code,
+ * raised once however many runs that line stops, and none at all for a task in no project.
  *
  * Not destructive: every case owns freshly generated ids and its own temporary repository.
  */
@@ -353,6 +356,22 @@ async function prerequisite(
   return { taskId, landedSha: after };
 }
 
+/**
+ * The scene every DEPENDENCY_BASE_NOT_LANDED case below needs before it has a line to be about.
+ *
+ * v1.2 (`docs/project-source-contract.md` §4.1): P4's baseline spells the line the way P5's does —
+ * `integrationRef` once something has landed on it, `upstreamRef` until then — because §1.5 L10's
+ * first row says the project branch is created BY the first landing on it, and a landing is a
+ * receipt. A case whose prerequisite landed on `main` while nothing has landed on the line
+ * therefore resolves onto upstream, which contains that landing, and is admitted: the refusal it
+ * means to drive never happens. So the case has to say the line exists first. The fixture's
+ * `git branch` is not that statement — the readers ask the receipts table, not the repository.
+ */
+async function lineExists(stack: Stack, f: Fixture): Promise<void> {
+  const first = await prerequisite(stack, f, 'first-landing', { onto: 'line' });
+  assert.ok(first.landedSha, 'the scene-setting landing on the line did not land');
+}
+
 /** The dependent under test: waits on one prerequisite and is started by hand. */
 async function dependentOf(stack: Stack, f: Fixture, title: string, prerequisiteId: string) {
   return task(stack, f, title, { dependsOnTaskIds: [prerequisiteId] });
@@ -364,6 +383,39 @@ async function start(stack: Stack, f: Fixture, taskId: string): Promise<string> 
   assert.equal(answer.ok, true, `the start was not made: ${JSON.stringify(answer)}`);
   assert.ok(answer.sessionId, 'the start named no session');
   return answer.sessionId!;
+}
+
+/**
+ * What the runner does with a claimed run whose ref it could not resolve (§6.3 steps 2 and 3).
+ *
+ * The claim's own write, the selector off the row, and the refusal POSTed through the real pin
+ * route in the runner's own words — `git fetch`'s sentence for a ref the authority does not have,
+ * which is what `mentionsMissingRef` turns into BASE_REF_NOT_FOUND (src/runner-go/source.go). No
+ * repository is needed: the refusal is the runner's answer, and the door is what is under test.
+ */
+async function refuseAtResolution(
+  stack: Stack,
+  f: Fixture,
+  sessionId: string,
+): Promise<{ ref: string; stderr: string; response: Awaited<ReturnType<RunnerApiController['pinSessionSource']>> }> {
+  await stack.db.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+  const selected = await stack.db.session.findUniqueOrThrow({
+    where: { id: sessionId }, select: { sourceState: true, sourceRef: true },
+  });
+  assert.equal(selected.sourceState, 'SELECTED');
+  const ref = selected.sourceRef!;
+  const stderr = `fatal: couldn't find remote ref ${ref}`;
+  const response = await stack.api.pinSessionSource(
+    { id: f.runnerId, ownerId: f.ownerId },
+    sessionId,
+    {
+      refusal: {
+        code: 'BASE_REF_NOT_FOUND',
+        detail: { ref, refAuthority: 'REMOTE', remoteName: 'origin', stderr },
+      },
+    },
+  );
+  return { ref, stderr, response };
 }
 
 interface RunnerOutcome {
@@ -463,6 +515,19 @@ const refusalOf = async (db: PrismaClient, taskId: string) =>
   (await db.task.findUniqueOrThrow({ where: { id: taskId }, select: { dispatchRefusal: true } }))
     .dispatchRefusal as unknown as TaskDispatchRefusal | null;
 
+/** The project's own exception items: what the project page counts as needing a person (SR50). */
+function blockers(db: PrismaClient, projectId: string) {
+  return db.projectBlocker.findMany({
+    where: { projectId },
+    select: {
+      id: true, kind: true, owner: true, recovery: true, severity: true, subjectType: true,
+      subjectId: true, detail: true, dedupeKey: true, requiredAction: true, resolvedAt: true,
+      lifecycleGeneration: true,
+    },
+    orderBy: { id: 'asc' },
+  });
+}
+
 function release(f: Fixture, checkouts: Array<string | null>): void {
   for (const checkout of checkouts) if (checkout) rmSync(checkout, { recursive: true, force: true });
   rmSync(f.repo, { recursive: true, force: true });
@@ -475,7 +540,10 @@ test('(a) a start whose pinned commit lacks the prerequisite\'s landed commit is
     const stack = await connect();
     const f = await fixture(stack, 'refused-start');
     try {
+      await lineExists(stack, f);
       // The prerequisite's work reached main directly; the project branch has not absorbed main.
+      // The line exists — one landing of its own, nothing from main yet — which is what makes this
+      // a case about the line's tip rather than about the line not existing (v1.2).
       const p = await prerequisite(stack, f, 'quota-by-account', { onto: 'main' });
       const dependent = await dependentOf(stack, f, 'duplicate-account-hint', p.taskId);
 
@@ -558,6 +626,9 @@ test('(b) doing the next step the refusal names — the line absorbs main — le
     const f = await fixture(stack, 'way-out');
     const checkouts: Array<string | null> = [];
     try {
+      // A line that exists (v1.2): one landing of its own, and it has not absorbed main, which is
+      // what the prerequisite's work went to.
+      await lineExists(stack, f);
       const p = await prerequisite(stack, f, 'landed-on-main', { onto: 'main' });
       const dependent = await dependentOf(stack, f, 'waits-for-it', p.taskId);
 
@@ -663,6 +734,7 @@ test('a refused start under a switched-off coordinator is recorded on the task a
     const stack = await connect();
     const f = await fixture(stack, 'switched-off', { coordinatorEnabled: false });
     try {
+      await lineExists(stack, f);
       const p = await prerequisite(stack, f, 'landed-on-main-off', { onto: 'main' });
       const dependent = await dependentOf(stack, f, 'refused-off', p.taskId);
       const sessionId = await start(stack, f, dependent);
@@ -715,6 +787,126 @@ test('a run that fails for any other reason is not taken for a refused start',
       assert.deepEqual(await refusalWakes(stack.db, f.projectId), []);
     } finally {
       release(f, [checkout]);
+      await stack.db.$disconnect();
+    }
+  });
+
+test('a start refused at resolution opens the project\'s SOURCE_UNRESOLVED item, once per line and code',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    const f = await fixture(stack, 'source-item');
+    try {
+      // The line the dependent is dispatched from is the project's own, and the runner cannot
+      // resolve it (the incident's shape: the branch was never created).
+      const p = await prerequisite(stack, f, 'landed-on-the-line', { onto: 'line' });
+      const first = await dependentOf(stack, f, 'refused-line', p.taskId);
+      const sessionId = await start(stack, f, first);
+      const refused = await refuseAtResolution(stack, f, sessionId);
+      assert.equal(refused.response.state, 'REFUSED');
+      assert.equal(refused.response.wonRace, true);
+      assert.equal(refused.response.refusalCode, 'BASE_REF_NOT_FOUND');
+      assert.equal(await refusalOf(stack.db, first).then((r) => r?.ref), refused.ref,
+        'the refusal on the task is not about the ref that could not be resolved');
+
+      // SR50: the project's own exception item — the kind migration 0231 declared, on the project,
+      // owned by the person who can change the binding or create the branch.
+      const items = await blockers(stack.db, f.projectId);
+      assert.equal(items.length, 1, 'one refused start left the project with no item, or with two');
+      const [item] = items;
+      assert.equal(item.kind, 'SOURCE_UNRESOLVED');
+      assert.equal(item.owner, 'USER');
+      assert.equal(item.recovery, 'HUMAN');
+      assert.equal(item.severity, 'CRITICAL');
+      assert.equal(item.subjectType, 'PROJECT');
+      assert.equal(item.subjectId, f.projectId);
+      assert.equal(item.resolvedAt, null);
+      assert.equal(item.lifecycleGeneration, 1n);
+      assert.deepEqual(item.detail, {
+        code: 'BASE_REF_NOT_FOUND',
+        fixAction: 'FIX_REF',
+        ref: refused.ref,
+        taskIds: [first],
+      });
+      // The row's advice is the task comment's and the coordinator message's own sentence: three
+      // readers, one next step, no second copy of §10.1's pairing to drift.
+      assert.ok(
+        item.requiredAction.includes(dispatchRefusalNextStep({ fixAction: 'FIX_REF', ref: refused.ref })),
+        'the project item gives a next step of its own',
+      );
+
+      // A second task dispatched from the same line is the same thing to fix, and so is a re-issue
+      // of the first refusal (a runner whose response was lost): one open item, and the row that is
+      // there is the first one.
+      const second = await dependentOf(stack, f, 'refused-line-again', p.taskId);
+      const secondSession = await start(stack, f, second);
+      await refuseAtResolution(stack, f, secondSession);
+      await stack.api.pinSessionSource(
+        { id: f.runnerId, ownerId: f.ownerId },
+        sessionId,
+        {
+          refusal: {
+            code: 'BASE_REF_NOT_FOUND',
+            detail: { ref: refused.ref, refAuthority: 'REMOTE', remoteName: 'origin', stderr: refused.stderr },
+          },
+        },
+      );
+      assert.deepEqual(await blockers(stack.db, f.projectId), items, 'the item was raised a second time');
+    } finally {
+      release(f, []);
+      await stack.db.$disconnect();
+    }
+  });
+
+test('a start refused for a task in no project records the refusal and opens no project item',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    const f = await fixture(stack, 'refused-without-project');
+    try {
+      // A defensive case, and a deliberately constructed one: `task_claimed_project_move_guard`
+      // (0122, widened by 0130) refuses to move a task out of its project while any session of it
+      // is live, so a refused run's task is normally still in the project that gave it a SOURCE.
+      // What is asserted is that the door INVENTS nothing — the session is what the refusal is
+      // about, and its task is the only row that can name a project for the item.
+      const orphan = await stack.tasks.create(f.ownerId, {
+        title: 'refused-without-a-project',
+        assigneeId: f.workspaceId,
+        autoRunWhenReady: false,
+        ...CHECK,
+      } as never) as { id: string };
+      const sessionId = randomUUID();
+      await stack.db.session.create({
+        data: {
+          id: sessionId, ownerId: f.ownerId, creatorId: f.ownerId, taskId: orphan.id,
+          workspaceId: f.workspaceId, assignedRunnerId: f.runnerId,
+          title: 'refused-without-a-project', prompt: 'do the thing', provider: 'claude',
+          providerBuiltin: true, status: RunStatus.PENDING,
+          dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+          // The frozen selector a run of a code task carries (SR28) — the one part of this row the
+          // fixture has to state, because no door resolves a SOURCE for a task in no project.
+          sourceState: 'SELECTED', sourceKind: 'PROJECT_UPSTREAM',
+          sourceCodebaseId: randomUUID(), sourceRepoUrl: 'https://github.com/example/dispatch-refusal',
+          sourceRef: 'refs/heads/main', sourceRefAuthority: 'REMOTE', sourceConfigRevision: 0n,
+          sourceRequiredContains: [],
+        },
+      });
+
+      const refused = await refuseAtResolution(stack, f, sessionId);
+      assert.equal(refused.response.state, 'REFUSED');
+      assert.equal(refused.response.wonRace, true);
+
+      // The task still says it — the refusal is recorded where it can legally be recorded, and
+      // nothing is filed against a project this task is not in.
+      const recorded = await refusalOf(stack.db, orphan.id);
+      assert.equal(recorded?.code, 'BASE_REF_NOT_FOUND');
+      assert.equal(recorded?.sessionId, sessionId);
+      assert.deepEqual(await blockers(stack.db, f.projectId), [], 'a task in no project opened an item');
+      const stray = await stack.db.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "project_blocker"
+         WHERE "detail" -> 'taskIds' @> ${JSON.stringify([orphan.id])}::jsonb
+      `;
+      assert.deepEqual(stray, [], 'the refusal of a project-less task was filed against some project');
+    } finally {
+      release(f, []);
       await stack.db.$disconnect();
     }
   });

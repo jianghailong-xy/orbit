@@ -165,6 +165,78 @@ describe('ProjectBlockersCard — what each blocker says', () => {
   });
 });
 
+/**
+ * The project's refused starts (§10.3 / SR50): `project_blocker.kind = 'SOURCE_UNRESOLVED'`, whose
+ * `detail` is `{ code, fixAction, ref, taskIds }`. The card is the project page's half of the same
+ * fact the session page draws over the refused conversation — the same why (one table), the kind
+ * and ref it is about, and the runs the line refused.
+ */
+const SOURCE_UNRESOLVED = blocker({
+  id: '7cQmVv9tE4xJb2hRNu6zPd',
+  kind: 'SOURCE_UNRESOLVED',
+  severity: 'WARNING',
+  subjectType: 'PROJECT',
+  subjectTitle: null,
+  requiredAction: '把这条线建出来，或把绑定指到存在的那一条；在那之前重新开工只会得到同一个拒绝。',
+  detail: {
+    code: 'BASE_REF_NOT_FOUND',
+    fixAction: 'FIX_REF',
+    ref: 'refs/heads/project/34bZ3i4AvgJaaoaw5E9tH',
+    taskIds: ['34bhbW5al0NR1NFcwA2Fj', '34bhbViUOlywBK9Il6n4w'],
+  },
+  firstSeenAt: new Date(NOW - 24 * HOUR).toISOString(),
+});
+
+describe('ProjectBlockersCard — a refused start', () => {
+  it('names the line, the situation and the kind the reports use, and lists the refused runs', () => {
+    const html = paint(standing({ open: [SOURCE_UNRESOLVED] }));
+
+    // The design's headline for the FIX_REF half, and the why the session page's card gives for
+    // the same fixAction — one table (lib/sourceRefusal), two screens.
+    expect(html).toContain('Integration line not created');
+    expect(html).toContain('Its baseline is a branch that doesn’t exist yet');
+    expect(html).toContain('SOURCE_UNRESOLVED · refs/heads/project/34bZ3i4AvgJaaoaw5E9tH');
+    // The server's own next step, which is what the row has always drawn.
+    expect(html).toContain(SOURCE_UNRESOLVED.requiredAction);
+    // Both refused runs, each an address a reader can open. (Their titles are the task page's read,
+    // and a static render asks no queries: what is asserted here is that the rows are drawn at all.)
+    expect(html).toContain('href="/tasks/34bhbW5al0NR1NFcwA2Fj"');
+    expect(html).toContain('href="/tasks/34bhbViUOlywBK9Il6n4w"');
+    expect(html.match(/Refused/g)).toHaveLength(2);
+  });
+
+  it('names an ordinary blocker by its kind, not by this card', () => {
+    const html = paint(standing());
+    expect(html).not.toContain('SOURCE_UNRESOLVED');
+    expect(html).not.toContain('Refused');
+  });
+
+  it('puts the task’s title on each row once the project’s task page resolves', async () => {
+    apiMock.mockResolvedValue({
+      items: [
+        { id: '34bhbW5al0NR1NFcwA2Fj', title: 'web Providers 页给 OpenCode 一行', status: 'OPEN' },
+        { id: '34bhbViUOlywBK9Il6n4w', title: 'web：把「没跑起来」画出来', status: 'OPEN' },
+      ],
+      nextCursor: null,
+    });
+    await mount(
+      <QueryClientProvider client={client()}>
+        <ProjectBlockersCard projectId={PROJECT_ID} blockers={standing({ open: [SOURCE_UNRESOLVED] })} now={NOW} />
+      </QueryClientProvider>,
+    );
+    await settle();
+
+    expect(apiMock).toHaveBeenCalledWith(`/projects/${PROJECT_ID}/tasks/page?limit=100`);
+    const rows = [...document.body.querySelectorAll('.project-blockers-tasks a')].map(
+      (row) => row.textContent,
+    );
+    expect(rows).toEqual([
+      'web Providers 页给 OpenCode 一行',
+      'web：把「没跑起来」画出来',
+    ]);
+  });
+});
+
 let root: Root | null = null;
 let container: HTMLElement | null = null;
 

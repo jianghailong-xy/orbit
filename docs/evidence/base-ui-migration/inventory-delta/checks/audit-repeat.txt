@@ -1,0 +1,2 @@
+two audit --json runs of this tree are byte-identical
+this tree (7059b9994) scans the same sources as the recorded audit (7732f14f8): True
