@@ -420,6 +420,17 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// (idle / task-done / user-ended — shown as dormant) apart from a hard cancel/orphan.
     public let error: String?
     public let endReason: String?
+    /// The SOURCE chain's state for this session — `UNBOUND`, `SELECTED`, `PINNED` or `REFUSED`
+    /// (§6.1). Only `REFUSED` is terminal, and it is the one value this client acts on: such a
+    /// session never re-resolves, and its recovery is a new run (SR34). Absent from older servers,
+    /// which reads as "nothing to say", never as a refusal.
+    public let sourceState: String?
+    /// §10.1's code. Present exactly when `sourceState` is `REFUSED`, which is the DB's own rule
+    /// (`session_source_refusal_chk`).
+    public let sourceRefusalCode: String?
+    /// §10.1's fifth column with `fixAction` folded in — what the refusal was about, in the ref's
+    /// and the runner's own words.
+    public let sourceRefusalDetail: SourceRefusalDetail?
     /// When the server will re-send the message a self-healing failure killed — a spent quota, a
     /// 529, a runner that vanished mid-turn — or nil when nothing is armed. What makes a FAILED
     /// row not yet an outcome: the run continues on its own when this fires, so `isSettled` (and
@@ -543,6 +554,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         engineTurnActive = try values.decodeIfPresent(Bool.self, forKey: .engineTurnActive)
         error = try values.decodeIfPresent(String.self, forKey: .error)
         endReason = try values.decodeIfPresent(String.self, forKey: .endReason)
+        sourceState = try values.decodeIfPresent(String.self, forKey: .sourceState)
+        sourceRefusalCode = try values.decodeIfPresent(String.self, forKey: .sourceRefusalCode)
+        sourceRefusalDetail = try? values.decodeIfPresent(SourceRefusalDetail.self,
+                                                          forKey: .sourceRefusalDetail)
         retryAt = try values.decodeIfPresent(String.self, forKey: .retryAt)
         agent = try values.decodeIfPresent(SessionAgentRef.self, forKey: .agent)
         tags = try values.decodeIfPresent([SessionTag].self, forKey: .tags)
@@ -568,6 +583,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 runningSubagentCount: Int? = nil,
                 engineTurnActive: Bool? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
+                sourceState: String? = nil, sourceRefusalCode: String? = nil,
+                sourceRefusalDetail: SourceRefusalDetail? = nil,
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
                 currentTurnStartedAt: String? = nil,
                 tags: [SessionTag]? = nil, retryAt: String? = nil,
@@ -630,6 +647,9 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.engineTurnActive = engineTurnActive
         self.error = error
         self.endReason = endReason
+        self.sourceState = sourceState
+        self.sourceRefusalCode = sourceRefusalCode
+        self.sourceRefusalDetail = sourceRefusalDetail
         self.retryAt = retryAt
         self.agent = agent
         self.pinnedAt = pinnedAt
