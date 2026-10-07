@@ -69,7 +69,7 @@ old_night="$("$adb" -s "$serial" shell cmd uimode night | awk '{print $NF}' | tr
 "$adb" -s "$serial" shell settings put system font_scale "${A12_FONT_SCALE:-1.0}"
 "$adb" -s "$serial" shell cmd uimode night "${A12_NIGHT:-no}" >/dev/null
 printf 'font=%s\nnight=%s\n' "${A12_FONT_SCALE:-1.0}" "${A12_NIGHT:-no}" > "$output/conditions.txt"
-python3 "$scripts/wiki-watch-fixture.py" --port 18770 > "$output/fixture.log" 2>&1 9>&- &
+PYTHONDONTWRITEBYTECODE=1 python3 "$scripts/wiki-watch-fixture.py" --port 18770 > "$output/fixture.log" 2>&1 9>&- &
 fixture_pid=$!
 for attempt in {1..30}; do
   if curl --fail --silent http://127.0.0.1:18770/__stats > /dev/null; then break; fi

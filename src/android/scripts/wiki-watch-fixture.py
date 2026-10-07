@@ -3,7 +3,8 @@
 This is not a deployed backend. Journal/state prove client wiring, never database or iOS parity.
 Auth/session/record handling is inherited from A06, without a second reader implementation.
 """
-import argparse, copy, importlib.util, json, socket, threading, uuid
+import argparse, copy, importlib.util, json, socket, sys, threading, uuid
+sys.dont_write_bytecode = True  # importing A06's fixture must not leave a __pycache__ in the checkout
 from pathlib import Path
 from http.server import ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
