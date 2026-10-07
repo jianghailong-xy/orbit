@@ -27,6 +27,7 @@ const items: MenuItem[] = [
 ];
 
 let frames = new Map<number, FrameRequestCallback>();
+// Never reset: Base UI keeps the id of its last focus frame between tests, and cancels it on the next.
 let nextFrame = 1;
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
@@ -62,7 +63,6 @@ const highlighted = () => document.querySelector('[role="menu"] [data-highlighte
 beforeEach(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   frames = new Map();
-  nextFrame = 1;
   ran.length = 0;
   vi.stubGlobal('requestAnimationFrame', (frame: FrameRequestCallback) => {
     frames.set(nextFrame, frame);
