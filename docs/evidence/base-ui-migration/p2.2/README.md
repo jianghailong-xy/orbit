@@ -1,5 +1,13 @@
 # P2.2 菜单、浮层与选择控件
 
+> **证据瘦身（2026-10-07）**：完整原件见提交 `7732f14f82d4e6b4406d7d164c4b672f63aa0f56`（瘦身前最后一个含完整文件的提交）。取回单个文件用 `git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2.2/<路径> > <文件>`，整个目录用 `git archive 7732f14f82d4e6b4406d7d164c4b672f63aa0f56 docs/evidence/base-ui-migration/p2.2 | tar -x -C <空目录>`。
+>
+> 本目录在瘦身中：63 份 Playwright 报告换成同目录的 `report.summary.json`，另有 4 份其他文件名的报告换成 `<原名>.summary.json`，都只删附件正文；删除 102 个 trace 压缩包；删除被取代修订的 5666 个原始运行文件（截图、逐用例 JSON、运行压缩包）；1499 个逐用例 JSON（含打包的 attachments.tar.gz）换成所在目录的 `attachments.summary.json`（文件名、字节数、SHA-256 和顶层标量字段）；删除 398 张与本任务目录里保留副本逐字节相同的重复截图。下文链接若指向这些文件，按上面的命令从该提交取回；读取它们的脚本要在取回的目录里运行。
+>
+> 本页是第 1 版（判定 SEND_BACK）。第 2–7 版已被后续修订取代，被采用的是[第 8 版](revision-8/README.md)（最后一次 CONFIRM）。第 1–7 版运行的截图、逐用例 JSON 和压缩包已删除。
+>
+> 目录里的 SHA256SUMS 类清单（`*.sha256`、`artifact-index*.json`、`manifest.json`、各运行 `summary.json` 里的附件哈希等）保留原文件，核验的是提交 `7732f14f8` 里的文件。做法、保留理由和逐文件删除清单见 [evidence-slimming](../evidence-slimming/README.md)。
+
 **当前交付以[第二版返工证据](revision-2/README.md)为准。** 本页的结果表保留首版记录。独立审查发现首版遗漏正常动效，并未经授权改变手机附件菜单布局；第二版补齐动效、恢复实测布局，原截图和失败记录不覆盖。
 
 服务于任务 `34Za394q2ZEgr7TKprjkF`，起点 `67e62c0b4028eefe2c619dac80d3fac312cea601`。开工读取了任务完整信息/历史评论、项目目标/验收/作业指导，以及已完成的 P2.1 第二版交付。项目验收条目 key `1BvO6hYrlFnU60JqxQPUHt`，原文：**P2：Orbit 自有弹层、选择及反馈组件保持现有键盘、焦点、通知和确认行为。** 本任务承担菜单、Popover、Tooltip、Select/Combobox；通知与确认不凭本证据宣称完成。

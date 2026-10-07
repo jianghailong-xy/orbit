@@ -41,10 +41,17 @@ public enum KimiSite: String, CaseIterable, Sendable, Identifiable {
     /// `KIMI_LOGIN_REGION_V1`). One that doesn't runs a bare `kimi login`.
     public static let loginRegionCapability = "kimi-login-region/v1"
 
-    /// Whether `runner` can be told the site. One that can't signs in where its CLI decides — kimi.com,
-    /// on an install Orbit made — so a sign-in there names no site, and kimi.ai is out of reach.
+    /// Whether `runner` can be told the site (`named`).
     public static func choosable(on runner: Runner?) -> Bool {
         runner?.capabilities?.contains(loginRegionCapability) == true
+    }
+
+    /// What a press on `site` names to `runner`. Both sites can always be pressed: kimi.ai is named
+    /// always, kimi.com only where the runner can be told a site. One too old to be told signs in where
+    /// its CLI decides — kimi.com, on an install Orbit made — so kimi.com goes to it unnamed, and it is
+    /// refused kimi.ai in words that say to update it (web RunnerSignIn `kimiSiteToName`).
+    public static func named(_ site: KimiSite, on runner: Runner?) -> KimiSite? {
+        choosable(on: runner) || site == .global ? site : nil
     }
 
     /// The site `runner`'s Kimi login is on, as its probe last reported.
@@ -62,7 +69,6 @@ public enum KimiSite: String, CaseIterable, Sendable, Identifiable {
 
     public static let question = "Which Kimi account are you signing in with?"
     public static let separateAccounts = "The two sites keep separate accounts — pick the one you signed up on."
-    public static let olderRunner = "This runner signs in on kimi.com only. Update it to sign in with a kimi.ai account."
     public static let currentMark = "Current"
     public var openPage: String { "Open the \(domain) sign-in page" }
     public var enterCode: String { "Sign in with your \(domain) account there, then enter this one-time code:" }

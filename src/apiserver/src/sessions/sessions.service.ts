@@ -78,6 +78,9 @@ import {
   SessionState,
   type SessionProjectMembership,
   type SessionSearchHit,
+  type SessionSourceRefusalDetail,
+  type SourceRefusalCode,
+  type SourceState,
   supportsMidTurnSteer,
   supportsTargetBoundCurrentWorkSteer,
   uuidToBase62,
@@ -207,6 +210,7 @@ import {
   type TranscriptRecordKind,
 } from './transcript-around';
 import { EngineSignedOutConflict, engineSignInAction, signedOutEngineRefusal } from './engine-signin-preflight';
+import { assertManagedFirstSessionRuntime } from '../managed-runners/managed-runner-supply';
 import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
 import { DSH_RUNNER_UPGRADE_ERROR, dshRuntimeUnavailable } from '../runner-api/runner-provider-support';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
@@ -899,6 +903,9 @@ export class SessionsService {
     let workspaceEnv: unknown;
     // The accounts the workspace pins its sessions to, whose sign-ins the preflight below judges.
     let accountChoices: WorkspaceAccountChoices | undefined;
+    // Set when the workspace is a managed runner's default workspace: that runner, whose first
+    // session is held to the runtimes it has ready (see the preflight below).
+    let managedRunnerId: string | undefined;
     if (!assignedRunnerId && dto.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
@@ -910,6 +917,7 @@ export class SessionsService {
           codexAccount: true,
           claudeAccount: true,
           antigravityAccount: true,
+          managedRunnerDefault: { select: { runnerId: true } },
         },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
@@ -925,16 +933,21 @@ export class SessionsService {
       enableWorktree = workspace.enableWorktree;
       workspaceEnv = workspace.env;
       accountChoices = workspace;
+      managedRunnerId = workspace.managedRunnerDefault?.runnerId;
     } else if (dto.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
-        select: { enableWorktree: true, enabled: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true },
+        select: {
+          enableWorktree: true, enabled: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true,
+          managedRunnerDefault: { select: { runnerId: true } },
+        },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
       if (workspace.enabled === false) throw new ForbiddenException('workspace is disabled');
       enableWorktree = workspace.enableWorktree;
       workspaceEnv = workspace.env;
       accountChoices = workspace;
+      managedRunnerId = workspace.managedRunnerDefault?.runnerId;
     }
     if (!assignedRunnerId) {
       throw new BadRequestException('pick a workspace bound to a runner, or pass assignedRunnerId');
@@ -1201,6 +1214,18 @@ export class SessionsService {
     // clears it where Orbit can start one, so a client can offer that as a button.
     if (refusal && targetRunner) {
       throw new EngineSignedOutConflict(runtime, refusal, assignedRunnerId, engineSignInAction(runtime, targetRunner));
+    }
+    // A managed runner installs no engine on demand, so its default workspace's first session runs on
+    // a runtime it reported ready — the default derived above is the one it became READY with — or is
+    // refused MODEL_UNAVAILABLE here (docs/managed-runner-design.md, "Provisioning retry wake and sleep" 3).
+    if (managedRunnerId && managedRunnerId === assignedRunnerId && targetRunner && dto.workspaceId) {
+      await assertManagedFirstSessionRuntime(this.prisma, {
+        workspaceId: dto.workspaceId,
+        runtime,
+        bringsOwnCredentials: borrowedRuntime != null,
+        workspaceEnv,
+        runner: targetRunner,
+      });
     }
     // §13.8: a conversation gets no worktree. Applied after the workspace's default is read, so it
     // is a deliberate override rather than a second source of the default.
@@ -2959,6 +2984,9 @@ export class SessionsService {
       lastToolUse: string | null;
       lastUserText: string | null;
       mergeStatus: string | null;
+      sourceState: SourceState;
+      sourceRefusalCode: SourceRefusalCode | null;
+      sourceRefusalDetail: SessionSourceRefusalDetail | null;
       pinnedAt: Date | null;
       folderId: string | null;
       shared: boolean;
@@ -3038,6 +3066,14 @@ export class SessionsService {
         s.last_tool_use   AS "lastToolUse",
         left(s.last_user_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastUserText",
         s.merge_status    AS "mergeStatus",
+        -- The SOURCE snapshot (migration 0231), for the "this run never started" card: which
+        -- baseline this run was to start from, and — when a runner refused it — the code, and the
+        -- diagnosis carrying §10.1's fixAction. On the row rather than behind a second request,
+        -- because the card is drawn over a list and a refused run is otherwise a row that says
+        -- nothing is wrong. UNBOUND + nulls on every Legacy session.
+        s.source_state    AS "sourceState",
+        s.source_refusal_code   AS "sourceRefusalCode",
+        s.source_refusal_detail AS "sourceRefusalDetail",
         s.pinned_at       AS "pinnedAt",
         -- The folder this session is filed in (0348), which the clients group the list by.
         s.folder_id       AS "folderId",
@@ -3195,6 +3231,11 @@ export class SessionsService {
         lastToolUse: r.lastToolUse,
         lastUserText: r.lastUserText,
         mergeStatus: r.mergeStatus,
+        // The SOURCE snapshot, passed through as the columns hold it: a row that resolves nothing
+        // is `UNBOUND` with nulls, which is the shape a card tests before it draws anything.
+        sourceState: r.sourceState,
+        sourceRefusalCode: r.sourceRefusalCode ?? null,
+        sourceRefusalDetail: r.sourceRefusalDetail ?? null,
         pinnedAt: r.pinnedAt,
         folderId: r.folderId,
         shared: r.shared === true,

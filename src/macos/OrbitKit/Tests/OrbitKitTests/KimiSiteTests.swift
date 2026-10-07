@@ -43,6 +43,19 @@ final class KimiSiteTests: XCTestCase {
         XCTAssertFalse(KimiSite.choosable(on: nil))
     }
 
+    /// Both sites can always be pressed. On a runner that can be told a site, each press names its own;
+    /// on one too old to be told, kimi.com goes unnamed (its CLI's own site) and kimi.ai is still named,
+    /// for the control plane to refuse in words that say to update the runner.
+    func testAPressNamesItsSiteWhereTheRunnerCanBeToldIt() throws {
+        let current = try runner(capabilities: ["kimi-login-region/v1"])
+        XCTAssertEqual(KimiSite.named(.mainlandCN, on: current), .mainlandCN)
+        XCTAssertEqual(KimiSite.named(.global, on: current), .global)
+        for older in [try runner(capabilities: ["session-worktree-ops-v1"]), nil] {
+            XCTAssertNil(KimiSite.named(.mainlandCN, on: older))
+            XCTAssertEqual(KimiSite.named(.global, on: older), .global)
+        }
+    }
+
     func testTheRunnersLoginSiteIsTheOneItsProbeReported() throws {
         XCTAssertEqual(KimiSite.current(on: try runner(capabilities: [], kimiRegion: "global")), .global)
         XCTAssertEqual(KimiSite.current(on: try runner(capabilities: [], kimiRegion: "mainland-cn")), .mainlandCN)
@@ -85,7 +98,6 @@ final class KimiSiteTests: XCTestCase {
         for literal in [
             KimiSite.question,
             KimiSite.separateAccounts,
-            KimiSite.olderRunner,
             ">\(KimiSite.currentMark)<",
             "'mainland-cn': { domain: '\(KimiSite.mainlandCN.domain)', where: '\(KimiSite.mainlandCN.place)' }",
             "global: { domain: '\(KimiSite.global.domain)', where: '\(KimiSite.global.place)' }",

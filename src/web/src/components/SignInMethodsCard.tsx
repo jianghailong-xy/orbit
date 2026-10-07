@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import {
@@ -13,6 +13,7 @@ import { meQuery, type Me, type SignInMethods } from '../lib/queries';
 import { useToast } from '../lib/toast';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
+import { Card } from './ui/Card';
 import { useConfirm } from './ui/ConfirmDialog';
 
 export const SIGN_IN_METHODS_TITLE = 'Sign-in methods';
@@ -38,7 +39,6 @@ export function SignInMethodsCard({ me }: { me: Me | undefined }) {
   const [confirm, confirmation] = useConfirm();
   const disconnectButton = useRef<HTMLButtonElement>(null);
   const returned = useRef(false);
-  const titleId = useId();
 
   /** Every answer here is the account's sign-in methods; they become what every view shows. */
   const adopt = (signInMethods: SignInMethods) =>
@@ -120,42 +120,35 @@ export function SignInMethodsCard({ me }: { me: Me | undefined }) {
   }
 
   return (
-    <section className="orbit-card profile-signin" aria-labelledby={titleId}>
-      <div className="orbit-card-head">
-        <h2 className="orbit-card-title" id={titleId}>
-          {SIGN_IN_METHODS_TITLE}
-        </h2>
+    <Card title={SIGN_IN_METHODS_TITLE} className="profile-signin">
+      <div className="signin-method" data-method="password">
+        <div className="signin-method-text">
+          <div className="signin-method-name">Password</div>
+          <div className="signin-method-detail">
+            {signIn.password
+              ? 'You can sign in with your email and password.'
+              : 'No password is set: you sign in with Google. An administrator can set one for you.'}
+          </div>
+        </div>
+        <Badge tone={signIn.password ? 'success' : 'default'}>{signIn.password ? 'Set' : 'Not set'}</Badge>
       </div>
-      <div className="orbit-card-body">
-        <div className="signin-method" data-method="password">
-          <div className="signin-method-text">
-            <div className="signin-method-name">Password</div>
-            <div className="signin-method-detail">
-              {signIn.password
-                ? 'You can sign in with your email and password.'
-                : 'No password is set: you sign in with Google. An administrator can set one for you.'}
-            </div>
+      <div className="signin-method" data-method="google">
+        <div className="signin-method-text">
+          <div className="signin-method-name">Google</div>
+          <div className="signin-method-detail">
+            {google ? (
+              <>
+                Connected as <strong>{google.email}</strong>
+              </>
+            ) : (
+              'Not connected'
+            )}
           </div>
-          <Badge tone={signIn.password ? 'success' : 'default'}>{signIn.password ? 'Set' : 'Not set'}</Badge>
+          {note && <div className="signin-method-note">{note}</div>}
         </div>
-        <div className="signin-method" data-method="google">
-          <div className="signin-method-text">
-            <div className="signin-method-name">Google</div>
-            <div className="signin-method-detail">
-              {google ? (
-                <>
-                  Connected as <strong>{google.email}</strong>
-                </>
-              ) : (
-                'Not connected'
-              )}
-            </div>
-            {note && <div className="signin-method-note">{note}</div>}
-          </div>
-          {action}
-        </div>
+        {action}
       </div>
       {confirmation}
-    </section>
+    </Card>
   );
 }

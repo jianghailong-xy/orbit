@@ -1,0 +1,70 @@
+{
+ "webkit-light-phone/profile-validation.png": {
+  "differentPixels": 4861,
+  "maxChannelDelta": 224,
+  "pixelsBeyond2": 1820,
+  "pixelsAtMost2": 3041,
+  "allDifferencesBox": {
+   "x": 104,
+   "y": 42,
+   "width": 178,
+   "height": 80
+  },
+  "clustersBeyond2": [
+   {
+    "box": {
+     "x": 114,
+     "y": 56,
+     "width": 131,
+     "height": 44
+    },
+    "pixels": 1342,
+    "maxChannelDelta": 224
+   },
+   {
+    "box": {
+     "x": 243,
+     "y": 56,
+     "width": 29,
+     "height": 44
+    },
+    "pixels": 478,
+    "maxChannelDelta": 19
+   }
+  ]
+ },
+ "webkit-dark-phone/profile-validation.png": {
+  "differentPixels": 4239,
+  "maxChannelDelta": 167,
+  "pixelsBeyond2": 1317,
+  "pixelsAtMost2": 2922,
+  "allDifferencesBox": {
+   "x": 100,
+   "y": 44,
+   "width": 181,
+   "height": 76
+  },
+  "clustersBeyond2": [
+   {
+    "box": {
+     "x": 121,
+     "y": 56,
+     "width": 124,
+     "height": 43
+    },
+    "pixels": 1104,
+    "maxChannelDelta": 167
+   },
+   {
+    "box": {
+     "x": 243,
+     "y": 56,
+     "width": 20,
+     "height": 36
+    },
+    "pixels": 213,
+    "maxChannelDelta": 18
+   }
+  ]
+ }
+}

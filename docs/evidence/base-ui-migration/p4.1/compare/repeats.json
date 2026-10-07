@@ -1,0 +1,898 @@
+{
+ "chromium-dark-desktop/p41-cli-approved.png": {
+  "runs": {
+   "f-p41-ref": "a137c0a8b711",
+   "rep-ref-1": "a137c0a8b711",
+   "rep-ref-2": "a137c0a8b711",
+   "f-p41-del": "a137c0a8b711",
+   "rep-del-1": "a137c0a8b711",
+   "rep-del-2": "a137c0a8b711",
+   "r1-ref": "a137c0a8b711",
+   "r1-ref2": "a137c0a8b711"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-dark-phone/p41-cli-approved.png": {
+  "runs": {
+   "f-p41-ref": "003c4ff5bf97",
+   "rep-ref-1": "003c4ff5bf97",
+   "rep-ref-2": "003c4ff5bf97",
+   "f-p41-del": "003c4ff5bf97",
+   "rep-del-1": "003c4ff5bf97",
+   "rep-del-2": "003c4ff5bf97",
+   "r1-ref": "003c4ff5bf97",
+   "r1-ref2": "003c4ff5bf97"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-light-desktop/p41-cli-approved.png": {
+  "runs": {
+   "f-p41-ref": "cfbf5ed7d673",
+   "rep-ref-1": "cfbf5ed7d673",
+   "rep-ref-2": "cfbf5ed7d673",
+   "f-p41-del": "cfbf5ed7d673",
+   "rep-del-1": "cfbf5ed7d673",
+   "rep-del-2": "cfbf5ed7d673",
+   "r1-ref": "cfbf5ed7d673",
+   "r1-ref2": "cfbf5ed7d673"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-light-phone/p41-cli-approved.png": {
+  "runs": {
+   "f-p41-ref": "f5c4ab7a1298",
+   "rep-ref-1": "f5c4ab7a1298",
+   "rep-ref-2": "f5c4ab7a1298",
+   "f-p41-del": "f5c4ab7a1298",
+   "rep-del-1": "f5c4ab7a1298",
+   "rep-del-2": "f5c4ab7a1298",
+   "r1-ref": "f5c4ab7a1298",
+   "r1-ref2": "f5c4ab7a1298"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-dark-desktop/p41-cli-approved.png": {
+  "runs": {
+   "f-p41-ref": "c43aac451073",
+   "rep-ref-1": "c43aac451073",
+   "rep-ref-2": "c43aac451073",
+   "f-p41-del": "c43aac451073",
+   "rep-del-1": "c43aac451073",
+   "rep-del-2": "c43aac451073",
+   "r1-ref": "c43aac451073",
+   "r1-ref2": "c43aac451073"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-dark-phone/p41-cli-approved.png": {
+  "runs": {
+   "f-p41-ref": "62cb6ec3f926",
+   "rep-ref-1": "62cb6ec3f926",
+   "rep-ref-2": "62cb6ec3f926",
+   "f-p41-del": "62cb6ec3f926",
+   "rep-del-1": "62cb6ec3f926",
+   "rep-del-2": "62cb6ec3f926",
+   "r1-ref": "62cb6ec3f926",
+   "r1-ref2": "62cb6ec3f926"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-light-desktop/p41-cli-approved.png": {
+  "runs": {
+   "f-p41-ref": "6a2f9f06dcf3",
+   "rep-ref-1": "6a2f9f06dcf3",
+   "rep-ref-2": "6a2f9f06dcf3",
+   "f-p41-del": "6a2f9f06dcf3",
+   "rep-del-1": "6a2f9f06dcf3",
+   "rep-del-2": "6a2f9f06dcf3",
+   "r1-ref": "6a2f9f06dcf3",
+   "r1-ref2": "6a2f9f06dcf3"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-light-phone/p41-cli-approved.png": {
+  "runs": {
+   "f-p41-ref": "44568c28e1c4",
+   "rep-ref-1": "44568c28e1c4",
+   "rep-ref-2": "44568c28e1c4",
+   "f-p41-del": "44568c28e1c4",
+   "rep-del-1": "44568c28e1c4",
+   "rep-del-2": "44568c28e1c4",
+   "r1-ref": "44568c28e1c4",
+   "r1-ref2": "44568c28e1c4"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-dark-desktop/p41-cli-denied.png": {
+  "runs": {
+   "f-p41-ref": "6ad3befa715e",
+   "rep-ref-1": "6ad3befa715e",
+   "rep-ref-2": "6ad3befa715e",
+   "f-p41-del": "9d809ec80487",
+   "rep-del-1": "6ad3befa715e",
+   "rep-del-2": "6ad3befa715e",
+   "r1-ref": "6ad3befa715e",
+   "r1-ref2": "6ad3befa715e"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 2,
+  "deliveryWithinReference": false,
+  "deliveryWithinReferenceOrStart": false
+ },
+ "chromium-dark-phone/p41-cli-denied.png": {
+  "runs": {
+   "f-p41-ref": "17c94e96d0a3",
+   "rep-ref-1": "99e6730f3a2f",
+   "rep-ref-2": "99e6730f3a2f",
+   "f-p41-del": "17c94e96d0a3",
+   "rep-del-1": "17c94e96d0a3",
+   "rep-del-2": "99e6730f3a2f",
+   "r1-ref": "17c94e96d0a3",
+   "r1-ref2": "17c94e96d0a3"
+  },
+  "referenceVariants": 2,
+  "deliveryVariants": 2,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-light-desktop/p41-cli-denied.png": {
+  "runs": {
+   "f-p41-ref": "af17743d37bf",
+   "rep-ref-1": "af17743d37bf",
+   "rep-ref-2": "af17743d37bf",
+   "f-p41-del": "d827330688b2",
+   "rep-del-1": "af17743d37bf",
+   "rep-del-2": "d827330688b2",
+   "r1-ref": "af17743d37bf",
+   "r1-ref2": "d827330688b2"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 2,
+  "deliveryWithinReference": false,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-light-phone/p41-cli-denied.png": {
+  "runs": {
+   "f-p41-ref": "9812c2aede5f",
+   "rep-ref-1": "cb77de9a2aa8",
+   "rep-ref-2": "cb77de9a2aa8",
+   "f-p41-del": "cb77de9a2aa8",
+   "rep-del-1": "cb77de9a2aa8",
+   "rep-del-2": "cb77de9a2aa8",
+   "r1-ref": "cb77de9a2aa8",
+   "r1-ref2": "9812c2aede5f"
+  },
+  "referenceVariants": 2,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-dark-desktop/p41-cli-denied.png": {
+  "runs": {
+   "f-p41-ref": "71c04fec003b",
+   "rep-ref-1": "71c04fec003b",
+   "rep-ref-2": "71c04fec003b",
+   "f-p41-del": "71c04fec003b",
+   "rep-del-1": "71c04fec003b",
+   "rep-del-2": "71c04fec003b",
+   "r1-ref": "71c04fec003b",
+   "r1-ref2": "71c04fec003b"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-dark-phone/p41-cli-denied.png": {
+  "runs": {
+   "f-p41-ref": "b65c7f5ee670",
+   "rep-ref-1": "6164c61273e7",
+   "rep-ref-2": "6164c61273e7",
+   "f-p41-del": "b65c7f5ee670",
+   "rep-del-1": "b65c7f5ee670",
+   "rep-del-2": "b65c7f5ee670",
+   "r1-ref": "b65c7f5ee670",
+   "r1-ref2": "6164c61273e7"
+  },
+  "referenceVariants": 2,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-light-desktop/p41-cli-denied.png": {
+  "runs": {
+   "f-p41-ref": "bbe04afeb34e",
+   "rep-ref-1": "d7627c39940c",
+   "rep-ref-2": "bbe04afeb34e",
+   "f-p41-del": "bbe04afeb34e",
+   "rep-del-1": "bbe04afeb34e",
+   "rep-del-2": "bbe04afeb34e",
+   "r1-ref": "bbe04afeb34e",
+   "r1-ref2": "bbe04afeb34e"
+  },
+  "referenceVariants": 2,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-light-phone/p41-cli-denied.png": {
+  "runs": {
+   "f-p41-ref": "c33b288e4b04",
+   "rep-ref-1": "c33b288e4b04",
+   "rep-ref-2": "c33b288e4b04",
+   "f-p41-del": "6b6347039d37",
+   "rep-del-1": "6b6347039d37",
+   "rep-del-2": "6b6347039d37",
+   "r1-ref": "c33b288e4b04",
+   "r1-ref2": "6b6347039d37"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": false,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-dark-desktop/p41-cli-error.png": {
+  "runs": {
+   "f-p41-ref": "be0f6b03e8a9",
+   "rep-ref-1": "be0f6b03e8a9",
+   "rep-ref-2": "be0f6b03e8a9",
+   "f-p41-del": "be0f6b03e8a9",
+   "rep-del-1": "be0f6b03e8a9",
+   "rep-del-2": "be0f6b03e8a9",
+   "r1-ref": "be0f6b03e8a9",
+   "r1-ref2": "be0f6b03e8a9"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-dark-phone/p41-cli-error.png": {
+  "runs": {
+   "f-p41-ref": "cfc5bdede9dd",
+   "rep-ref-1": "cfc5bdede9dd",
+   "rep-ref-2": "cfc5bdede9dd",
+   "f-p41-del": "cfc5bdede9dd",
+   "rep-del-1": "cfc5bdede9dd",
+   "rep-del-2": "cfc5bdede9dd",
+   "r1-ref": "cfc5bdede9dd",
+   "r1-ref2": "cfc5bdede9dd"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-light-desktop/p41-cli-error.png": {
+  "runs": {
+   "f-p41-ref": "c27b779b6b2e",
+   "rep-ref-1": "c27b779b6b2e",
+   "rep-ref-2": "c27b779b6b2e",
+   "f-p41-del": "c27b779b6b2e",
+   "rep-del-1": "c27b779b6b2e",
+   "rep-del-2": "c27b779b6b2e",
+   "r1-ref": "c27b779b6b2e",
+   "r1-ref2": "c27b779b6b2e"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-light-phone/p41-cli-error.png": {
+  "runs": {
+   "f-p41-ref": "172dd063804f",
+   "rep-ref-1": "172dd063804f",
+   "rep-ref-2": "172dd063804f",
+   "f-p41-del": "172dd063804f",
+   "rep-del-1": "172dd063804f",
+   "rep-del-2": "172dd063804f",
+   "r1-ref": "172dd063804f",
+   "r1-ref2": "172dd063804f"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-dark-desktop/p41-cli-error.png": {
+  "runs": {
+   "f-p41-ref": "c5724d9245fc",
+   "rep-ref-1": "c5724d9245fc",
+   "rep-ref-2": "c5724d9245fc",
+   "f-p41-del": "c5724d9245fc",
+   "rep-del-1": "c5724d9245fc",
+   "rep-del-2": "c5724d9245fc",
+   "r1-ref": "c5724d9245fc",
+   "r1-ref2": "c5724d9245fc"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-dark-phone/p41-cli-error.png": {
+  "runs": {
+   "f-p41-ref": "0ab8d3fe0f4a",
+   "rep-ref-1": "0ab8d3fe0f4a",
+   "rep-ref-2": "0ab8d3fe0f4a",
+   "f-p41-del": "0ab8d3fe0f4a",
+   "rep-del-1": "0ab8d3fe0f4a",
+   "rep-del-2": "0ab8d3fe0f4a",
+   "r1-ref": "0ab8d3fe0f4a",
+   "r1-ref2": "0ab8d3fe0f4a"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-light-desktop/p41-cli-error.png": {
+  "runs": {
+   "f-p41-ref": "d2ecd52ca5ed",
+   "rep-ref-1": "d2ecd52ca5ed",
+   "rep-ref-2": "d2ecd52ca5ed",
+   "f-p41-del": "d2ecd52ca5ed",
+   "rep-del-1": "d2ecd52ca5ed",
+   "rep-del-2": "d2ecd52ca5ed",
+   "r1-ref": "d2ecd52ca5ed",
+   "r1-ref2": "d2ecd52ca5ed"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-light-phone/p41-cli-error.png": {
+  "runs": {
+   "f-p41-ref": "1dfdf69751d7",
+   "rep-ref-1": "1dfdf69751d7",
+   "rep-ref-2": "1dfdf69751d7",
+   "f-p41-del": "1dfdf69751d7",
+   "rep-del-1": "1dfdf69751d7",
+   "rep-del-2": "1dfdf69751d7",
+   "r1-ref": "1dfdf69751d7",
+   "r1-ref2": "1dfdf69751d7"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-dark-desktop/p41-cli-loading.png": {
+  "runs": {
+   "f-p41-ref": "9e5bdfb1e854",
+   "rep-ref-1": "9e5bdfb1e854",
+   "rep-ref-2": "9e5bdfb1e854",
+   "f-p41-del": "9e5bdfb1e854",
+   "rep-del-1": "9e5bdfb1e854",
+   "rep-del-2": "9e5bdfb1e854",
+   "r1-ref": "9e5bdfb1e854",
+   "r1-ref2": "9e5bdfb1e854"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-dark-phone/p41-cli-loading.png": {
+  "runs": {
+   "f-p41-ref": "41a7d627408f",
+   "rep-ref-1": "41a7d627408f",
+   "rep-ref-2": "41a7d627408f",
+   "f-p41-del": "41a7d627408f",
+   "rep-del-1": "41a7d627408f",
+   "rep-del-2": "41a7d627408f",
+   "r1-ref": "41a7d627408f",
+   "r1-ref2": "41a7d627408f"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-light-desktop/p41-cli-loading.png": {
+  "runs": {
+   "f-p41-ref": "6c7543fcd3a9",
+   "rep-ref-1": "6c7543fcd3a9",
+   "rep-ref-2": "6c7543fcd3a9",
+   "f-p41-del": "6c7543fcd3a9",
+   "rep-del-1": "6c7543fcd3a9",
+   "rep-del-2": "6c7543fcd3a9",
+   "r1-ref": "6c7543fcd3a9",
+   "r1-ref2": "6c7543fcd3a9"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-light-phone/p41-cli-loading.png": {
+  "runs": {
+   "f-p41-ref": "d8053bf2f2a1",
+   "rep-ref-1": "d8053bf2f2a1",
+   "rep-ref-2": "d8053bf2f2a1",
+   "f-p41-del": "d8053bf2f2a1",
+   "rep-del-1": "d8053bf2f2a1",
+   "rep-del-2": "d8053bf2f2a1",
+   "r1-ref": "d8053bf2f2a1",
+   "r1-ref2": "d8053bf2f2a1"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-dark-desktop/p41-cli-loading.png": {
+  "runs": {
+   "f-p41-ref": "e2ed9ff71400",
+   "rep-ref-1": "e2ed9ff71400",
+   "rep-ref-2": "e2ed9ff71400",
+   "f-p41-del": "e2ed9ff71400",
+   "rep-del-1": "e2ed9ff71400",
+   "rep-del-2": "e2ed9ff71400",
+   "r1-ref": "e2ed9ff71400",
+   "r1-ref2": "e2ed9ff71400"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-dark-phone/p41-cli-loading.png": {
+  "runs": {
+   "f-p41-ref": "ca1f2eb47bb5",
+   "rep-ref-1": "ca1f2eb47bb5",
+   "rep-ref-2": "ca1f2eb47bb5",
+   "f-p41-del": "ca1f2eb47bb5",
+   "rep-del-1": "ca1f2eb47bb5",
+   "rep-del-2": "ca1f2eb47bb5",
+   "r1-ref": "ca1f2eb47bb5",
+   "r1-ref2": "ca1f2eb47bb5"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-light-desktop/p41-cli-loading.png": {
+  "runs": {
+   "f-p41-ref": "0dcf3e07dc96",
+   "rep-ref-1": "0dcf3e07dc96",
+   "rep-ref-2": "0dcf3e07dc96",
+   "f-p41-del": "0dcf3e07dc96",
+   "rep-del-1": "0dcf3e07dc96",
+   "rep-del-2": "0dcf3e07dc96",
+   "r1-ref": "0dcf3e07dc96",
+   "r1-ref2": "0dcf3e07dc96"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-light-phone/p41-cli-loading.png": {
+  "runs": {
+   "f-p41-ref": "185234aca2a9",
+   "rep-ref-1": "185234aca2a9",
+   "rep-ref-2": "185234aca2a9",
+   "f-p41-del": "185234aca2a9",
+   "rep-del-1": "185234aca2a9",
+   "rep-del-2": "185234aca2a9",
+   "r1-ref": "185234aca2a9",
+   "r1-ref2": "185234aca2a9"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-dark-desktop/p41-cli-warnings.png": {
+  "runs": {
+   "f-p41-ref": "50e1dd159b58",
+   "rep-ref-1": "50e1dd159b58",
+   "rep-ref-2": "50e1dd159b58",
+   "f-p41-del": "50e1dd159b58",
+   "rep-del-1": "50e1dd159b58",
+   "rep-del-2": "50e1dd159b58",
+   "r1-ref": "50e1dd159b58",
+   "r1-ref2": "50e1dd159b58"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-dark-phone/p41-cli-warnings.png": {
+  "runs": {
+   "f-p41-ref": "114e345635e3",
+   "rep-ref-1": "114e345635e3",
+   "rep-ref-2": "114e345635e3",
+   "f-p41-del": "114e345635e3",
+   "rep-del-1": "114e345635e3",
+   "rep-del-2": "114e345635e3",
+   "r1-ref": "114e345635e3",
+   "r1-ref2": "114e345635e3"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-light-desktop/p41-cli-warnings.png": {
+  "runs": {
+   "f-p41-ref": "02d1cee7abf8",
+   "rep-ref-1": "02d1cee7abf8",
+   "rep-ref-2": "02d1cee7abf8",
+   "f-p41-del": "02d1cee7abf8",
+   "rep-del-1": "02d1cee7abf8",
+   "rep-del-2": "02d1cee7abf8",
+   "r1-ref": "02d1cee7abf8",
+   "r1-ref2": "02d1cee7abf8"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-light-phone/p41-cli-warnings.png": {
+  "runs": {
+   "f-p41-ref": "b14f050afd4f",
+   "rep-ref-1": "b14f050afd4f",
+   "rep-ref-2": "b14f050afd4f",
+   "f-p41-del": "b14f050afd4f",
+   "rep-del-1": "b14f050afd4f",
+   "rep-del-2": "b14f050afd4f",
+   "r1-ref": "b14f050afd4f",
+   "r1-ref2": "b14f050afd4f"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-dark-desktop/p41-cli-warnings.png": {
+  "runs": {
+   "f-p41-ref": "ef5b0573a3da",
+   "rep-ref-1": "ef5b0573a3da",
+   "rep-ref-2": "ef5b0573a3da",
+   "f-p41-del": "ef5b0573a3da",
+   "rep-del-1": "ef5b0573a3da",
+   "rep-del-2": "ef5b0573a3da",
+   "r1-ref": "ef5b0573a3da",
+   "r1-ref2": "ef5b0573a3da"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-dark-phone/p41-cli-warnings.png": {
+  "runs": {
+   "f-p41-ref": "a025c77b46ac",
+   "rep-ref-1": "a025c77b46ac",
+   "rep-ref-2": "a025c77b46ac",
+   "f-p41-del": "a025c77b46ac",
+   "rep-del-1": "a025c77b46ac",
+   "rep-del-2": "a025c77b46ac",
+   "r1-ref": "a025c77b46ac",
+   "r1-ref2": "a025c77b46ac"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-light-desktop/p41-cli-warnings.png": {
+  "runs": {
+   "f-p41-ref": "a950b153ac2f",
+   "rep-ref-1": "a950b153ac2f",
+   "rep-ref-2": "a950b153ac2f",
+   "f-p41-del": "a950b153ac2f",
+   "rep-del-1": "a950b153ac2f",
+   "rep-del-2": "a950b153ac2f",
+   "r1-ref": "a950b153ac2f",
+   "r1-ref2": "a950b153ac2f"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-light-phone/p41-cli-warnings.png": {
+  "runs": {
+   "f-p41-ref": "96ce3d44a59f",
+   "rep-ref-1": "96ce3d44a59f",
+   "rep-ref-2": "96ce3d44a59f",
+   "f-p41-del": "96ce3d44a59f",
+   "rep-del-1": "96ce3d44a59f",
+   "rep-del-2": "96ce3d44a59f",
+   "r1-ref": "96ce3d44a59f",
+   "r1-ref2": "96ce3d44a59f"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-dark-desktop/p41-cli.png": {
+  "runs": {
+   "f-p41-ref": "00afe41a82d2",
+   "rep-ref-1": "00afe41a82d2",
+   "rep-ref-2": "00afe41a82d2",
+   "f-p41-del": "00afe41a82d2",
+   "rep-del-1": "00afe41a82d2",
+   "rep-del-2": "00afe41a82d2",
+   "r1-ref": "00afe41a82d2",
+   "r1-ref2": "00afe41a82d2"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-dark-phone/p41-cli.png": {
+  "runs": {
+   "f-p41-ref": "2b7df707765b",
+   "rep-ref-1": "2b7df707765b",
+   "rep-ref-2": "2b7df707765b",
+   "f-p41-del": "2b7df707765b",
+   "rep-del-1": "2b7df707765b",
+   "rep-del-2": "2b7df707765b",
+   "r1-ref": "2b7df707765b",
+   "r1-ref2": "2b7df707765b"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-light-desktop/p41-cli.png": {
+  "runs": {
+   "f-p41-ref": "1ff5301bcfa2",
+   "rep-ref-1": "1ff5301bcfa2",
+   "rep-ref-2": "1ff5301bcfa2",
+   "f-p41-del": "1ff5301bcfa2",
+   "rep-del-1": "1ff5301bcfa2",
+   "rep-del-2": "1ff5301bcfa2",
+   "r1-ref": "1ff5301bcfa2",
+   "r1-ref2": "1ff5301bcfa2"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-light-phone/p41-cli.png": {
+  "runs": {
+   "f-p41-ref": "dc2a6fdab4d4",
+   "rep-ref-1": "dc2a6fdab4d4",
+   "rep-ref-2": "dc2a6fdab4d4",
+   "f-p41-del": "dc2a6fdab4d4",
+   "rep-del-1": "dc2a6fdab4d4",
+   "rep-del-2": "dc2a6fdab4d4",
+   "r1-ref": "dc2a6fdab4d4",
+   "r1-ref2": "dc2a6fdab4d4"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-dark-desktop/p41-cli.png": {
+  "runs": {
+   "f-p41-ref": "f74806c871fb",
+   "rep-ref-1": "f74806c871fb",
+   "rep-ref-2": "f74806c871fb",
+   "f-p41-del": "f74806c871fb",
+   "rep-del-1": "f74806c871fb",
+   "rep-del-2": "f74806c871fb",
+   "r1-ref": "f74806c871fb",
+   "r1-ref2": "f74806c871fb"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-dark-phone/p41-cli.png": {
+  "runs": {
+   "f-p41-ref": "0a176ce12775",
+   "rep-ref-1": "0a176ce12775",
+   "rep-ref-2": "0a176ce12775",
+   "f-p41-del": "0a176ce12775",
+   "rep-del-1": "0a176ce12775",
+   "rep-del-2": "0a176ce12775",
+   "r1-ref": "0a176ce12775",
+   "r1-ref2": "0a176ce12775"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-light-desktop/p41-cli.png": {
+  "runs": {
+   "f-p41-ref": "bc53ff894b51",
+   "rep-ref-1": "bc53ff894b51",
+   "rep-ref-2": "bc53ff894b51",
+   "f-p41-del": "bc53ff894b51",
+   "rep-del-1": "bc53ff894b51",
+   "rep-del-2": "bc53ff894b51",
+   "r1-ref": "bc53ff894b51",
+   "r1-ref2": "bc53ff894b51"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-light-phone/p41-cli.png": {
+  "runs": {
+   "f-p41-ref": "8da3e7896512",
+   "rep-ref-1": "8da3e7896512",
+   "rep-ref-2": "8da3e7896512",
+   "f-p41-del": "8da3e7896512",
+   "rep-del-1": "8da3e7896512",
+   "rep-del-2": "8da3e7896512",
+   "r1-ref": "8da3e7896512",
+   "r1-ref2": "8da3e7896512"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "chromium-dark-desktop/p41-profile-photo.png": {
+  "runs": {
+   "f-p41-ref": "ce9f4eb5d163",
+   "rep-ref-1": "ce9f4eb5d163",
+   "rep-ref-2": "ce9f4eb5d163",
+   "f-p41-del": "65a92503b875",
+   "rep-del-1": "65a92503b875",
+   "rep-del-2": "921f069e7855",
+   "r1-ref": "ce9f4eb5d163",
+   "r1-ref2": "ce9f4eb5d163"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 2,
+  "deliveryWithinReference": false,
+  "deliveryWithinReferenceOrStart": false
+ },
+ "chromium-dark-phone/p41-profile-photo.png": {
+  "runs": {
+   "f-p41-ref": "3dc8aace0b40",
+   "rep-ref-1": "95672924d3b1",
+   "rep-ref-2": "f21d36b2592c",
+   "f-p41-del": "6aade61cc27e",
+   "rep-del-1": "5fe3043cd0af",
+   "rep-del-2": "03668dbaf281",
+   "r1-ref": "3dc8aace0b40",
+   "r1-ref2": "f21d36b2592c"
+  },
+  "referenceVariants": 3,
+  "deliveryVariants": 3,
+  "deliveryWithinReference": false,
+  "deliveryWithinReferenceOrStart": false
+ },
+ "chromium-light-desktop/p41-profile-photo.png": {
+  "runs": {
+   "f-p41-ref": "b42cb9f281f6",
+   "rep-ref-1": "b42cb9f281f6",
+   "rep-ref-2": "b87169d48246",
+   "f-p41-del": "ef422498117d",
+   "rep-del-1": "8e8048c9e26f",
+   "rep-del-2": "8e8048c9e26f",
+   "r1-ref": "b42cb9f281f6",
+   "r1-ref2": "b42cb9f281f6"
+  },
+  "referenceVariants": 2,
+  "deliveryVariants": 2,
+  "deliveryWithinReference": false,
+  "deliveryWithinReferenceOrStart": false
+ },
+ "chromium-light-phone/p41-profile-photo.png": {
+  "runs": {
+   "f-p41-ref": "07793dee15fa",
+   "rep-ref-1": "7ca27512e068",
+   "rep-ref-2": "7ca27512e068",
+   "f-p41-del": "fa8202ff2841",
+   "rep-del-1": "49cfd6a209b6",
+   "rep-del-2": "24609271a2e0",
+   "r1-ref": "07793dee15fa",
+   "r1-ref2": "07793dee15fa"
+  },
+  "referenceVariants": 2,
+  "deliveryVariants": 3,
+  "deliveryWithinReference": false,
+  "deliveryWithinReferenceOrStart": false
+ },
+ "webkit-dark-desktop/p41-profile-photo.png": {
+  "runs": {
+   "f-p41-ref": "d4b0f9cf7417",
+   "rep-ref-1": "d4b0f9cf7417",
+   "rep-ref-2": "d4b0f9cf7417",
+   "f-p41-del": "d4b0f9cf7417",
+   "rep-del-1": "d4b0f9cf7417",
+   "rep-del-2": "d4b0f9cf7417",
+   "r1-ref": "d4b0f9cf7417",
+   "r1-ref2": "d4b0f9cf7417"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-dark-phone/p41-profile-photo.png": {
+  "runs": {
+   "f-p41-ref": "fe7a1b9fa206",
+   "rep-ref-1": "fe7a1b9fa206",
+   "rep-ref-2": "fe7a1b9fa206",
+   "f-p41-del": "fe7a1b9fa206",
+   "rep-del-1": "fe7a1b9fa206",
+   "rep-del-2": "fe7a1b9fa206",
+   "r1-ref": "fe7a1b9fa206",
+   "r1-ref2": "fe7a1b9fa206"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-light-desktop/p41-profile-photo.png": {
+  "runs": {
+   "f-p41-ref": "1fad3ae98642",
+   "rep-ref-1": "1fad3ae98642",
+   "rep-ref-2": "1fad3ae98642",
+   "f-p41-del": "1fad3ae98642",
+   "rep-del-1": "1fad3ae98642",
+   "rep-del-2": "1fad3ae98642",
+   "r1-ref": "1fad3ae98642",
+   "r1-ref2": "1fad3ae98642"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ },
+ "webkit-light-phone/p41-profile-photo.png": {
+  "runs": {
+   "f-p41-ref": "9684e755f5fe",
+   "rep-ref-1": "9684e755f5fe",
+   "rep-ref-2": "9684e755f5fe",
+   "f-p41-del": "9684e755f5fe",
+   "rep-del-1": "9684e755f5fe",
+   "rep-del-2": "9684e755f5fe",
+   "r1-ref": "9684e755f5fe",
+   "r1-ref2": "9684e755f5fe"
+  },
+  "referenceVariants": 1,
+  "deliveryVariants": 1,
+  "deliveryWithinReference": true,
+  "deliveryWithinReferenceOrStart": true
+ }
+}

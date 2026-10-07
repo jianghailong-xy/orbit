@@ -1,0 +1,1911 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2-keyboard-window/fix-pilot-run-before/<name>",
+ "archives": [
+  {
+   "name": "attachments.tar.gz",
+   "bytes": 1724333,
+   "sha256": "0868603c915ffee4eff5df6216d16a940a41cbedabf321e4f5a1a550b88a7366",
+   "members": [
+    {
+     "name": "attachments/.last-run.json",
+     "bytes": 45,
+     "sha256": "91d1c43004802cd49950d78eb11c8fa7d05da8ffffe219a8b13b2f561bc00903",
+     "fields": {
+      "status": "passed",
+      "failedTests": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-P0-share-f6087-ent-focused-before-the-shot-chromium-dark-desktop/attachments/computed-styles-and-timings-cee2039f8c7760572f557e3d912bff0ea0ffa900.json",
+     "bytes": 79289,
+     "sha256": "f15c2861d4642f9811490a30f2a54bbf8ab7097137eff90dbbfbc04da1d32e7b",
+     "fields": {
+      "project": "chromium-dark-desktop",
+      "test": "same element focused before the shot",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-P0-share-f6087-ent-focused-before-the-shot-chromium-dark-desktop/evidence.json",
+     "bytes": 79289,
+     "sha256": "f15c2861d4642f9811490a30f2a54bbf8ab7097137eff90dbbfbc04da1d32e7b",
+     "fields": {
+      "project": "chromium-dark-desktop",
+      "test": "same element focused before the shot",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-P0-share-f6087-ent-focused-before-the-shot-chromium-dark-phone/attachments/computed-styles-and-timings-899b56d3eaa53883b7a8bf52498dc19cae987026.json",
+     "bytes": 76241,
+     "sha256": "1e59fb26ad984be4d5eaf95d8d10a930dd403a8624d58d72463f81276fe08e89",
+     "fields": {
+      "project": "chromium-dark-phone",
+      "test": "same element focused before the shot",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-P0-share-f6087-ent-focused-before-the-shot-chromium-dark-phone/evidence.json",
+     "bytes": 76241,
+     "sha256": "1e59fb26ad984be4d5eaf95d8d10a930dd403a8624d58d72463f81276fe08e89",
+     "fields": {
+      "project": "chromium-dark-phone",
+      "test": "same element focused before the shot",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-P0-share-f6087-ent-focused-before-the-shot-chromium-light-desktop/attachments/computed-styles-and-timings-bdaaa18657f3896f0921d4acd0d6dccfced19ff0.json",
+     "bytes": 78507,
+     "sha256": "b16669bc8f4b1d4c1e56a9d80f2a6e35528b8310bfb52e6828947d33b01289d2",
+     "fields": {
+      "project": "chromium-light-desktop",
+      "test": "same element focused before the shot",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-P0-share-f6087-ent-focused-before-the-shot-chromium-light-desktop/evidence.json",
+     "bytes": 78507,
+     "sha256": "b16669bc8f4b1d4c1e56a9d80f2a6e35528b8310bfb52e6828947d33b01289d2",
+     "fields": {
+      "project": "chromium-light-desktop",
+      "test": "same element focused before the shot",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-P0-share-f6087-ent-focused-before-the-shot-chromium-light-phone/attachments/computed-styles-and-timings-1a2044fee7faff207a133649bd7320eb54a3f0d2.json",
+     "bytes": 75527,
+     "sha256": "dff83cd11ea516eda8004327ba6a0eb1cba0af0661d2ac7d49acf248555d5e0d",
+     "fields": {
+      "project": "chromium-light-phone",
+      "test": "same element focused before the shot",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-P0-share-f6087-ent-focused-before-the-shot-chromium-light-phone/evidence.json",
+     "bytes": 75527,
+     "sha256": "dff83cd11ea516eda8004327ba6a0eb1cba0af0661d2ac7d49acf248555d5e0d",
+     "fields": {
+      "project": "chromium-light-phone",
+      "test": "same element focused before the shot",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-P0-share-f6087-ent-focused-before-the-shot-webkit-dark-desktop/attachments/computed-styles-and-timings-c611b0ba8943291d4a2eb5d817bbcb7482944fe0.json",
+     "bytes": 77607,
+     "sha256": "70d02f767f164247424fc0d502e1c8262bed14b73381a4fd4cce33656e32a31d",
+     "fields": {
+      "project": "webkit-dark-desktop",
+      "test": "same element focused before the shot",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-P0-share-f6087-ent-focused-before-the-shot-webkit-dark-desktop/evidence.json",
+     "bytes": 77607,
+     "sha256": "70d02f767f164247424fc0d502e1c8262bed14b73381a4fd4cce33656e32a31d",
+     "fields": {
+      "project": "webkit-dark-desktop",
+      "test": "same element focused before the shot",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-P0-share-f6087-ent-focused-before-the-shot-webkit-dark-phone/attachments/computed-styles-and-timings-5b793bf26721913021c31725c6c526213085d9ce.json",
+     "bytes": 74540,
+     "sha256": "1aefe4ec9a762674d06853280c1499979500c03d17a6531640f313535fae592b",
+     "fields": {
+      "project": "webkit-dark-phone",
+      "test": "same element focused before the shot",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-P0-share-f6087-ent-focused-before-the-shot-webkit-dark-phone/evidence.json",
+     "bytes": 74540,
+     "sha256": "1aefe4ec9a762674d06853280c1499979500c03d17a6531640f313535fae592b",
+     "fields": {
+      "project": "webkit-dark-phone",
+      "test": "same element focused before the shot",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-P0-share-f6087-ent-focused-before-the-shot-webkit-light-desktop/attachments/computed-styles-and-timings-b663904775deadf145170306ccb33c6737cddba2.json",
+     "bytes": 76828,
+     "sha256": "cebd264f88d77d44e462ec442a69e947648eceea4d3050beb3412be63b53eb6f",
+     "fields": {
+      "project": "webkit-light-desktop",
+      "test": "same element focused before the shot",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-P0-share-f6087-ent-focused-before-the-shot-webkit-light-desktop/evidence.json",
+     "bytes": 76828,
+     "sha256": "cebd264f88d77d44e462ec442a69e947648eceea4d3050beb3412be63b53eb6f",
+     "fields": {
+      "project": "webkit-light-desktop",
+      "test": "same element focused before the shot",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-P0-share-f6087-ent-focused-before-the-shot-webkit-light-phone/attachments/computed-styles-and-timings-fc5f0e58a091137e9c4c2bcd4267a2d8ba5a0e6a.json",
+     "bytes": 73824,
+     "sha256": "c70a8505a431a7d15f95ca9fd9ca3f3e76fe9772ad7b2defdebe4336f968e068",
+     "fields": {
+      "project": "webkit-light-phone",
+      "test": "same element focused before the shot",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-P0-share-f6087-ent-focused-before-the-shot-webkit-light-phone/evidence.json",
+     "bytes": 73824,
+     "sha256": "c70a8505a431a7d15f95ca9fd9ca3f3e76fe9772ad7b2defdebe4336f968e068",
+     "fields": {
+      "project": "webkit-light-phone",
+      "test": "same element focused before the shot",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-396a5-ding-and-a-read-that-failed-chromium-dark-desktop/attachments/computed-styles-and-timings-6faaa2c577d42f5b3fff76bfc4f5c28f61128c4e.json",
+     "bytes": 193393,
+     "sha256": "86fd213cc0c910f4df87c569fc2ce14aed2be5b7ce15e295fd166c93a357bb77",
+     "fields": {
+      "project": "chromium-dark-desktop",
+      "test": "loading and a read that failed",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-396a5-ding-and-a-read-that-failed-chromium-dark-desktop/evidence.json",
+     "bytes": 193393,
+     "sha256": "86fd213cc0c910f4df87c569fc2ce14aed2be5b7ce15e295fd166c93a357bb77",
+     "fields": {
+      "project": "chromium-dark-desktop",
+      "test": "loading and a read that failed",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-396a5-ding-and-a-read-that-failed-chromium-dark-phone/attachments/computed-styles-and-timings-92ce731d60100230b9c9c2189566e188cae464d0.json",
+     "bytes": 181114,
+     "sha256": "978682ee78e01c9df693bb9ecd5e5d4b2e532a81872d85b0e7b509c9669732ba",
+     "fields": {
+      "project": "chromium-dark-phone",
+      "test": "loading and a read that failed",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-396a5-ding-and-a-read-that-failed-chromium-dark-phone/evidence.json",
+     "bytes": 181114,
+     "sha256": "978682ee78e01c9df693bb9ecd5e5d4b2e532a81872d85b0e7b509c9669732ba",
+     "fields": {
+      "project": "chromium-dark-phone",
+      "test": "loading and a read that failed",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-396a5-ding-and-a-read-that-failed-chromium-light-desktop/attachments/computed-styles-and-timings-9821a4ac5fe311969d701b1c2417852cfe4fe61e.json",
+     "bytes": 191571,
+     "sha256": "0cbf1b82036c45edaa73d6a6099120a978859eef6cb7b7156c83e881f1ce91c9",
+     "fields": {
+      "project": "chromium-light-desktop",
+      "test": "loading and a read that failed",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-396a5-ding-and-a-read-that-failed-chromium-light-desktop/evidence.json",
+     "bytes": 191571,
+     "sha256": "0cbf1b82036c45edaa73d6a6099120a978859eef6cb7b7156c83e881f1ce91c9",
+     "fields": {
+      "project": "chromium-light-desktop",
+      "test": "loading and a read that failed",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-396a5-ding-and-a-read-that-failed-chromium-light-phone/attachments/computed-styles-and-timings-b07d713401f4097b1c1c4c54668579b8e13ed65b.json",
+     "bytes": 179596,
+     "sha256": "70daac32876c396056765dd2d86ac4b79ce4dca93cb64fa02992367d1e727c1d",
+     "fields": {
+      "project": "chromium-light-phone",
+      "test": "loading and a read that failed",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-396a5-ding-and-a-read-that-failed-chromium-light-phone/evidence.json",
+     "bytes": 179596,
+     "sha256": "70daac32876c396056765dd2d86ac4b79ce4dca93cb64fa02992367d1e727c1d",
+     "fields": {
+      "project": "chromium-light-phone",
+      "test": "loading and a read that failed",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-396a5-ding-and-a-read-that-failed-webkit-dark-desktop/attachments/computed-styles-and-timings-5db0895ad741f2fe973efc0a1335910e37e2a349.json",
+     "bytes": 190036,
+     "sha256": "eb3e09e44a6e279f1d92856d1b484028d8439d05dc1f94488bc61c0d3a532316",
+     "fields": {
+      "project": "webkit-dark-desktop",
+      "test": "loading and a read that failed",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-396a5-ding-and-a-read-that-failed-webkit-dark-desktop/evidence.json",
+     "bytes": 190036,
+     "sha256": "eb3e09e44a6e279f1d92856d1b484028d8439d05dc1f94488bc61c0d3a532316",
+     "fields": {
+      "project": "webkit-dark-desktop",
+      "test": "loading and a read that failed",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-396a5-ding-and-a-read-that-failed-webkit-dark-phone/attachments/computed-styles-and-timings-f26c8312483f03b644ca5245a2772f92d1faa1be.json",
+     "bytes": 177356,
+     "sha256": "857ec355570e76cb8331c601e0dad8e3a9b172d33b823f3d263fc287566a4c28",
+     "fields": {
+      "project": "webkit-dark-phone",
+      "test": "loading and a read that failed",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-396a5-ding-and-a-read-that-failed-webkit-dark-phone/evidence.json",
+     "bytes": 177356,
+     "sha256": "857ec355570e76cb8331c601e0dad8e3a9b172d33b823f3d263fc287566a4c28",
+     "fields": {
+      "project": "webkit-dark-phone",
+      "test": "loading and a read that failed",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-396a5-ding-and-a-read-that-failed-webkit-light-desktop/attachments/computed-styles-and-timings-7d369f5d9de685f4a483c95ea4f8f259b4e05cf9.json",
+     "bytes": 188254,
+     "sha256": "d0fda3e58b78f5d126c90f7be1694b36f39a2d17bce718343b7aeea012353696",
+     "fields": {
+      "project": "webkit-light-desktop",
+      "test": "loading and a read that failed",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-396a5-ding-and-a-read-that-failed-webkit-light-desktop/evidence.json",
+     "bytes": 188254,
+     "sha256": "d0fda3e58b78f5d126c90f7be1694b36f39a2d17bce718343b7aeea012353696",
+     "fields": {
+      "project": "webkit-light-desktop",
+      "test": "loading and a read that failed",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-396a5-ding-and-a-read-that-failed-webkit-light-phone/attachments/computed-styles-and-timings-a014de393cd090f567eb422012ad2f005eb53586.json",
+     "bytes": 175866,
+     "sha256": "4df098cdde8d6a02284916446d254cd0ee66614e6c92a9e98c7c9521edadb9f7",
+     "fields": {
+      "project": "webkit-light-phone",
+      "test": "loading and a read that failed",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-396a5-ding-and-a-read-that-failed-webkit-light-phone/evidence.json",
+     "bytes": 175866,
+     "sha256": "4df098cdde8d6a02284916446d254cd0ee66614e6c92a9e98c7c9521edadb9f7",
+     "fields": {
+      "project": "webkit-light-phone",
+      "test": "loading and a read that failed",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-3e42c-u-to-a-public-link-and-back-chromium-dark-desktop/attachments/computed-styles-and-timings-c19e8b72dc9f655690b362cd01c07743f35dfaed.json",
+     "bytes": 632218,
+     "sha256": "a0363e9a717dc838614fdf78c0695f2f4f83a26248997f69ac1a536a38887f98",
+     "fields": {
+      "project": "chromium-dark-desktop",
+      "test": "from Only you to a public link and back",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-3e42c-u-to-a-public-link-and-back-chromium-dark-desktop/evidence.json",
+     "bytes": 632218,
+     "sha256": "a0363e9a717dc838614fdf78c0695f2f4f83a26248997f69ac1a536a38887f98",
+     "fields": {
+      "project": "chromium-dark-desktop",
+      "test": "from Only you to a public link and back",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-3e42c-u-to-a-public-link-and-back-chromium-dark-phone/attachments/computed-styles-and-timings-a8ee97639d8701a8e17b44fa463171bf074fd8fb.json",
+     "bytes": 595121,
+     "sha256": "d27f6b4bbcff44745570f350d9a7d0d197330b6a2b423a6e527dc1dd38cc687d",
+     "fields": {
+      "project": "chromium-dark-phone",
+      "test": "from Only you to a public link and back",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-3e42c-u-to-a-public-link-and-back-chromium-dark-phone/evidence.json",
+     "bytes": 595121,
+     "sha256": "d27f6b4bbcff44745570f350d9a7d0d197330b6a2b423a6e527dc1dd38cc687d",
+     "fields": {
+      "project": "chromium-dark-phone",
+      "test": "from Only you to a public link and back",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-3e42c-u-to-a-public-link-and-back-chromium-light-desktop/attachments/computed-styles-and-timings-19daa649efc5ee2c7531734a4c37ed2869946484.json",
+     "bytes": 627119,
+     "sha256": "bafcbcfc280f09f94e07db5febab4c6659080269e8926cc5cb7d50ecd8918456",
+     "fields": {
+      "project": "chromium-light-desktop",
+      "test": "from Only you to a public link and back",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-3e42c-u-to-a-public-link-and-back-chromium-light-desktop/evidence.json",
+     "bytes": 627119,
+     "sha256": "bafcbcfc280f09f94e07db5febab4c6659080269e8926cc5cb7d50ecd8918456",
+     "fields": {
+      "project": "chromium-light-desktop",
+      "test": "from Only you to a public link and back",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-3e42c-u-to-a-public-link-and-back-chromium-light-phone/attachments/computed-styles-and-timings-f1ffd1ddf2ce495f89b51221130b4358c4b87742.json",
+     "bytes": 590028,
+     "sha256": "e8ae46df87915624fa596b8632599af3256cfa5d8dd3423061319a83c3c6f276",
+     "fields": {
+      "project": "chromium-light-phone",
+      "test": "from Only you to a public link and back",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-3e42c-u-to-a-public-link-and-back-chromium-light-phone/evidence.json",
+     "bytes": 590028,
+     "sha256": "e8ae46df87915624fa596b8632599af3256cfa5d8dd3423061319a83c3c6f276",
+     "fields": {
+      "project": "chromium-light-phone",
+      "test": "from Only you to a public link and back",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-3e42c-u-to-a-public-link-and-back-webkit-dark-desktop/attachments/computed-styles-and-timings-72fe1c2e59858bb5a19632ae4e8030504a57e320.json",
+     "bytes": 620815,
+     "sha256": "95ccec09d44851b3ed7eb5e875993aa31c370ffae62b71476e3352f51684d649",
+     "fields": {
+      "project": "webkit-dark-desktop",
+      "test": "from Only you to a public link and back",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-3e42c-u-to-a-public-link-and-back-webkit-dark-desktop/evidence.json",
+     "bytes": 620815,
+     "sha256": "95ccec09d44851b3ed7eb5e875993aa31c370ffae62b71476e3352f51684d649",
+     "fields": {
+      "project": "webkit-dark-desktop",
+      "test": "from Only you to a public link and back",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-3e42c-u-to-a-public-link-and-back-webkit-dark-phone/attachments/computed-styles-and-timings-dc0388a4b7bab83b7e667b997e90282733a1fb90.json",
+     "bytes": 584189,
+     "sha256": "0eb54156b438ccd752c75cc308e659316f7d5970316ca8966519477fa9693469",
+     "fields": {
+      "project": "webkit-dark-phone",
+      "test": "from Only you to a public link and back",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-3e42c-u-to-a-public-link-and-back-webkit-dark-phone/evidence.json",
+     "bytes": 584189,
+     "sha256": "0eb54156b438ccd752c75cc308e659316f7d5970316ca8966519477fa9693469",
+     "fields": {
+      "project": "webkit-dark-phone",
+      "test": "from Only you to a public link and back",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-3e42c-u-to-a-public-link-and-back-webkit-light-desktop/attachments/computed-styles-and-timings-70ad3ff27d64c2f603a9100bb2b416e4e3c8efa0.json",
+     "bytes": 614954,
+     "sha256": "69d53aa075d7e2217ef996722cb6fd2a1efa7f340d34ac71fafcef3de873b660",
+     "fields": {
+      "project": "webkit-light-desktop",
+      "test": "from Only you to a public link and back",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-3e42c-u-to-a-public-link-and-back-webkit-light-desktop/evidence.json",
+     "bytes": 614954,
+     "sha256": "69d53aa075d7e2217ef996722cb6fd2a1efa7f340d34ac71fafcef3de873b660",
+     "fields": {
+      "project": "webkit-light-desktop",
+      "test": "from Only you to a public link and back",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-3e42c-u-to-a-public-link-and-back-webkit-light-phone/attachments/computed-styles-and-timings-6707064cf190e03721d45d0d387677eb9da06ad1.json",
+     "bytes": 579222,
+     "sha256": "6d632f8f8c0435208799f07acc6a6020b308eca86d1728b565f54655148c5553",
+     "fields": {
+      "project": "webkit-light-phone",
+      "test": "from Only you to a public link and back",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-share-di-3e42c-u-to-a-public-link-and-back-webkit-light-phone/evidence.json",
+     "bytes": 579222,
+     "sha256": "6d632f8f8c0435208799f07acc6a6020b308eca86d1728b565f54655148c5553",
+     "fields": {
+      "project": "webkit-light-phone",
+      "test": "from Only you to a public link and back",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-chromium-dark-desktop/attachments/computed-styles-and-timings-2e8fc9b283dc919f35da973e12ab6ceaa3654a6e.json",
+     "bytes": 912675,
+     "sha256": "54ecb629329afa31179a27d33441be867f4183b28c89491d23b9eeb2ced15c6f",
+     "fields": {
+      "project": "chromium-dark-desktop",
+      "test": "fields, pickers and the panel header",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-chromium-dark-desktop/evidence.json",
+     "bytes": 912675,
+     "sha256": "54ecb629329afa31179a27d33441be867f4183b28c89491d23b9eeb2ced15c6f",
+     "fields": {
+      "project": "chromium-dark-desktop",
+      "test": "fields, pickers and the panel header",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-chromium-dark-phone/attachments/computed-styles-and-timings-0cb40064948868c7c61a17584df8cdfd6b05375c.json",
+     "bytes": 862805,
+     "sha256": "218e54ab480b0ca5cdb7d72342fe4604c0c0c0d4e397a6eeb5eb88516326d02f",
+     "fields": {
+      "project": "chromium-dark-phone",
+      "test": "fields, pickers and the panel header",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-chromium-dark-phone/evidence.json",
+     "bytes": 862805,
+     "sha256": "218e54ab480b0ca5cdb7d72342fe4604c0c0c0d4e397a6eeb5eb88516326d02f",
+     "fields": {
+      "project": "chromium-dark-phone",
+      "test": "fields, pickers and the panel header",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-chromium-light-desktop/attachments/computed-styles-and-timings-3980bf730b88110d523c8818ae2b63f49879beb8.json",
+     "bytes": 904940,
+     "sha256": "ce62a734336b1557866925a47aa67e99d92c4b1eb8cedff7c1993d7f598a7097",
+     "fields": {
+      "project": "chromium-light-desktop",
+      "test": "fields, pickers and the panel header",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-chromium-light-desktop/evidence.json",
+     "bytes": 904940,
+     "sha256": "ce62a734336b1557866925a47aa67e99d92c4b1eb8cedff7c1993d7f598a7097",
+     "fields": {
+      "project": "chromium-light-desktop",
+      "test": "fields, pickers and the panel header",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-chromium-light-phone/attachments/computed-styles-and-timings-07e1ac21e0e58eb0ddce4d4588c342d2bba16885.json",
+     "bytes": 855301,
+     "sha256": "05df977b56e66d25787becfe8c6bc2758534804ae18b952387103735c75f6303",
+     "fields": {
+      "project": "chromium-light-phone",
+      "test": "fields, pickers and the panel header",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-chromium-light-phone/evidence.json",
+     "bytes": 855301,
+     "sha256": "05df977b56e66d25787becfe8c6bc2758534804ae18b952387103735c75f6303",
+     "fields": {
+      "project": "chromium-light-phone",
+      "test": "fields, pickers and the panel header",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-webkit-dark-desktop/attachments/computed-styles-and-timings-cde83188fb02ba3fdebd419dfdf45844b0015214.json",
+     "bytes": 893728,
+     "sha256": "60e14844f3b5fc194b56fa04a1b199cb6b03495bdb03e938127b4cfc3141fd70",
+     "fields": {
+      "project": "webkit-dark-desktop",
+      "test": "fields, pickers and the panel header",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-webkit-dark-desktop/evidence.json",
+     "bytes": 893728,
+     "sha256": "60e14844f3b5fc194b56fa04a1b199cb6b03495bdb03e938127b4cfc3141fd70",
+     "fields": {
+      "project": "webkit-dark-desktop",
+      "test": "fields, pickers and the panel header",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-webkit-dark-phone/attachments/computed-styles-and-timings-2241bd744217667207d227d0dba26cd377e5f034.json",
+     "bytes": 844388,
+     "sha256": "7a58925d4e114cd64a3dd79618f268b8648d83a1737f0ff2b105a4fcf904256b",
+     "fields": {
+      "project": "webkit-dark-phone",
+      "test": "fields, pickers and the panel header",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-webkit-dark-phone/evidence.json",
+     "bytes": 844388,
+     "sha256": "7a58925d4e114cd64a3dd79618f268b8648d83a1737f0ff2b105a4fcf904256b",
+     "fields": {
+      "project": "webkit-dark-phone",
+      "test": "fields, pickers and the panel header",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-webkit-light-desktop/attachments/computed-styles-and-timings-b9ac0c449fe2f14a6b9074f7f364c6147024cd77.json",
+     "bytes": 885593,
+     "sha256": "528f9a944e3cb77a7a264c8d4c50a7a1d406ab369b72f095b0fa640ac12b2b3f",
+     "fields": {
+      "project": "webkit-light-desktop",
+      "test": "fields, pickers and the panel header",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-webkit-light-desktop/evidence.json",
+     "bytes": 885593,
+     "sha256": "528f9a944e3cb77a7a264c8d4c50a7a1d406ab369b72f095b0fa640ac12b2b3f",
+     "fields": {
+      "project": "webkit-light-desktop",
+      "test": "fields, pickers and the panel header",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-webkit-light-phone/attachments/computed-styles-and-timings-d601bd8dac29c7161c595dfbaab4ddc10911f000.json",
+     "bytes": 837497,
+     "sha256": "1a709ac8d49a551bb5236795588fbd0e83302c389a381f3960ebf5fa40484fc8",
+     "fields": {
+      "project": "webkit-light-phone",
+      "test": "fields, pickers and the panel header",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-webkit-light-phone/evidence.json",
+     "bytes": 837497,
+     "sha256": "1a709ac8d49a551bb5236795588fbd0e83302c389a381f3960ebf5fa40484fc8",
+     "fields": {
+      "project": "webkit-light-phone",
+      "test": "fields, pickers and the panel header",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-5e191-used-and-then-backed-out-of-chromium-dark-desktop/attachments/computed-styles-and-timings-56211b8cb61f7a0170ec96ca9f04e149056058c3.json",
+     "bytes": 138945,
+     "sha256": "019399cd38a795c9078277dd124ded3527bd2e8c22557bb7581ce56833b4eac2",
+     "fields": {
+      "project": "chromium-dark-desktop",
+      "test": "reopening a stopped task, refused and then backed out of",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-5e191-used-and-then-backed-out-of-chromium-dark-desktop/evidence.json",
+     "bytes": 138945,
+     "sha256": "019399cd38a795c9078277dd124ded3527bd2e8c22557bb7581ce56833b4eac2",
+     "fields": {
+      "project": "chromium-dark-desktop",
+      "test": "reopening a stopped task, refused and then backed out of",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-5e191-used-and-then-backed-out-of-chromium-dark-phone/attachments/computed-styles-and-timings-c12f3020fa54cd22ea5d483f26ba180055642101.json",
+     "bytes": 135819,
+     "sha256": "ac4a28a8515711e7acebc9952c9756270266152df0cf1a18a66acc8c59fdaeb5",
+     "fields": {
+      "project": "chromium-dark-phone",
+      "test": "reopening a stopped task, refused and then backed out of",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-5e191-used-and-then-backed-out-of-chromium-dark-phone/evidence.json",
+     "bytes": 135819,
+     "sha256": "ac4a28a8515711e7acebc9952c9756270266152df0cf1a18a66acc8c59fdaeb5",
+     "fields": {
+      "project": "chromium-dark-phone",
+      "test": "reopening a stopped task, refused and then backed out of",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-5e191-used-and-then-backed-out-of-chromium-light-desktop/attachments/computed-styles-and-timings-cbc924385f260d7d0231f136986ea9d06da4c05f.json",
+     "bytes": 137721,
+     "sha256": "f990e5bd3a8fd8f134ed89f7fc232e9f092d098394044b0c58224150c2b2b9b9",
+     "fields": {
+      "project": "chromium-light-desktop",
+      "test": "reopening a stopped task, refused and then backed out of",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-5e191-used-and-then-backed-out-of-chromium-light-desktop/evidence.json",
+     "bytes": 137721,
+     "sha256": "f990e5bd3a8fd8f134ed89f7fc232e9f092d098394044b0c58224150c2b2b9b9",
+     "fields": {
+      "project": "chromium-light-desktop",
+      "test": "reopening a stopped task, refused and then backed out of",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-5e191-used-and-then-backed-out-of-chromium-light-phone/attachments/computed-styles-and-timings-119ee6ceb14abc7fec0318d1c8bf2981172e58dc.json",
+     "bytes": 134455,
+     "sha256": "18e4295f30191bb7d9115c47f8bdb902fe0978ca5bb19eb6d7b3dd6e64b263ef",
+     "fields": {
+      "project": "chromium-light-phone",
+      "test": "reopening a stopped task, refused and then backed out of",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-5e191-used-and-then-backed-out-of-chromium-light-phone/evidence.json",
+     "bytes": 134455,
+     "sha256": "18e4295f30191bb7d9115c47f8bdb902fe0978ca5bb19eb6d7b3dd6e64b263ef",
+     "fields": {
+      "project": "chromium-light-phone",
+      "test": "reopening a stopped task, refused and then backed out of",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-5e191-used-and-then-backed-out-of-webkit-dark-desktop/attachments/computed-styles-and-timings-a42ddde7b57d7109a648ff7a82125f8306bda5b7.json",
+     "bytes": 135628,
+     "sha256": "e4bcc60e694f6d00e9a22801bfb3edf5b62213fcf83462fce830cfe69cdd45fe",
+     "fields": {
+      "project": "webkit-dark-desktop",
+      "test": "reopening a stopped task, refused and then backed out of",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-5e191-used-and-then-backed-out-of-webkit-dark-desktop/evidence.json",
+     "bytes": 135628,
+     "sha256": "e4bcc60e694f6d00e9a22801bfb3edf5b62213fcf83462fce830cfe69cdd45fe",
+     "fields": {
+      "project": "webkit-dark-desktop",
+      "test": "reopening a stopped task, refused and then backed out of",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-5e191-used-and-then-backed-out-of-webkit-dark-phone/attachments/computed-styles-and-timings-9e2f802b203138886dabe10c00b702a3325bb1e1.json",
+     "bytes": 132400,
+     "sha256": "f992442edc4ae57d679ec7d8fb80b9439c7f898663544d4307ef5b99723cbda3",
+     "fields": {
+      "project": "webkit-dark-phone",
+      "test": "reopening a stopped task, refused and then backed out of",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-5e191-used-and-then-backed-out-of-webkit-dark-phone/evidence.json",
+     "bytes": 132400,
+     "sha256": "f992442edc4ae57d679ec7d8fb80b9439c7f898663544d4307ef5b99723cbda3",
+     "fields": {
+      "project": "webkit-dark-phone",
+      "test": "reopening a stopped task, refused and then backed out of",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-5e191-used-and-then-backed-out-of-webkit-light-desktop/attachments/computed-styles-and-timings-69351b5c90797b40c4b4d975789cf375fdbba615.json",
+     "bytes": 134340,
+     "sha256": "1fa40991e681e2a9607d8e56078b285aae7f353e4757f6e2121ab175b6a411e4",
+     "fields": {
+      "project": "webkit-light-desktop",
+      "test": "reopening a stopped task, refused and then backed out of",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-5e191-used-and-then-backed-out-of-webkit-light-desktop/evidence.json",
+     "bytes": 134340,
+     "sha256": "1fa40991e681e2a9607d8e56078b285aae7f353e4757f6e2121ab175b6a411e4",
+     "fields": {
+      "project": "webkit-light-desktop",
+      "test": "reopening a stopped task, refused and then backed out of",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-5e191-used-and-then-backed-out-of-webkit-light-phone/attachments/computed-styles-and-timings-875cf58b510d043b380a0bd2efc62717c160c6bf.json",
+     "bytes": 131154,
+     "sha256": "918829c717d218813ed12b1cf0cf78846bca7f88d791b5632a11f4a3bee586d8",
+     "fields": {
+      "project": "webkit-light-phone",
+      "test": "reopening a stopped task, refused and then backed out of",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-5e191-used-and-then-backed-out-of-webkit-light-phone/evidence.json",
+     "bytes": 131154,
+     "sha256": "918829c717d218813ed12b1cf0cf78846bca7f88d791b5632a11f4a3bee586d8",
+     "fields": {
+      "project": "webkit-light-phone",
+      "test": "reopening a stopped task, refused and then backed out of",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-chromium-dark-desktop/attachments/computed-styles-and-timings-f2696aca61e81b647a0146b571c758a02a7ca585.json",
+     "bytes": 605846,
+     "sha256": "45ace713bbafef92fd6bb3c2012e9810d42831ff2c0d7fc1e2458cf6cb4f45ab",
+     "fields": {
+      "project": "chromium-dark-desktop",
+      "test": "dependencies, inputs and comments",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-chromium-dark-desktop/evidence.json",
+     "bytes": 605846,
+     "sha256": "45ace713bbafef92fd6bb3c2012e9810d42831ff2c0d7fc1e2458cf6cb4f45ab",
+     "fields": {
+      "project": "chromium-dark-desktop",
+      "test": "dependencies, inputs and comments",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-chromium-dark-phone/attachments/computed-styles-and-timings-23398602328418345d9a184f26e322de7084df50.json",
+     "bytes": 562758,
+     "sha256": "db9002af591c6cf315113285d0bde6ebe1b652bad2dd8beb85d867bc6f1cfdeb",
+     "fields": {
+      "project": "chromium-dark-phone",
+      "test": "dependencies, inputs and comments",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-chromium-dark-phone/evidence.json",
+     "bytes": 562758,
+     "sha256": "db9002af591c6cf315113285d0bde6ebe1b652bad2dd8beb85d867bc6f1cfdeb",
+     "fields": {
+      "project": "chromium-dark-phone",
+      "test": "dependencies, inputs and comments",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-chromium-light-desktop/attachments/computed-styles-and-timings-fa8e6d6360ba4e261bc1b47645030439d92887be.json",
+     "bytes": 600285,
+     "sha256": "5d5156535e23b10e76d3797ffc19dfe7ec01899be31528e329130d82364f8334",
+     "fields": {
+      "project": "chromium-light-desktop",
+      "test": "dependencies, inputs and comments",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-chromium-light-desktop/evidence.json",
+     "bytes": 600285,
+     "sha256": "5d5156535e23b10e76d3797ffc19dfe7ec01899be31528e329130d82364f8334",
+     "fields": {
+      "project": "chromium-light-desktop",
+      "test": "dependencies, inputs and comments",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-chromium-light-phone/attachments/computed-styles-and-timings-8b8fa16bdde8102c2df5b22dc1046f42ceb8f89a.json",
+     "bytes": 558170,
+     "sha256": "a0305b354dcd7de9c79b1940bbf8d9cb86c61793cb1ac34219a61944f72464eb",
+     "fields": {
+      "project": "chromium-light-phone",
+      "test": "dependencies, inputs and comments",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-chromium-light-phone/evidence.json",
+     "bytes": 558170,
+     "sha256": "a0305b354dcd7de9c79b1940bbf8d9cb86c61793cb1ac34219a61944f72464eb",
+     "fields": {
+      "project": "chromium-light-phone",
+      "test": "dependencies, inputs and comments",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-webkit-dark-desktop/attachments/computed-styles-and-timings-deb1b6c039ca28f47141964d7274fcc00f7f409a.json",
+     "bytes": 593291,
+     "sha256": "f6d68cfb3918b6450d57c604243b0be9507f8aaa836d4e453f1b2744ac9bc3e0",
+     "fields": {
+      "project": "webkit-dark-desktop",
+      "test": "dependencies, inputs and comments",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-webkit-dark-desktop/evidence.json",
+     "bytes": 593291,
+     "sha256": "f6d68cfb3918b6450d57c604243b0be9507f8aaa836d4e453f1b2744ac9bc3e0",
+     "fields": {
+      "project": "webkit-dark-desktop",
+      "test": "dependencies, inputs and comments",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-webkit-dark-phone/attachments/computed-styles-and-timings-1faa3dcaef518d7661e82e0c22a150cc8e15b210.json",
+     "bytes": 550378,
+     "sha256": "858c3f95959daef7c96c1b9df411fa723aed34e03566c988c4e7b9c7653f3b2f",
+     "fields": {
+      "project": "webkit-dark-phone",
+      "test": "dependencies, inputs and comments",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-webkit-dark-phone/evidence.json",
+     "bytes": 550378,
+     "sha256": "858c3f95959daef7c96c1b9df411fa723aed34e03566c988c4e7b9c7653f3b2f",
+     "fields": {
+      "project": "webkit-dark-phone",
+      "test": "dependencies, inputs and comments",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-webkit-light-desktop/attachments/computed-styles-and-timings-83ba30f7faa5119ccbb14e96d2533ab7bd932469.json",
+     "bytes": 587205,
+     "sha256": "b3ea3f46fd5c7d309a79239be7d2021d51eaa5c652b9f9d4da2a49ddbcd56aae",
+     "fields": {
+      "project": "webkit-light-desktop",
+      "test": "dependencies, inputs and comments",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-webkit-light-desktop/evidence.json",
+     "bytes": 587205,
+     "sha256": "b3ea3f46fd5c7d309a79239be7d2021d51eaa5c652b9f9d4da2a49ddbcd56aae",
+     "fields": {
+      "project": "webkit-light-desktop",
+      "test": "dependencies, inputs and comments",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-webkit-light-phone/attachments/computed-styles-and-timings-d17425ff354263507d641eb0b247283bf35eecb4.json",
+     "bytes": 545328,
+     "sha256": "5b2186c16177bffd52f374d284935091f4ffa0e0b9be7fe0a6b7239ec9f50cf6",
+     "fields": {
+      "project": "webkit-light-phone",
+      "test": "dependencies, inputs and comments",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-webkit-light-phone/evidence.json",
+     "bytes": 545328,
+     "sha256": "5b2186c16177bffd52f374d284935091f4ffa0e0b9be7fe0a6b7239ec9f50cf6",
+     "fields": {
+      "project": "webkit-light-phone",
+      "test": "dependencies, inputs and comments",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-e58b5-d-leaves-the-list-as-it-was-chromium-dark-desktop/attachments/computed-styles-and-timings-2912fb6d85a14c9c102ec18d150f44e85a3d8cda.json",
+     "bytes": 2231,
+     "sha256": "91a76fd21a9cb0cbd51107c9b543651cf98b5d41be4d675dabcd75525325ff91",
+     "fields": {
+      "project": "chromium-dark-desktop",
+      "test": "a failed upload says so and leaves the list as it was",
+      "browser": "153.0.8010.12",
+      "captures": [],
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-e58b5-d-leaves-the-list-as-it-was-chromium-dark-desktop/evidence.json",
+     "bytes": 2231,
+     "sha256": "91a76fd21a9cb0cbd51107c9b543651cf98b5d41be4d675dabcd75525325ff91",
+     "fields": {
+      "project": "chromium-dark-desktop",
+      "test": "a failed upload says so and leaves the list as it was",
+      "browser": "153.0.8010.12",
+      "captures": [],
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-e58b5-d-leaves-the-list-as-it-was-chromium-dark-phone/attachments/computed-styles-and-timings-626d30ec38f451c5df83ff1794f64f9010f5291f.json",
+     "bytes": 2229,
+     "sha256": "beab2f71854d6493e23cd8e2225f3076ba191e27faab641386f5f402adb45377",
+     "fields": {
+      "project": "chromium-dark-phone",
+      "test": "a failed upload says so and leaves the list as it was",
+      "browser": "153.0.8010.12",
+      "captures": [],
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-e58b5-d-leaves-the-list-as-it-was-chromium-dark-phone/evidence.json",
+     "bytes": 2229,
+     "sha256": "beab2f71854d6493e23cd8e2225f3076ba191e27faab641386f5f402adb45377",
+     "fields": {
+      "project": "chromium-dark-phone",
+      "test": "a failed upload says so and leaves the list as it was",
+      "browser": "153.0.8010.12",
+      "captures": [],
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-e58b5-d-leaves-the-list-as-it-was-chromium-light-desktop/attachments/computed-styles-and-timings-9b08b4b3fd757cdd93d6f66d1e25cbd029562cc8.json",
+     "bytes": 2232,
+     "sha256": "8416cc103923c65a84c5206a320fbd807d4aab00cd561e9777e13ffd2e070080",
+     "fields": {
+      "project": "chromium-light-desktop",
+      "test": "a failed upload says so and leaves the list as it was",
+      "browser": "153.0.8010.12",
+      "captures": [],
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-e58b5-d-leaves-the-list-as-it-was-chromium-light-desktop/evidence.json",
+     "bytes": 2232,
+     "sha256": "8416cc103923c65a84c5206a320fbd807d4aab00cd561e9777e13ffd2e070080",
+     "fields": {
+      "project": "chromium-light-desktop",
+      "test": "a failed upload says so and leaves the list as it was",
+      "browser": "153.0.8010.12",
+      "captures": [],
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-e58b5-d-leaves-the-list-as-it-was-chromium-light-phone/attachments/computed-styles-and-timings-265f1a3ccf445d9822a731a4492d0133dde551af.json",
+     "bytes": 2230,
+     "sha256": "c86534ef185cc2f87565e9d25cd70296aa72e9829edfc859c36dd074b9beed1b",
+     "fields": {
+      "project": "chromium-light-phone",
+      "test": "a failed upload says so and leaves the list as it was",
+      "browser": "153.0.8010.12",
+      "captures": [],
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-e58b5-d-leaves-the-list-as-it-was-chromium-light-phone/evidence.json",
+     "bytes": 2230,
+     "sha256": "c86534ef185cc2f87565e9d25cd70296aa72e9829edfc859c36dd074b9beed1b",
+     "fields": {
+      "project": "chromium-light-phone",
+      "test": "a failed upload says so and leaves the list as it was",
+      "browser": "153.0.8010.12",
+      "captures": [],
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-e58b5-d-leaves-the-list-as-it-was-webkit-dark-desktop/attachments/computed-styles-and-timings-af1ba6b17b5f8b29a8ccb372dcd4385d640fbac9.json",
+     "bytes": 2220,
+     "sha256": "c0e9cdc704f155e9a44cdd7cd3b4bc9870d195cad3f6e58ba579ef935be36fdf",
+     "fields": {
+      "project": "webkit-dark-desktop",
+      "test": "a failed upload says so and leaves the list as it was",
+      "browser": "26.6",
+      "captures": [],
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-e58b5-d-leaves-the-list-as-it-was-webkit-dark-desktop/evidence.json",
+     "bytes": 2220,
+     "sha256": "c0e9cdc704f155e9a44cdd7cd3b4bc9870d195cad3f6e58ba579ef935be36fdf",
+     "fields": {
+      "project": "webkit-dark-desktop",
+      "test": "a failed upload says so and leaves the list as it was",
+      "browser": "26.6",
+      "captures": [],
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-e58b5-d-leaves-the-list-as-it-was-webkit-dark-phone/attachments/computed-styles-and-timings-d43bad8a8fa44d5ef4b751f3a040e8c6f9fc6be2.json",
+     "bytes": 2218,
+     "sha256": "8a5bcb3c3b45e85c2f8075b286b85932d26128673338f85c2d9f2943c5877de4",
+     "fields": {
+      "project": "webkit-dark-phone",
+      "test": "a failed upload says so and leaves the list as it was",
+      "browser": "26.6",
+      "captures": [],
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-e58b5-d-leaves-the-list-as-it-was-webkit-dark-phone/evidence.json",
+     "bytes": 2218,
+     "sha256": "8a5bcb3c3b45e85c2f8075b286b85932d26128673338f85c2d9f2943c5877de4",
+     "fields": {
+      "project": "webkit-dark-phone",
+      "test": "a failed upload says so and leaves the list as it was",
+      "browser": "26.6",
+      "captures": [],
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-e58b5-d-leaves-the-list-as-it-was-webkit-light-desktop/attachments/computed-styles-and-timings-6d48b932cb1ab8188e013e22b49b4b266b03914c.json",
+     "bytes": 2221,
+     "sha256": "4eae39cf30da212d08b6754b3711d51fb541291df7240782d088375ed966cd98",
+     "fields": {
+      "project": "webkit-light-desktop",
+      "test": "a failed upload says so and leaves the list as it was",
+      "browser": "26.6",
+      "captures": [],
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-e58b5-d-leaves-the-list-as-it-was-webkit-light-desktop/evidence.json",
+     "bytes": 2221,
+     "sha256": "4eae39cf30da212d08b6754b3711d51fb541291df7240782d088375ed966cd98",
+     "fields": {
+      "project": "webkit-light-desktop",
+      "test": "a failed upload says so and leaves the list as it was",
+      "browser": "26.6",
+      "captures": [],
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-e58b5-d-leaves-the-list-as-it-was-webkit-light-phone/attachments/computed-styles-and-timings-96da24a05861a04735bf322554336c8271a9e1c5.json",
+     "bytes": 2219,
+     "sha256": "48be0fc2084835ba6eb50e1906f78beafa366b56768e200898895505d2d062d4",
+     "fields": {
+      "project": "webkit-light-phone",
+      "test": "a failed upload says so and leaves the list as it was",
+      "browser": "26.6",
+      "captures": [],
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-task-det-e58b5-d-leaves-the-list-as-it-was-webkit-light-phone/evidence.json",
+     "bytes": 2219,
+     "sha256": "48be0fc2084835ba6eb50e1906f78beafa366b56768e200898895505d2d062d4",
+     "fields": {
+      "project": "webkit-light-phone",
+      "test": "a failed upload says so and leaves the list as it was",
+      "browser": "26.6",
+      "captures": [],
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-31733-t-picker-of-a-new-workspace-chromium-dark-desktop/attachments/computed-styles-and-timings-b218531169a9312b580173cd0dedd78511d10a89.json",
+     "bytes": 87763,
+     "sha256": "eb59e99a44b0a45776b3cacb8c9daa521e00336cc6bad011acda4ecfccb447c0",
+     "fields": {
+      "project": "chromium-dark-desktop",
+      "test": "the Claude account picker of a new workspace",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-31733-t-picker-of-a-new-workspace-chromium-dark-desktop/evidence.json",
+     "bytes": 87763,
+     "sha256": "eb59e99a44b0a45776b3cacb8c9daa521e00336cc6bad011acda4ecfccb447c0",
+     "fields": {
+      "project": "chromium-dark-desktop",
+      "test": "the Claude account picker of a new workspace",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-31733-t-picker-of-a-new-workspace-chromium-dark-phone/attachments/computed-styles-and-timings-e1033336bc6778ceb354b10e61a07fbe9eaf1b8e.json",
+     "bytes": 87737,
+     "sha256": "8958a5a73ce66e78cec17f724862dcf8fa8863aa049ce65133bd4f21f2e1b6e1",
+     "fields": {
+      "project": "chromium-dark-phone",
+      "test": "the Claude account picker of a new workspace",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-31733-t-picker-of-a-new-workspace-chromium-dark-phone/evidence.json",
+     "bytes": 87737,
+     "sha256": "8958a5a73ce66e78cec17f724862dcf8fa8863aa049ce65133bd4f21f2e1b6e1",
+     "fields": {
+      "project": "chromium-dark-phone",
+      "test": "the Claude account picker of a new workspace",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-31733-t-picker-of-a-new-workspace-chromium-light-desktop/attachments/computed-styles-and-timings-2a3d84b8fce79d45b666a30bad19bf8ba4f30750.json",
+     "bytes": 87278,
+     "sha256": "ba682987886b255ed1fecedcafa7aab36832ef2a8f64bf788c93a049e3bb5c47",
+     "fields": {
+      "project": "chromium-light-desktop",
+      "test": "the Claude account picker of a new workspace",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-31733-t-picker-of-a-new-workspace-chromium-light-desktop/evidence.json",
+     "bytes": 87278,
+     "sha256": "ba682987886b255ed1fecedcafa7aab36832ef2a8f64bf788c93a049e3bb5c47",
+     "fields": {
+      "project": "chromium-light-desktop",
+      "test": "the Claude account picker of a new workspace",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-31733-t-picker-of-a-new-workspace-chromium-light-phone/attachments/computed-styles-and-timings-c9dad9965809f9b21ab65dcf7d4b38d93e6bc42f.json",
+     "bytes": 87370,
+     "sha256": "2a48d8951f9e2c4aa9fe181b8e8e047c618329eee224635ff44e5c4225166fbb",
+     "fields": {
+      "project": "chromium-light-phone",
+      "test": "the Claude account picker of a new workspace",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-31733-t-picker-of-a-new-workspace-chromium-light-phone/evidence.json",
+     "bytes": 87370,
+     "sha256": "2a48d8951f9e2c4aa9fe181b8e8e047c618329eee224635ff44e5c4225166fbb",
+     "fields": {
+      "project": "chromium-light-phone",
+      "test": "the Claude account picker of a new workspace",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-31733-t-picker-of-a-new-workspace-webkit-dark-desktop/attachments/computed-styles-and-timings-85037d097f63a01d7c2a3b62cc49fef255a632a5.json",
+     "bytes": 84425,
+     "sha256": "6193c561160856c4d0acc838163177c6db67f14beeb950546bacec00538f3db3",
+     "fields": {
+      "project": "webkit-dark-desktop",
+      "test": "the Claude account picker of a new workspace",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-31733-t-picker-of-a-new-workspace-webkit-dark-desktop/evidence.json",
+     "bytes": 84425,
+     "sha256": "6193c561160856c4d0acc838163177c6db67f14beeb950546bacec00538f3db3",
+     "fields": {
+      "project": "webkit-dark-desktop",
+      "test": "the Claude account picker of a new workspace",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-31733-t-picker-of-a-new-workspace-webkit-dark-phone/attachments/computed-styles-and-timings-1d677195aaec1c686dc30e4ecfd4575e0ae68746.json",
+     "bytes": 84517,
+     "sha256": "d3e5d8d67aec8d6f1e85185b1a0e790d8872819580008dbdd7a1050b6dbbb90e",
+     "fields": {
+      "project": "webkit-dark-phone",
+      "test": "the Claude account picker of a new workspace",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-31733-t-picker-of-a-new-workspace-webkit-dark-phone/evidence.json",
+     "bytes": 84517,
+     "sha256": "d3e5d8d67aec8d6f1e85185b1a0e790d8872819580008dbdd7a1050b6dbbb90e",
+     "fields": {
+      "project": "webkit-dark-phone",
+      "test": "the Claude account picker of a new workspace",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-31733-t-picker-of-a-new-workspace-webkit-light-desktop/attachments/computed-styles-and-timings-5046a16c8b5f5a330f55c15e084fb2505651ce65.json",
+     "bytes": 84154,
+     "sha256": "b35c5d709385b43fd7f17b18fac9ca454762a6c1f9e9205be8d8024a859eeab3",
+     "fields": {
+      "project": "webkit-light-desktop",
+      "test": "the Claude account picker of a new workspace",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-31733-t-picker-of-a-new-workspace-webkit-light-desktop/evidence.json",
+     "bytes": 84154,
+     "sha256": "b35c5d709385b43fd7f17b18fac9ca454762a6c1f9e9205be8d8024a859eeab3",
+     "fields": {
+      "project": "webkit-light-desktop",
+      "test": "the Claude account picker of a new workspace",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-31733-t-picker-of-a-new-workspace-webkit-light-phone/attachments/computed-styles-and-timings-544745a1055881fd7167384e605043fcb183c2ad.json",
+     "bytes": 84208,
+     "sha256": "9484d256f7bfe26682ebfaf6bbeaa49fbb4e139e7fdbf78dd799cd6bd09b8157",
+     "fields": {
+      "project": "webkit-light-phone",
+      "test": "the Claude account picker of a new workspace",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-31733-t-picker-of-a-new-workspace-webkit-light-phone/evidence.json",
+     "bytes": 84208,
+     "sha256": "9484d256f7bfe26682ebfaf6bbeaa49fbb4e139e7fdbf78dd799cd6bd09b8157",
+     "fields": {
+      "project": "webkit-light-phone",
+      "test": "the Claude account picker of a new workspace",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-55b7f-e-account-with-what-is-left-chromium-dark-desktop/attachments/computed-styles-and-timings-d892b27e97a883ad3252103c4fcbb85f71a5a51d.json",
+     "bytes": 93895,
+     "sha256": "c314ecfe3e63090f6c22679f9fec483ffd1a4920c22de0c8aa56249b50b9abfe",
+     "fields": {
+      "project": "chromium-dark-desktop",
+      "test": "the Antigravity account picker: Default on the Gemini key, a Google account with what is left",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-55b7f-e-account-with-what-is-left-chromium-dark-desktop/evidence.json",
+     "bytes": 93895,
+     "sha256": "c314ecfe3e63090f6c22679f9fec483ffd1a4920c22de0c8aa56249b50b9abfe",
+     "fields": {
+      "project": "chromium-dark-desktop",
+      "test": "the Antigravity account picker: Default on the Gemini key, a Google account with what is left",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-55b7f-e-account-with-what-is-left-chromium-dark-phone/attachments/computed-styles-and-timings-c1675a4b79684ab7c092a9d63c86df2d09b769b1.json",
+     "bytes": 94099,
+     "sha256": "7df6c768969768855e6b8bc14f16e5d51c9a4249dbe3abdbec506c9b53a034fd",
+     "fields": {
+      "project": "chromium-dark-phone",
+      "test": "the Antigravity account picker: Default on the Gemini key, a Google account with what is left",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-55b7f-e-account-with-what-is-left-chromium-dark-phone/evidence.json",
+     "bytes": 94099,
+     "sha256": "7df6c768969768855e6b8bc14f16e5d51c9a4249dbe3abdbec506c9b53a034fd",
+     "fields": {
+      "project": "chromium-dark-phone",
+      "test": "the Antigravity account picker: Default on the Gemini key, a Google account with what is left",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-55b7f-e-account-with-what-is-left-chromium-light-desktop/attachments/computed-styles-and-timings-e844d99e9b4407f4258c0ef402cee2332ae8121e.json",
+     "bytes": 93658,
+     "sha256": "ad1e6dd8d5bbd4d6b33d1eb116b49ec56c8b974acdd40639179c13f73d70977f",
+     "fields": {
+      "project": "chromium-light-desktop",
+      "test": "the Antigravity account picker: Default on the Gemini key, a Google account with what is left",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-55b7f-e-account-with-what-is-left-chromium-light-desktop/evidence.json",
+     "bytes": 93658,
+     "sha256": "ad1e6dd8d5bbd4d6b33d1eb116b49ec56c8b974acdd40639179c13f73d70977f",
+     "fields": {
+      "project": "chromium-light-desktop",
+      "test": "the Antigravity account picker: Default on the Gemini key, a Google account with what is left",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-55b7f-e-account-with-what-is-left-chromium-light-phone/attachments/computed-styles-and-timings-1651a8c1a7a5d0313debce3519a8ccef4a3b6a01.json",
+     "bytes": 93572,
+     "sha256": "92661bb9d9eab461645c0236d31ee05093e3c26b5668cb8e3fecf84ac4b923d9",
+     "fields": {
+      "project": "chromium-light-phone",
+      "test": "the Antigravity account picker: Default on the Gemini key, a Google account with what is left",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-55b7f-e-account-with-what-is-left-chromium-light-phone/evidence.json",
+     "bytes": 93572,
+     "sha256": "92661bb9d9eab461645c0236d31ee05093e3c26b5668cb8e3fecf84ac4b923d9",
+     "fields": {
+      "project": "chromium-light-phone",
+      "test": "the Antigravity account picker: Default on the Gemini key, a Google account with what is left",
+      "browser": "153.0.8010.12",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-55b7f-e-account-with-what-is-left-webkit-dark-desktop/attachments/computed-styles-and-timings-73da656a0beae93c62f1d5dd915e9edfb8306fa8.json",
+     "bytes": 90636,
+     "sha256": "c33bbd95ffa49f9f619a58b9973931a8ccebc4527bbb094f20d6ea697cdd9b5d",
+     "fields": {
+      "project": "webkit-dark-desktop",
+      "test": "the Antigravity account picker: Default on the Gemini key, a Google account with what is left",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-55b7f-e-account-with-what-is-left-webkit-dark-desktop/evidence.json",
+     "bytes": 90636,
+     "sha256": "c33bbd95ffa49f9f619a58b9973931a8ccebc4527bbb094f20d6ea697cdd9b5d",
+     "fields": {
+      "project": "webkit-dark-desktop",
+      "test": "the Antigravity account picker: Default on the Gemini key, a Google account with what is left",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-55b7f-e-account-with-what-is-left-webkit-dark-phone/attachments/computed-styles-and-timings-f2b2fede968971f1bbabca18d3ebdca8abbeb391.json",
+     "bytes": 90726,
+     "sha256": "6a397ad8e3ced5636dcf5557e6e1a1a1b1e47891cc9fe85c80c76bbfb4426fbf",
+     "fields": {
+      "project": "webkit-dark-phone",
+      "test": "the Antigravity account picker: Default on the Gemini key, a Google account with what is left",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-55b7f-e-account-with-what-is-left-webkit-dark-phone/evidence.json",
+     "bytes": 90726,
+     "sha256": "6a397ad8e3ced5636dcf5557e6e1a1a1b1e47891cc9fe85c80c76bbfb4426fbf",
+     "fields": {
+      "project": "webkit-dark-phone",
+      "test": "the Antigravity account picker: Default on the Gemini key, a Google account with what is left",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-55b7f-e-account-with-what-is-left-webkit-light-desktop/attachments/computed-styles-and-timings-addd57b02256b45e302458ed72931896133f873e.json",
+     "bytes": 90313,
+     "sha256": "80c4c5dd7562911386481796bcd20de8025ef9fc61b58e3b72b4fb8dd3fbd7cd",
+     "fields": {
+      "project": "webkit-light-desktop",
+      "test": "the Antigravity account picker: Default on the Gemini key, a Google account with what is left",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-55b7f-e-account-with-what-is-left-webkit-light-desktop/evidence.json",
+     "bytes": 90313,
+     "sha256": "80c4c5dd7562911386481796bcd20de8025ef9fc61b58e3b72b4fb8dd3fbd7cd",
+     "fields": {
+      "project": "webkit-light-desktop",
+      "test": "the Antigravity account picker: Default on the Gemini key, a Google account with what is left",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-55b7f-e-account-with-what-is-left-webkit-light-phone/attachments/computed-styles-and-timings-d1fef0b1e32ca6585d0a50f5fcce723f2e2f3f96.json",
+     "bytes": 90361,
+     "sha256": "3dc63895ad6fd3e597cac6a70c16279fd0f32f8b1a3363d3a265711aaa78e1a4",
+     "fields": {
+      "project": "webkit-light-phone",
+      "test": "the Antigravity account picker: Default on the Gemini key, a Google account with what is left",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pilot.browser.mjs-workspac-55b7f-e-account-with-what-is-left-webkit-light-phone/evidence.json",
+     "bytes": 90361,
+     "sha256": "3dc63895ad6fd3e597cac6a70c16279fd0f32f8b1a3363d3a265711aaa78e1a4",
+     "fields": {
+      "project": "webkit-light-phone",
+      "test": "the Antigravity account picker: Default on the Gemini key, a Google account with what is left",
+      "browser": "26.6",
+      "timings": [],
+      "unhandled": [],
+      "pageErrors": []
+     }
+    }
+   ]
+  }
+ ]
+}

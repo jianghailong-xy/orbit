@@ -171,6 +171,31 @@ export interface TaskDispatchRefusal {
   reason: string;
 }
 
+/**
+ * The structured diagnosis a RESOLUTION refusal left on the session (`session.source_refusal_detail`,
+ * migration 0231), as the owner-side session reads carry it.
+ *
+ * One key is not the runner's: `fixAction`, which the control plane writes beside the runner's
+ * `detail` in the same statement that writes the code (`session-source.ts#pinSessionSource`). §10.1
+ * pairs every code with exactly one executable next step, and a client that derives the pairing
+ * itself is a second copy of that table free to disagree with the first (SR49) — so it travels with
+ * the code and a card reads it rather than recomputing it.
+ *
+ * Everything else is §10.1's fifth column: display-only, and its shape is the runner's to choose
+ * (SR48) — the ref it could not resolve, `refAuthority`, `remoteName`, git's own `stderr`, a `sha`.
+ * The three the clients read are named; the rest rides the open index rather than being re-declared
+ * here, where it would become a schema the runner never agreed to.
+ */
+export interface SessionSourceRefusalDetail {
+  /** §10.1's pairing for the code beside it: `SOURCE_FIX_ACTIONS[code]`, always present. */
+  fixAction: SourceFixAction;
+  /** The ref the selector resolved, for the `BASE_REF_NOT_FOUND` family (§10.1's `ref`). */
+  ref?: string;
+  /** The runner's own words — where git says why a ref is not there or an authority did not answer. */
+  stderr?: string;
+  [key: string]: unknown;
+}
+
 export interface SourcePinRequest {
   /** The resolved commit — full 40-hex, lowercase. Rejected in any other shape. */
   baseSha?: string;

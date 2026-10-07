@@ -1,0 +1,57 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2-keyboard-window/regression-repeat-motion-flipped-attachment-desktop/<name>",
+ "files": [
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-attachment--motion.json",
+   "bytes": 12752,
+   "sha256": "9ea4138ceca95512a95c48182cbea69d52c328fed23cdf58a369a8727580bc56"
+  },
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-attachment--repeat-1--motion.json",
+   "bytes": 21824,
+   "sha256": "0e34916a37218413a3670619d01f6d59dd0dab3a1ce647579a3959727e784b20"
+  },
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-attachment--repeat-2--motion.json",
+   "bytes": 21183,
+   "sha256": "1035bcabcca1c249fb62fc433544b5e3cb11218637a2caa59658b96aa2ec8fbd"
+  },
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-attachment--repeat-3--motion.json",
+   "bytes": 20753,
+   "sha256": "7525f7502d4183bbc00c9d061a01edc727d8a331c94982c814b8b9b5d6b3ee8d"
+  },
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-attachment--repeat-4--motion.json",
+   "bytes": 21775,
+   "sha256": "e6d475af788b4f01ea94fccd1f08a458692fae2179702b647369bafe17a186c4"
+  },
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-attachment--repeat-5--motion.json",
+   "bytes": 21789,
+   "sha256": "c8380ef2e7cd0af3646b489ac51d3bd975df4f99751c8ba341102a96a7b6257c"
+  },
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-attachment--repeat-6--motion.json",
+   "bytes": 18406,
+   "sha256": "b5aa19315d0e02e6f5b2762aa5bc48bc6dc733c60cf421a8a3569adbb6ce99bf"
+  },
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-attachment--repeat-7--motion.json",
+   "bytes": 22217,
+   "sha256": "ae05b528e40d478a428dad4f7a515b25fa1ce75e29e341dd86ae1468b4f8856b"
+  },
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-attachment--repeat-8--motion.json",
+   "bytes": 22109,
+   "sha256": "f0a6b1e07e9d036ce464fc961b522b9309cf6406a7d8ca550f095af4f7e904a4"
+  },
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-attachment--repeat-9--motion.json",
+   "bytes": 18637,
+   "sha256": "3b7f6f6200186de8a15586eb7406fbee4ce8f6f3c81ba5073c7ce65c5da9598c"
+  }
+ ]
+}

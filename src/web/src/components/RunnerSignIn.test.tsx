@@ -302,10 +302,12 @@ describe('RunnerSignIn for Kimi', () => {
     ]);
   });
 
-  it('offers kimi.ai only on a runner that can be told the site', () => {
+  it('offers both sites on every runner, one too old to be told the site included', () => {
+    // Such a runner is refused kimi.ai at its next heartbeat, in words that say to update it: the
+    // choice itself is never taken away.
     const html = kimi(loginState({}), runner({ capabilities: ['session-worktree-ops-v1'] }));
-    expect(sites(html)).toEqual(['kimi.com · Mainland China', 'kimi.ai · International (disabled)']);
-    expect(html).toContain('This runner signs in on kimi.com only. Update it to sign in with a kimi.ai account.');
+    expect(sites(html)).toEqual(['kimi.com · Mainland China', 'kimi.ai · International']);
+    expect(html).toContain('The two sites keep separate accounts — pick the one you signed up on.');
   });
 
   it('says why the last attempt failed above the choice', () => {
@@ -327,10 +329,10 @@ describe('RunnerSignIn for Kimi', () => {
     expect(com).toContain('Use kimi.ai instead');
   });
 
-  it('offers no other site where the runner could not be told it', () => {
+  it('offers the other site on a runner too old to be told it as well', () => {
     const html = kimi(device('https://www.kimi.com/code/authorize_device?user_code=7K06-QP86'), runner({ capabilities: [] }));
     expect(html).toContain('Open the kimi.com sign-in page');
-    expect(html).not.toContain('instead');
+    expect(html).toContain('Use kimi.ai instead');
     expect(html).toContain('Cancel');
   });
 

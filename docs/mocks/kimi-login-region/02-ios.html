@@ -70,7 +70,7 @@
         <li><span class="m-n">b</span><span><b>RunnerSignInModel.begin(region:)</b> 把站点带进 <code>POST /runners/:id/login</code>；设备码状态里的站点从 <code>model.url</code> 的域名读，和 web 同一条规则。</span></li>
       </ul>
       <ul class="m-notes zh">
-        <li><span class="m-n">c</span><span><b>旧 runner</b>（没声明 <code>kimi-login-region/v1</code>）：kimi.ai 按钮 disabled，说明换成「This runner signs in on kimi.com only. Update it to sign in with a kimi.ai account.」——和 web 第 7 点一样。</span></li>
+        <li><span class="m-n">c</span><span><b>旧 runner</b>（没声明 <code>kimi-login-region/v1</code>）：两个按钮照样都能点；kimi.com 是不带参数的登录，kimi.ai 会被服务端拒绝并提示先更新 runner——和 web 第 7、8 点一样（<code>KimiSite.named</code>）。</span></li>
         <li><span class="m-n">d</span><span>Android 没有 runner 登录卡，不涉及。</span></li>
       </ul>
     </div>

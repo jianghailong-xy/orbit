@@ -19,6 +19,7 @@ import { Badge } from '../components/ui/Badge';
 import { Button as OrbitButton } from '../components/ui/Button';
 import { Checkbox } from '../components/ui/Checkbox';
 import { useConfirm } from '../components/ui/ConfirmDialog';
+import { OverlayScope } from '../components/ui/Overlay';
 import { fullDate } from '../lib/accessTokens';
 import { authMethodsQuery } from '../lib/googleLink';
 import type { SignInMethods } from '../lib/queries';
@@ -41,6 +42,15 @@ interface CreateResult {
 
 export const GOOGLE_SIGN_IN_ONLY = 'Google sign-in only';
 export const UNLINK_GOOGLE = 'Unlink Google';
+/**
+ * What the Add-user dialog says under **Google sign-in only** (design §5.2): only a Gmail or Google
+ * Workspace address is one Google vouches for, so only that address can be linked by it. Any other
+ * address leaves the account without a password and without a way in.
+ */
+export const GOOGLE_SIGN_IN_ONLY_HINT =
+  'No password is set: they sign in with the Google account of this email address. That address must be a '
+  + 'Gmail or Google Workspace address — Google has to vouch for it. Any other address leaves this account '
+  + 'with no way to sign in: give them a password instead.';
 
 /**
  * How an account signs in (docs/google-sign-in-design.md §5.6: the list shows it, so an unusual
@@ -256,7 +266,7 @@ export function AdminUsersPage() {
           )}
           <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
             {googleOn && googleOnly
-              ? 'No password is set: they sign in with the Google account of this email address.'
+              ? GOOGLE_SIGN_IN_ONLY_HINT
               : 'A one-time password is generated and shown once after creating.'}
           </div>
         </Space>
@@ -271,7 +281,12 @@ export function AdminUsersPage() {
         width={1120}
         destroyOnHidden
       >
-        {tokensOf && <UserAccessTokens user={tokensOf} />}
+        {/* The table's revoke question is an Orbit popover: it stays inside this dialog's focus and layer. */}
+        {tokensOf && (
+          <OverlayScope>
+            <UserAccessTokens user={tokensOf} />
+          </OverlayScope>
+        )}
       </Modal>
     </div>
   );

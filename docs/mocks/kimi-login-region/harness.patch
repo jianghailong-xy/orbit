@@ -18,10 +18,10 @@ index 000000000..a0d567d37
 +</html>
 diff --git a/src/web/ui-migration/kimi-region-mock.tsx b/src/web/ui-migration/kimi-region-mock.tsx
 new file mode 100644
-index 000000000..bc8b587a4
+index 000000000..619c849df
 --- /dev/null
 +++ b/src/web/ui-migration/kimi-region-mock.tsx
-@@ -0,0 +1,84 @@
+@@ -0,0 +1,89 @@
 +// Design-mock harness (docs/mocks/kimi-login-region): the Providers page's "On your runners" card,
 +// shipped components and CSS, on synthetic REST data chosen by ?frame=. Not a test, not shipped.
 +import { App as AntApp, ConfigProvider } from 'antd';
@@ -52,7 +52,7 @@ index 000000000..bc8b587a4
 +
 +const runner = {
 +  id: RUNNER_ID, name: 'hpc', displayName: 'HPC', hostname: 'hpc-01', version: '0.68.0', online: true,
-+  capabilities: frame === 'old-runner' ? [] : ['kimi-login-region/v1'],
++  capabilities: frame.startsWith('old-runner') ? [] : ['kimi-login-region/v1'],
 +  engines: [
 +    { engine: 'claude', installed: true, version: '2.1.287 (Claude Code)', auth: 'yes', update },
 +    { engine: 'codex', installed: true, version: 'codex-cli 0.130.0', auth: 'yes', update },
@@ -65,7 +65,7 @@ index 000000000..bc8b587a4
 +  status: 'awaiting_approval', engine: 'kimi', account: null, message: null,
 +  url: `https://${host}/verify?user_code=62WK-UEL8`, userCode: '62WK-UEL8',
 +});
-+const login =
++let login =
 +  frame === 'device-com' ? device('auth.kimi.com')
 +  : frame === 'device-ai' ? device('auth.kimi.ai')
 +  : { status: null, engine: null, url: null, userCode: null, message: null, account: null };
@@ -81,6 +81,11 @@ index 000000000..bc8b587a4
 +  if (url.pathname === `/api/runners/${RUNNER_ID}/login`) {
 +    if (method === 'POST') {
 +      (window as unknown as { __loginBody?: unknown }).__loginBody = JSON.parse(String(init?.body ?? '{}'));
++      // An old runner refuses a named site at its next heartbeat (RunnerApiController.drainLoginRequest).
++      if (frame === 'old-runner-refused') {
++        login = { status: 'failed', engine: 'kimi', url: null, userCode: null, account: null,
++          message: 'This runner is too old to choose a Kimi site — update it, then try again.' };
++      }
 +      return json({ ...login, status: 'pending', engine: 'kimi' });
 +    }
 +    return json(login);

@@ -68,14 +68,21 @@ export function takeGoogleSignIn(): GoogleSignInStart | null {
   }
 }
 
+const TOO_MANY = 'Too many Google sign-ins from your network. Wait a minute, then continue with Google again.';
+
 /**
  * What to tell someone a Google sign-in failed for, by the code it failed with — a `google_error` the
- * callback sent back to /login (§4.1, §4.2) or the exchange's refusal (§4.3, §5.2, §5.5) — in words
- * that say what to do next. English: the Web has no i18n.
+ * start or the callback sent back to /login (§4.1, §4.2) or the exchange's refusal (§4.3, §5.2, §5.5) —
+ * in words that say what to do next. English: the Web has no i18n.
  */
 const FAILURES: Record<string, string> = {
   GOOGLE_NOT_CONFIGURED:
     'Google sign-in is turned off on this Orbit server. Sign in with your email and password, or ask an administrator to turn it on.',
+  GOOGLE_RATE_LIMITED: TOO_MANY,
+  GOOGLE_SIGN_IN_BUSY:
+    'Too many Google sign-ins are in progress on this Orbit server. Wait a few minutes, then continue with Google again, or sign in with your password.',
+  GOOGLE_BAD_REQUEST:
+    "Orbit couldn't start Google sign-in from this page. Reload the page, then continue with Google again; if it keeps failing, sign in with your password.",
   GOOGLE_FLOW_EXPIRED:
     'That Google sign-in expired or was finished in a different browser. Continue with Google again from this page.',
   GOOGLE_CANCELLED: 'Google sign-in was cancelled. Continue with Google to try again, or sign in with your password.',
@@ -97,7 +104,6 @@ const FAILURES: Record<string, string> = {
   ACCOUNT_DISABLED: 'This Orbit account is disabled. Ask an administrator to enable it again.',
 };
 
-const TOO_MANY = 'Too many Google sign-ins from your network. Wait a minute, then continue with Google again.';
 const UNKNOWN = "Couldn't sign in with Google. Continue with Google to try again, or sign in with your password.";
 
 /** Google's answer came to a tab that holds no verifier for it: the ticket was spent unused (§3.2 rule 2). */

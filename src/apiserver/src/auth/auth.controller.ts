@@ -1,5 +1,7 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Optional, Post, UseGuards } from '@nestjs/common';
+import { MANAGED_RUNNER_CONTRACT_VERSION, type ServerCapabilities } from '@orbit/shared';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
+import { MANAGED_RUNNER_GATE, MANAGED_RUNNERS_OFF, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import { AuthService } from './auth.service';
 import { BootstrapDto, ChangePasswordDto, LoginDto, RefreshDto } from './dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -9,10 +11,16 @@ import { SignInProvidersService } from './sign-in-providers.service';
 @PatForbidden('AUTH')
 @Controller('auth')
 export class AuthController {
+  private readonly managedRunners: ManagedRunnerGate;
+
   constructor(
     private readonly auth: AuthService,
     private readonly signIn: SignInProvidersService,
-  ) {}
+    // The process's managed runner switch; a module graph without it has the feature off.
+    @Optional() @Inject(MANAGED_RUNNER_GATE) managedRunners?: ManagedRunnerGate,
+  ) {
+    this.managedRunners = managedRunners ?? MANAGED_RUNNERS_OFF;
+  }
 
   @Post('login')
   login(@Body() dto: LoginDto) {
@@ -50,6 +58,17 @@ export class AuthController {
   @Post('logout')
   logout(@Body() dto: RefreshDto) {
     return this.auth.logout(dto.refreshToken);
+  }
+
+  /** What optional features this server offers a signed-in client (docs/managed-runner-design.md,
+   *  "Server and three client interfaces"). Answered from the process's switch alone: it reads no
+   *  cluster, allocates nothing and writes nothing. */
+  @UseGuards(JwtAuthGuard)
+  @Get('capabilities')
+  capabilities(): ServerCapabilities {
+    return {
+      managedRunners: { enabled: this.managedRunners.enabled, contractVersion: MANAGED_RUNNER_CONTRACT_VERSION },
+    };
   }
 
   @UseGuards(JwtAuthGuard)

@@ -1,5 +1,11 @@
 # P2.1 第二版：抽屉分隔线与一致状态对照
 
+> **证据瘦身（2026-10-07）**：完整原件见提交 `7732f14f82d4e6b4406d7d164c4b672f63aa0f56`（瘦身前最后一个含完整文件的提交）。取回单个文件用 `git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2.1/revision-2/<路径> > <文件>`，整个目录用 `git archive 7732f14f82d4e6b4406d7d164c4b672f63aa0f56 docs/evidence/base-ui-migration/p2.1/revision-2 | tar -x -C <空目录>`。
+>
+> 本目录在瘦身中：5 份 Playwright 报告换成同目录的 `report.summary.json`，都只删附件正文；98 个逐用例 JSON（含打包的 attachments.tar.gz）换成所在目录的 `attachments.summary.json`（文件名、字节数、SHA-256 和顶层标量字段）；删除 31 张与本任务目录里保留副本逐字节相同的重复截图。下文链接若指向这些文件，按上面的命令从该提交取回；读取它们的脚本要在取回的目录里运行。
+>
+> 目录里的 SHA256SUMS 类清单（`*.sha256`、`artifact-index*.json`、`manifest.json`、各运行 `summary.json` 里的附件哈希等）保留原文件，核验的是提交 `7732f14f8` 里的文件。做法、保留理由和逐文件删除清单见 [evidence-slimming](../../evidence-slimming/README.md)。
+
 任务 `34Za393HPMLVyuXAdfv3j`，项目验收 key `1BvO6hYrlFnU60JqxQPUHt`，原文：**P2：Orbit 自有弹层、选择及反馈组件保持现有键盘、焦点、通知和确认行为。** 本任务仍只承担弹窗、抽屉、确认和共存基础。原实现为 `9429c189f604251685b26c0329b5dd31e7014b05`，本次修复为 `e3f53d40246c005aac7c3e1060f0734d38afbb47`。
 
 此版回应[第一版独立验收 SEND_BACK](send-back.json)，保留[第一版实现/行为说明](../README.md)、全部原始证据和验收者的[复核日志](reviewer-checks/)。返修只修改抽屉局部分隔线变量、外观对照测试及其 fixture；Dialog/Drawer/Confirm 的交互实现未改。没有业务路由、REST/SSE、全局配色、依赖或历史基线变更。

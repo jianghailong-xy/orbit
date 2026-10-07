@@ -1,0 +1,445 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/node_modules/.bin/playwright",
+   "test",
+   "pilot.browser.mjs",
+   "--config",
+   "ui-migration/pilot.config.mjs",
+   "--update-snapshots=all",
+   "--project",
+   "webkit-dark-desktop",
+   "-g",
+   "dependencies, inputs and comments",
+   "--repeat-each=3"
+  ],
+  "configFile": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration/pilot.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/pilot-rerun-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "pilot*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/pilot-rerun-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "pilot*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/pilot-rerun-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "pilot*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/pilot-rerun-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "pilot*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/pilot-rerun-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "pilot*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/pilot-rerun-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "pilot*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/pilot-rerun-out",
+    "repeatEach": 3,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "pilot*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/pilot-rerun-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "pilot*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/var/tmp/p4.1-293463/runs/pilot-rerun-out/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "all",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run preview -- --host 127.0.0.1 --port 4321 --strictPort",
+   "cwd": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/",
+   "url": "http://127.0.0.1:4321",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "pilot.browser.mjs",
+   "file": "pilot.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [],
+   "suites": [
+    {
+     "title": "task detail pilot",
+     "file": "pilot.browser.mjs",
+     "line": 70,
+     "column": 6,
+     "specs": [
+      {
+       "title": "dependencies, inputs and comments",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 0,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 7496,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun-shots/webkit-dark-desktop/pilot-dependencies.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun-shots/webkit-dark-desktop/pilot-dependency-view-hover.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun-shots/webkit-dark-desktop/pilot-dependency-list.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun-shots/webkit-dark-desktop/pilot-prerequisite-open.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun-shots/webkit-dark-desktop/pilot-inputs.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun-shots/webkit-dark-desktop/pilot-remove-confirm.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun-shots/webkit-dark-desktop/pilot-comment-mention.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:51:06.155Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "pilot-dependencies-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun-shots/webkit-dark-desktop/pilot-dependencies.png"
+            },
+            {
+             "name": "pilot-dependencies-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun-out/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-webkit-dark-desktop/pilot-dependencies-actual.png"
+            },
+            {
+             "name": "pilot-dependency-view-hover-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun-shots/webkit-dark-desktop/pilot-dependency-view-hover.png"
+            },
+            {
+             "name": "pilot-dependency-view-hover-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun-out/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-webkit-dark-desktop/pilot-dependency-view-hover-actual.png"
+            },
+            {
+             "name": "pilot-dependency-list-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun-shots/webkit-dark-desktop/pilot-dependency-list.png"
+            },
+            {
+             "name": "pilot-dependency-list-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun-out/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-webkit-dark-desktop/pilot-dependency-list-actual.png"
+            },
+            {
+             "name": "pilot-prerequisite-open-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun-shots/webkit-dark-desktop/pilot-prerequisite-open.png"
+            },
+            {
+             "name": "pilot-prerequisite-open-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun-out/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-webkit-dark-desktop/pilot-prerequisite-open-actual.png"
+            },
+            {
+             "name": "pilot-inputs-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun-shots/webkit-dark-desktop/pilot-inputs.png"
+            },
+            {
+             "name": "pilot-inputs-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun-out/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-webkit-dark-desktop/pilot-inputs-actual.png"
+            },
+            {
+             "name": "pilot-remove-confirm-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun-shots/webkit-dark-desktop/pilot-remove-confirm.png"
+            },
+            {
+             "name": "pilot-remove-confirm-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun-out/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-webkit-dark-desktop/pilot-remove-confirm-actual.png"
+            },
+            {
+             "name": "pilot-comment-mention-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun-shots/webkit-dark-desktop/pilot-comment-mention.png"
+            },
+            {
+             "name": "pilot-comment-mention-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun-out/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-webkit-dark-desktop/pilot-comment-mention-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun-out/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-webkit-dark-desktop/attachments/computed-styles-and-timings-fea057754559ee10941c5a8cb45eba7de94a5ed1.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "d4114f9e53caa5d81e7d-4be1fdd59c1e9583bd1d",
+       "file": "pilot.browser.mjs",
+       "line": 152,
+       "column": 3
+      },
+      {
+       "title": "dependencies, inputs and comments",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 1,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 7285,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:51:14.163Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun-out/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-webkit-dark-desktop-repeat1/attachments/computed-styles-and-timings-be6e4591b874785bd31a907894d3161bfc431986.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "d4114f9e53caa5d81e7d-0323a5f4eff9c9e52ec1",
+       "file": "pilot.browser.mjs",
+       "line": 152,
+       "column": 3
+      },
+      {
+       "title": "dependencies, inputs and comments",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 2,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 6262,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:51:21.924Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun-out/pilot.browser.mjs-task-det-c16d2-dencies-inputs-and-comments-webkit-dark-desktop-repeat2/attachments/computed-styles-and-timings-4bb1d90cc94429ed1e8589b91b6262a3530214d6.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "d4114f9e53caa5d81e7d-b2297f1ad07fea651bb7",
+       "file": "pilot.browser.mjs",
+       "line": 152,
+       "column": 3
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-07T15:51:05.198Z",
+  "duration": 23189.016,
+  "expected": 3,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}
