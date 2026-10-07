@@ -33,8 +33,8 @@ export const GOOGLE_TICKET_TTL_MS = 2 * 60_000;
 /**
  * How many sign-ins may be waiting on Google at once, across the deployment (§7.4). /start writes a
  * row for anyone who asks, so the table is bounded here rather than by the rate limit alone: past it
- * a start is refused 503 until rows end or are swept. Far above what people signing in reach — each
- * is one row for at most ten minutes — so only a flood meets it.
+ * a start is refused (GOOGLE_SIGN_IN_BUSY, §4.1; a link 503) until rows end or are swept. Far above
+ * what people signing in reach — each is one row for at most ten minutes — so only a flood meets it.
  */
 export const GOOGLE_PENDING_FLOW_CAP = 10_000;
 /**
