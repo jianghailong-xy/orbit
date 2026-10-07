@@ -1,0 +1,47 @@
+{
+  "target": "orbit-field",
+  "sequence": "select-down-pagedown-enter",
+  "control": "select-down-enter",
+  "mode": "paced",
+  "run": 12,
+  "keys": [
+    "ArrowDown",
+    "PageDown",
+    "Enter"
+  ],
+  "from": "Never",
+  "before": "never",
+  "after": "never",
+  "result": "never | list closed",
+  "listOpen": false,
+  "active": "combobox:Expires",
+  "keyLog": [
+    {
+      "key": "ArrowDown",
+      "t": 60.3,
+      "target": "combobox:Expires",
+      "trusted": true,
+      "focused": "combobox:Expires",
+      "listbox": false,
+      "highlighted": null
+    },
+    {
+      "key": "PageDown",
+      "t": 390.8,
+      "target": "option:Never",
+      "trusted": true,
+      "focused": "option:Never",
+      "listbox": true,
+      "highlighted": "Never"
+    },
+    {
+      "key": "Enter",
+      "t": 698.5,
+      "target": "option:Never",
+      "trusted": true,
+      "focused": "option:Never",
+      "listbox": true,
+      "highlighted": "Never"
+    }
+  ]
+}

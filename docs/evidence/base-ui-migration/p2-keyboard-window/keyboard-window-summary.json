@@ -47440,9 +47440,9 @@
   }
  },
  "dataset:fix-select-after": {
-  "scope": "fix-select-after-down + fix-select-after-down-enter",
+  "scope": "fix-select-after-down + fix-select-after-down-7-enter + fix-select-after-down-end-enter + fix-select-after-down-enter + fix-select-after-down-enter-from-7 + fix-select-after-down-home-enter + fix-select-after-down-n-enter + fix-select-after-down-pagedown-enter + fix-select-after-down-pageup-enter + fix-select-after-down-space + fix-select-after-down-space-from-null + fix-select-after-enter-down-enter + fix-select-after-space-down-enter",
   "playwright": {
-   "expected": 240,
+   "expected": 1480,
    "unexpected": 0,
    "skipped": 0,
    "flaky": 0
@@ -47467,6 +47467,48 @@
     "burstWrong": 0,
     "wrong": []
    },
+   "antd-sample select-down-7-enter": {
+    "keys": [
+     "ArrowDown",
+     "7",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "Never | list closed": 20
+    },
+    "burst": {
+     "Never | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 0,
+    "reference": "Never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "antd-sample select-down-end-enter": {
+    "keys": [
+     "ArrowDown",
+     "End",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "Never | list closed": 20
+    },
+    "burst": {
+     "Never | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 0,
+    "reference": "Never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
    "antd-sample select-down-enter": {
     "keys": [
      "ArrowDown",
@@ -47483,6 +47525,207 @@
     "windowHits": 20,
     "handedOver": 0,
     "reference": "Never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "antd-sample select-down-enter-from-7": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": null,
+    "paced": {
+     "7 days | list closed": 20
+    },
+    "burst": {
+     "7 days | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 0,
+    "reference": "7 days | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "antd-sample select-down-home-enter": {
+    "keys": [
+     "ArrowDown",
+     "Home",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": "select-down-enter-from-7",
+    "paced": {
+     "7 days | list closed": 20
+    },
+    "burst": {
+     "7 days | list closed": 19,
+     "7 days | list open": 1
+    },
+    "windowHits": 20,
+    "handedOver": 0,
+    "reference": "7 days | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 1,
+    "wrong": [
+     {
+      "file": "chromium-dark-desktop--antd-sample-select-down-home-enter-burst-sample-18--keyboard-window.json",
+      "result": "7 days | list open",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 22.7,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 36.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 36.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     }
+    ]
+   },
+   "antd-sample select-down-n-enter": {
+    "keys": [
+     "ArrowDown",
+     "n",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": "select-down-enter-from-7",
+    "paced": {
+     "7 days | list closed": 20
+    },
+    "burst": {
+     "7 days | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 0,
+    "reference": "7 days | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "antd-sample select-down-pagedown-enter": {
+    "keys": [
+     "ArrowDown",
+     "PageDown",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "Never | list closed": 20
+    },
+    "burst": {
+     "Never | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 0,
+    "reference": "Never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "antd-sample select-down-pageup-enter": {
+    "keys": [
+     "ArrowDown",
+     "PageUp",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": "select-down-enter-from-7",
+    "paced": {
+     "7 days | list closed": 20
+    },
+    "burst": {
+     "7 days | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 0,
+    "reference": "7 days | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "antd-sample select-down-space": {
+    "keys": [
+     "ArrowDown",
+     "Space"
+    ],
+    "from": "Never",
+    "control": "select-down",
+    "paced": {
+     "Never | list open": 20
+    },
+    "burst": {
+     "Never | list open": 20
+    },
+    "windowHits": 20,
+    "handedOver": 0,
+    "reference": "Never | list open",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "antd-sample select-enter-down-enter": {
+    "keys": [
+     "Enter",
+     "ArrowDown",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "7 days | list closed": 20
+    },
+    "burst": {
+     "7 days | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 0,
+    "reference": "7 days | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "antd-sample select-space-down-enter": {
+    "keys": [
+     "Space",
+     "ArrowDown",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "7 days | list closed": 20
+    },
+    "burst": {
+     "7 days | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 0,
+    "reference": "7 days | list closed",
     "pacedUnanimous": true,
     "burstWrong": 0,
     "wrong": []
@@ -47506,6 +47749,889 @@
     "burstWrong": 0,
     "wrong": []
    },
+   "orbit-field select-down-7-enter": {
+    "keys": [
+     "ArrowDown",
+     "7",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "7 | list closed": 20
+    },
+    "burst": {
+     "7 | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "7 | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-field select-down-end-enter": {
+    "keys": [
+     "ArrowDown",
+     "End",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "never | list open": 20
+    },
+    "burst": {
+     "never | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "never | list open",
+    "pacedUnanimous": true,
+    "burstWrong": 20,
+    "wrong": [
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-0--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 68.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 98.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 98.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 99.4,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-1--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 54,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 74.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 75.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 75.7,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-10--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 50.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 73.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 73.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 74,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-11--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 49.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 72.3,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 72.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 73.2,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-12--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 47.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 67.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 67.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 68.4,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-13--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 60,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 84.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 85.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 85.9,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-14--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 48.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 68.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 68.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 69.2,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-15--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 46.3,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 66.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 66.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 67.3,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-16--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 47.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 68.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 68.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 69.5,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-17--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 70.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 103.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 103.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 104.3,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-18--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 51.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 73.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 73.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 74.5,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-19--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 56,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 75.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 75.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 76.5,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-2--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 90.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 115,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 115.3,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 116,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-3--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 103.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 144.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 144.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 145,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-4--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 45.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 66.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 67,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 67.6,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-5--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 38.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 61.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 61.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 62.2,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-6--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 61.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 80.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 80.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 81.5,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-7--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 62,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 91.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 91.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 92.3,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-8--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 62.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 84.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 84.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 85.3,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-end-enter-burst-sample-9--keyboard-window.json",
+      "result": "never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 60.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 85.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 85.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 86.5,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     }
+    ]
+   },
    "orbit-field select-down-enter": {
     "keys": [
      "ArrowDown",
@@ -47522,6 +48648,1514 @@
     "windowHits": 20,
     "handedOver": 20,
     "reference": "never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-field select-down-enter-from-7": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": null,
+    "paced": {
+     "7 | list closed": 20
+    },
+    "burst": {
+     "7 | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "7 | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-field select-down-home-enter": {
+    "keys": [
+     "ArrowDown",
+     "Home",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": "select-down-enter-from-7",
+    "paced": {
+     "never | list closed": 20
+    },
+    "burst": {
+     "7 | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 20,
+    "wrong": [
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-home-enter-burst-sample-0--keyboard-window.json",
+      "result": "7 | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 21,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 32.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 32.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 32.9,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-home-enter-burst-sample-1--keyboard-window.json",
+      "result": "7 | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 15.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 26.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 26.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 27,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-home-enter-burst-sample-10--keyboard-window.json",
+      "result": "7 | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 13,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 24.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 24.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 24.9,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-home-enter-burst-sample-11--keyboard-window.json",
+      "result": "7 | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 21.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 32.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 32.3,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 32.6,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-home-enter-burst-sample-12--keyboard-window.json",
+      "result": "7 | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 20.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 30.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 30.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 31.2,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-home-enter-burst-sample-13--keyboard-window.json",
+      "result": "7 | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 12.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 22.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 22.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 23,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-home-enter-burst-sample-14--keyboard-window.json",
+      "result": "7 | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 10.3,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 21.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 21.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 21.8,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-home-enter-burst-sample-15--keyboard-window.json",
+      "result": "7 | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 9.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 20.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 20.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 20.7,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-home-enter-burst-sample-16--keyboard-window.json",
+      "result": "7 | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 20.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 32.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 32.3,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 32.5,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-home-enter-burst-sample-17--keyboard-window.json",
+      "result": "7 | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 16.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 26.3,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 26.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 26.7,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-home-enter-burst-sample-18--keyboard-window.json",
+      "result": "7 | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 22.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 32.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 33,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 33.2,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-home-enter-burst-sample-19--keyboard-window.json",
+      "result": "7 | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 7.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 19.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 19.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 19.9,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-home-enter-burst-sample-2--keyboard-window.json",
+      "result": "7 | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 20.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 32.3,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 32.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 32.7,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-home-enter-burst-sample-3--keyboard-window.json",
+      "result": "7 | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 15.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 25.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 25.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 25.8,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-home-enter-burst-sample-4--keyboard-window.json",
+      "result": "7 | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 22.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 33.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 33.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 33.9,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-home-enter-burst-sample-5--keyboard-window.json",
+      "result": "7 | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 18.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 30.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 31,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 31.1,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-home-enter-burst-sample-6--keyboard-window.json",
+      "result": "7 | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 22.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 34,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 34.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 34.4,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-home-enter-burst-sample-7--keyboard-window.json",
+      "result": "7 | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 11.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 21.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 21.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 22,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-home-enter-burst-sample-8--keyboard-window.json",
+      "result": "7 | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 16.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 27.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 27.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 27.9,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-home-enter-burst-sample-9--keyboard-window.json",
+      "result": "7 | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 13.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 25,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 25.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 25.3,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     }
+    ]
+   },
+   "orbit-field select-down-n-enter": {
+    "keys": [
+     "ArrowDown",
+     "n",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": "select-down-enter-from-7",
+    "paced": {
+     "never | list closed": 20
+    },
+    "burst": {
+     "never | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-field select-down-pagedown-enter": {
+    "keys": [
+     "ArrowDown",
+     "PageDown",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "never | list closed": 20
+    },
+    "burst": {
+     "never | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-field select-down-pageup-enter": {
+    "keys": [
+     "ArrowDown",
+     "PageUp",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": "select-down-enter-from-7",
+    "paced": {
+     "7 | list closed": 20
+    },
+    "burst": {
+     "7 | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "7 | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-field select-down-space": {
+    "keys": [
+     "ArrowDown",
+     "Space"
+    ],
+    "from": "Never",
+    "control": "select-down",
+    "paced": {
+     "never | list closed": 20
+    },
+    "burst": {
+     "never | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 0,
+    "reference": "never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-field select-down-space-from-null": {
+    "keys": [
+     "ArrowDown",
+     "Space"
+    ],
+    "from": null,
+    "control": null,
+    "paced": {
+     "never | list closed": 20
+    },
+    "burst": {
+     "null | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 0,
+    "reference": "never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 20,
+    "wrong": [
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-space-from-null-burst-sample-0--keyboard-window.json",
+      "result": "null | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 61,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": " ",
+        "t": 91.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-space-from-null-burst-sample-1--keyboard-window.json",
+      "result": "null | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 46.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": " ",
+        "t": 78.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-space-from-null-burst-sample-10--keyboard-window.json",
+      "result": "null | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 57.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": " ",
+        "t": 89,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-space-from-null-burst-sample-11--keyboard-window.json",
+      "result": "null | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 49.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": " ",
+        "t": 74.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-space-from-null-burst-sample-12--keyboard-window.json",
+      "result": "null | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 44.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": " ",
+        "t": 63.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-space-from-null-burst-sample-13--keyboard-window.json",
+      "result": "null | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 43.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": " ",
+        "t": 63.3,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-space-from-null-burst-sample-14--keyboard-window.json",
+      "result": "null | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 30.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": " ",
+        "t": 50.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-space-from-null-burst-sample-15--keyboard-window.json",
+      "result": "null | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 41.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": " ",
+        "t": 60.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-space-from-null-burst-sample-16--keyboard-window.json",
+      "result": "null | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 38.3,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": " ",
+        "t": 50.3,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-space-from-null-burst-sample-17--keyboard-window.json",
+      "result": "null | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 36.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": " ",
+        "t": 57.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-space-from-null-burst-sample-18--keyboard-window.json",
+      "result": "null | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 36.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": " ",
+        "t": 58.3,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-space-from-null-burst-sample-19--keyboard-window.json",
+      "result": "null | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 47,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": " ",
+        "t": 64.7,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-space-from-null-burst-sample-2--keyboard-window.json",
+      "result": "null | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 56.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": " ",
+        "t": 77.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-space-from-null-burst-sample-3--keyboard-window.json",
+      "result": "null | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 52.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": " ",
+        "t": 85.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-space-from-null-burst-sample-4--keyboard-window.json",
+      "result": "null | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 60.1,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": " ",
+        "t": 86.8,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-space-from-null-burst-sample-5--keyboard-window.json",
+      "result": "null | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 57,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": " ",
+        "t": 81.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-space-from-null-burst-sample-6--keyboard-window.json",
+      "result": "null | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 44.3,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": " ",
+        "t": 72.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-space-from-null-burst-sample-7--keyboard-window.json",
+      "result": "null | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 49.2,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": " ",
+        "t": 72.5,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-space-from-null-burst-sample-8--keyboard-window.json",
+      "result": "null | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 61.9,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": " ",
+        "t": 95.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-field-select-down-space-from-null-burst-sample-9--keyboard-window.json",
+      "result": "null | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 44.6,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": " ",
+        "t": 67.4,
+        "target": "combobox:Expires",
+        "trusted": true,
+        "focused": "combobox:Expires",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     }
+    ]
+   },
+   "orbit-field select-enter-down-enter": {
+    "keys": [
+     "Enter",
+     "ArrowDown",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "7 | list closed": 20
+    },
+    "burst": {
+     "7 | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "7 | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-field select-space-down-enter": {
+    "keys": [
+     "Space",
+     "ArrowDown",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "7 | list closed": 20
+    },
+    "burst": {
+     "7 | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "7 | list closed",
     "pacedUnanimous": true,
     "burstWrong": 0,
     "wrong": []
@@ -47545,6 +50179,889 @@
     "burstWrong": 0,
     "wrong": []
    },
+   "orbit-sample select-down-7-enter": {
+    "keys": [
+     "ArrowDown",
+     "7",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "7 days | list closed": 20
+    },
+    "burst": {
+     "7 days | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "7 days | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-sample select-down-end-enter": {
+    "keys": [
+     "ArrowDown",
+     "End",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "Never | list open": 20
+    },
+    "burst": {
+     "Never | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "Never | list open",
+    "pacedUnanimous": true,
+    "burstWrong": 20,
+    "wrong": [
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-end-enter-burst-sample-0--keyboard-window.json",
+      "result": "Never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 48.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 69.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 69.7,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 70.4,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-end-enter-burst-sample-1--keyboard-window.json",
+      "result": "Never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 56.7,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 77,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 77.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 77.8,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-end-enter-burst-sample-10--keyboard-window.json",
+      "result": "Never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 70.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 97,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 97.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 97.9,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-end-enter-burst-sample-11--keyboard-window.json",
+      "result": "Never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 51.9,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 72.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 72.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 73,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-end-enter-burst-sample-12--keyboard-window.json",
+      "result": "Never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 70.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 96.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 96.7,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 97.3,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-end-enter-burst-sample-13--keyboard-window.json",
+      "result": "Never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 62.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 94.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 94.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 95.2,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-end-enter-burst-sample-14--keyboard-window.json",
+      "result": "Never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 42.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 64.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 64.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 65.6,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-end-enter-burst-sample-15--keyboard-window.json",
+      "result": "Never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 59.7,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 83.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 83.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 84.4,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-end-enter-burst-sample-16--keyboard-window.json",
+      "result": "Never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 60.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 94.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 94.7,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 95.5,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-end-enter-burst-sample-17--keyboard-window.json",
+      "result": "Never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 55.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 77.7,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 77.9,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 78.4,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-end-enter-burst-sample-18--keyboard-window.json",
+      "result": "Never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 47.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 72.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 72.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 73.1,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-end-enter-burst-sample-19--keyboard-window.json",
+      "result": "Never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 69.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 95,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 95.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 96,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-end-enter-burst-sample-2--keyboard-window.json",
+      "result": "Never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 58.7,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 84.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 84.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 85.5,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-end-enter-burst-sample-3--keyboard-window.json",
+      "result": "Never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 52.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 73.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 73.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 73.9,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-end-enter-burst-sample-4--keyboard-window.json",
+      "result": "Never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 49.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 75.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 75.7,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 76.3,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-end-enter-burst-sample-5--keyboard-window.json",
+      "result": "Never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 48.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 68,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 68.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 68.9,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-end-enter-burst-sample-6--keyboard-window.json",
+      "result": "Never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 58.9,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 80.9,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 81.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 81.9,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-end-enter-burst-sample-7--keyboard-window.json",
+      "result": "Never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 55.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 78.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 78.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 79.1,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-end-enter-burst-sample-8--keyboard-window.json",
+      "result": "Never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 75.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 101.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 101.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 102.3,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-end-enter-burst-sample-9--keyboard-window.json",
+      "result": "Never | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 78.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "End",
+        "t": 106,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 106.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "Never"
+       },
+       {
+        "key": "Enter",
+        "t": 106.9,
+        "target": "option:Never",
+        "trusted": false,
+        "focused": "option:Never",
+        "listbox": true,
+        "highlighted": "Never"
+       }
+      ]
+     }
+    ]
+   },
    "orbit-sample select-down-enter": {
     "keys": [
      "ArrowDown",
@@ -47561,6 +51078,1013 @@
     "windowHits": 20,
     "handedOver": 20,
     "reference": "Never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-sample select-down-enter-from-7": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": null,
+    "paced": {
+     "7 days | list closed": 20
+    },
+    "burst": {
+     "7 days | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "7 days | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-sample select-down-home-enter": {
+    "keys": [
+     "ArrowDown",
+     "Home",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": "select-down-enter-from-7",
+    "paced": {
+     "Never | list closed": 20
+    },
+    "burst": {
+     "7 days | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "Never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 20,
+    "wrong": [
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-home-enter-burst-sample-0--keyboard-window.json",
+      "result": "7 days | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 17.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 28.9,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 29.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 29.4,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-home-enter-burst-sample-1--keyboard-window.json",
+      "result": "7 days | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 12,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 22.7,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 22.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 23.1,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-home-enter-burst-sample-10--keyboard-window.json",
+      "result": "7 days | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 7.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 19.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 19.9,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 20.2,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-home-enter-burst-sample-11--keyboard-window.json",
+      "result": "7 days | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 24,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 35.9,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 36.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 36.3,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-home-enter-burst-sample-12--keyboard-window.json",
+      "result": "7 days | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 8.7,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 19.9,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 20.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 20.3,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-home-enter-burst-sample-13--keyboard-window.json",
+      "result": "7 days | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 22,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 33.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 33.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 33.8,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-home-enter-burst-sample-14--keyboard-window.json",
+      "result": "7 days | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 10.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 21.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 21.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 21.6,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-home-enter-burst-sample-15--keyboard-window.json",
+      "result": "7 days | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 13.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 24.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 24.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 24.9,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-home-enter-burst-sample-16--keyboard-window.json",
+      "result": "7 days | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 12.7,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 26.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 26.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 26.4,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-home-enter-burst-sample-17--keyboard-window.json",
+      "result": "7 days | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 17.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 29.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 29.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 30.1,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-home-enter-burst-sample-18--keyboard-window.json",
+      "result": "7 days | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 7.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 19.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 19.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 20.1,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-home-enter-burst-sample-19--keyboard-window.json",
+      "result": "7 days | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 9.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 21.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 21.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 21.6,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-home-enter-burst-sample-2--keyboard-window.json",
+      "result": "7 days | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 9.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 20,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 20.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 20.4,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-home-enter-burst-sample-3--keyboard-window.json",
+      "result": "7 days | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 19,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 31.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 31.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 31.9,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-home-enter-burst-sample-4--keyboard-window.json",
+      "result": "7 days | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 18.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 30.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 30.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 30.8,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-home-enter-burst-sample-5--keyboard-window.json",
+      "result": "7 days | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 14.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 25.4,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 25.5,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 25.8,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-home-enter-burst-sample-6--keyboard-window.json",
+      "result": "7 days | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 8.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 19.7,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 19.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 20.1,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-home-enter-burst-sample-7--keyboard-window.json",
+      "result": "7 days | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 17.3,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 30,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 30.2,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 30.4,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-home-enter-burst-sample-8--keyboard-window.json",
+      "result": "7 days | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 13.6,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 25.8,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 26,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 26.3,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     },
+     {
+      "file": "chromium-dark-desktop--orbit-sample-select-down-home-enter-burst-sample-9--keyboard-window.json",
+      "result": "7 days | list closed",
+      "keyLog": [
+       {
+        "key": "ArrowDown",
+        "t": 20.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": false,
+        "highlighted": null
+       },
+       {
+        "key": "Home",
+        "t": 31,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 31.1,
+        "target": "combobox:Sample choice",
+        "trusted": true,
+        "focused": "combobox:Sample choice",
+        "listbox": true,
+        "highlighted": "7 days"
+       },
+       {
+        "key": "Enter",
+        "t": 31.4,
+        "target": "option:7 days",
+        "trusted": false,
+        "focused": "option:7 days",
+        "listbox": true,
+        "highlighted": "7 days"
+       }
+      ]
+     }
+    ]
+   },
+   "orbit-sample select-down-n-enter": {
+    "keys": [
+     "ArrowDown",
+     "n",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": "select-down-enter-from-7",
+    "paced": {
+     "Never | list closed": 20
+    },
+    "burst": {
+     "Never | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "Never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-sample select-down-pagedown-enter": {
+    "keys": [
+     "ArrowDown",
+     "PageDown",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "Never | list closed": 20
+    },
+    "burst": {
+     "Never | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "Never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-sample select-down-pageup-enter": {
+    "keys": [
+     "ArrowDown",
+     "PageUp",
+     "Enter"
+    ],
+    "from": "7 days",
+    "control": "select-down-enter-from-7",
+    "paced": {
+     "7 days | list closed": 20
+    },
+    "burst": {
+     "7 days | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "7 days | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-sample select-down-space": {
+    "keys": [
+     "ArrowDown",
+     "Space"
+    ],
+    "from": "Never",
+    "control": "select-down",
+    "paced": {
+     "Never | list closed": 20
+    },
+    "burst": {
+     "Never | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 0,
+    "reference": "Never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-sample select-enter-down-enter": {
+    "keys": [
+     "Enter",
+     "ArrowDown",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "7 days | list closed": 20
+    },
+    "burst": {
+     "7 days | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "7 days | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-sample select-space-down-enter": {
+    "keys": [
+     "Space",
+     "ArrowDown",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": "select-down-enter",
+    "paced": {
+     "7 days | list closed": 20
+    },
+    "burst": {
+     "7 days | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "7 days | list closed",
     "pacedUnanimous": true,
     "burstWrong": 0,
     "wrong": []
@@ -47589,6 +52113,70 @@
     "antdWindowHits": 0,
     "decision": "control"
    },
+   "select-down-7-enter": {
+    "orbitBurstWrong": {
+     "orbit-field": "0/20",
+     "orbit-sample": "0/20"
+    },
+    "orbitPaced": {
+     "orbit-field": "7 | list closed",
+     "orbit-sample": "7 days | list closed"
+    },
+    "orbitWindowHits": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "orbitHandedOver": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "antdPaced": "Never | list closed",
+    "antdBurstWrong": "0/20",
+    "antdWindowHits": 20,
+    "antdGivesTheKeyAFunction": false,
+    "antdControlPaced": "Never | list closed",
+    "orbitControlPaced": {
+     "orbit-field": "never | list closed",
+     "orbit-sample": "Never | list closed"
+    },
+    "orbitPacedMatchesAntd": {
+     "orbit-field": false,
+     "orbit-sample": false
+    },
+    "decision": "antd-no-function: record, no change"
+   },
+   "select-down-end-enter": {
+    "orbitBurstWrong": {
+     "orbit-field": "20/20",
+     "orbit-sample": "20/20"
+    },
+    "orbitPaced": {
+     "orbit-field": "never | list open",
+     "orbit-sample": "Never | list open"
+    },
+    "orbitWindowHits": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "orbitHandedOver": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "antdPaced": "Never | list closed",
+    "antdBurstWrong": "0/20",
+    "antdWindowHits": 20,
+    "antdGivesTheKeyAFunction": false,
+    "antdControlPaced": "Never | list closed",
+    "orbitControlPaced": {
+     "orbit-field": "never | list closed",
+     "orbit-sample": "Never | list closed"
+    },
+    "orbitPacedMatchesAntd": {
+     "orbit-field": false,
+     "orbit-sample": false
+    },
+    "decision": "antd-no-function: record, no change"
+   },
    "select-down-enter": {
     "orbitBurstWrong": {
      "orbit-field": "0/20",
@@ -47610,6 +52198,276 @@
     "antdBurstWrong": "0/20",
     "antdWindowHits": 20,
     "decision": "control"
+   },
+   "select-down-enter-from-7": {
+    "orbitBurstWrong": {
+     "orbit-field": "0/20",
+     "orbit-sample": "0/20"
+    },
+    "orbitPaced": {
+     "orbit-field": "7 | list closed",
+     "orbit-sample": "7 days | list closed"
+    },
+    "orbitWindowHits": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "orbitHandedOver": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "antdPaced": "7 days | list closed",
+    "antdBurstWrong": "0/20",
+    "antdWindowHits": 20,
+    "decision": "control"
+   },
+   "select-down-home-enter": {
+    "orbitBurstWrong": {
+     "orbit-field": "20/20",
+     "orbit-sample": "20/20"
+    },
+    "orbitPaced": {
+     "orbit-field": "never | list closed",
+     "orbit-sample": "Never | list closed"
+    },
+    "orbitWindowHits": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "orbitHandedOver": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "antdPaced": "7 days | list closed",
+    "antdBurstWrong": "1/20",
+    "antdWindowHits": 20,
+    "antdGivesTheKeyAFunction": false,
+    "antdControlPaced": "7 days | list closed",
+    "orbitControlPaced": {
+     "orbit-field": "7 | list closed",
+     "orbit-sample": "7 days | list closed"
+    },
+    "orbitPacedMatchesAntd": {
+     "orbit-field": false,
+     "orbit-sample": false
+    },
+    "decision": "antd-no-function: record, no change"
+   },
+   "select-down-n-enter": {
+    "orbitBurstWrong": {
+     "orbit-field": "0/20",
+     "orbit-sample": "0/20"
+    },
+    "orbitPaced": {
+     "orbit-field": "never | list closed",
+     "orbit-sample": "Never | list closed"
+    },
+    "orbitWindowHits": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "orbitHandedOver": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "antdPaced": "7 days | list closed",
+    "antdBurstWrong": "0/20",
+    "antdWindowHits": 20,
+    "antdGivesTheKeyAFunction": false,
+    "antdControlPaced": "7 days | list closed",
+    "orbitControlPaced": {
+     "orbit-field": "7 | list closed",
+     "orbit-sample": "7 days | list closed"
+    },
+    "orbitPacedMatchesAntd": {
+     "orbit-field": false,
+     "orbit-sample": false
+    },
+    "decision": "antd-no-function: record, no change"
+   },
+   "select-down-pagedown-enter": {
+    "orbitBurstWrong": {
+     "orbit-field": "0/20",
+     "orbit-sample": "0/20"
+    },
+    "orbitPaced": {
+     "orbit-field": "never | list closed",
+     "orbit-sample": "Never | list closed"
+    },
+    "orbitWindowHits": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "orbitHandedOver": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "antdPaced": "Never | list closed",
+    "antdBurstWrong": "0/20",
+    "antdWindowHits": 20,
+    "antdGivesTheKeyAFunction": false,
+    "antdControlPaced": "Never | list closed",
+    "orbitControlPaced": {
+     "orbit-field": "never | list closed",
+     "orbit-sample": "Never | list closed"
+    },
+    "orbitPacedMatchesAntd": {
+     "orbit-field": true,
+     "orbit-sample": true
+    },
+    "decision": "antd-no-function: record, no change"
+   },
+   "select-down-pageup-enter": {
+    "orbitBurstWrong": {
+     "orbit-field": "0/20",
+     "orbit-sample": "0/20"
+    },
+    "orbitPaced": {
+     "orbit-field": "7 | list closed",
+     "orbit-sample": "7 days | list closed"
+    },
+    "orbitWindowHits": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "orbitHandedOver": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "antdPaced": "7 days | list closed",
+    "antdBurstWrong": "0/20",
+    "antdWindowHits": 20,
+    "antdGivesTheKeyAFunction": false,
+    "antdControlPaced": "7 days | list closed",
+    "orbitControlPaced": {
+     "orbit-field": "7 | list closed",
+     "orbit-sample": "7 days | list closed"
+    },
+    "orbitPacedMatchesAntd": {
+     "orbit-field": true,
+     "orbit-sample": true
+    },
+    "decision": "antd-no-function: record, no change"
+   },
+   "select-down-space": {
+    "orbitBurstWrong": {
+     "orbit-field": "0/20",
+     "orbit-sample": "0/20"
+    },
+    "orbitPaced": {
+     "orbit-field": "never | list closed",
+     "orbit-sample": "Never | list closed"
+    },
+    "orbitWindowHits": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "orbitHandedOver": {
+     "orbit-field": 0,
+     "orbit-sample": 0
+    },
+    "antdPaced": "Never | list open",
+    "antdBurstWrong": "0/20",
+    "antdWindowHits": 20,
+    "antdGivesTheKeyAFunction": false,
+    "antdControlPaced": "Never | list open",
+    "orbitControlPaced": {
+     "orbit-field": "never | list open",
+     "orbit-sample": "Never | list open"
+    },
+    "orbitPacedMatchesAntd": {
+     "orbit-field": false,
+     "orbit-sample": false
+    },
+    "decision": "antd-no-function: record, no change"
+   },
+   "select-down-space-from-null": {
+    "orbitBurstWrong": {
+     "orbit-field": "20/20"
+    },
+    "orbitPaced": {
+     "orbit-field": "never | list closed"
+    },
+    "orbitWindowHits": {
+     "orbit-field": 20
+    },
+    "orbitHandedOver": {
+     "orbit-field": 0
+    },
+    "antdJudgedOn": "select-down-space",
+    "antdPaced": "Never | list open",
+    "antdBurstWrong": "0/20",
+    "antdWindowHits": 20,
+    "antdGivesTheKeyAFunction": false,
+    "antdControlPaced": "Never | list open",
+    "orbitControlPaced": {
+     "orbit-field": "never | list open"
+    },
+    "decision": "antd-no-function: record, no change"
+   },
+   "select-enter-down-enter": {
+    "orbitBurstWrong": {
+     "orbit-field": "0/20",
+     "orbit-sample": "0/20"
+    },
+    "orbitPaced": {
+     "orbit-field": "7 | list closed",
+     "orbit-sample": "7 days | list closed"
+    },
+    "orbitWindowHits": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "orbitHandedOver": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "antdPaced": "7 days | list closed",
+    "antdBurstWrong": "0/20",
+    "antdWindowHits": 20,
+    "antdGivesTheKeyAFunction": true,
+    "antdControlPaced": "Never | list closed",
+    "orbitControlPaced": {
+     "orbit-field": "never | list closed",
+     "orbit-sample": "Never | list closed"
+    },
+    "orbitPacedMatchesAntd": {
+     "orbit-field": true,
+     "orbit-sample": true
+    },
+    "decision": "both-correct: no change"
+   },
+   "select-space-down-enter": {
+    "orbitBurstWrong": {
+     "orbit-field": "0/20",
+     "orbit-sample": "0/20"
+    },
+    "orbitPaced": {
+     "orbit-field": "7 | list closed",
+     "orbit-sample": "7 days | list closed"
+    },
+    "orbitWindowHits": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "orbitHandedOver": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "antdPaced": "7 days | list closed",
+    "antdBurstWrong": "0/20",
+    "antdWindowHits": 20,
+    "antdGivesTheKeyAFunction": true,
+    "antdControlPaced": "Never | list closed",
+    "orbitControlPaced": {
+     "orbit-field": "never | list closed",
+     "orbit-sample": "Never | list closed"
+    },
+    "orbitPacedMatchesAntd": {
+     "orbit-field": true,
+     "orbit-sample": true
+    },
+    "decision": "both-correct: no change"
    }
   }
  },
