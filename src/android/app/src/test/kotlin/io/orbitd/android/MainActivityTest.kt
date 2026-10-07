@@ -137,6 +137,8 @@ class TestOrbitApplication : OrbitApplication() {
                 request.api.path == listOf("auth", "methods") -> methods()
                 request.api.path == listOf("auth", "google", "exchange") -> exchange()
                 request.api.path == listOf("auth", "login") -> ApiResponse(200, LOGIN.encodeToByteArray())
+                // The account Settings shows: the one the login answered with.
+                request.api.path == listOf("users", "me") -> ApiResponse(200, USER.encodeToByteArray())
                 request.api.path.firstOrNull() == "tasks" -> ApiResponse(200, """{"id":"01a0cca7-8609-70ed-a0e2-d4b55b832b60","title":"Linked task"}""".encodeToByteArray())
                 // The signed-in shell's directory reads: empty lists.
                 else -> ApiResponse(200, "[]".encodeToByteArray())
@@ -160,4 +162,5 @@ class TestOrbitApplication : OrbitApplication() {
     )
 }
 
-private const val LOGIN = """{"accessToken":"fixture-access","refreshToken":"fixture-refresh","user":{"id":"u1","email":"fixture@example.test","name":"Fixture"}}"""
+private const val USER = """{"id":"u1","email":"fixture@example.test","name":"Fixture"}"""
+private const val LOGIN = """{"accessToken":"fixture-access","refreshToken":"fixture-refresh","user":$USER}"""
