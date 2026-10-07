@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>规格：新 Start 页面</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  body { width: 1760px; }
+  table.mx th:first-child { width: 170px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; }
+</style>
+</head>
+<body>
+<h1>规格：新 Start 页面（第 2 版）</h1>
+<p class="lede">按 owner 10-07 的决定：<b>Automatic 默认开</b>；<b>卡片上不放就绪检查的提醒</b>，刚建好的项目不带警告；<b>合并检查可以为空</b>；<b>项目还没有协调者时，按下 Start 顺手建一个</b>。英文是界面文案，两端共用（<code>lib/projectStart.ts</code> 和 OrbitKit 的 <code>StartProject</code>，由对照测试锁住）。标“沿用”的句子现在就有，只换了位置。</p>
+
+<div class="panel">
+  <h2>每一节的文案</h2>
+  <p class="hint">从上到下。蓝底是新的或改过的。</p>
+  <table class="mx">
+    <thead><tr><th>位置</th><th class="new">文案</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><th>导航栏</th><td class="new en">Start this project? · Cancel · <span class="k">Chat</span></td><td>Chat 就是 Chat about this：在协调会话里交给输入框；从项目页打开时跳到协调会话再交给输入框。</td></tr>
+      <tr><th>页头</th><td class="new en">{project title} · The coordinator asked 56m ago · <span class="m">Coordinator</span> “{why}” · More</td><td>协调者的原话最多三行，More 展开。原来的 meta 行拆开，seal 挪到底栏。</td></tr>
+      <tr><th>Done when</th><td class="en">Done when · 7 criteria · Read all 7 in full · Orbit derives done from these 7 criteria and nothing else. If they change later, it asks you to confirm the new version — the project keeps running.</td><td>沿用。说明句从卡片底部挪到这一节下面。</td></tr>
+      <tr><th>How it runs · 开关</th><td class="new en">Automatic <span class="m" style="font-family:'Noto Sans SC'">（默认开）</span><br><span class="m">开：</span>The coordinator decides when each task is done and merges into main once the merge check passes — with a receipt you can revert.<br><span class="m">开，没有合并检查：</span>… merges into main by itself — with a receipt you can revert.<br><span class="m">关：</span>You decide when each task is done and when the branch goes into main.</td><td>开着的那句由现有的 automaticHint 缩短；“The criteria and anything irreversible stay yours” 变成下面的清单。</td></tr>
+      <tr><th>How it runs · 清单</th><td class="new en">Comes to you<br>P10 · {title} · you confirm it<br>Any change to the criteria<br>Problems it can't resolve within 2 h<br><span class="m" style="font-family:'Noto Sans SC'">关掉后另有：</span>Whether each task is done · 11 reviews · Problems along the way · conflicts, failed checks · Merging the branch into main</td><td>怎么推出来见下面左栏。</td></tr>
+      <tr><th>How it runs · 其余</th><td class="new en">Tasks land on · A project branch ⌃⌄ &nbsp; Merge check · Set ›（为空时：None › · Work lands once it rebases cleanly.） &nbsp; At most · 3 tasks at a time [− +]<br>Automatic is on by default (the coordinator suggested off). The rest is the coordinator's suggestion. You can change any of these later on the project page.</td><td>一项一行，分支名和合并检查的命令点开才看。括号里那句只在协调者建议关的时候出现。</td></tr>
+      <tr><th>没有协调者</th><td class="new en">页头：Nobody asked yet · no coordinator yet<br>Automatic 下面：This project has no coordinator yet. Orbit opens one in <b>{workspace}</b> on {runner} — where its tasks run — when it starts.<br>底栏：Opens a coordinator · starts P1a now · confirms these 7 criteria</td><td>只在 Automatic 开时出现；关掉就不建，这几句也不出现。没有协调者时不显示 Chat。</td></tr>
+      <tr><th>Plan</th><td class="new en">Plan · 12 tasks in 7 levels · Now · You · 5 in parallel · View tasks ›</td><td>按层（BatchReview 的规则）。只有一个任务的层写标题，多个的只列编号。编号规则多认 P1a。</td></tr>
+      <tr><th>底栏</th><td class="new en">Start the project<br>Starts P1a now · confirms these 7 criteria · seal 7c1e9a42</td><td>固定在屏幕底部。第二行写按下等于什么；“Starts …” 是第 1 层会马上开工的任务。</td></tr>
+      <tr><th>不再显示</th><td class="m">就绪检查的提醒（“Orbit can't tell if … write code”、手动启动的任务）· Orbit checked the plan 三行（每条标准都有任务、每个任务都有 runner、仓库）</td><td>你不关心、在卡片上也做不了什么。协调者在 <code>project_request_start</code> 的返回里照旧收到这些提醒。</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="two">
+  <div class="panel">
+    <h2>“会找你的事”怎么算</h2>
+    <p class="hint">由 Automatic、落地线和每个任务的完成方式推出来，开关一拨就重算。这些规则都是服务端现在的行为。</p>
+    <table class="mx">
+      <thead><tr><th>条件</th><th class="new">这一行</th></tr></thead>
+      <tbody>
+        <tr><th>总是</th><td class="new en">Any change to the criteria</td></tr>
+        <tr><th>有 OWNER_CONFIRMED 任务</th><td class="new en">{label} · {title} · you confirm it<span class="m" style="font-family:'Noto Sans SC'">（一个一行；超过 3 个合成 “N tasks you confirm”）</span></td></tr>
+        <tr><th>Automatic 开（默认）</th><td class="new en">Problems it can't resolve within 2 h<span class="m" style="font-family:'Noto Sans SC'">（项目的升级时限 exceptionEscalationSeconds）</span></td></tr>
+        <tr><th>Automatic 关</th><td class="new en">Whether each task is done · N reviews<span class="m" style="font-family:'Noto Sans SC'">（N = EVIDENCE_JUDGMENT 的个数，证据审核卡会给你）</span><br>Problems along the way · conflicts, failed checks<span class="m" style="font-family:'Noto Sans SC'">（问题不会自动交给协调者）</span></td></tr>
+        <tr><th>Automatic 关 + 项目分支</th><td class="new en">Merging the branch into main</td></tr>
+        <tr><th>直接落 main</th><td class="new en">Each merge into main<span class="m" style="font-family:'Noto Sans SC'">（开关怎样都要问你）</span></td></tr>
+        <tr><th>EXECUTABLE 任务</th><td class="m">不找你：由命令判定。</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="panel">
+    <h2>其他状态</h2>
+    <p class="hint">这一版画的是“协调者请求了，建议 Automatic 关”。</p>
+    <ul class="rules">
+      <li><b>协调者建议 Automatic 关</b>：开关仍默认开，How it runs 的说明里加一句 <span class="en">(the coordinator suggested off)</span>；它的理由在页头它的原话里。</li>
+      <li><b>没人请求，自己点 Start…</b>：页头只写 <span class="en">Nobody asked yet</span>，没有协调者引用；Automatic 本来就默认开（<code>defaultSettings</code>）。有协调者时 Chat 照常。</li>
+      <li><b>项目还没有协调者，Automatic 开</b>：卡片写明开始时会建一个、建在哪（任务所在的 workspace，规则同 <code>project_ensure_coordinator</code>）。按下后先确认建得出来；建不出来（比如 runner 都离线）就整次不写，底栏上方说原因。建好后它的第一条消息就是“项目已开始”。没有协调者时不显示 Chat。Automatic 关时不建。</li>
+      <li><b>合并检查为空</b>：正常状态。那一行写 None 和 <span class="en">Work lands once it rebases cleanly.</span>，不变色，也不拒绝请求；Automatic 那句改成 “merges into main by itself”。</li>
+      <li><b>请求失效</b>（计划或标准变了）：底栏按钮变灰，按钮上方一行沿用 <code>requestGone</code> 的句子。</li>
+      <li><b>还在读取</b>：按钮变灰，各节显示占位，不画半张卡。</li>
+      <li><b>计划太大</b>（依赖图折叠了）：Plan 只写 “N tasks” 和 View tasks。</li>
+      <li><b>按下没成功</b>：错误句子显示在底栏按钮上方，卡片不动。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>数据和要改的东西</h2>
+  <p class="hint">建议分两步：第一步只改客户端，第二步改服务端。</p>
+  <div class="two" style="gap:36px">
+    <ul class="rules">
+      <li><b>第一步 · 客户端</b>：新结构；Automatic 默认开（协调者建议关时只加那句说明）；不再画 <code>request.warnings</code> 和 Orbit checked；固定底栏和 Chat；按层的 Plan；编号规则多认 P1a。清单先写开关和落地线能确定的几行。</li>
+      <li><b>第二步 · 服务端</b>：
+        <ol style="margin:4px 0 0;padding-left:18px">
+          <li>就绪检查的提醒只给协调者：<code>project_request_start</code> 的返回照旧带 warnings，START_REQUEST 的 payload 不再存。</li>
+          <li><code>POST /projects/:id/start</code>：Automatic 开而项目没有协调者时，确保建出一个（复用 <code>ensureCoordinator</code> 的规则，建在任务所在的 workspace）。先确认能建，建不出来就整次拒绝（409，说原因）；响应里带上新协调者的 sessionId。卡片要提前写“建在哪”，所以项目的读接口加一个预览：会建在哪个 workspace、哪台 runner 上。</li>
+          <li><code>project_request_start</code> 的 <code>automatic</code> 改成可选、默认开；工具说明写“默认开，你认为该关就在 why 里说”。合并检查为空不拒绝，START_NO_MERGE_CHECK 只作为提醒留在协调者那边。</li>
+          <li>START_REQUEST 带上每个任务的完成方式（<code>readStartPlan</code> 已经读了 <code>completionCriterion</code>），清单里的 P10 和 Plan 里的 You 才有数据。</li>
+          <li>可选：codeless 启发式只看 OWNER_CONFIRMED。没有命令的 EVIDENCE_JUDGMENT 是写代码任务的常态，这次 11 个全是误判，协调者那边也少一些噪音。</li>
+        </ol>
+      </li>
+    </ul>
+    <ul class="rules">
+      <li><b>iOS / macOS</b>：<code>ApprovalCards.swift</code> 的 <code>StartProjectCard</code> 重排（含“没有协调者”和“合并检查为空”两种状态，<code>mergeCheckMissing</code> 的琥珀色去掉）；项目页的两个 sheet（<code>RequestedStartProjectSheet</code>、<code>OwnerStartProjectSheet</code>）改成导航栏标题 + 固定底栏 + Chat；协调会话里的预览卡不变，点开的审阅页用同一个布局。草稿的开关从请求里取改成默认开（<code>StartSettingsDraft</code>）。</li>
+      <li><b>OrbitKit</b>：<code>StartProject.swift</code>（新文案、会找你的事、按层、底栏那行，删掉 <code>warningLines</code> 的用处）、<code>ProjectRunSettings.swift</code>（开关的两句）。</li>
+      <li><b>Web</b>：<code>StartProjectCard.tsx</code>、<code>lib/projectStart.ts</code> 同步。</li>
+      <li><b>测试</b>：<code>StartProjectTests</code>、<code>StartProjectCardCopyParityTests</code>、<code>StartProjectWiringTests</code>、<code>StartProjectCard.test.tsx</code>；第二步加 <code>project-start-request</code> 的 pg spec。</li>
+      <li><b>不变</b>：按下仍是一次写入（<code>POST /projects/:id/start</code>），请求和失效的规则不变；开始后的回执照旧标出“和协调者建议不同”的设置。</li>
+      <li><b>被取代</b>：<code>docs/mocks/start-card-plan-warnings</code> 里那行可展开的提醒不用做了；P1a 编号修复仍然要做。</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>
