@@ -10,7 +10,7 @@
   box-shadow: var(--orbit-shadow-popup);
   outline: none;
 }
-.orbit-menu { min-width: var(--orbit-menu-anchor-width, var(--anchor-width)); max-width: var(--available-width); max-height: var(--available-height); overflow-y: auto; padding: 4px; }
+.orbit-menu { min-width: var(--orbit-menu-anchor-width, var(--anchor-width)); max-width: var(--orbit-dropdown-room, var(--available-width)); max-height: var(--available-height); overflow-y: auto; padding: 4px; position: relative; left: var(--orbit-dropdown-subpixel, 0px); }
 .orbit-menu-item {
   display: flex; align-items: center; gap: 8px; padding: 5px 12px; min-height: 32px;
   border-radius: 4px; cursor: pointer; outline: none; white-space: nowrap;
@@ -30,6 +30,17 @@
 .orbit-menu-check:not([data-checked]) { visibility: hidden; }
 .orbit-popover { --orbit-callout-bg: var(--orbit-bg-elevated); position: relative; padding: 12px; max-width: min(100vw - 16px, var(--available-width)); }
 .orbit-popover-title { min-width: 177px; margin: 0 0 8px; font: inherit; font-weight: 600; }
+/* Popconfirm keeps the old confirmation panel: warning icon, title, description, small buttons,
+   as wide as its text up to the whole viewport. */
+.orbit-popconfirm { max-width: 100vw; }
+.orbit-popconfirm-message { display: flex; flex-wrap: nowrap; align-items: start; margin-bottom: 8px; }
+.orbit-popconfirm-icon > .anticon { color: var(--orbit-badge-warning); font-size: 14px; line-height: 1; margin-inline-end: 8px; }
+.orbit-popconfirm-text { flex: auto; }
+.orbit-popconfirm-title { font-weight: 600; }
+.orbit-popconfirm-title:only-child { font-weight: 400; }
+.orbit-popconfirm-description { margin-top: 4px; }
+.orbit-popconfirm-buttons { text-align: end; white-space: nowrap; }
+.orbit-popconfirm-buttons > .orbit-button { margin-inline-start: 8px; }
 /* Filter belongs to the animated surface: opacity must composite its shadow
    together with the surface, rather than cast a shadow through fading content. */
 .orbit-popover, .orbit-tooltip { box-shadow: none; filter: var(--orbit-filter-popover); }
@@ -41,6 +52,9 @@
 .orbit-floating-arrow[data-side='bottom'] { top: 0; transform: translateY(-100%); }
 .orbit-floating-arrow[data-side='left'] { right: 0; transform: translateX(100%) rotate(90deg); }
 .orbit-floating-arrow[data-side='right'] { left: 0; transform: translateX(-100%) rotate(-90deg); }
+/* Pointed where the replaced callout pointed it (see useWholePixelOffsets): a layout offset, which
+   snaps to the pixel grid as the replaced arrow's left did, where a translate would antialias it. */
+.orbit-floating-arrow[data-align='center']:is([data-side='top'], [data-side='bottom']) { margin-left: var(--orbit-arrow-nudge, 0px); }
 @keyframes orbit-slide-up-in {
   from { opacity: 0; transform: scaleY(.8); transform-origin: 0% 0%; }
   to { opacity: 1; transform: scaleY(1); transform-origin: 0% 0%; }

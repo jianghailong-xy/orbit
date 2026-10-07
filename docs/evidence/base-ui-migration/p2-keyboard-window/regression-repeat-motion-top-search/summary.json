@@ -1,0 +1,182 @@
+{
+  "stats": {
+    "startTime": "2026-10-06T22:45:13.473Z",
+    "duration": 40370.763999999996,
+    "expected": 10,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3506
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--motion.json",
+          "sha256": "d35830738288c45a1ab4fcb4a93c7d6b7defea1b61b8aeae3c874592e960b6d1"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-1",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3235
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-1--motion.json",
+          "sha256": "9c09db5fac576679c4272c81ef9e2e88750e7c20f04ff64bbd2eea0442d6eaec"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-2",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3255
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-2--motion.json",
+          "sha256": "542e1eacc596241d228301790d627a55840c8be2d3d5b5410f5b31e479e46a88"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-3",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3934
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-3--motion.json",
+          "sha256": "1e565ca7d78836344069253690e5e5db58a44b8b0f5c0e16ff5945e485419fbf"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-4",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3934
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-4--motion.json",
+          "sha256": "61dd314ea24d5bd61467e9b8d39d97f4a4a64d18ada56db00f6643f4bca4bb74"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-5",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2987
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-5--motion.json",
+          "sha256": "3f8e5ec4cb7223f6975189d70067e95959cc3caeee651e4a845182015729f93d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-6",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2953
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-6--motion.json",
+          "sha256": "11828d6f4090f5f0c923be62dc8a14155bebe39a3b7ab20439b6e084f99462ce"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-7",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2910
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-7--motion.json",
+          "sha256": "da782e4b0c06aac0ac94e5f58e3c64ea3932c9a5cb52f31e49208c3466541f36"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-8",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4126
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-8--motion.json",
+          "sha256": "e1f1e1d820af96d7c305d7177af2e0ac25b2606f40bf831a9aae493b3f36ba70"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-9",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4177
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-9--motion.json",
+          "sha256": "c64e04fad147e4c0f5302deda7b40ed370397f21e4313f528d4cbb16e5ecbd9a"
+        }
+      ]
+    }
+  ]
+}

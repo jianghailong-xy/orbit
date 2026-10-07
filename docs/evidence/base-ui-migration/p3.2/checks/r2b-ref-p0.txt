@@ -1,0 +1,905 @@
+
+Running 112 tests using 1 worker
+
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/breakpoint-961-session.png, writing actual.
+  ✓    1 [chromium-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (11.2s)
+  ✓    2 [chromium-light-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.9s)
+  ✘    3 [chromium-light-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.2s)
+  ✘    4 [chromium-light-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (2.6s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/task-share-dialog.png, writing actual.
+  ✓    5 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (3.9s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/task-public-share.png, writing actual.
+  ✓    6 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (687ms)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/project-graph-fullscreen.png, writing actual.
+  ✓    7 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (3.7s)
+  ✘    8 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (15.5s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/settings-saved.png, writing actual.
+  ✓    9 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.4s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/profile.png, writing actual.
+  ✘   10 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.1s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/notification-error.png, writing actual.
+  ✓   11 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (6.3s)
+  ✓   12 [chromium-light-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline (19.3s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/projects-loading.png, writing actual.
+  ✓   13 [chromium-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (749ms)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/projects-error.png, writing actual.
+  ✓   14 [chromium-light-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.9s)
+  -   15 [chromium-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓   16 [chromium-light-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.6s)
+  ✘   17 [chromium-light-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.2s)
+  ✘   18 [chromium-light-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (2.1s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/task-share-dialog.png, writing actual.
+  ✓   19 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (3.6s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/task-public-share.png, writing actual.
+  ✓   20 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (576ms)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/project-graph-fullscreen.png, writing actual.
+  ✓   21 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (3.2s)
+  ✘   22 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (15.4s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/settings-saved.png, writing actual.
+  ✓   23 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (1.1s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/profile-validation.png, writing actual.
+  ✓   24 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.4s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/notification-error.png, writing actual.
+  ✓   25 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (4.6s)
+  -   26 [chromium-light-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/projects-loading.png, writing actual.
+  ✓   27 [chromium-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (667ms)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/projects-error.png, writing actual.
+  ✓   28 [chromium-light-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (2.2s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/breakpoint-961-session.png, writing actual.
+  ✓   29 [chromium-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (11.7s)
+  ✓   30 [chromium-dark-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.2s)
+  ✘   31 [chromium-dark-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.2s)
+  ✘   32 [chromium-dark-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (3.5s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/task-share-dialog.png, writing actual.
+  ✓   33 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (4.4s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/task-public-share.png, writing actual.
+  ✓   34 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (772ms)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/project-graph-fullscreen.png, writing actual.
+  ✓   35 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (4.0s)
+  ✘   36 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (20.7s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/settings-saved.png, writing actual.
+  ✓   37 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (2.5s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/profile-validation.png, writing actual.
+  ✓   38 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (3.1s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/notification-error.png, writing actual.
+  ✓   39 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (7.7s)
+  -   40 [chromium-dark-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/projects-loading.png, writing actual.
+  ✓   41 [chromium-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.2s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/projects-error.png, writing actual.
+  ✓   42 [chromium-dark-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (4.2s)
+  -   43 [chromium-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓   44 [chromium-dark-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.4s)
+  ✘   45 [chromium-dark-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.6s)
+  ✘   46 [chromium-dark-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (2.9s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/task-share-dialog.png, writing actual.
+  ✓   47 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (3.9s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/task-public-share.png, writing actual.
+  ✓   48 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (748ms)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/project-graph-fullscreen.png, writing actual.
+  ✓   49 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (3.8s)
+  ✘   50 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (16.5s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/settings-saved.png, writing actual.
+  ✓   51 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (1.6s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/profile-validation.png, writing actual.
+  ✓   52 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.6s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/notification-error.png, writing actual.
+  ✓   53 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (5.5s)
+  -   54 [chromium-dark-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/projects-loading.png, writing actual.
+  ✓   55 [chromium-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (808ms)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/projects-error.png, writing actual.
+  ✓   56 [chromium-dark-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.9s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/breakpoint-961-session.png, writing actual.
+  ✓   57 [webkit-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (19.3s)
+  ✓   58 [webkit-light-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (10.7s)
+  ✘   59 [webkit-light-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (3.7s)
+  ✘   60 [webkit-light-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (3.7s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/task-share-dialog.png, writing actual.
+  ✓   61 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (5.7s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/task-public-share.png, writing actual.
+  ✓   62 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (3.2s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/project-graph-fullscreen.png, writing actual.
+  ✓   63 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (13.9s)
+  ✘   64 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (17.8s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/settings.png, writing actual.
+  ✘   65 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (5.7s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/profile-validation.png, writing actual.
+  ✓   66 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (4.8s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/notification-error.png, writing actual.
+  ✓   67 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (28.7s)
+  -   68 [webkit-light-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/projects-loading.png, writing actual.
+  ✓   69 [webkit-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (8.9s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/projects-error.png, writing actual.
+  ✓   70 [webkit-light-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (6.7s)
+  -   71 [webkit-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓   72 [webkit-light-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (5.0s)
+  ✘   73 [webkit-light-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (4.4s)
+  ✘   74 [webkit-light-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (5.3s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/task-share-dialog.png, writing actual.
+  ✓   75 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (6.2s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/task-public-share.png, writing actual.
+  ✓   76 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (1.4s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/project-graph-fullscreen.png, writing actual.
+  ✓   77 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (5.6s)
+  ✘   78 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (17.4s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/settings-saved.png, writing actual.
+  ✓   79 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (1.8s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/profile-validation.png, writing actual.
+  ✓   80 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.7s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/notification-error.png, writing actual.
+  ✓   81 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (5.4s)
+  -   82 [webkit-light-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/projects-loading.png, writing actual.
+  ✓   83 [webkit-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.0s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/projects-error.png, writing actual.
+  ✓   84 [webkit-light-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.4s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/breakpoint-961-session.png, writing actual.
+  ✓   85 [webkit-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (14.6s)
+  ✓   86 [webkit-dark-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (6.0s)
+  ✘   87 [webkit-dark-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (3.5s)
+  ✘   88 [webkit-dark-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (4.4s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/task-share-dialog.png, writing actual.
+  ✓   89 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (5.3s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/task-public-share.png, writing actual.
+  ✓   90 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (1.5s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/project-graph-fullscreen.png, writing actual.
+  ✓   91 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (6.2s)
+  ✘   92 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (16.2s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/settings.png, writing actual.
+  ✘   93 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.9s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/profile.png, writing actual.
+  ✘   94 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (2.3s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/notification-error.png, writing actual.
+  ✓   95 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (10.4s)
+  -   96 [webkit-dark-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/projects-loading.png, writing actual.
+  ✓   97 [webkit-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.6s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/projects-error.png, writing actual.
+  ✓   98 [webkit-dark-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (5.1s)
+  -   99 [webkit-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓  100 [webkit-dark-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (19.7s)
+  ✘  101 [webkit-dark-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (16.9s)
+  ✘  102 [webkit-dark-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (6.7s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/task-share-dialog.png, writing actual.
+  ✓  103 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (9.3s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/task-public-share.png, writing actual.
+  ✓  104 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (2.0s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/project-graph-fullscreen.png, writing actual.
+  ✓  105 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (6.4s)
+  ✘  106 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (16.5s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/settings.png, writing actual.
+  ✘  107 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (1.9s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/profile-validation.png, writing actual.
+  ✓  108 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (2.7s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/notification-error.png, writing actual.
+  ✓  109 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (7.6s)
+  -  110 [webkit-dark-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/projects-loading.png, writing actual.
+  ✓  111 [webkit-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.4s)
+A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/projects-error.png, writing actual.
+  ✓  112 [webkit-dark-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.9s)
+
+
+  1) [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ──────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/var/tmp/p32r2-ref/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/var/tmp/p32r2-ref/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-chromium-light-desktop/attachments/computed-styles-and-timings-9ee970361ebbea230d76689bc7de9127c9753293.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile ───────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('Name saved', { exact: true })
+    Expected: visible
+    Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:
+        1) <span class="toast-head">Name saved</span> aka getByRole('region', { name: 'Notifications' }).getByText('Name saved')
+        2) <div class="sr-only" aria-atomic="true" aria-live="polite">Name saved</div> aka getByText('Name saved').nth(1)
+
+    Call log:
+      - Expect "toBeVisible" getByText('Name saved', { exact: true }) with timeout 15000ms
+      - waiting for getByText('Name saved', { exact: true })
+
+
+       at page-scenarios.mjs:120
+
+      118 |   });
+      119 |   await save.click();
+    > 120 |   await expect(page.getByText('Name saved', { exact: true })).toBeVisible();
+          |                                                               ^
+      121 |   await expect(name).toHaveValue('Baseline Reviewer Updated');
+      122 |   await expect(save).toBeDisabled();
+      123 |   await page.getByRole('button', { name: 'Change password', exact: true }).click();
+        at profileScenario (/var/tmp/p32r2-ref/src/web/ui-migration/page-scenarios.mjs:120:63)
+
+    attachment #1: profile (image/png) ─────────────────────────────────────────────────────────────
+    Expected: ../../../p32r2-final/r2b-p0-shots/chromium-light-desktop/profile.png
+    Received: ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-profile-chromium-light-desktop/profile-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-profile-chromium-light-desktop/attachments/computed-styles-and-timings-7152bdcf30cd51b001dc13b3f08f77f82c5e7c9c.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-profile-chromium-light-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-profile-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-profile-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/var/tmp/p32r2-ref/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/var/tmp/p32r2-ref/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-chromium-light-phone/attachments/computed-styles-and-timings-026f9080912c5b794ac6b4fa49f762ae2965cb4b.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-chromium-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ───────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/var/tmp/p32r2-ref/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/var/tmp/p32r2-ref/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-chromium-dark-desktop/attachments/computed-styles-and-timings-5b23c393d77d463f4977845cc790d2949c9d6fed.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-chromium-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ─────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/var/tmp/p32r2-ref/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/var/tmp/p32r2-ref/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-chromium-dark-phone/attachments/computed-styles-and-timings-f90ded2a8fd6c0649522d2b3e1e92e24f3d720ec.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-chromium-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/var/tmp/p32r2-ref/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/var/tmp/p32r2-ref/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-webkit-light-desktop/attachments/computed-styles-and-timings-2a06b144f61b8370be9d0ccc40e1821eea084b86.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('Setting saved', { exact: true })
+    Expected: visible
+    Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:
+        1) <span class="toast-head">Setting saved</span> aka getByRole('region', { name: 'Notifications' }).getByText('Setting saved')
+        2) <div class="sr-only" aria-atomic="true" aria-live="polite">Setting saved</div> aka getByText('Setting saved').nth(1)
+
+    Call log:
+      - Expect "toBeVisible" getByText('Setting saved', { exact: true }) with timeout 15000ms
+      - waiting for getByText('Setting saved', { exact: true })
+
+
+       at page-scenarios.mjs:102
+
+      100 |   await firstSwitch.click();
+      101 |   await expect(firstSwitch).toHaveAttribute('aria-checked', previous === 'true' ? 'false' : 'true');
+    > 102 |   await expect(page.getByText('Setting saved', { exact: true })).toBeVisible();
+          |                                                                  ^
+      103 |   await capture('settings-saved', { switch: firstSwitch });
+      104 | }
+      105 |
+        at settingsScenario (/var/tmp/p32r2-ref/src/web/ui-migration/page-scenarios.mjs:102:66)
+
+    attachment #1: settings (image/png) ────────────────────────────────────────────────────────────
+    Expected: ../../../p32r2-final/r2b-p0-shots/webkit-light-desktop/settings.png
+    Received: ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-settings-webkit-light-desktop/settings-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-settings-webkit-light-desktop/attachments/computed-styles-and-timings-2053f6ff1d312d877f938faec3cfe0a48c6753b1.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-settings-webkit-light-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-settings-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-settings-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ──────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/var/tmp/p32r2-ref/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/var/tmp/p32r2-ref/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-webkit-light-phone/attachments/computed-styles-and-timings-340e843d3139eecccdb66abd24424ac925e939a2.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-webkit-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ─────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/var/tmp/p32r2-ref/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/var/tmp/p32r2-ref/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-webkit-dark-desktop/attachments/computed-styles-and-timings-139a6f1d9bb006d985a4fcf33230e2632ad4c212.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  10) [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('Setting saved', { exact: true })
+    Expected: visible
+    Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:
+        1) <span class="toast-head">Setting saved</span> aka getByRole('region', { name: 'Notifications' }).getByText('Setting saved')
+        2) <div class="sr-only" aria-atomic="true" aria-live="polite">Setting saved</div> aka getByText('Setting saved').nth(1)
+
+    Call log:
+      - Expect "toBeVisible" getByText('Setting saved', { exact: true }) with timeout 15000ms
+      - waiting for getByText('Setting saved', { exact: true })
+
+
+       at page-scenarios.mjs:102
+
+      100 |   await firstSwitch.click();
+      101 |   await expect(firstSwitch).toHaveAttribute('aria-checked', previous === 'true' ? 'false' : 'true');
+    > 102 |   await expect(page.getByText('Setting saved', { exact: true })).toBeVisible();
+          |                                                                  ^
+      103 |   await capture('settings-saved', { switch: firstSwitch });
+      104 | }
+      105 |
+        at settingsScenario (/var/tmp/p32r2-ref/src/web/ui-migration/page-scenarios.mjs:102:66)
+
+    attachment #1: settings (image/png) ────────────────────────────────────────────────────────────
+    Expected: ../../../p32r2-final/r2b-p0-shots/webkit-dark-desktop/settings.png
+    Received: ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-settings-webkit-dark-desktop/settings-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-settings-webkit-dark-desktop/attachments/computed-styles-and-timings-7598dfb2e6bd95b8725e66ae2f0c4fc307a074fb.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-settings-webkit-dark-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-settings-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-settings-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  11) [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile ─────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('Name saved', { exact: true })
+    Expected: visible
+    Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:
+        1) <span class="toast-head">Name saved</span> aka getByRole('region', { name: 'Notifications' }).getByText('Name saved')
+        2) <div class="sr-only" aria-atomic="true" aria-live="polite">Name saved</div> aka getByText('Name saved').nth(1)
+
+    Call log:
+      - Expect "toBeVisible" getByText('Name saved', { exact: true }) with timeout 15000ms
+      - waiting for getByText('Name saved', { exact: true })
+
+
+       at page-scenarios.mjs:120
+
+      118 |   });
+      119 |   await save.click();
+    > 120 |   await expect(page.getByText('Name saved', { exact: true })).toBeVisible();
+          |                                                               ^
+      121 |   await expect(name).toHaveValue('Baseline Reviewer Updated');
+      122 |   await expect(save).toBeDisabled();
+      123 |   await page.getByRole('button', { name: 'Change password', exact: true }).click();
+        at profileScenario (/var/tmp/p32r2-ref/src/web/ui-migration/page-scenarios.mjs:120:63)
+
+    attachment #1: profile (image/png) ─────────────────────────────────────────────────────────────
+    Expected: ../../../p32r2-final/r2b-p0-shots/webkit-dark-desktop/profile.png
+    Received: ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-profile-webkit-dark-desktop/profile-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-profile-webkit-dark-desktop/attachments/computed-styles-and-timings-594d43363ee7e944d59e23297dad86bcd81a1917.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-profile-webkit-dark-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-profile-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-profile-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  12) [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ──────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/var/tmp/p32r2-ref/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/var/tmp/p32r2-ref/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-webkit-dark-phone/attachments/computed-styles-and-timings-73b12dd7296566fd6be93505313d68b5fc9d372b.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-wiki-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  13) [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings ──────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('Setting saved', { exact: true })
+    Expected: visible
+    Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:
+        1) <span class="toast-head">Setting saved</span> aka getByRole('region', { name: 'Notifications' }).getByText('Setting saved')
+        2) <div class="sr-only" aria-atomic="true" aria-live="polite">Setting saved</div> aka getByText('Setting saved').nth(1)
+
+    Call log:
+      - Expect "toBeVisible" getByText('Setting saved', { exact: true }) with timeout 15000ms
+      - waiting for getByText('Setting saved', { exact: true })
+
+
+       at page-scenarios.mjs:102
+
+      100 |   await firstSwitch.click();
+      101 |   await expect(firstSwitch).toHaveAttribute('aria-checked', previous === 'true' ? 'false' : 'true');
+    > 102 |   await expect(page.getByText('Setting saved', { exact: true })).toBeVisible();
+          |                                                                  ^
+      103 |   await capture('settings-saved', { switch: firstSwitch });
+      104 | }
+      105 |
+        at settingsScenario (/var/tmp/p32r2-ref/src/web/ui-migration/page-scenarios.mjs:102:66)
+
+    attachment #1: settings (image/png) ────────────────────────────────────────────────────────────
+    Expected: ../../../p32r2-final/r2b-p0-shots/webkit-dark-phone/settings.png
+    Received: ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-settings-webkit-dark-phone/settings-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-settings-webkit-dark-phone/attachments/computed-styles-and-timings-69c565bc71b081c6c5ad9c5ad69d2ab488b55971.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-settings-webkit-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-settings-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p32r2-final/r2b-ref-p0/pages.browser.mjs-settings-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  13 failed
+    [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ───────────────────────────
+    [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile ────────────────────────
+    [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ─────────────────────────────
+    [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ────────────────────────────
+    [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ──────────────────────────────
+    [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ─────────────────────────────
+    [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ─────────────────────────
+    [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ───────────────────────────────
+    [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ──────────────────────────────
+    [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ──────────────────────────
+    [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile ───────────────────────────
+    [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ────────────────────────────────
+    [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings ────────────────────────────
+  11 skipped
+  88 passed (10.4m)

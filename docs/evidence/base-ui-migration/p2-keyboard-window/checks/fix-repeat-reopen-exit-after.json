@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6 && git log --oneline -1 && git rev-parse HEAD:src/web && unshare -n bash -c 'ip link set lo up && nice -n -10 npm run test:ui-choices -w @orbit/web -- --grep \"normal attachment can reopen during exit\" --project webkit-dark-phone --repeat-each 10'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_5c9cd3db5e9b",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "52e78ab88",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "outputLastWritten": "2026-10-07T06:11:40.416972+00:00",
+ "exitCode": 0,
+ "outputSha256": "20b20bf225eb26a4709f4abf87b88771450af6c682e9e7b712df351d5677500b",
+ "outputBytes": 2185,
+ "note": "The same case repeated alone 10 times on webkit-dark-phone on the fixed tree (where the full run failed it), simultaneously: 10 passed."
+}

@@ -5,7 +5,7 @@ import { flattenOptions, type SelectOption, type SelectProps } from './Select';
 import { SelectEmpty } from './SelectEmpty';
 import { ComboboxOption } from './ComboboxOption';
 import { Spinner } from './Spinner';
-import { useFloating } from './Floating';
+import { useDropdownPlacement, useFloating } from './Floating';
 
 export interface MultiSelectProps extends Omit<SelectProps, 'value' | 'onValueChange' | 'ref' | 'renderValue'> {
   value: string[];
@@ -30,6 +30,7 @@ export function MultiSelect({ options, value, onValueChange, mode = 'multiple', 
   const anchor = useRef<HTMLDivElement>(null);
   const updateQuery = (next: string) => { setLocalQuery(next); onSearch?.(next); };
   const layer = useFloating({ open, onOpenChange: (next) => { if (!next) updateQuery(''); onOpenChange?.(next); } });
+  const { positioner, ...placement } = useDropdownPlacement(layer.open, anchor, 4, align);
   const flat = flattenOptions(options);
   const selected = value.map((entry) => flat.find((option) => option.value === entry) ?? { value: entry, label: entry });
   const visible = maxTagCount === undefined ? selected : selected.slice(0, maxTagCount);
@@ -62,7 +63,7 @@ export function MultiSelect({ options, value, onValueChange, mode = 'multiple', 
       if (!next && details.reason === 'item-press') { details.cancel(); return; }
       layer.setOpen(next);
     }} modal={false}>
-    <div ref={anchor} className={`orbit-choice orbit-multi${className ? ` ${className}` : ''}`} data-size={size} data-variant={variant} data-disabled={disabled || undefined} style={style}>
+    <div ref={anchor} className={`orbit-select orbit-multi${className ? ` ${className}` : ''}`} data-size={size} data-variant={variant} data-disabled={disabled || undefined} style={style}>
       <BaseCombobox.Chips className="orbit-multi-chips">
         {visible.map((option) => <BaseCombobox.Chip key={option.value} className="orbit-multi-chip">
           <span className="orbit-multi-chip-label">{option.label}</span>
@@ -90,7 +91,7 @@ export function MultiSelect({ options, value, onValueChange, mode = 'multiple', 
       {clearable && value.length > 0 && !disabled && <BaseCombobox.Clear className="orbit-choice-clear" tabIndex={0} aria-label={clearLabel}><CloseCircleFilled aria-hidden /></BaseCombobox.Clear>}
     </div>
     <BaseCombobox.Portal container={layer.container()}>
-      <BaseCombobox.Positioner anchor={anchor} side={side} align={align} sideOffset={4} collisionPadding={8}
+      <BaseCombobox.Positioner ref={positioner} anchor={anchor} side={side} align={align} {...placement}
         className="orbit-floating-positioner orbit-choice-positioner" data-match-width={matchTriggerWidth} style={{ zIndex: layer.zIndex }}>
         <BaseCombobox.Popup className={`orbit-select-popup${popupClassName ? ` ${popupClassName}` : ''}`} style={popupStyle} finalFocus={returnFocus}>
           <BaseCombobox.Empty className="orbit-select-empty" role="status">{emptyContent}</BaseCombobox.Empty>

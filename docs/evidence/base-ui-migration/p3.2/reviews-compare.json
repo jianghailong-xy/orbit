@@ -1,0 +1,366 @@
+{
+ "chromium-dark-desktop :: wide screens show full questions and actions without opening a preview :: coordinator-inline.json": {
+  "kind": "json",
+  "equal": true,
+  "differences": []
+ },
+ "chromium-dark-desktop :: wide screens show full questions and actions without opening a preview :: coordinator-inline.png": {
+  "kind": "png",
+  "equal": true
+ },
+ "chromium-dark-phone :: long plan scrolls above visible actions and owns the foreground shortcut :: plan-scrolled.json": {
+  "kind": "json",
+  "equal": false,
+  "differences": [
+   {
+    "path": "geometry.actions.height",
+    "ref": 119,
+    "del": 115.84375
+   },
+   {
+    "path": "geometry.actions.top",
+    "ref": 701,
+    "del": 704.15625
+   },
+   {
+    "path": "geometry.actions.y",
+    "ref": 701,
+    "del": 704.15625
+   },
+   {
+    "path": "geometry.body.bottom",
+    "ref": 701,
+    "del": 704.15625
+   },
+   {
+    "path": "geometry.body.clientHeight",
+    "ref": 621,
+    "del": 624
+   },
+   {
+    "path": "geometry.body.height",
+    "ref": 621,
+    "del": 624.15625
+   },
+   {
+    "path": "geometry.body.scrollHeight",
+    "ref": 7214,
+    "del": 7891
+   },
+   {
+    "path": "geometry.body.scrollTop",
+    "ref": 6593,
+    "del": 7267
+   },
+   {
+    "path": "geometry.buttons[0].bottom",
+    "ref": 756,
+    "del": 757.578125
+   },
+   {
+    "path": "geometry.buttons[0].height",
+    "ref": 44,
+    "del": 42.421875
+   },
+   {
+    "path": "geometry.buttons[0].top",
+    "ref": 712,
+    "del": 715.15625
+   },
+   {
+    "path": "geometry.buttons[0].y",
+    "ref": 712,
+    "del": 715.15625
+   },
+   {
+    "path": "geometry.buttons[1].height",
+    "ref": 44,
+    "del": 42.421875
+   },
+   {
+    "path": "geometry.buttons[1].top",
+    "ref": 766,
+    "del": 767.578125
+   },
+   {
+    "path": "geometry.buttons[1].y",
+    "ref": 766,
+    "del": 767.578125
+   }
+  ]
+ },
+ "chromium-dark-phone :: long plan scrolls above visible actions and owns the foreground shortcut :: plan-scrolled.png": {
+  "kind": "png",
+  "equal": false,
+  "pixels": 40393,
+  "pixelsAtMost2": 626,
+  "maxChannelDiff": 222
+ },
+ "chromium-dark-phone :: question traps focus, preserves choices and drafts, and suspends background shortcuts :: question-retained.json": {
+  "kind": "json",
+  "equal": false,
+  "differences": [
+   {
+    "path": "geometry.actions.height",
+    "ref": 119,
+    "del": 115.84375
+   },
+   {
+    "path": "geometry.actions.top",
+    "ref": 701,
+    "del": 704.15625
+   },
+   {
+    "path": "geometry.actions.y",
+    "ref": 701,
+    "del": 704.15625
+   },
+   {
+    "path": "geometry.body.bottom",
+    "ref": 701,
+    "del": 704.15625
+   },
+   {
+    "path": "geometry.body.clientHeight",
+    "ref": 645,
+    "del": 648
+   },
+   {
+    "path": "geometry.body.height",
+    "ref": 645,
+    "del": 648.15625
+   },
+   {
+    "path": "geometry.body.scrollHeight",
+    "ref": 645,
+    "del": 648
+   },
+   {
+    "path": "geometry.buttons[0].bottom",
+    "ref": 756,
+    "del": 757.578125
+   },
+   {
+    "path": "geometry.buttons[0].height",
+    "ref": 44,
+    "del": 42.421875
+   },
+   {
+    "path": "geometry.buttons[0].top",
+    "ref": 712,
+    "del": 715.15625
+   },
+   {
+    "path": "geometry.buttons[0].y",
+    "ref": 712,
+    "del": 715.15625
+   },
+   {
+    "path": "geometry.buttons[1].height",
+    "ref": 44,
+    "del": 42.421875
+   },
+   {
+    "path": "geometry.buttons[1].top",
+    "ref": 766,
+    "del": 767.578125
+   },
+   {
+    "path": "geometry.buttons[1].y",
+    "ref": 766,
+    "del": 767.578125
+   }
+  ]
+ },
+ "chromium-dark-phone :: question traps focus, preserves choices and drafts, and suspends background shortcuts :: question-retained.png": {
+  "kind": "png",
+  "equal": false,
+  "pixels": 19616,
+  "pixelsAtMost2": 264,
+  "maxChannelDiff": 209
+ },
+ "chromium-light-desktop :: wide screens show full questions and actions without opening a preview :: coordinator-inline.json": {
+  "kind": "json",
+  "equal": true,
+  "differences": []
+ },
+ "chromium-light-desktop :: wide screens show full questions and actions without opening a preview :: coordinator-inline.png": {
+  "kind": "png",
+  "equal": true
+ },
+ "chromium-light-phone :: long plan scrolls above visible actions and owns the foreground shortcut :: plan-scrolled.json": {
+  "kind": "json",
+  "equal": false,
+  "differences": [
+   {
+    "path": "geometry.actions.height",
+    "ref": 119,
+    "del": 115.84375
+   },
+   {
+    "path": "geometry.actions.top",
+    "ref": 701,
+    "del": 704.15625
+   },
+   {
+    "path": "geometry.actions.y",
+    "ref": 701,
+    "del": 704.15625
+   },
+   {
+    "path": "geometry.body.bottom",
+    "ref": 701,
+    "del": 704.15625
+   },
+   {
+    "path": "geometry.body.clientHeight",
+    "ref": 621,
+    "del": 624
+   },
+   {
+    "path": "geometry.body.height",
+    "ref": 621,
+    "del": 624.15625
+   },
+   {
+    "path": "geometry.body.scrollHeight",
+    "ref": 7214,
+    "del": 7891
+   },
+   {
+    "path": "geometry.body.scrollTop",
+    "ref": 6593,
+    "del": 7267
+   },
+   {
+    "path": "geometry.buttons[0].bottom",
+    "ref": 756,
+    "del": 757.578125
+   },
+   {
+    "path": "geometry.buttons[0].height",
+    "ref": 44,
+    "del": 42.421875
+   },
+   {
+    "path": "geometry.buttons[0].top",
+    "ref": 712,
+    "del": 715.15625
+   },
+   {
+    "path": "geometry.buttons[0].y",
+    "ref": 712,
+    "del": 715.15625
+   },
+   {
+    "path": "geometry.buttons[1].height",
+    "ref": 44,
+    "del": 42.421875
+   },
+   {
+    "path": "geometry.buttons[1].top",
+    "ref": 766,
+    "del": 767.578125
+   },
+   {
+    "path": "geometry.buttons[1].y",
+    "ref": 766,
+    "del": 767.578125
+   }
+  ]
+ },
+ "chromium-light-phone :: long plan scrolls above visible actions and owns the foreground shortcut :: plan-scrolled.png": {
+  "kind": "png",
+  "equal": false,
+  "pixels": 40464,
+  "pixelsAtMost2": 825,
+  "maxChannelDiff": 239
+ },
+ "chromium-light-phone :: question traps focus, preserves choices and drafts, and suspends background shortcuts :: question-retained.json": {
+  "kind": "json",
+  "equal": false,
+  "differences": [
+   {
+    "path": "geometry.actions.height",
+    "ref": 119,
+    "del": 115.84375
+   },
+   {
+    "path": "geometry.actions.top",
+    "ref": 701,
+    "del": 704.15625
+   },
+   {
+    "path": "geometry.actions.y",
+    "ref": 701,
+    "del": 704.15625
+   },
+   {
+    "path": "geometry.body.bottom",
+    "ref": 701,
+    "del": 704.15625
+   },
+   {
+    "path": "geometry.body.clientHeight",
+    "ref": 645,
+    "del": 648
+   },
+   {
+    "path": "geometry.body.height",
+    "ref": 645,
+    "del": 648.15625
+   },
+   {
+    "path": "geometry.body.scrollHeight",
+    "ref": 645,
+    "del": 648
+   },
+   {
+    "path": "geometry.buttons[0].bottom",
+    "ref": 756,
+    "del": 757.578125
+   },
+   {
+    "path": "geometry.buttons[0].height",
+    "ref": 44,
+    "del": 42.421875
+   },
+   {
+    "path": "geometry.buttons[0].top",
+    "ref": 712,
+    "del": 715.15625
+   },
+   {
+    "path": "geometry.buttons[0].y",
+    "ref": 712,
+    "del": 715.15625
+   },
+   {
+    "path": "geometry.buttons[1].height",
+    "ref": 44,
+    "del": 42.421875
+   },
+   {
+    "path": "geometry.buttons[1].top",
+    "ref": 766,
+    "del": 767.578125
+   },
+   {
+    "path": "geometry.buttons[1].y",
+    "ref": 766,
+    "del": 767.578125
+   }
+  ]
+ },
+ "chromium-light-phone :: question traps focus, preserves choices and drafts, and suspends background shortcuts :: question-retained.png": {
+  "kind": "png",
+  "equal": false,
+  "pixels": 15903,
+  "pixelsAtMost2": 221,
+  "maxChannelDiff": 224
+ },
+ "_missing": {
+  "onlyReference": [],
+  "onlyDelivery": []
+ }
+}

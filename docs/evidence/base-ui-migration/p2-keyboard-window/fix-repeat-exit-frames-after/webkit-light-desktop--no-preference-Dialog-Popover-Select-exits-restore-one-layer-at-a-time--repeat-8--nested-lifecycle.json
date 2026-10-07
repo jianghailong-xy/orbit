@@ -1,0 +1,85 @@
+{
+  "motion": "no-preference",
+  "geometry": {
+    "box": {
+      "x": 610,
+      "y": 244,
+      "width": 81.359375,
+      "height": 104,
+      "top": 244,
+      "right": 691.359375,
+      "bottom": 348,
+      "left": 610
+    },
+    "inPopover": true,
+    "inDialog": true,
+    "cornersHitPopup": true,
+    "animationName": "orbit-slide-up-in"
+  },
+  "selectExit": [
+    {
+      "connected": true,
+      "opacity": 0.999337,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 0.980188,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 0.947386,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 0.823003,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 1,
+      "pointerEvents": "none",
+      "visible": false
+    }
+  ],
+  "popoverExit": [
+    {
+      "connected": true,
+      "opacity": 0.996223,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 0.127504,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": false,
+      "opacity": 0,
+      "pointerEvents": "",
+      "visible": false
+    },
+    {
+      "connected": false,
+      "opacity": 0,
+      "pointerEvents": "",
+      "visible": false
+    },
+    {
+      "connected": false,
+      "opacity": 0,
+      "pointerEvents": "",
+      "visible": false
+    }
+  ],
+  "focusReturned": true,
+  "scrollUnlocked": true
+}

@@ -219,6 +219,58 @@ describe('provider write approval', () => {
   });
 });
 
+describe('merge-check skip approval', () => {
+  const skip = (over: Record<string, unknown> = {}): ApprovalInfo =>
+    ({
+      id: 's1',
+      toolName: 'orbit_integration_skip_merge_check',
+      input: {
+        projectId: 'p1',
+        projectTitle: 'Checkout rewrite',
+        taskId: 't1',
+        taskTitle: 'Port the payment form',
+        checkCommand: 'npm test && go test ./...',
+        failure: 'Checks failed on the combined tree: the merge check exited 1 (expected 0)',
+        generation: '1',
+        reason: '本机 bash 3.2 没有 mapfile，也没有 GNU `timeout`，这条命令在这里必红。',
+        ...(over.input as object),
+      },
+      ...over,
+    }) as ApprovalInfo;
+
+  it('leads with the command that would not run, then the agent\'s claim about it', () => {
+    const html = render(skip());
+
+    expect(html).toContain('Confirm: land Port the payment form without the merge check?');
+    expect(html).toContain('In Checkout rewrite');
+    // The command itself, verbatim: the decision is whether THAT command should hold up THAT
+    // landing, and a card that paraphrased it would be asking about something nobody can see.
+    expect(html).toContain('npm test &amp;&amp; go test ./...');
+    // What it said last time, and that it did not run this time.
+    expect(html).toContain('the merge check exited 1 (expected 0)');
+    expect(html).toContain('This landing runs without the merge check');
+    // The agent's reason is marked as the agent's, because it is a claim being judged.
+    expect(html).toContain('The agent says this red is the check');
+    expect(html).toContain('GNU');
+    expect(html).toContain('Land it without the check');
+    // Once, said on the card: a skip is not the project's check being turned off.
+    expect(html).toContain('Once, and only this landing');
+    // Declining is "not this, and here is what instead", as it is on Orbit's other asks.
+    expect(html).toContain('Chat about this');
+    expect(html).not.toContain('orbit_integration_skip_merge_check');
+  });
+
+  it('offers no standing yes', () => {
+    // "Always let this conversation land past the check" is every later landing unchecked, which is
+    // the project's setting — not a rule one card may leave behind.
+    expect(render(skip())).not.toContain('Always allow');
+  });
+
+  it('says what is not being skipped when it is declined', () => {
+    expect(decliningPrefix('orbit_integration_skip_merge_check')).toBe('Checking it after all: ');
+  });
+});
+
 describe('blocker resolution approval', () => {
   const resolve = (over: Record<string, unknown> = {}): ApprovalInfo =>
     ({
@@ -282,6 +334,65 @@ describe('blocker resolution approval', () => {
 
   it('says what is being left alone when it is declined', () => {
     expect(decliningPrefix('orbit_blocker_resolve')).toBe('Leaving this open: ');
+  });
+});
+
+describe('merge check change approval', () => {
+  const change = (over: Record<string, unknown> = {}): ApprovalInfo =>
+    ({
+      id: 'mc1',
+      toolName: 'orbit_project_update_integration',
+      input: {
+        projectId: 'p1',
+        projectTitle: 'Checkout rewrite',
+        currentMergeCheckCommand: 'npm run lint',
+        currentMergeCheckTimeoutSeconds: 600,
+        mergeCheckCommand: 'npm test',
+        ...(over.input as object),
+      },
+      ...over,
+    }) as ApprovalInfo;
+
+  it('shows the check as it stands beside the check being asked for', () => {
+    const html = render(change());
+
+    expect(html).toContain('Confirm: change the merge check of Checkout rewrite?');
+    // Both commands, because their difference is the whole decision. The CURRENT one is the fact
+    // the agent's proposal is checked against, so a card with only the new command would be asking
+    // the owner to take the agent's word for what is being replaced.
+    expect(html).toContain('npm run lint');
+    expect(html).toContain('npm test');
+    expect(html).toContain('Change the check');
+    expect(html).toContain('Chat about this');
+    expect(html).not.toContain('orbit_project_update_integration');
+  });
+
+  it('says in words when the check is being removed', () => {
+    // An empty line under "after" reads as a card that failed to load rather than as "no check".
+    const html = render(change({ input: { mergeCheckCommand: null } }));
+
+    expect(html).toContain('no check — nothing runs on the combined tree');
+    expect(html).toContain('no check configured');
+  });
+
+  it('names the budget only when the proposal named one', () => {
+    // Absent means "leave the budget as it is", which is not the same as "no budget" — a card that
+    // printed a zero would be describing a write nobody proposed.
+    expect(render(change())).not.toContain('killed after');
+    expect(render(change({
+      input: { mergeCheckCommand: 'npm test', mergeCheckTimeoutSeconds: 900 },
+    }))).toContain('killed after 900s');
+  });
+
+  it('offers no standing yes', () => {
+    // Every one of these is a different change to a different project, and "always allow" would
+    // turn the owner's answer to this one into a permission for the next.
+    expect(render(change())).not.toContain('Always allow');
+  });
+
+  it('says what is being left alone when it is declined', () => {
+    expect(decliningPrefix('orbit_project_update_integration'))
+      .toBe('Leaving the check as it is: ');
   });
 });
 

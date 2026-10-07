@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import { Menu as BaseMenu } from '@base-ui/react/menu';
 import { CheckOutlined, RightOutlined } from '@ant-design/icons';
-import { useFloating, type FloatingProps } from './Floating';
+import { useDropdownPlacement, useFloating, type FloatingProps } from './Floating';
 import './Floating.css';
 
 interface MenuAction {
@@ -31,7 +31,7 @@ export interface MenuProps extends FloatingProps {
   variant?: 'default' | 'attachment';
 }
 
-function Submenu({ item, contents, container, zIndex }: { item: MenuAction; contents: ReactNode; container: () => HTMLElement; zIndex: number }) {
+function Submenu({ item, contents, container, zIndex }: { item: MenuAction; contents: ReactNode; container: () => HTMLElement | undefined; zIndex: number }) {
   const layer = useFloating({});
   return <BaseMenu.SubmenuRoot open={layer.open} onOpenChange={layer.setOpen}>
     <BaseMenu.SubmenuTrigger className="orbit-menu-item" label={item.textValue}>{contents}<RightOutlined className="orbit-menu-submenu-icon" aria-hidden /></BaseMenu.SubmenuTrigger>
@@ -43,7 +43,7 @@ function Submenu({ item, contents, container, zIndex }: { item: MenuAction; cont
   </BaseMenu.SubmenuRoot>;
 }
 
-function Items({ items, container, zIndex }: { items: MenuItem[]; container: () => HTMLElement; zIndex: number }) {
+function Items({ items, container, zIndex }: { items: MenuItem[]; container: () => HTMLElement | undefined; zIndex: number }) {
   return items.map((item) => {
     if (item.type === 'separator') return <BaseMenu.Separator key={item.key} className="orbit-menu-separator" />;
     if (item.type === 'group') return <BaseMenu.Group key={item.key}>
@@ -73,6 +73,8 @@ export function Menu({ trigger, items, disabled, variant = 'default', side = 'bo
   popupClassName, popupStyle, returnFocus, ...state }: MenuProps) {
   const layer = useFloating(state);
   const anchor = useRef<HTMLButtonElement>(null);
+  const popup = useRef<HTMLDivElement>(null);
+  const { positioner, ...placement } = useDropdownPlacement(layer.open, anchor, 4, align);
   const [anchorWidth, setAnchorWidth] = useState<number>();
   useLayoutEffect(() => {
     if (!layer.open || !anchor.current) return;
@@ -84,10 +86,24 @@ export function Menu({ trigger, items, disabled, variant = 'default', side = 'bo
     return () => observer.disconnect();
   }, [layer.open]);
   return <BaseMenu.Root open={layer.open} onOpenChange={layer.setOpen} modal={false}>
-    <BaseMenu.Trigger ref={anchor} render={trigger} disabled={disabled} onClick={(event) => event.stopPropagation()} />
+    <BaseMenu.Trigger ref={anchor} render={trigger} disabled={disabled} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => {
+      // Base UI moves focus into an opened menu on the next animation frame. Until then the trigger
+      // would restart the highlight (arrows) or close the menu without running an item (Enter), so hand
+      // these keys to the highlighted item, else the menu, as Select's are; they then act as in the menu.
+      // Focus is left to Base UI: an arrow that wraps round the menu moves it a frame later, and a key
+      // pressed before then must come back here, not run the item it left.
+      const menu = popup.current;
+      if (!layer.open || !menu || !['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.preventBaseUIHandler();
+      const target = menu.querySelector<HTMLElement>('[data-highlighted]') ?? menu;
+      target.dispatchEvent(new KeyboardEvent('keydown', { key: event.key, code: event.code, bubbles: true, cancelable: true,
+        shiftKey: event.shiftKey, ctrlKey: event.ctrlKey, altKey: event.altKey, metaKey: event.metaKey }));
+    }} />
     <BaseMenu.Portal container={layer.container()}>
-      <BaseMenu.Positioner side={side} align={align} sideOffset={4} collisionPadding={8} className="orbit-floating-positioner" style={{ zIndex: layer.zIndex }}>
-        <BaseMenu.Popup finalFocus={returnFocus} className={`orbit-menu${popupClassName ? ` ${popupClassName}` : ''}`} data-variant={variant} onClick={(event) => event.stopPropagation()}
+      <BaseMenu.Positioner ref={positioner} side={side} align={align} {...placement} className="orbit-floating-positioner" style={{ zIndex: layer.zIndex }}>
+        <BaseMenu.Popup ref={popup} finalFocus={returnFocus} className={`orbit-menu${popupClassName ? ` ${popupClassName}` : ''}`} data-variant={variant} onClick={(event) => event.stopPropagation()}
           style={{ '--orbit-menu-anchor-width': anchorWidth === undefined ? undefined : `${anchorWidth}px`, ...popupStyle } as CSSProperties}>
           <Items items={items} container={layer.container} zIndex={layer.zIndex} />
         </BaseMenu.Popup>

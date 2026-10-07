@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869 && npm run test:ui-choices -w @orbit/web -- --grep 'Dialog owns choices|Dialog keeps composition|Dialog Popover Select exits'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_066d21019f8c",
+ "cwd": "/root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869",
+ "commit": "89256103213431815c02a5e5d4dc8456ef5015c6",
+ "webTree": "1780d071a6b402eef7d34ea74185684d73db3a85",
+ "outputLastWritten": "2026-10-06T13:35:42.813209+00:00",
+ "exitCode": 0,
+ "outputSha256": "e75503c7c5606a24993922877dfc8b21138d43574340f3c82a24a0f1107b7099",
+ "outputBytes": 5548,
+ "note": "32 passed: the choices original entry (Dialog/legacy Modal ownership, Escape one layer at a time, Tab, theme, composition, outside dismissal, submenu Escape, keyboard clear, Dialog Popover Select exits with normal and reduced motion) in all eight environments."
+}

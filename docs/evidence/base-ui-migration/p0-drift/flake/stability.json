@@ -1,0 +1,62 @@
+{
+ "command": "pages.browser.mjs -g '(settings|profile)$' --repeat-each=25 --update-snapshots=all (8 projects x 2 scenarios x 25 = 400 executions, screenshots to a scratch directory so only locators, fixtures and page errors can fail), on the production build of the project tip da13423d3",
+ "fixedLocators": {
+  "sources": [
+   "9d63a52435de6210c59e92dfb15844d1855cee4f32b1aade558838a1e4ef2c4b  /var/tmp/p0drift/flake-runs/stability2-fixed/runner/src/web/ui-migration/announce-duplicate.browser.mjs",
+   "e4c19462c331c8f72fb1687d3c702a273324c363ba5c6ec1181405960df3991c  /var/tmp/p0drift/flake-runs/stability2-fixed/runner/src/web/ui-migration/breakpoints.browser.mjs",
+   "2b5370cd22ef2d03547982210277c1c731ae0a0741ff3d766a4d8c7071b51aee  /var/tmp/p0drift/flake-runs/stability2-fixed/runner/src/web/ui-migration/drift.config.mjs",
+   "ab94a200de48797f8a834d245ce1296c68f232685211d1034c60c8418ecc916f  /var/tmp/p0drift/flake-runs/stability2-fixed/runner/src/web/ui-migration/environment.mjs",
+   "d951bcaeb8f6f634e4e327a255826c09b1bd84b074d4e136a395b1d7f3eb7476  /var/tmp/p0drift/flake-runs/stability2-fixed/runner/src/web/ui-migration/fixtures.mjs",
+   "eb3291c8e48f1d06b75cde43f04815c9fcec9ed38998c70c7b40643979647da8  /var/tmp/p0drift/flake-runs/stability2-fixed/runner/src/web/ui-migration/flake.config.mjs",
+   "145bc5b9014890d531e9d9f757a91bcad7f3ceeb4ecacdfc8fee7935e5f406c1  /var/tmp/p0drift/flake-runs/stability2-fixed/runner/src/web/ui-migration/harness.mjs",
+   "5e197e317a423c611735e5414fdb9ddc0643c640ed56784c0dbe4d558eaa0407  /var/tmp/p0drift/flake-runs/stability2-fixed/runner/src/web/ui-migration/pages.browser.mjs",
+   "5f552bd0ca5554ea0baf7acf8c89620faab750d0246a1117ee3214985bb1d59e  /var/tmp/p0drift/flake-runs/stability2-fixed/runner/src/web/ui-migration/page-scenarios.mjs",
+   "b9ef76a458e6a4b80f85cf9a64b43541787af20b9c07499ee6cb72fab330b8b2  /var/tmp/p0drift/flake-runs/stability2-fixed/runner/src/web/ui-migration/playwright.config.mjs",
+   "43663d63aae496d71302118a3078b48308438d0856c5b7a889b046b4dcde675c  /var/tmp/p0drift/flake-runs/stability2-fixed/runner/src/web/ui-migration/session-fixtures.mjs",
+   "447a629d6b900371671b76edec612e0443b99a95697f399ec38d6c55cfc31e5a  /var/tmp/p0drift/flake-runs/stability2-fixed/runner/src/web/ui-migration/session-scenarios.mjs",
+   "f2d2e184fc12742f024b6fc54ef97932c26d466d6da47e7bd6030ea6fedbdb52  /var/tmp/p0drift/flake-runs/stability2-fixed/runner/src/web/ui-migration/states.browser.mjs",
+   "b05df5d5d5447482a74bc732f4e0b0726510ca6ad129ebe935638eba2d509b7d  /var/tmp/p0drift/flake-runs/stability2-fixed/runner/src/web/ui-migration/toast-geometry.browser.mjs"
+  ],
+  "stats": {
+   "startTime": "2026-10-06T10:34:49.881Z",
+   "duration": 792489.561,
+   "expected": 400,
+   "skipped": 0,
+   "unexpected": 0,
+   "flaky": 0
+  },
+  "failedResults": 0
+ },
+ "originalLocators": {
+  "note": "the run was killed by the runner drain (drain_cap) after about 303 of 400 executions; counted from its per-test output folders",
+  "executionsStarted": 303,
+  "strictModeFailures": 9,
+  "failed": [
+   "pages.browser.mjs-profile-chromium-light-desktop-repeat16",
+   "pages.browser.mjs-profile-chromium-light-desktop-repeat17",
+   "pages.browser.mjs-profile-chromium-light-desktop-repeat20",
+   "pages.browser.mjs-profile-chromium-light-desktop-repeat22",
+   "pages.browser.mjs-settings-chromium-light-desktop-repeat16",
+   "pages.browser.mjs-settings-chromium-light-desktop-repeat17",
+   "pages.browser.mjs-settings-chromium-light-desktop-repeat18",
+   "pages.browser.mjs-settings-chromium-light-desktop-repeat21",
+   "pages.browser.mjs-settings-chromium-light-desktop-repeat24"
+  ],
+  "sources": [
+   "9d63a52435de6210c59e92dfb15844d1855cee4f32b1aade558838a1e4ef2c4b  /var/tmp/p0drift/flake-runs/stability2-original/runner/src/web/ui-migration/announce-duplicate.browser.mjs",
+   "e4c19462c331c8f72fb1687d3c702a273324c363ba5c6ec1181405960df3991c  /var/tmp/p0drift/flake-runs/stability2-original/runner/src/web/ui-migration/breakpoints.browser.mjs",
+   "2b5370cd22ef2d03547982210277c1c731ae0a0741ff3d766a4d8c7071b51aee  /var/tmp/p0drift/flake-runs/stability2-original/runner/src/web/ui-migration/drift.config.mjs",
+   "ab94a200de48797f8a834d245ce1296c68f232685211d1034c60c8418ecc916f  /var/tmp/p0drift/flake-runs/stability2-original/runner/src/web/ui-migration/environment.mjs",
+   "d951bcaeb8f6f634e4e327a255826c09b1bd84b074d4e136a395b1d7f3eb7476  /var/tmp/p0drift/flake-runs/stability2-original/runner/src/web/ui-migration/fixtures.mjs",
+   "eb3291c8e48f1d06b75cde43f04815c9fcec9ed38998c70c7b40643979647da8  /var/tmp/p0drift/flake-runs/stability2-original/runner/src/web/ui-migration/flake.config.mjs",
+   "145bc5b9014890d531e9d9f757a91bcad7f3ceeb4ecacdfc8fee7935e5f406c1  /var/tmp/p0drift/flake-runs/stability2-original/runner/src/web/ui-migration/harness.mjs",
+   "5e197e317a423c611735e5414fdb9ddc0643c640ed56784c0dbe4d558eaa0407  /var/tmp/p0drift/flake-runs/stability2-original/runner/src/web/ui-migration/pages.browser.mjs",
+   "eeb67d77e337b5b282ea950aaf85056935b1b9282817a7ac69c07a7711b30a39  /var/tmp/p0drift/flake-runs/stability2-original/runner/src/web/ui-migration/page-scenarios.mjs",
+   "b9ef76a458e6a4b80f85cf9a64b43541787af20b9c07499ee6cb72fab330b8b2  /var/tmp/p0drift/flake-runs/stability2-original/runner/src/web/ui-migration/playwright.config.mjs",
+   "43663d63aae496d71302118a3078b48308438d0856c5b7a889b046b4dcde675c  /var/tmp/p0drift/flake-runs/stability2-original/runner/src/web/ui-migration/session-fixtures.mjs",
+   "447a629d6b900371671b76edec612e0443b99a95697f399ec38d6c55cfc31e5a  /var/tmp/p0drift/flake-runs/stability2-original/runner/src/web/ui-migration/session-scenarios.mjs",
+   "f2d2e184fc12742f024b6fc54ef97932c26d466d6da47e7bd6030ea6fedbdb52  /var/tmp/p0drift/flake-runs/stability2-original/runner/src/web/ui-migration/states.browser.mjs",
+   "b05df5d5d5447482a74bc732f4e0b0726510ca6ad129ebe935638eba2d509b7d  /var/tmp/p0drift/flake-runs/stability2-original/runner/src/web/ui-migration/toast-geometry.browser.mjs"
+  ]
+ }
+}

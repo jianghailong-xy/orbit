@@ -1,0 +1,12 @@
+{
+ "tip": {
+  "summary": "Executed 3257 tests, with 5 tests skipped and 0 failures (0 unexpected) in 41.415 (41.415) seconds",
+  "failed": []
+ },
+ "delivery": {
+  "summary": "Executed 3257 tests, with 5 tests skipped and 0 failures (0 unexpected) in 36.358 (36.358) seconds",
+  "failed": []
+ },
+ "onlyDelivery": [],
+ "onlyTip": []
+}

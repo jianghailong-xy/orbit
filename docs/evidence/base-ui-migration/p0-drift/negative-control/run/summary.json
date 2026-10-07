@@ -1,0 +1,107 @@
+{
+ "normalPassed": 72,
+ "expectedFailures": 16,
+ "skipped": 11,
+ "unexpected": [
+  {
+   "project": "chromium-light-desktop",
+   "test": "settings",
+   "screenshot": "settings.png",
+   "expectedLayer": "p0-drift",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed"
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "profile",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed"
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "settings",
+   "screenshot": "settings.png",
+   "expectedLayer": "p0-drift",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed"
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "profile",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed"
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "settings",
+   "screenshot": "settings.png",
+   "expectedLayer": "p0-drift",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed"
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "profile",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed"
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "settings",
+   "screenshot": "settings.png",
+   "expectedLayer": "p0-drift",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed"
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "settings",
+   "screenshot": "settings.png",
+   "expectedLayer": "p0-drift",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed"
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "settings",
+   "screenshot": "settings.png",
+   "expectedLayer": "p0-drift",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed"
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "profile",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed"
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "settings",
+   "screenshot": "settings.png",
+   "expectedLayer": "p0-drift",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed"
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "settings",
+   "screenshot": "settings.png",
+   "expectedLayer": "p0-drift",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed"
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "profile",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": "p0.2",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed"
+  }
+ ],
+ "flaky": 0,
+ "stats": {
+  "startTime": "2026-10-06T12:25:40.741Z",
+  "duration": 346024.866,
+  "expected": 88,
+  "skipped": 11,
+  "unexpected": 13,
+  "flaky": 0
+ }
+}

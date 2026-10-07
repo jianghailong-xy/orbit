@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6 && git -C /var/tmp/p2kw-c2604b/before log --oneline -1 && python3 docs/evidence/base-ui-migration/p2-keyboard-window/run-chunks.py /var/tmp/p2kw-c2604b/before docs/evidence/base-ui-migration/p2-select-keys/select-keys-burst.config.mjs src/web/.choices-results/p2-select-keys-burst fix-select-keys-burst-before 'field=orbit-field ' 'sample=orbit-sample ' 'antd=antd-sample ' 'search-multiple=(orbit-combobox|antd-search|orbit-multiselect|antd-multiple) ' 'menu=orbit-menu '",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_964d41703329",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "46a418fba",
+ "webTree": "62fce56ed0c10a115d5c4e567ce1c60e882f79a9",
+ "outputLastWritten": "2026-10-07T05:47:35.266474+00:00",
+ "exitCode": 0,
+ "outputSha256": "316da3aeb2daf8a2ef68672e8737c83e1e2b83344e2d8cbc561a8abfddf059ee",
+ "outputBytes": 1359,
+ "note": "The runner job that ran the previous task's unchanged burst probe on the before-fix tree in five chunks by target (each chunk's own command, output and exit code: checks/fix-select-keys-burst-before-<chunk>.*), at the same time as fix-select-keys-burst-after-job. All five chunks exit 0."
+}

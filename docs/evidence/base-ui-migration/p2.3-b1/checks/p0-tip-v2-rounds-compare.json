@@ -1,0 +1,169 @@
+{
+ "round1": {
+  "report": "runs/p0-tip-v2-round-1/report.json",
+  "stats": {
+   "startTime": "2026-10-07T00:49:08.009Z",
+   "duration": 435014.656,
+   "expected": 81,
+   "skipped": 11,
+   "unexpected": 20,
+   "flaky": 0
+  }
+ },
+ "round2": {
+  "report": "runs/p0-tip-v2-round-2/report.json",
+  "stats": {
+   "startTime": "2026-10-07T00:56:55.397Z",
+   "duration": 390812.48000000004,
+   "expected": 81,
+   "skipped": 11,
+   "unexpected": 20,
+   "flaky": 0
+  }
+ },
+ "tests": 112,
+ "identical": true,
+ "differences": [],
+ "failures": {
+  "chromium-light-desktop | breakpoints.browser.mjs | both sides of existing 600, 640 and 960px rules": {
+   "status": "unexpected",
+   "expectedStatus": "passed",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed",
+   "differentPixels": 8872,
+   "screenshot": "breakpoint-959-wiki.png"
+  },
+  "chromium-dark-desktop | breakpoints.browser.mjs | both sides of existing 600, 640 and 960px rules": {
+   "status": "unexpected",
+   "expectedStatus": "passed",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed",
+   "differentPixels": 8787,
+   "screenshot": "breakpoint-959-wiki.png"
+  },
+  "webkit-light-desktop | breakpoints.browser.mjs | both sides of existing 600, 640 and 960px rules": {
+   "status": "unexpected",
+   "expectedStatus": "passed",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed",
+   "differentPixels": 9047,
+   "screenshot": "breakpoint-959-wiki.png"
+  },
+  "webkit-dark-desktop | breakpoints.browser.mjs | both sides of existing 600, 640 and 960px rules": {
+   "status": "unexpected",
+   "expectedStatus": "passed",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed",
+   "differentPixels": 8840,
+   "screenshot": "breakpoint-959-wiki.png"
+  },
+  "chromium-light-desktop | pages.browser.mjs | wiki": {
+   "status": "unexpected",
+   "expectedStatus": "passed",
+   "error": "Error: expect(locator).toBeVisible() failed",
+   "differentPixels": null,
+   "screenshot": null
+  },
+  "chromium-light-desktop | pages.browser.mjs | profile": {
+   "status": "unexpected",
+   "expectedStatus": "passed",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed",
+   "differentPixels": 9144,
+   "screenshot": "profile.png"
+  },
+  "chromium-light-phone | pages.browser.mjs | wiki": {
+   "status": "unexpected",
+   "expectedStatus": "passed",
+   "error": "Error: expect(locator).toBeVisible() failed",
+   "differentPixels": null,
+   "screenshot": null
+  },
+  "chromium-light-phone | pages.browser.mjs | profile": {
+   "status": "unexpected",
+   "expectedStatus": "passed",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed",
+   "differentPixels": 4721,
+   "screenshot": "profile.png"
+  },
+  "chromium-dark-desktop | pages.browser.mjs | wiki": {
+   "status": "unexpected",
+   "expectedStatus": "passed",
+   "error": "Error: expect(locator).toBeVisible() failed",
+   "differentPixels": null,
+   "screenshot": null
+  },
+  "chromium-dark-desktop | pages.browser.mjs | profile": {
+   "status": "unexpected",
+   "expectedStatus": "passed",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed",
+   "differentPixels": 9400,
+   "screenshot": "profile.png"
+  },
+  "chromium-dark-phone | pages.browser.mjs | wiki": {
+   "status": "unexpected",
+   "expectedStatus": "passed",
+   "error": "Error: expect(locator).toBeVisible() failed",
+   "differentPixels": null,
+   "screenshot": null
+  },
+  "chromium-dark-phone | pages.browser.mjs | profile": {
+   "status": "unexpected",
+   "expectedStatus": "passed",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed",
+   "differentPixels": 4795,
+   "screenshot": "profile.png"
+  },
+  "webkit-light-desktop | pages.browser.mjs | wiki": {
+   "status": "unexpected",
+   "expectedStatus": "passed",
+   "error": "Error: expect(locator).toBeVisible() failed",
+   "differentPixels": null,
+   "screenshot": null
+  },
+  "webkit-light-desktop | pages.browser.mjs | profile": {
+   "status": "unexpected",
+   "expectedStatus": "passed",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed",
+   "differentPixels": 13970,
+   "screenshot": "profile.png"
+  },
+  "webkit-light-phone | pages.browser.mjs | wiki": {
+   "status": "unexpected",
+   "expectedStatus": "passed",
+   "error": "Error: expect(locator).toBeVisible() failed",
+   "differentPixels": null,
+   "screenshot": null
+  },
+  "webkit-light-phone | pages.browser.mjs | profile": {
+   "status": "unexpected",
+   "expectedStatus": "passed",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed",
+   "differentPixels": 4626,
+   "screenshot": "profile.png"
+  },
+  "webkit-dark-desktop | pages.browser.mjs | wiki": {
+   "status": "unexpected",
+   "expectedStatus": "passed",
+   "error": "Error: expect(locator).toBeVisible() failed",
+   "differentPixels": null,
+   "screenshot": null
+  },
+  "webkit-dark-desktop | pages.browser.mjs | profile": {
+   "status": "unexpected",
+   "expectedStatus": "passed",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed",
+   "differentPixels": 13762,
+   "screenshot": "profile.png"
+  },
+  "webkit-dark-phone | pages.browser.mjs | wiki": {
+   "status": "unexpected",
+   "expectedStatus": "passed",
+   "error": "Error: expect(locator).toBeVisible() failed",
+   "differentPixels": null,
+   "screenshot": null
+  },
+  "webkit-dark-phone | pages.browser.mjs | profile": {
+   "status": "unexpected",
+   "expectedStatus": "passed",
+   "error": "Error: expect(page).toHaveScreenshot(expected) failed",
+   "differentPixels": 4702,
+   "screenshot": "profile.png"
+  }
+ }
+}

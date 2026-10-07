@@ -1,0 +1,756 @@
+{
+  "default": {
+    "antd": {
+      "control": {
+        "surface": {
+          "x": 0,
+          "y": 0,
+          "width": 250,
+          "height": 24,
+          "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+          "fontSize": "14px",
+          "lineHeight": "22px",
+          "fontWeight": "400",
+          "color": "rgb(31, 35, 41)",
+          "backgroundColor": "rgb(255, 255, 255)",
+          "borderRadius": "4px",
+          "borderColor": "rgb(222, 224, 227)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "padding": "1px 7px 1px 3px",
+          "boxShadow": "none"
+        },
+        "rows": [],
+        "separators": [],
+        "origin": {
+          "x": 24,
+          "y": 148
+        },
+        "chips": [
+          {
+            "x": 4,
+            "y": 4,
+            "width": 52.921875,
+            "height": 16,
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "lineHeight": "14px",
+            "fontWeight": "400",
+            "color": "rgb(31, 35, 41)",
+            "backgroundColor": "rgba(0, 0, 0, 0.06)",
+            "borderRadius": "2px",
+            "borderColor": "rgba(0, 0, 0, 0)",
+            "borderWidth": "1px",
+            "borderStyle": "solid",
+            "padding": "0px 4px 0px 8px",
+            "boxShadow": "none"
+          },
+          {
+            "x": 60.921875,
+            "y": 4,
+            "width": 59.90625,
+            "height": 16,
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "lineHeight": "14px",
+            "fontWeight": "400",
+            "color": "rgb(31, 35, 41)",
+            "backgroundColor": "rgba(0, 0, 0, 0.06)",
+            "borderRadius": "2px",
+            "borderColor": "rgba(0, 0, 0, 0)",
+            "borderWidth": "1px",
+            "borderStyle": "solid",
+            "padding": "0px 4px 0px 8px",
+            "boxShadow": "none"
+          },
+          {
+            "x": 124.828125,
+            "y": 4,
+            "width": 53.421875,
+            "height": 16,
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "lineHeight": "14px",
+            "fontWeight": "400",
+            "color": "rgb(31, 35, 41)",
+            "backgroundColor": "rgba(0, 0, 0, 0.06)",
+            "borderRadius": "2px",
+            "borderColor": "rgba(0, 0, 0, 0)",
+            "borderWidth": "1px",
+            "borderStyle": "solid",
+            "padding": "0px 4px 0px 8px",
+            "boxShadow": "none"
+          }
+        ],
+        "texts": [
+          {
+            "text": "Bug",
+            "x": 13,
+            "y": 4,
+            "width": 24.921875,
+            "height": 16,
+            "color": "rgb(31, 35, 41)",
+            "fontSize": "14px",
+            "fontWeight": "400"
+          },
+          {
+            "text": "Docs",
+            "x": 69.921875,
+            "y": 4,
+            "width": 31.90625,
+            "height": 16,
+            "color": "rgb(31, 35, 41)",
+            "fontSize": "14px",
+            "fontWeight": "400"
+          },
+          {
+            "text": "+ 1 ...",
+            "x": 133.828125,
+            "y": 4,
+            "width": 35.421875,
+            "height": 16,
+            "color": "rgb(31, 35, 41)",
+            "fontSize": "14px",
+            "fontWeight": "400"
+          }
+        ],
+        "icons": [
+          {
+            "x": 41.921875,
+            "y": 7,
+            "width": 10,
+            "height": 10,
+            "color": "rgb(143, 149, 158)",
+            "paths": [
+              "M799.86 166.31c.02 0 .04.02.08.06l57.69 57.7c.04.03.05.05.06.08a.12.12 0 010 .06c0 .03-.02.05-.06.09L569.93 512l287.7 287.7c.04.04.05.06.06.09a.12.12 0 010 .07c0 .02-.02.04-.06.08l-57.7 57.69c-.03.04-.05.05-.07.06a.12.12 0 01-.07 0c-.03 0-.05-.02-.09-.06L512 569.93l-287.7 287.7c-.04.04-.06.05-.09.06a.12.12 0 01-.07 0c-.02 0-.04-.02-.08-.06l-57.69-57.7c-.04-.03-.05-.05-.06-.07a.12.12 0 010-.07c0-.03.02-.05.06-.09L454.07 512l-287.7-287.7c-.04-.04-.05-.06-.06-.09a.12.12 0 010-.07c0-.02.02-.04.06-.08l57.7-57.69c.03-.04.05-.05.07-.06a.12.12 0 01.07 0c.03 0 .05.02.09.06L512 454.07l287.7-287.7c.04-.04.06-.05.09-.06a.12.12 0 01.07 0z"
+            ]
+          },
+          {
+            "x": 105.828125,
+            "y": 7,
+            "width": 10,
+            "height": 10,
+            "color": "rgb(143, 149, 158)",
+            "paths": [
+              "M799.86 166.31c.02 0 .04.02.08.06l57.69 57.7c.04.03.05.05.06.08a.12.12 0 010 .06c0 .03-.02.05-.06.09L569.93 512l287.7 287.7c.04.04.05.06.06.09a.12.12 0 010 .07c0 .02-.02.04-.06.08l-57.7 57.69c-.03.04-.05.05-.07.06a.12.12 0 01-.07 0c-.03 0-.05-.02-.09-.06L512 569.93l-287.7 287.7c-.04.04-.06.05-.09.06a.12.12 0 01-.07 0c-.02 0-.04-.02-.08-.06l-57.69-57.7c-.04-.03-.05-.05-.06-.07a.12.12 0 010-.07c0-.03.02-.05.06-.09L454.07 512l-287.7-287.7c-.04-.04-.05-.06-.06-.09a.12.12 0 010-.07c0-.02.02-.04.06-.08l57.7-57.69c.03-.04.05-.05.07-.06a.12.12 0 01.07 0c.03 0 .05.02.09.06L512 454.07l287.7-287.7c.04-.04.06-.05.09-.06a.12.12 0 01.07 0z"
+            ]
+          },
+          {
+            "x": 230,
+            "y": 6,
+            "width": 12,
+            "height": 12,
+            "color": "rgba(0, 0, 0, 0.25)",
+            "paths": [
+              "M884 256h-75c-5.1 0-9.9 2.5-12.9 6.6L512 654.2 227.9 262.6c-3-4.1-7.8-6.6-12.9-6.6h-75c-6.5 0-10.3 7.4-6.5 12.7l352.6 486.1c12.8 17.6 39 17.6 51.7 0l352.6-486.1c3.9-5.3.1-12.7-6.4-12.7z"
+            ]
+          }
+        ]
+      },
+      "popup": {
+        "surface": {
+          "x": 0,
+          "y": 0,
+          "width": 250,
+          "height": 136,
+          "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+          "fontSize": "14px",
+          "lineHeight": "22px",
+          "fontWeight": "400",
+          "color": "rgb(31, 35, 41)",
+          "backgroundColor": "rgb(255, 255, 255)",
+          "borderRadius": "8px",
+          "borderColor": "rgb(31, 35, 41)",
+          "borderWidth": "0px",
+          "borderStyle": "none",
+          "padding": "4px",
+          "boxShadow": "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+        },
+        "rows": [
+          {
+            "label": "Bug",
+            "x": 4,
+            "y": 4,
+            "width": 242,
+            "height": 32,
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "lineHeight": "22px",
+            "fontWeight": "600",
+            "color": "rgb(31, 35, 41)",
+            "backgroundColor": "rgb(214, 232, 255)",
+            "borderRadius": "4px 4px 0px 0px",
+            "borderColor": "rgb(31, 35, 41)",
+            "borderWidth": "0px",
+            "borderStyle": "none",
+            "padding": "5px 12px",
+            "boxShadow": "none"
+          },
+          {
+            "label": "Docs",
+            "x": 4,
+            "y": 36,
+            "width": 242,
+            "height": 32,
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "lineHeight": "22px",
+            "fontWeight": "600",
+            "color": "rgb(31, 35, 41)",
+            "backgroundColor": "rgb(240, 247, 255)",
+            "borderRadius": "0px",
+            "borderColor": "rgb(31, 35, 41)",
+            "borderWidth": "0px",
+            "borderStyle": "none",
+            "padding": "5px 12px",
+            "boxShadow": "none"
+          },
+          {
+            "label": "Ops",
+            "x": 4,
+            "y": 68,
+            "width": 242,
+            "height": 32,
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "lineHeight": "22px",
+            "fontWeight": "600",
+            "color": "rgb(31, 35, 41)",
+            "backgroundColor": "rgb(240, 247, 255)",
+            "borderRadius": "0px 0px 4px 4px",
+            "borderColor": "rgb(31, 35, 41)",
+            "borderWidth": "0px",
+            "borderStyle": "none",
+            "padding": "5px 12px",
+            "boxShadow": "none"
+          },
+          {
+            "label": "Archived",
+            "x": 4,
+            "y": 100,
+            "width": 242,
+            "height": 32,
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "lineHeight": "22px",
+            "fontWeight": "400",
+            "color": "rgba(0, 0, 0, 0.25)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "borderRadius": "4px",
+            "borderColor": "rgba(0, 0, 0, 0.25)",
+            "borderWidth": "0px",
+            "borderStyle": "none",
+            "padding": "5px 12px",
+            "boxShadow": "none"
+          }
+        ],
+        "separators": []
+      }
+    },
+    "orbit": {
+      "control": {
+        "surface": {
+          "x": 0,
+          "y": 0,
+          "width": 250,
+          "height": 24,
+          "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+          "fontSize": "14px",
+          "lineHeight": "22px",
+          "fontWeight": "400",
+          "color": "rgb(31, 35, 41)",
+          "backgroundColor": "rgb(255, 255, 255)",
+          "borderRadius": "4px",
+          "borderColor": "rgb(222, 224, 227)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "padding": "1px 7px 1px 3px",
+          "boxShadow": "none"
+        },
+        "rows": [],
+        "separators": [],
+        "origin": {
+          "x": 24,
+          "y": 148
+        },
+        "chips": [
+          {
+            "x": 4,
+            "y": 4,
+            "width": 52.921875,
+            "height": 16,
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "lineHeight": "14px",
+            "fontWeight": "400",
+            "color": "rgb(31, 35, 41)",
+            "backgroundColor": "rgba(0, 0, 0, 0.06)",
+            "borderRadius": "2px",
+            "borderColor": "rgba(0, 0, 0, 0)",
+            "borderWidth": "1px",
+            "borderStyle": "solid",
+            "padding": "0px 4px 0px 8px",
+            "boxShadow": "none"
+          },
+          {
+            "x": 60.921875,
+            "y": 4,
+            "width": 59.90625,
+            "height": 16,
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "lineHeight": "14px",
+            "fontWeight": "400",
+            "color": "rgb(31, 35, 41)",
+            "backgroundColor": "rgba(0, 0, 0, 0.06)",
+            "borderRadius": "2px",
+            "borderColor": "rgba(0, 0, 0, 0)",
+            "borderWidth": "1px",
+            "borderStyle": "solid",
+            "padding": "0px 4px 0px 8px",
+            "boxShadow": "none"
+          },
+          {
+            "x": 124.828125,
+            "y": 4,
+            "width": 53.421875,
+            "height": 16,
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "lineHeight": "14px",
+            "fontWeight": "400",
+            "color": "rgb(31, 35, 41)",
+            "backgroundColor": "rgba(0, 0, 0, 0.06)",
+            "borderRadius": "2px",
+            "borderColor": "rgba(0, 0, 0, 0)",
+            "borderWidth": "1px",
+            "borderStyle": "solid",
+            "padding": "0px 4px 0px 8px",
+            "boxShadow": "none"
+          }
+        ],
+        "texts": [
+          {
+            "text": "Bug",
+            "x": 13,
+            "y": 4,
+            "width": 24.921875,
+            "height": 16,
+            "color": "rgb(31, 35, 41)",
+            "fontSize": "14px",
+            "fontWeight": "400"
+          },
+          {
+            "text": "Docs",
+            "x": 69.921875,
+            "y": 4,
+            "width": 31.90625,
+            "height": 16,
+            "color": "rgb(31, 35, 41)",
+            "fontSize": "14px",
+            "fontWeight": "400"
+          },
+          {
+            "text": "+ 1 ...",
+            "x": 133.828125,
+            "y": 4,
+            "width": 35.421875,
+            "height": 16,
+            "color": "rgb(31, 35, 41)",
+            "fontSize": "14px",
+            "fontWeight": "400"
+          }
+        ],
+        "icons": [
+          {
+            "x": 41.921875,
+            "y": 7,
+            "width": 10,
+            "height": 10,
+            "color": "rgb(143, 149, 158)",
+            "paths": [
+              "M799.86 166.31c.02 0 .04.02.08.06l57.69 57.7c.04.03.05.05.06.08a.12.12 0 010 .06c0 .03-.02.05-.06.09L569.93 512l287.7 287.7c.04.04.05.06.06.09a.12.12 0 010 .07c0 .02-.02.04-.06.08l-57.7 57.69c-.03.04-.05.05-.07.06a.12.12 0 01-.07 0c-.03 0-.05-.02-.09-.06L512 569.93l-287.7 287.7c-.04.04-.06.05-.09.06a.12.12 0 01-.07 0c-.02 0-.04-.02-.08-.06l-57.69-57.7c-.04-.03-.05-.05-.06-.07a.12.12 0 010-.07c0-.03.02-.05.06-.09L454.07 512l-287.7-287.7c-.04-.04-.05-.06-.06-.09a.12.12 0 010-.07c0-.02.02-.04.06-.08l57.7-57.69c.03-.04.05-.05.07-.06a.12.12 0 01.07 0c.03 0 .05.02.09.06L512 454.07l287.7-287.7c.04-.04.06-.05.09-.06a.12.12 0 01.07 0z"
+            ]
+          },
+          {
+            "x": 105.828125,
+            "y": 7,
+            "width": 10,
+            "height": 10,
+            "color": "rgb(143, 149, 158)",
+            "paths": [
+              "M799.86 166.31c.02 0 .04.02.08.06l57.69 57.7c.04.03.05.05.06.08a.12.12 0 010 .06c0 .03-.02.05-.06.09L569.93 512l287.7 287.7c.04.04.05.06.06.09a.12.12 0 010 .07c0 .02-.02.04-.06.08l-57.7 57.69c-.03.04-.05.05-.07.06a.12.12 0 01-.07 0c-.03 0-.05-.02-.09-.06L512 569.93l-287.7 287.7c-.04.04-.06.05-.09.06a.12.12 0 01-.07 0c-.02 0-.04-.02-.08-.06l-57.69-57.7c-.04-.03-.05-.05-.06-.07a.12.12 0 010-.07c0-.03.02-.05.06-.09L454.07 512l-287.7-287.7c-.04-.04-.05-.06-.06-.09a.12.12 0 010-.07c0-.02.02-.04.06-.08l57.7-57.69c.03-.04.05-.05.07-.06a.12.12 0 01.07 0c.03 0 .05.02.09.06L512 454.07l287.7-287.7c.04-.04.06-.05.09-.06a.12.12 0 01.07 0z"
+            ]
+          },
+          {
+            "x": 230,
+            "y": 6,
+            "width": 12,
+            "height": 12,
+            "color": "rgba(0, 0, 0, 0.25)",
+            "paths": [
+              "M884 256h-75c-5.1 0-9.9 2.5-12.9 6.6L512 654.2 227.9 262.6c-3-4.1-7.8-6.6-12.9-6.6h-75c-6.5 0-10.3 7.4-6.5 12.7l352.6 486.1c12.8 17.6 39 17.6 51.7 0l352.6-486.1c3.9-5.3.1-12.7-6.4-12.7z"
+            ]
+          }
+        ]
+      },
+      "popup": {
+        "surface": {
+          "x": 0,
+          "y": 0,
+          "width": 250,
+          "height": 136,
+          "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+          "fontSize": "14px",
+          "lineHeight": "22px",
+          "fontWeight": "400",
+          "color": "rgb(31, 35, 41)",
+          "backgroundColor": "rgb(255, 255, 255)",
+          "borderRadius": "8px",
+          "borderColor": "rgb(31, 35, 41)",
+          "borderWidth": "0px",
+          "borderStyle": "none",
+          "padding": "4px",
+          "boxShadow": "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+        },
+        "rows": [
+          {
+            "label": "Bug",
+            "x": 4,
+            "y": 4,
+            "width": 242,
+            "height": 32,
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "lineHeight": "22px",
+            "fontWeight": "600",
+            "color": "rgb(31, 35, 41)",
+            "backgroundColor": "rgb(214, 232, 255)",
+            "borderRadius": "4px 4px 0px 0px",
+            "borderColor": "rgb(31, 35, 41)",
+            "borderWidth": "0px",
+            "borderStyle": "none",
+            "padding": "5px 12px",
+            "boxShadow": "none"
+          },
+          {
+            "label": "Docs",
+            "x": 4,
+            "y": 36,
+            "width": 242,
+            "height": 32,
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "lineHeight": "22px",
+            "fontWeight": "600",
+            "color": "rgb(31, 35, 41)",
+            "backgroundColor": "rgb(240, 247, 255)",
+            "borderRadius": "0px",
+            "borderColor": "rgb(31, 35, 41)",
+            "borderWidth": "0px",
+            "borderStyle": "none",
+            "padding": "5px 12px",
+            "boxShadow": "none"
+          },
+          {
+            "label": "Ops",
+            "x": 4,
+            "y": 68,
+            "width": 242,
+            "height": 32,
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "lineHeight": "22px",
+            "fontWeight": "600",
+            "color": "rgb(31, 35, 41)",
+            "backgroundColor": "rgb(240, 247, 255)",
+            "borderRadius": "0px 0px 4px 4px",
+            "borderColor": "rgb(31, 35, 41)",
+            "borderWidth": "0px",
+            "borderStyle": "none",
+            "padding": "5px 12px",
+            "boxShadow": "none"
+          },
+          {
+            "label": "Archived",
+            "x": 4,
+            "y": 100,
+            "width": 242,
+            "height": 32,
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "lineHeight": "22px",
+            "fontWeight": "400",
+            "color": "rgba(0, 0, 0, 0.25)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "borderRadius": "4px",
+            "borderColor": "rgba(0, 0, 0, 0.25)",
+            "borderWidth": "0px",
+            "borderStyle": "none",
+            "padding": "5px 12px",
+            "boxShadow": "none"
+          }
+        ],
+        "separators": []
+      }
+    }
+  },
+  "disabled": {
+    "antd": {
+      "control": {
+        "surface": {
+          "x": 0,
+          "y": 0,
+          "width": 250,
+          "height": 24,
+          "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+          "fontSize": "14px",
+          "lineHeight": "22px",
+          "fontWeight": "400",
+          "color": "rgba(0, 0, 0, 0.25)",
+          "backgroundColor": "rgba(0, 0, 0, 0.04)",
+          "borderRadius": "4px",
+          "borderColor": "rgb(217, 217, 217)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "padding": "1px 7px 1px 3px",
+          "boxShadow": "none"
+        },
+        "rows": [],
+        "separators": [],
+        "origin": {
+          "x": 24,
+          "y": 148
+        },
+        "chips": [
+          {
+            "x": 4,
+            "y": 4,
+            "width": 42.921875,
+            "height": 16,
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "lineHeight": "14px",
+            "fontWeight": "400",
+            "color": "rgba(0, 0, 0, 0.25)",
+            "backgroundColor": "rgba(0, 0, 0, 0.06)",
+            "borderRadius": "2px",
+            "borderColor": "rgba(0, 0, 0, 0)",
+            "borderWidth": "1px",
+            "borderStyle": "solid",
+            "padding": "0px 4px 0px 8px",
+            "boxShadow": "none"
+          },
+          {
+            "x": 50.921875,
+            "y": 4,
+            "width": 49.90625,
+            "height": 16,
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "lineHeight": "14px",
+            "fontWeight": "400",
+            "color": "rgba(0, 0, 0, 0.25)",
+            "backgroundColor": "rgba(0, 0, 0, 0.06)",
+            "borderRadius": "2px",
+            "borderColor": "rgba(0, 0, 0, 0)",
+            "borderWidth": "1px",
+            "borderStyle": "solid",
+            "padding": "0px 4px 0px 8px",
+            "boxShadow": "none"
+          },
+          {
+            "x": 104.828125,
+            "y": 4,
+            "width": 53.421875,
+            "height": 16,
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "lineHeight": "14px",
+            "fontWeight": "400",
+            "color": "rgba(0, 0, 0, 0.25)",
+            "backgroundColor": "rgba(0, 0, 0, 0.06)",
+            "borderRadius": "2px",
+            "borderColor": "rgba(0, 0, 0, 0)",
+            "borderWidth": "1px",
+            "borderStyle": "solid",
+            "padding": "0px 4px 0px 8px",
+            "boxShadow": "none"
+          }
+        ],
+        "texts": [
+          {
+            "text": "Bug",
+            "x": 13,
+            "y": 4,
+            "width": 24.921875,
+            "height": 16,
+            "color": "rgba(0, 0, 0, 0.25)",
+            "fontSize": "14px",
+            "fontWeight": "400"
+          },
+          {
+            "text": "Docs",
+            "x": 59.921875,
+            "y": 4,
+            "width": 31.90625,
+            "height": 16,
+            "color": "rgba(0, 0, 0, 0.25)",
+            "fontSize": "14px",
+            "fontWeight": "400"
+          },
+          {
+            "text": "+ 1 ...",
+            "x": 113.828125,
+            "y": 4,
+            "width": 35.421875,
+            "height": 16,
+            "color": "rgba(0, 0, 0, 0.25)",
+            "fontSize": "14px",
+            "fontWeight": "400"
+          }
+        ],
+        "icons": [
+          {
+            "x": 230,
+            "y": 6,
+            "width": 12,
+            "height": 12,
+            "color": "rgba(0, 0, 0, 0.25)",
+            "paths": [
+              "M884 256h-75c-5.1 0-9.9 2.5-12.9 6.6L512 654.2 227.9 262.6c-3-4.1-7.8-6.6-12.9-6.6h-75c-6.5 0-10.3 7.4-6.5 12.7l352.6 486.1c12.8 17.6 39 17.6 51.7 0l352.6-486.1c3.9-5.3.1-12.7-6.4-12.7z"
+            ]
+          }
+        ]
+      }
+    },
+    "orbit": {
+      "control": {
+        "surface": {
+          "x": 0,
+          "y": 0,
+          "width": 250,
+          "height": 24,
+          "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+          "fontSize": "14px",
+          "lineHeight": "22px",
+          "fontWeight": "400",
+          "color": "rgba(0, 0, 0, 0.25)",
+          "backgroundColor": "rgba(0, 0, 0, 0.04)",
+          "borderRadius": "4px",
+          "borderColor": "rgb(217, 217, 217)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "padding": "1px 7px 1px 3px",
+          "boxShadow": "none"
+        },
+        "rows": [],
+        "separators": [],
+        "origin": {
+          "x": 24,
+          "y": 148
+        },
+        "chips": [
+          {
+            "x": 4,
+            "y": 4,
+            "width": 42.921875,
+            "height": 16,
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "lineHeight": "14px",
+            "fontWeight": "400",
+            "color": "rgba(0, 0, 0, 0.25)",
+            "backgroundColor": "rgba(0, 0, 0, 0.06)",
+            "borderRadius": "2px",
+            "borderColor": "rgba(0, 0, 0, 0)",
+            "borderWidth": "1px",
+            "borderStyle": "solid",
+            "padding": "0px 4px 0px 8px",
+            "boxShadow": "none"
+          },
+          {
+            "x": 50.921875,
+            "y": 4,
+            "width": 49.90625,
+            "height": 16,
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "lineHeight": "14px",
+            "fontWeight": "400",
+            "color": "rgba(0, 0, 0, 0.25)",
+            "backgroundColor": "rgba(0, 0, 0, 0.06)",
+            "borderRadius": "2px",
+            "borderColor": "rgba(0, 0, 0, 0)",
+            "borderWidth": "1px",
+            "borderStyle": "solid",
+            "padding": "0px 4px 0px 8px",
+            "boxShadow": "none"
+          },
+          {
+            "x": 104.828125,
+            "y": 4,
+            "width": 53.421875,
+            "height": 16,
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "lineHeight": "14px",
+            "fontWeight": "400",
+            "color": "rgba(0, 0, 0, 0.25)",
+            "backgroundColor": "rgba(0, 0, 0, 0.06)",
+            "borderRadius": "2px",
+            "borderColor": "rgba(0, 0, 0, 0)",
+            "borderWidth": "1px",
+            "borderStyle": "solid",
+            "padding": "0px 4px 0px 8px",
+            "boxShadow": "none"
+          }
+        ],
+        "texts": [
+          {
+            "text": "Bug",
+            "x": 13,
+            "y": 4,
+            "width": 24.921875,
+            "height": 16,
+            "color": "rgba(0, 0, 0, 0.25)",
+            "fontSize": "14px",
+            "fontWeight": "400"
+          },
+          {
+            "text": "Docs",
+            "x": 59.921875,
+            "y": 4,
+            "width": 31.90625,
+            "height": 16,
+            "color": "rgba(0, 0, 0, 0.25)",
+            "fontSize": "14px",
+            "fontWeight": "400"
+          },
+          {
+            "text": "+ 1 ...",
+            "x": 113.828125,
+            "y": 4,
+            "width": 35.421875,
+            "height": 16,
+            "color": "rgba(0, 0, 0, 0.25)",
+            "fontSize": "14px",
+            "fontWeight": "400"
+          }
+        ],
+        "icons": [
+          {
+            "x": 230,
+            "y": 6,
+            "width": 12,
+            "height": 12,
+            "color": "rgba(0, 0, 0, 0.25)",
+            "paths": [
+              "M884 256h-75c-5.1 0-9.9 2.5-12.9 6.6L512 654.2 227.9 262.6c-3-4.1-7.8-6.6-12.9-6.6h-75c-6.5 0-10.3 7.4-6.5 12.7l352.6 486.1c12.8 17.6 39 17.6 51.7 0l352.6-486.1c3.9-5.3.1-12.7-6.4-12.7z"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

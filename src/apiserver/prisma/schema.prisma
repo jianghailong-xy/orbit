@@ -2742,6 +2742,17 @@ model ProjectIntegrationJob {
   retryRequestedBySessionId String? @map("retry_requested_by_session_id") @db.Uuid
   retryRequestedByUserId    String? @map("retry_requested_by_user_id") @db.Uuid
 
+  /// A LAND_TASK generation queued through `integration_skip_merge_check` (migration 0393, contract
+  /// §2.4 J-S5): the merge check did NOT run on it, and the row says so — with the reason, the person
+  /// whose yes it is, and the card it was approved on (NULL when the account owner queued it
+  /// themselves). Only that one generation: the next one is written with the flag false and runs the
+  /// project's check as before. A skip is never written as a pass; `checks` stays empty because
+  /// nothing ran.
+  skipMergeCheck       Boolean @default(false) @map("skip_merge_check")
+  skipReason           String? @map("skip_reason")
+  skipApprovedByUserId String? @map("skip_approved_by_user_id") @db.Uuid
+  skipApprovalId       String? @map("skip_approval_id") @db.Uuid
+
   /// `ij:v1:<kind>:<taskId or promotionId>:<generation>` — enqueue is idempotent on the fact. The one
   /// exception is the landing J-T1e owes the work, keyed by the work's generation instead
   /// (`landingBehindTheWorkKey`).
