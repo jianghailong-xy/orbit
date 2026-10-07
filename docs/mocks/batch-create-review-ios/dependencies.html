@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>有依赖的批次：按层排 — iPhone 效果图</title>
+<style>
+  /* 字体：Mac 上打开直接走 SF Pro / PingFang。Linux 渲染机没有它们，用 Inter + Noto Sans SC 代替
+     （render 时 Chromium 带 --allow-file-access-from-files 读 /tmp 里的字体；文件不在就落回系统字体）。 */
+  @font-face { font-family:"MockInter"; src:url("file:///tmp/mockfonts-batch-1Dtv/Inter.ttf"); font-weight:100 900; }
+  @font-face { font-family:"MockNotoSC"; src:url("file:///tmp/mockfonts-batch-1Dtv/NotoSansSC.ttf"); font-weight:100 900; }
+  @font-face { font-family:"MockMono"; src:url("file:///tmp/mockfonts-batch-1Dtv/JetBrainsMono.ttf"); font-weight:100 800; }
+
+  /* 颜色取自截图：主色 #3E69F6（Create 按钮与 ✕ 的实测值），橙 #F09242 / #FCEDDE（卡头图标与徽标）。
+     其余是 iOS 系统色：分组底 #F2F2F7、secondaryLabel 60%、separator。 */
+  :root {
+    --accent:#3E69F6; --orange:#F09242; --orange-bg:#FCEDDE;
+    --green:#34C759; --amber:#FF9500; --red:#E5484D;
+    --label:#000; --label-2:rgba(60,60,67,.6); --label-3:rgba(60,60,67,.3);
+    --sep:rgba(60,60,67,.16); --grouped:#F2F2F7; --cell:#fff;
+    --fill:rgba(120,120,128,.12); --fill-2:rgba(120,120,128,.08);
+    --ui:-apple-system,"SF Pro Text","MockInter","PingFang SC","MockNotoSC",sans-serif;
+    --mono:ui-monospace,"SF Mono","MockMono",Menlo,monospace;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:40px 32px 56px; background:#e9e9ee; color:#16161a; font:15px/1.55 var(--ui);
+         -webkit-font-smoothing:antialiased; }
+  h1 { font-size:26px; letter-spacing:-.02em; margin:0 0 8px; }
+  .lede { color:#55555e; max-width:1180px; margin:0; font-size:15px; }
+  .lede b { color:#16161a; }
+  code { font-family:var(--mono); font-size:12.5px; background:#dedee6; border-radius:4px; padding:1px 5px; }
+  .row { display:flex; gap:36px; align-items:flex-start; margin-top:26px; }
+  figure { margin:0; width:393px; }
+  .tag { display:inline-block; font-weight:700; font-size:13px; padding:4px 10px; border-radius:7px; margin-bottom:12px; }
+  .tag.now { background:#ffe4e0; color:#b3261e; }
+  .tag.new { background:#dfe8ff; color:#2449c7; }
+  figcaption { margin-top:16px; font-size:13.5px; line-height:1.6; color:#4a4a52; }
+  figcaption ol, figcaption ul { margin:0; padding-left:20px; }
+  figcaption li { margin-top:5px; }
+  figcaption li::marker { font-weight:700; color:#b3261e; }
+  figcaption.ok li::marker { color:#2449c7; }
+  figcaption b { color:#16161a; }
+
+  /* ── 手机与 sheet ─────────────────────────────────────────────── */
+  .phone { width:393px; height:852px; border-radius:55px; overflow:hidden; position:relative;
+           background:#c6c8c8; box-shadow:0 14px 44px rgba(0,0,0,.18); font-family:var(--ui); color:var(--label); }
+  .shots .phone { border-radius:0; box-shadow:none; }
+  .status { position:absolute; top:0; left:0; right:0; height:59px; display:flex; align-items:center;
+            justify-content:space-between; padding:0 30px 0 52px; font-size:17px; font-weight:600; }
+  .status .r { display:flex; align-items:center; gap:7px; font-size:15px; }
+  .bars { display:flex; gap:2px; align-items:flex-end; }
+  .bars i { display:block; width:3.5px; background:#000; border-radius:1px; }
+  .batt { width:27px; height:13px; border-radius:4px; background:#000; color:#c6c8c8; font-size:10px; font-weight:700;
+          display:grid; place-items:center; position:relative; }
+  .batt::after { content:""; position:absolute; right:-3px; top:4px; width:1.5px; height:5px; border-radius:1px; background:#8b8c8c; }
+  .sheet { position:absolute; top:59px; left:0; right:0; bottom:0; background:var(--grouped);
+           border-radius:38px 38px 0 0; overflow:hidden; }
+  .grabber { width:36px; height:5px; border-radius:3px; background:rgba(60,60,67,.22); margin:5px auto 0; }
+  .nav { position:relative; height:44px; margin-top:11px; display:flex; align-items:center; justify-content:center; }
+  .nav .t { font-size:17px; font-weight:600; letter-spacing:-.01em; }
+  /* iOS 26 工具栏玻璃按钮的中性态：白色半透明 + 细边 + 软投影，图形用 label 色 */
+  .glass { position:absolute; top:0; width:44px; height:44px; border-radius:50%; display:grid; place-items:center;
+           background:rgba(255,255,255,.82); box-shadow:0 0 0 .5px rgba(0,0,0,.07), 0 3px 12px rgba(0,0,0,.08); }
+  .glass.r { right:16px; } .glass.l { left:16px; }
+  .glass svg { width:17px; height:17px; }
+  .content { padding:10px 16px 0; }
+  .sechead { font-size:13px; line-height:18px; color:var(--label-2); padding:0 16px 7px; }
+  .group { background:var(--cell); border-radius:22px; overflow:hidden; margin-bottom:22px; }
+
+  /* 后果卡：同一句文案，在 " — " 处拆成粗体结论 + 灰字原因 */
+  .impact { display:flex; gap:12px; align-items:center; padding:13px 16px; position:relative; }
+  .impact + .impact::before { content:""; position:absolute; top:0; left:58px; right:0; border-top:.5px solid var(--sep); }
+  .impact .ic { flex:none; width:30px; height:30px; border-radius:8px; display:grid; place-items:center; }
+  .impact .ic svg { width:17px; height:17px; }
+  .ic.gray { background:#ececf0; color:#636366; }
+  .ic.green { background:rgba(52,199,89,.16); color:#1f9d45; }
+  .ic.amber { background:rgba(255,149,0,.16); color:#b26a00; }
+  .impact .k { font-size:16px; line-height:21px; font-weight:600; letter-spacing:-.01em; }
+  .impact .why { font-size:14px; line-height:19px; color:var(--label-2); margin-top:1px; }
+
+  /* 任务行 */
+  .task { display:flex; gap:12px; align-items:flex-start; padding:11px 14px 11px 14px; position:relative; }
+  .list-flat .task + .task::before { content:""; position:absolute; top:0; left:50px; right:0; border-top:.5px solid var(--sep); }
+  .num { flex:none; width:24px; height:24px; border-radius:50%; background:var(--fill); color:#3c3c43;
+         font-size:13px; font-weight:600; display:grid; place-items:center; margin-top:-1px; position:relative; z-index:1; }
+  .task .tt { flex:1; min-width:0; font-size:16px; line-height:22px; letter-spacing:-.005em; }
+  .task .sub { font-size:13px; line-height:18px; color:var(--label-2); margin-top:2px; }
+  .chev { flex:none; width:8px; align-self:center; color:#c4c4c7; }
+  .chev svg { width:8px; height:14px; display:block; }
+  /* 树：连接线是真的线，不再是等宽字体里的 ├─ */
+  .tree .task { padding-top:10px; padding-bottom:10px; }
+  .tree .ln { position:absolute; background:rgba(60,60,67,.24); }
+
+  /* 底部动作栏（safeAreaInset .bar） */
+  .bar { position:absolute; left:0; right:0; bottom:0; padding:12px 16px 50px; background:rgba(248,248,249,.96);
+         border-top:.5px solid rgba(60,60,67,.18); display:flex; flex-direction:column; gap:10px; }
+  .btn { height:34px; border-radius:17px; display:grid; place-items:center; font-size:17px; font-weight:450; letter-spacing:-.01em; }
+  .btn.primary { background:var(--accent); color:#fff; }
+  .btn.second { background:rgba(120,120,128,.14); color:var(--accent); }
+  .home { position:absolute; left:50%; bottom:8px; width:134px; height:5px; margin-left:-67px; border-radius:3px; background:#000; z-index:5; }
+
+  /* 详情页 */
+  .dt-title { font-size:20px; line-height:26px; font-weight:650; letter-spacing:-.015em; padding:2px 4px 0; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; padding:10px 4px 18px; }
+  .chip { font-size:12.5px; line-height:16px; padding:4px 9px; border-radius:99px; background:#e5e5ea; color:#3c3c43; }
+  .prose { padding:12px 16px 14px; font-size:15px; line-height:22px; }
+  .prose p { margin:0; }
+  .prose p + p, .prose ol { margin-top:8px; }
+  .prose ol { padding-left:20px; margin-bottom:0; }
+  .prose code { font-family:var(--mono); font-size:13px; background:var(--fill-2); border-radius:4px; padding:1px 4px; }
+
+  /* ① 的标注 */
+  .shot { position:absolute; inset:0; width:393px; height:852px; }
+  .mk { position:absolute; border:2px dashed var(--red); border-radius:10px; }
+  .mk b { position:absolute; width:22px; height:22px; border-radius:50%; background:var(--red); color:#fff;
+          font:700 13px/22px var(--ui); text-align:center; box-shadow:0 0 0 2px #fff; }
+  .mk .lab { position:absolute; white-space:nowrap; font:600 12px/1 var(--ui); color:#fff; background:var(--red);
+             padding:5px 8px; border-radius:7px; }
+
+  .notes { margin-top:34px; display:grid; grid-template-columns:1.25fr 1fr; gap:22px; max-width:1680px; }
+  .note { padding:18px 20px; background:#fff; border:1px solid #dcdce2; border-radius:14px; font-size:14px; line-height:1.65; color:#3c3c43; }
+  .note h3 { margin:0 0 8px; font-size:16px; color:#16161a; }
+  .note ol, .note ul { margin:4px 0 0; padding-left:20px; }
+  .note li { margin-top:6px; }
+  .note li b { color:#16161a; }
+
+  /* ── 依赖：按层 ─────────────────────────────────────────────── */
+  /* 层 = 本批里最深的前置 + 1（与 Web buildBatchGraph 的 longest-path layering 同一算法）。
+     左侧细线把各层串起来，表示先后；同层的任务彼此不依赖，可以并行。 */
+  .lvblock { position:relative; padding:0 0 10px 22px; }
+  .lvblock:not(:last-child)::before { content:""; position:absolute; left:6.25px; top:14px; bottom:-4px; width:1.5px;
+                                      background:rgba(60,60,67,.2); }
+  .lv { position:relative; font-size:13px; line-height:18px; color:var(--label-2); padding:0 0 6px 2px; }
+  .lv b { font-weight:600; }
+  .lv .dot { position:absolute; left:-20px; top:4px; width:10px; height:10px; border-radius:50%; background:#c4c4c9; }
+  .lvblock .group { margin-bottom:0; }
+  .wait { font-size:13px; line-height:18px; color:var(--label-2); margin-top:2px; display:flex; flex-wrap:wrap;
+          align-items:center; gap:4px; }
+  .mini { display:inline-grid; place-items:center; width:18px; height:18px; border-radius:50%; background:var(--fill);
+          color:#3c3c43; font-size:11px; font-weight:650; }
+  .st { font-size:11.5px; line-height:16px; font-weight:650; padding:1px 7px; border-radius:6px; margin-right:2px; }
+  .st.run { background:rgba(52,199,89,.17); color:#1d8a3c; }
+  .st.hold { background:var(--fill); color:#55555e; }
+  .more { margin-top:0; padding:11px 16px; border-radius:16px; border:1.5px dashed rgba(60,60,67,.22);
+          font-size:13px; line-height:18px; color:var(--label-2); }
+
+  /* 形状小卡：去掉手机框，只保留 sheet 里的那一块 */
+  .shapes { display:grid; grid-template-columns:repeat(4, 393px); gap:28px 36px; margin-top:22px; align-items:start; }
+  .shape h4 { margin:0 0 10px; font-size:14px; color:#16161a; }
+  .shape h4 span { font-weight:400; color:#6b6b74; }
+  .panel { background:var(--grouped); border-radius:22px; padding:16px 16px 4px; font-family:var(--ui); color:var(--label);
+           box-shadow:0 0 0 1px rgba(0,0,0,.05); }
+  .shape p { margin:10px 2px 0; font-size:13.5px; line-height:1.6; color:#4a4a52; }
+  h2 { font-size:19px; margin:40px 0 0; letter-spacing:-.01em; }
+  .lede2 { color:#55555e; margin:6px 0 0; max-width:1180px; }
+</style>
+
+<h1>有依赖的批次：按层排，每行写清在等谁</h1>
+<p class="lede">一批任务之间有依赖时，确认页把任务<b>按层分组</b>：第几层 = 它在本批里最深的前置 + 1，
+和 Web 依赖图的分层是同一个算法（<code>buildBatchGraph</code>），所以两端看到的先后顺序一致。
+层与层之间用左侧细线串起来表示先后；同一层的任务互不依赖，可以并行；每行写全它在等哪几条。
+B、C 用的是一批示例任务（菱形依赖：1 → 2、3 → 4，第 1 条还等一条已有任务）。</p>
+
+<div class="row">
+  <figure>
+    <span class="tag now">A · 上一版 ④：树（对比用）</span>
+    <div class="phone" id="tree-old"><div class="status"><span>8:40</span><span class="r"><span class="bars"><i style="height:5px"></i><i style="height:7.5px"></i><i style="height:10px"></i><i style="height:12px;opacity:.35"></i></span>5G<span class="batt">41</span></span></div><div class="sheet"><div class="grabber"></div><div class="nav"><span class="t">Create 4 tasks?</span><span class="glass r"><svg viewBox="0 0 17 17"><path d="M3.5 3.5l10 10M13.5 3.5l-10 10" stroke="#1d1d1f" stroke-width="2.1" stroke-linecap="round"/></svg></span></div><div class="content"><div class="group"><div class="impact"><span class="ic green"><svg viewBox="0 0 17 17"><path d="M5.2 3.3v10.4c0 .5.5.8.9.5l8-5.2c.4-.2.4-.8 0-1L6.1 2.8c-.4-.3-.9 0-.9.5z" fill="currentColor"/></svg></span><div><div class="k">1 starts running within the minute</div></div></div><div class="impact"><span class="ic gray"><svg viewBox="0 0 17 17"><path d="M4.3 1.8h8.4M4.3 15.2h8.4M5.2 1.8c0 3.6 3.3 4.6 3.3 6.7S5.2 11.6 5.2 15.2M11.8 1.8c0 3.6-3.3 4.6-3.3 6.7s3.3 3.1 3.3 6.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span><div><div class="k">3 wait on a prerequisite</div></div></div></div><div class="sechead">into Backlog · 5 dependency edges · 3 levels, up to 2 in parallel</div><div class="group tree"><div class="task"><i class="ln" style="left:25px;top:35px;bottom:0;width:1.5px"></i><span class="num">1</span><div class="tt">Google OAuth 回调与身份落库<div class="sub">waits on a task outside</div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="task" style="padding-left:40px"><i class="ln" style="left:25px;top:0;bottom:0;width:1.5px"></i><i class="ln" style="left:25px;top:21px;width:15px;height:1.5px"></i><i class="ln" style="left:51px;top:34px;bottom:0;width:1.5px"></i><span class="num">2</span><div class="tt">登录页加「用 Google 登录」按钮</div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="task" style="padding-left:66px"><i class="ln" style="left:25px;top:0;bottom:0;width:1.5px"></i><i class="ln" style="left:51px;top:0;height:22.5px;width:1.5px"></i><i class="ln" style="left:51px;top:21px;width:15px;height:1.5px"></i><span class="num">3</span><div class="tt">开放注册 e2e：新账号看不到别人的 runner<div class="sub">waits on 1 more</div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="task" style="padding-left:40px"><i class="ln" style="left:25px;top:0;height:22.5px;width:1.5px"></i><i class="ln" style="left:25px;top:21px;width:15px;height:1.5px"></i><span class="num">4</span><div class="tt">首次登录自动建账号与默认 workspace</div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div><div class="bar"><div class="btn primary">Create 4 tasks</div><div class="btn second">Chat about this</div></div></div><div class="home"></div></div>
+    <figcaption><ul>
+      <li>树只能把任务挂在<b>第一个</b>前置下面。第 3 条（截图里）其实等两条，第二条只能写成「waits on 1 more」，看不出是哪一条。</li>
+      <li>链越长缩进越深，iOS 现在第 4 层以后直接压平。</li>
+      <li>和 Web 排法不一致：Web 按最深前置分层，iOS 的树按第一个前置挂。</li>
+    </ul></figcaption>
+  </figure>
+  <figure>
+    <span class="tag new">B · 建议：按层</span>
+    <div class="phone" id="levels"><div class="status"><span>8:40</span><span class="r"><span class="bars"><i style="height:5px"></i><i style="height:7.5px"></i><i style="height:10px"></i><i style="height:12px;opacity:.35"></i></span>5G<span class="batt">41</span></span></div><div class="sheet"><div class="grabber"></div><div class="nav"><span class="t">Create 4 tasks?</span><span class="glass r"><svg viewBox="0 0 17 17"><path d="M3.5 3.5l10 10M13.5 3.5l-10 10" stroke="#1d1d1f" stroke-width="2.1" stroke-linecap="round"/></svg></span></div><div class="content"><div class="group"><div class="impact"><span class="ic green"><svg viewBox="0 0 17 17"><path d="M5.2 3.3v10.4c0 .5.5.8.9.5l8-5.2c.4-.2.4-.8 0-1L6.1 2.8c-.4-.3-.9 0-.9.5z" fill="currentColor"/></svg></span><div><div class="k">1 starts running within the minute</div></div></div><div class="impact"><span class="ic gray"><svg viewBox="0 0 17 17"><path d="M4.3 1.8h8.4M4.3 15.2h8.4M5.2 1.8c0 3.6 3.3 4.6 3.3 6.7S5.2 11.6 5.2 15.2M11.8 1.8c0 3.6-3.3 4.6-3.3 6.7s3.3 3.1 3.3 6.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span><div><div class="k">3 wait on a prerequisite</div></div></div></div><div class="sechead">into Backlog · 5 dependency edges · 3 levels, up to 2 in parallel</div><div class="levels"><div class="lvblock"><div class="lv"><i class="dot"></i><b>Level 1</b></div><div class="group list-flat"><div class="task"><span class="num">1</span><div class="tt">Google OAuth 回调与身份落库<div class="wait">Waits on a task outside</div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div><div class="lvblock"><div class="lv"><i class="dot"></i><b>Level 2</b> · 2 in parallel</div><div class="group list-flat"><div class="task"><span class="num">2</span><div class="tt">登录页加「用 Google 登录」按钮<div class="wait">Waits on <span class="mini">1</span></div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="task"><span class="num">3</span><div class="tt">首次登录自动建账号与默认 workspace<div class="wait">Waits on <span class="mini">1</span></div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div><div class="lvblock"><div class="lv"><i class="dot"></i><b>Level 3</b></div><div class="group list-flat"><div class="task"><span class="num">4</span><div class="tt">开放注册 e2e：新账号看不到别人的 runner<div class="wait">Waits on <span class="mini">2</span><span class="mini">3</span></div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div></div></div><div class="bar"><div class="btn primary">Create 4 tasks</div><div class="btn second">Chat about this</div></div></div><div class="home"></div></div>
+    <figcaption class="ok"><ul>
+      <li><b>Level 1 / 2 / 3</b> 自上而下就是执行顺序，左侧细线把各层串起来。「3 levels, up to 2 in parallel」这句两端早就在用，不是新说法。</li>
+      <li><b>编号按层往下数</b>，前置的编号一定比等它的小，所以「Waits on 2 3」读起来是往回指的。</li>
+      <li><b>每行写全</b>它在等的本批任务（小圆点就是行首的编号）；只等本批以外任务的写「Waits on a task outside」。</li>
+      <li>后果卡不变：1 条马上开跑一定在第 1 层，第 2 层以后的都在等。</li>
+    </ul></figcaption>
+  </figure>
+  <figure>
+    <span class="tag new">C · 点开第 4 条</span>
+    <div class="phone" id="dep-detail"><div class="status"><span>8:40</span><span class="r"><span class="bars"><i style="height:5px"></i><i style="height:7.5px"></i><i style="height:10px"></i><i style="height:12px;opacity:.35"></i></span>5G<span class="batt">41</span></span></div><div class="sheet"><div class="grabber"></div><div class="nav"><span class="glass l"><svg viewBox="0 0 17 17"><path d="M10.8 2.8L5 8.5l5.8 5.7" fill="none" stroke="#1d1d1f" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="t">Task 4 of 4</span><span class="glass r"><svg viewBox="0 0 17 17"><path d="M3.5 3.5l10 10M13.5 3.5l-10 10" stroke="#1d1d1f" stroke-width="2.1" stroke-linecap="round"/></svg></span></div><div class="content"><div class="dt-title">开放注册 e2e：新账号看不到别人的 runner</div><div class="chips"><span class="chip">Judged by · submitted evidence</span><span class="chip">google-sign-in</span></div><div class="sechead">Waits on</div><div class="group list-flat"><div class="task"><span class="num">2</span><div class="tt">登录页加「用 Google 登录」按钮</div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="task"><span class="num">3</span><div class="tt">首次登录自动建账号与默认 workspace</div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div><div class="sechead">Done when</div><div class="group"><div class="prose"><p>用一个新注册的 Google 账号登录后，runner、workspace、共享池三处列表都为空，直接请求别人的 id 返回 404；e2e 在 CI 上通过，附运行记录。</p></div></div><div class="sechead">Description</div><div class="group"><div class="prose"><p>背景：开放注册后，陌生人可以直接用 Google 账号注册。设计 5.6 写的是「新用户看不到也用不了别人的 runner、workspace 和共享池」，这条 e2e 用来守住它。</p><p>要做：</p><ol><li>用全新的 Google 测试账号走一遍注册 → 登录 → 打开三个列表。</li><li>断言三处都为空，且直接请求别人的 id 返回 404。</li><li>接进 CI 的 e2e 任务。</li></ol></div></div></div></div><div class="home"></div></div>
+    <figcaption class="ok"><ul>
+      <li>任务页多一节 <b>「Waits on」</b>：列出它等的那几条，点一下跳到那条的任务页（同一个 sheet 里继续推进）。</li>
+      <li>被别的任务等着的（比如第 1 条），还会多一节 <b>「Needed by」</b>，列出等它的那几条。</li>
+      <li>等的是本批以外的任务时，这一节显示那条已有任务，点进去打开它。</li>
+      <li>其余和 ③ 一样：先「Done when」，再描述，不放 Create 按钮。</li>
+    </ul></figcaption>
+  </figure>
+</div>
+
+<h2>各种形状长什么样</h2>
+<p class="lede2">只截 sheet 里任务列表那一块。</p>
+<div class="shapes">
+  <div class="shape"><h4>1 · 一条链 <span>a chain of 4</span></h4><div class="panel" id="shape-chain"><div class="sechead">into Backlog · 3 dependency edges · a chain of 4</div><div class="levels"><div class="lvblock"><div class="lv"><i class="dot"></i><b>Level 1</b></div><div class="group list-flat"><div class="task"><span class="num">1</span><div class="tt">定义外部身份表 external_identity</div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div><div class="lvblock"><div class="lv"><i class="dot"></i><b>Level 2</b></div><div class="group list-flat"><div class="task"><span class="num">2</span><div class="tt">OAuth 回调写入外部身份<div class="wait">Waits on <span class="mini">1</span></div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div><div class="lvblock"><div class="lv"><i class="dot"></i><b>Level 3</b></div><div class="group list-flat"><div class="task"><span class="num">3</span><div class="tt">登录页接「用 Google 登录」<div class="wait">Waits on <span class="mini">2</span></div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div><div class="lvblock"><div class="lv"><i class="dot"></i><b>Level 4</b></div><div class="group list-flat"><div class="task"><span class="num">4</span><div class="tt">Google 登录冒烟 e2e<div class="wait">Waits on <span class="mini">3</span></div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div></div></div><p>每层一条，读起来就是一条时间线。层数没有上限，也不缩进，12 层也不会挤出屏幕（上一版的树第 4 层以后就压平了）。</p></div>
+  <div class="shape"><h4>2 · 扇出 <span>3 in parallel after 1</span></h4><div class="panel" id="shape-fan"><div class="sechead">into Backlog · 3 dependency edges · 3 in parallel after 1</div><div class="levels"><div class="lvblock"><div class="lv"><i class="dot"></i><b>Level 1</b></div><div class="group list-flat"><div class="task"><span class="num">1</span><div class="tt">拆出 Google 登录的配置项</div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div><div class="lvblock"><div class="lv"><i class="dot"></i><b>Level 2</b> · 3 in parallel</div><div class="group list-flat"><div class="task"><span class="num">2</span><div class="tt">iOS 登录页接 Google 按钮<div class="wait">Waits on <span class="mini">1</span></div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="task"><span class="num">3</span><div class="tt">Web 登录页接 Google 按钮<div class="wait">Waits on <span class="mini">1</span></div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="task"><span class="num">4</span><div class="tt">macOS 登录页接 Google 按钮<div class="wait">Waits on <span class="mini">1</span></div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div></div></div><p>同一层的几条互不依赖，层标题直接写「3 in parallel」：第 1 条做完，后面三条一起放出来。</p></div>
+  <div class="shape"><h4>3 · 只等本批以外的任务 <span>本批内部没有依赖</span></h4><div class="panel" id="shape-outside"><div class="sechead">into Backlog · 3 dependency edges · 3 independent tasks</div><div class="group list-flat"><div class="task"><span class="num">1</span><div class="tt">Google 登录的审计日志<div class="wait">Waits on a task outside</div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="task"><span class="num">2</span><div class="tt">开放注册的限流<div class="wait">Waits on a task outside</div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="task"><span class="num">3</span><div class="tt">注册邮件模板<div class="wait">Waits on a task outside</div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div><p>本批内部没有依赖就不分层，还是 ② 那种普通列表；每行写明它在等一条已有任务，点进去能看到是哪一条。</p></div>
+  <div class="shape"><h4>4 · 大批次 <span>50 条</span></h4><div class="panel" id="shape-big"><div class="group"><div class="impact"><span class="ic green"><svg viewBox="0 0 17 17"><path d="M5.2 3.3v10.4c0 .5.5.8.9.5l8-5.2c.4-.2.4-.8 0-1L6.1 2.8c-.4-.3-.9 0-.9.5z" fill="currentColor"/></svg></span><div><div class="k">1 starts running within the minute</div></div></div><div class="impact"><span class="ic gray"><svg viewBox="0 0 17 17"><path d="M4.3 1.8h8.4M4.3 15.2h8.4M5.2 1.8c0 3.6 3.3 4.6 3.3 6.7S5.2 11.6 5.2 15.2M11.8 1.8c0 3.6-3.3 4.6-3.3 6.7s3.3 3.1 3.3 6.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span><div><div class="k">49 wait on a prerequisite</div></div></div></div><div class="sechead">into Migration · 58 dependency edges · 5 levels, up to 4 in parallel</div><div class="levels"><div class="lvblock"><div class="lv"><i class="dot"></i><b>Level 1</b></div><div class="group list-flat"><div class="task"><span class="num">1</span><div class="tt">冻结旧 provider 表的写入<div class="wait">Waits on a task outside</div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div><div class="lvblock"><div class="lv"><i class="dot"></i><b>Level 2</b> · 4 in parallel</div><div class="group list-flat"><div class="task"><span class="num">2</span><div class="tt">迁移 custom-provider 行<div class="wait">Waits on <span class="mini">1</span></div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="task"><span class="num">3</span><div class="tt">迁移共享池成员<div class="wait">Waits on <span class="mini">1</span></div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div></div><div class="lv" style="padding:2px 0 12px 24px">⋯ 第 4–12 条（Level 2–5）</div><div class="more" style="margin-bottom:12px">+38 more not shown — the counts above cover all 50</div></div><p>服务端预览最多给 12 条（<code>DAG_PREVIEW_TITLES</code>），层只按这 12 条排，末尾一行说明还有多少条没画；上面的后果数字始终按整批 50 条算。（中间几行是板子上省略的）</p></div>
+  <div class="shape"><h4>5 · 可选：每行标出结果 <span>要服务端多给一个字段</span></h4><div class="panel" id="shape-tagged"><div class="group"><div class="impact"><span class="ic green"><svg viewBox="0 0 17 17"><path d="M5.2 3.3v10.4c0 .5.5.8.9.5l8-5.2c.4-.2.4-.8 0-1L6.1 2.8c-.4-.3-.9 0-.9.5z" fill="currentColor"/></svg></span><div><div class="k">1 starts running within the minute</div></div></div><div class="impact"><span class="ic gray"><svg viewBox="0 0 17 17"><path d="M4.3 1.8h8.4M4.3 15.2h8.4M5.2 1.8c0 3.6 3.3 4.6 3.3 6.7S5.2 11.6 5.2 15.2M11.8 1.8c0 3.6-3.3 4.6-3.3 6.7s3.3 3.1 3.3 6.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span><div><div class="k">2 wait on a prerequisite</div></div></div><div class="impact"><span class="ic gray"><svg viewBox="0 0 17 17"><circle cx="8.5" cy="8.5" r="7.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M6.6 5.6v5.8M10.4 5.6v5.8" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span><div><div class="k">1 needs a manual start</div><div class="why">Nothing will trigger it</div></div></div></div><div class="sechead">into Backlog · 4 dependency edges · 2 levels, up to 3 in parallel</div><div class="levels"><div class="lvblock"><div class="lv"><i class="dot"></i><b>Level 1</b> · 3 in parallel</div><div class="group list-flat"><div class="task"><span class="num">1</span><div class="tt">拆出 Google 登录的配置项<div class="wait"><span class="st hold">Manual start</span></div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="task"><span class="num">2</span><div class="tt">Google OAuth 回调与身份落库<div class="wait"><span class="st run">Starts now</span>Waits on a task outside · done</div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="task"><span class="num">3</span><div class="tt">开放注册的限流<div class="wait">Waits on a task outside · not done</div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div><div class="lvblock"><div class="lv"><i class="dot"></i><b>Level 2</b></div><div class="group list-flat"><div class="task"><span class="num">4</span><div class="tt">开放注册 e2e：新账号看不到别人的 runner<div class="wait">Waits on <span class="mini">1</span><span class="mini">2</span></div></div><span class="chev"><svg viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div></div></div><p>第 2 层以后的一定在等，不用标；要标的是第 1 层：谁马上跑、谁要手动启动、谁在等一条还没完成的已有任务。服务端 <code>previewCreateMany</code> 已经逐条判断过，也查了已有任务的状态，只是只返回了总数；在预览的 <code>tasks[i]</code> 上带回这两项就行。要改服务端，所以单列为可选。</p></div>
+</div>
+
+<div class="notes">
+  <div class="note">
+    <h3>规则</h3>
+    <ol>
+      <li><b>分层</b>：第几层 = 它在本批里最深的前置 + 1；在本批里没有前置的都在第 1 层。同 Web 的 <code>buildBatchGraph</code>（服务端保证引用只能指向更早的条目，所以不会有环）。</li>
+      <li><b>编号</b>：按层从上往下编，前置的编号永远比等它的小；任务页标题「Task 4 of 4」用同一个编号。</li>
+      <li><b>每行写全前置</b>：「Waits on 2 3」。只等本批以外的写「Waits on a task outside」。</li>
+      <li><b>并行</b>：同层的任务互不依赖，层标题写「N in parallel」。</li>
+      <li><b>没有依赖</b>：本批内部一条依赖都没有 → 不分层，就是 ② 的普通列表。</li>
+      <li><b>大批次</b>：只画服务端给的前 12 条，末尾「+N more」；后果数字始终按整批算。</li>
+      <li><b>代码</b>：分层算法从 Web 的 <code>batchGraph.ts</code> 搬到 OrbitKit（替掉 <code>batchTreeRows</code>），iOS 视图按层分组渲染；不需要改服务端（除非要做第 5 种）。</li>
+    </ol>
+  </div>
+  <div class="note">
+    <h3>顺带发现</h3>
+    <ul>
+      <li>服务端预览还返回 <code>scheduled</code>（定时，到点自己跑）和 <code>awaitingProjectStart</code>（等项目开始才跑）两个数，<b>iOS 和 Web 都没显示</b>。</li>
+      <li>一批任务如果全落在这两类里（比如往还没开始的项目里建任务），iOS 的后果卡<b>一行都没有</b>，Web 只写「0 start running within the minute」，看上去像什么都不会发生。</li>
+      <li>建议后果卡补上这两类，图标用时钟 / 旗子之类，文案另定。</li>
+      <li>形状那句话：只要是两层，两端都写「N in parallel after 1」（N 取最宽那层）。这只对「1 条之后并行 N 条」成立；像第 5 张卡「3 条之后接 1 条」，代码会写成「3 in parallel after 1」，说反了。板子上画的是改过后的「2 levels, up to 3 in parallel」：两层且第 1 层只有 1 条时才用 after 1 的说法。</li>
+    </ul>
+  </div>
+</div>
+</html>

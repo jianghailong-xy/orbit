@@ -13,6 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ProjectStatus } from '@prisma/client';
+import type { StartProjectResponse } from '@orbit/shared';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden, PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
@@ -336,6 +337,8 @@ export class ProjectsController {
    * same row: it is a stable read-back rather than a second decision, so clicking approve twice
    * cannot extend an authorization's own deadline. Denying is final for that crossing; if you change
    * your mind, file the work yourself, which is an ordinary write under your own authority (R1).
+   * Approving a request to MOVE a task moves it, as this person's act, and answers with the request
+   * spent on it (APPLIED) — or refuses with nothing written when the move can no longer be made.
    */
   @PatForbidden('OWNER_INTERACTIVE')
   @Post(':id/handoffs/:handoffId/decision')
@@ -373,7 +376,9 @@ export class ProjectsController {
         crossingKey: answer.row.crossingKey,
       });
     }
-    return this.handoffs.decide(user.userId, user.userId, handoffId, dto.decision, new Date());
+    return this.handoffs.decide(
+      user.userId, user.userId, handoffId, dto.decision, new Date(), user.credential,
+    );
   }
 
   /**
@@ -433,13 +438,26 @@ export class ProjectsController {
    */
   @PatForbidden('OWNER_INTERACTIVE')
   @Post(':id/start')
-  start(
+  async start(
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: StartProjectDto,
     @Headers('x-orbit-session-id') actingSessionId: string | undefined,
-  ) {
-    return this.acceptance.startProject(user.userId, id, dto, actingSessionId);
+  ): Promise<StartProjectResponse> {
+    // Automatic is the coordinator running the project, so a start that turns it on leaves the
+    // project one (the owner, 2026-10-07): whether one can open is checked before the start writes
+    // anything, and it is opened once the start has. A request carrying a session is the start's
+    // own refusal, so it is not read for anything first.
+    if (dto.automatic && !actingSessionId) {
+      await this.projects.assertStartCanOpenCoordinator(user.userId, id);
+    }
+    const started = await this.acceptance.startProject(user.userId, id, dto, actingSessionId);
+    const coordinator = await this.projects.coordinatorAfterStart(
+      user.userId,
+      id,
+      started.settings.automatic,
+    );
+    return { ...started, coordinator };
   }
 
   /**

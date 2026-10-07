@@ -1,8 +1,12 @@
 import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Card, Segmented, Select, Switch } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
+import { Button } from '../components/ui/Button';
+import { Card } from '../components/ui/Card';
+import { Segmented } from '../components/ui/Segmented';
+import { Select } from '../components/ui/Select';
+import { Switch } from '../components/ui/Switch';
 import { meQuery, type Me, type UserPreferences } from '../lib/queries';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { useToast } from '../lib/toast';
@@ -64,10 +68,11 @@ export function SettingsPage() {
           hint="The mode a new session starts in, unless the composer picks another. Account-wide: the mode is a property of the run, not of the workspace it runs in."
         >
           <Select
+            aria-label="Default permission mode"
             style={{ width: 200 }}
             value={defaultMode}
             options={MODE_OPTIONS}
-            onChange={(v) => save.mutate({ defaultPermissionMode: v })}
+            onValueChange={(v) => v !== null && save.mutate({ defaultPermissionMode: v })}
             loading={save.isPending}
           />
         </Field>
@@ -77,8 +82,9 @@ export function SettingsPage() {
           hint="Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before."
         >
           <Switch
+            aria-label="Smart model selection"
             checked={prefs.modelRouting === true}
-            onChange={(v) => save.mutate({ modelRouting: v })}
+            onCheckedChange={(v) => save.mutate({ modelRouting: v })}
             loading={save.isPending}
           />
         </Field>
@@ -93,8 +99,9 @@ export function SettingsPage() {
           hint="Sessions in every workspace can spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused."
         >
           <Switch
+            aria-label="Let sessions orchestrate"
             checked={prefs.enableOrchestration ?? true}
-            onChange={(v) => save.mutate({ enableOrchestration: v })}
+            onCheckedChange={(v) => save.mutate({ enableOrchestration: v })}
             loading={save.isPending}
           />
         </Field>
@@ -105,8 +112,9 @@ export function SettingsPage() {
           hint="Alert your devices when a run finishes on its own or fails for good."
         >
           <Switch
+            aria-label="When a session finishes"
             checked={prefs.notifySessionFinished ?? true}
-            onChange={(v) => save.mutate({ notifySessionFinished: v })}
+            onCheckedChange={(v) => save.mutate({ notifySessionFinished: v })}
             loading={save.isPending}
           />
         </Field>
@@ -115,8 +123,9 @@ export function SettingsPage() {
           hint="Let a running agent alert your devices itself — to ask something only you can answer, or to report what you were waiting for. At most one per session per minute."
         >
           <Switch
+            aria-label="When an agent asks for you"
             checked={prefs.notifyAgentMessage ?? true}
-            onChange={(v) => save.mutate({ notifyAgentMessage: v })}
+            onCheckedChange={(v) => save.mutate({ notifyAgentMessage: v })}
             loading={save.isPending}
           />
         </Field>
@@ -124,9 +133,10 @@ export function SettingsPage() {
 
       <Card title="Appearance" style={{ marginBottom: 16 }}>
         <Field label="Theme" hint="Synced to your account across devices.">
-          <Segmented
+          <Segmented<ThemeMode>
+            aria-label="Theme"
             value={mode}
-            onChange={(v) => setMode(v as ThemeMode)}
+            onValueChange={setMode}
             options={[
               { label: 'System', value: 'system' },
               { label: 'Light', value: 'light' },
@@ -142,6 +152,15 @@ export function SettingsPage() {
           hint="Everything you’ve made viewable by link: what each one includes, how often it was opened, and a way to turn it off."
         >
           <Button onClick={() => navigate('/settings/shared-links')}>Manage</Button>
+        </Field>
+      </Card>
+
+      <Card title="Access tokens" style={{ marginTop: 16 }}>
+        <Field
+          label="Personal access tokens"
+          hint="Let scripts and the orbit CLI use the Orbit API as you: what each token can reach, when it was last used, and a way to revoke it."
+        >
+          <Button onClick={() => navigate('/settings/access-tokens')}>Manage</Button>
         </Field>
       </Card>
 

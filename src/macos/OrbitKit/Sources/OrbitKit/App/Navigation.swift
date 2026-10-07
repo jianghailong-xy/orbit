@@ -86,6 +86,10 @@ public enum NavNode: Hashable, Sendable {
     /// Review: the proposals waiting for the owner, one card at a time. Pushed from the Wiki home's
     /// amber banner.
     case wikiReview
+    /// Activity (design §12.3.2): what the home said besides its content — the status line, what waits
+    /// on the owner, the decisions, the changes and the agents' use. Pushed from the bar's Activity
+    /// button; the three-column shells open it in the detail pane.
+    case wikiActivity
     /// The space's Wiki settings — its review mode and maintenance — pushed from the home's gear.
     case wikiSettings
     /// One run: what a maintenance run, an import or a session's proposal applied at once, pushed
@@ -283,6 +287,12 @@ public struct NavState: Equatable, Sendable {
         return false
     }
 
+    /// Whether Activity is the page on top of the Wiki section's stack.
+    public var wikiActivityOnTop: Bool {
+        if case .wikiActivity = path.last { return true }
+        return false
+    }
+
     /// Whether the Wiki settings are the page on top of the Wiki section's stack.
     public var wikiSettingsOnTop: Bool {
         if case .wikiSettings = path.last { return true }
@@ -327,6 +337,26 @@ public struct NavState: Equatable, Sendable {
         case .wikiPlanSection(let slug, let index, let version)?: return WikiPlanAddress(version: version, doc: slug, section: index)
         default: return nil
         }
+    }
+
+    /// The row of the Wiki's directory the page on top answers to — the one the iPad's and the Mac's directory
+    /// column lights (design §12.3, mock 32): the home at the root; Browse, the A–Z index, the plan (one of its
+    /// documents or sections too), a document or an article. An entry or a run opened over one of them keeps it
+    /// lit, as the web's drawer keeps the page it was opened over; Activity, Review and the settings answer to
+    /// no row.
+    public var wikiContentsAt: WikiContentsAt? {
+        for frame in path.reversed() {
+            switch frame {
+            case .wikiEntry, .wikiRun: continue
+            case .wikiBrowse: return .browse
+            case .wikiIndex: return .index
+            case .wikiPlan, .wikiPlanDoc, .wikiPlanSection: return .plan
+            case .wikiDoc(let slug, _): return .doc(slug: slug)
+            case .wikiArticle(let topic, let part): return .article(topic: topic, part: part)
+            default: return nil
+            }
+        }
+        return .home
     }
 
     /// `AppModel.selectedUserID` — the account the Admin pane shows.
@@ -616,6 +646,15 @@ public struct WikiDocAddress: Hashable, Sendable {
         self.slug = slug
         self.section = section
     }
+}
+
+/// A row of the Wiki's directory, as the page it stands for: lit where that page is open (the Contents sheet
+/// opened over it, the wide shells' directory column beside it), a topic whose article is open listing its
+/// subtopic articles under it, a document that is open its sections.
+public enum WikiContentsAt: Hashable, Sendable {
+    case home, browse, index, plan
+    case article(topic: String, part: Int)
+    case doc(slug: String)
 }
 
 /// A page of the plan: the version (nil for the one shown first), a document of it, a section of that.

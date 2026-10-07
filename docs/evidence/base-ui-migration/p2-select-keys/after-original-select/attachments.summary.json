@@ -1,0 +1,967 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2-select-keys/after-original-select/<name>",
+ "files": [
+  {
+   "name": "chromium-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-1--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-2--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-3--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-4--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-5--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-6--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-7--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-8--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-9--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-1--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-2--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-3--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-4--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-5--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-6--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-7--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-8--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-9--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-1--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-2--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-3--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-4--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-5--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-6--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-7--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-8--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-9--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-1--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-2--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-3--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-4--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-5--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-6--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-7--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-8--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-9--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-1--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-2--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-3--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-4--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-5--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-6--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-7--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-8--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-9--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-1--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-2--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-3--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-4--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-5--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-6--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-7--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-8--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-9--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-1--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-2--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-3--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-4--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-5--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-6--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-7--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-8--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-9--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-1--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-2--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-3--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-4--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-5--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-6--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-7--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-8--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--repeat-9--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--select-supports-arrows-Enter-clear-empty-disabled-and-empty-string-account-values--select.json",
+   "bytes": 111,
+   "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90",
+   "fields": {
+    "selected": "7",
+    "cleared": true,
+    "disabled": true,
+    "empty": true,
+    "emptyStringIsSelection": true
+   }
+  }
+ ]
+}

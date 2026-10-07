@@ -1,6 +1,6 @@
 {
   "name": "orbit",
-  "version": "0.1.219",
+  "version": "0.1.222",
   "private": true,
   "description": "Orbit — AI Agent task scheduling platform (control plane + distributed coding-agent runners)",
   "license": "MIT",
@@ -12,6 +12,7 @@
   "overrides": {
     "basic-ftp": "^6.2.1",
     "deepmerge-ts": "^8.0.2",
+    "katex": "^0.18.2",
     "mysql2": "^3.24.3",
     "multer": "^2.4.0"
   },

@@ -39,6 +39,60 @@ public struct LaunchSnapshot: Codable, Equatable, Sendable {
     }
 }
 
+/// What a cold launch still draws from the previous run's snapshot once its own fetches are taken
+/// into account (`LaunchSnapshot.fillIn`): every piece a fetch has already answered for is nil, and
+/// the caller leaves what it has alone. The snapshot is only ever the first frame's fill-in — a
+/// fetch that answered first is newer — so nothing here may land on top of one that is already in
+/// hand.
+public struct LaunchSnapshotFillIn: Equatable, Sendable {
+    /// The sidebar's workspace list as the previous run last held it: the rows, each runner's label
+    /// and the order those runners sort in. One list — the launch's landing is read off these ids —
+    /// so it is either still the launch's only source or it is dropped whole.
+    public struct Workspaces: Equatable, Sendable {
+        public var items: [Agent]
+        public var runnerNames: [String: String]
+        public var runnerOrder: [String]
+
+        public init(items: [Agent], runnerNames: [String: String], runnerOrder: [String]) {
+            self.items = items
+            self.runnerNames = runnerNames
+            self.runnerOrder = runnerOrder
+        }
+    }
+
+    public var user: User?
+    public var workspaces: Workspaces?
+    public var openSessions: [Session]?
+
+    public init(user: User? = nil, workspaces: Workspaces? = nil, openSessions: [Session]? = nil) {
+        self.user = user
+        self.workspaces = workspaces
+        self.openSessions = openSessions
+    }
+
+    /// Whether the snapshot has anything left to draw at all.
+    public var isEmpty: Bool { user == nil && workspaces == nil && openSessions == nil }
+}
+
+extension LaunchSnapshot {
+    /// The part of this snapshot a cold launch still has use for. The restore reads the file off the
+    /// main thread (`LaunchSnapshotStore.loadOffMain`), so by the time it has anything to apply a
+    /// fetch may already have answered — and that answer is newer than this file, which was written
+    /// as the previous run left the foreground. Each piece is therefore dropped once the launch has
+    /// answered for it: the account (`me()`), the workspace list (`GET /agents`), the Open rows
+    /// (`GET /sessions?view=open`). What survives is handed over as a fill-in; what doesn't stays
+    /// nil, so the caller cannot adopt it.
+    public func fillIn(accountAnswered: Bool = false,
+                       workspacesAnswered: Bool = false,
+                       openListAnswered: Bool = false) -> LaunchSnapshotFillIn {
+        LaunchSnapshotFillIn(
+            user: accountAnswered ? nil : user,
+            workspaces: workspacesAnswered ? nil : LaunchSnapshotFillIn.Workspaces(
+                items: agents, runnerNames: runnerNames, runnerOrder: runnerOrder),
+            openSessions: openListAnswered ? nil : openSessions)
+    }
+}
+
 /// One JSON file per instance, written atomically. Anything that can't be read back — no file yet,
 /// a torn or foreign file, another `schemaVersion` — is no snapshot, and the launch waits for the
 /// network as it always did.
@@ -68,6 +122,15 @@ public struct LaunchSnapshotStore: Sendable {
               let env = try? JSONDecoder().decode(Envelope.self, from: data),
               env.version == Self.schemaVersion else { return nil }
         return env.snapshot
+    }
+
+    /// `load()`, off the caller's thread. Reading and decoding what the previous run left is the one
+    /// part of a cold launch that scales with the account — the whole Open list, ~600 rows here —
+    /// and it ran in `AppModel.init`, on the main thread, before the first frame. The store holds
+    /// nothing but the file's URL and everything in a `LaunchSnapshot` is Sendable, so the read
+    /// belongs on a background thread; the caller adopts the result back on its own.
+    public func loadOffMain() async -> LaunchSnapshot? {
+        await Task.detached(priority: .userInitiated) { self.load() }.value
     }
 
     public func save(_ snapshot: LaunchSnapshot) {

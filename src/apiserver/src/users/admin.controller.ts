@@ -5,18 +5,22 @@ import {
   Controller,
   Delete,
   Get,
+  NotFoundException,
   Param,
   Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
 import { PublicIdPipe } from '../common/public-id';
+import { GoogleLoginService } from '../auth/google-login.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden } from '../auth/pat-scope.decorator';
+import { PatService } from '../auth/pat.service';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminRoleGuard } from './admin-role.guard';
 import { CreateUserDto, UpdateRoleDto } from './dto';
+import { SIGN_IN_METHODS_SELECT, signInMethodsOf } from './sign-in-methods';
 import { createOrResetUser } from './users.util';
 
 /**
@@ -28,14 +32,20 @@ import { createOrResetUser } from './users.util';
 @PatForbidden('ADMIN')
 @Controller('admin')
 export class AdminController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pats: PatService,
+    private readonly google: GoogleLoginService,
+  ) {}
 
+  /** Every account, oldest first, each with how it signs in (docs/google-sign-in-design.md §6). */
   @Get('users')
-  listUsers() {
-    return this.prisma.user.findMany({
-      select: { id: true, email: true, name: true, role: true, createdAt: true },
+  async listUsers() {
+    const users = await this.prisma.user.findMany({
+      select: { id: true, email: true, name: true, role: true, createdAt: true, ...SIGN_IN_METHODS_SELECT },
       orderBy: { createdAt: 'asc' },
     });
+    return users.map(({ passwordHash, identities, ...user }) => ({ ...user, signInMethods: signInMethodsOf({ passwordHash, identities }) }));
   }
 
   /** Create a user, or reset an existing one's password (force). Returns the generated
@@ -79,5 +89,30 @@ export class AdminController {
       throw new ConflictException('user still owns runners, workspaces, or tasks — remove those first');
     }
     return { id, deleted: true };
+  }
+
+  /** A user's personal access tokens, as their own list shows them (§11.4). Never the token itself:
+   *  it is not kept. */
+  @Get('users/:id/access-tokens')
+  async listAccessTokens(@Param('id', PublicIdPipe) id: string) {
+    const user = await this.prisma.user.findUnique({ where: { id }, select: { id: true } });
+    if (!user) throw new NotFoundException('user not found');
+    return { tokens: await this.pats.list(id) };
+  }
+
+  /** Revoke one of a user's tokens at once, recorded as revoked by an administrator. Idempotent. */
+  @Delete('users/:id/access-tokens/:tokenId')
+  revokeAccessToken(@Param('id', PublicIdPipe) id: string, @Param('tokenId', PublicIdPipe) tokenId: string) {
+    return this.pats.revoke(id, tokenId, 'ADMIN');
+  }
+
+  /**
+   * Unlink a user's Google account (docs/google-sign-in-design.md §5.3) — anyone's, an account without
+   * a password included, which a password reset then lets back in. Recorded as this administrator's.
+   * Answers the user's `signInMethods`; nothing linked is answered as it is.
+   */
+  @Delete('users/:id/identities/google')
+  unlinkGoogle(@CurrentUser() admin: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.google.unlinkByAdmin(admin.userId, id);
   }
 }

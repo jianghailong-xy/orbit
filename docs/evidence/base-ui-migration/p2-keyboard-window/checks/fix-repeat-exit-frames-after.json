@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6 && git log --oneline -1 && git rev-parse HEAD:src/web && unshare -n bash -c 'ip link set lo up && nice -n -10 npm run test:ui-choices -w @orbit/web -- --grep \"no-preference Dialog Popover Select exits\" --project webkit-light-desktop --repeat-each 10'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_13ff2cff3be7",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "761ddffa4",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "outputLastWritten": "2026-10-07T06:38:36.728152+00:00",
+ "exitCode": 0,
+ "outputSha256": "bf5b194ac54d998b3127342fec62519d423db5d163403b14b9a6ca1d15d6333f",
+ "outputBytes": 2284,
+ "note": "The same case repeated alone 10 times on webkit-light-desktop on the fixed tree, simultaneously: 10 passed."
+}

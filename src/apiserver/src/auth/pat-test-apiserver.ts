@@ -26,6 +26,7 @@ export interface Reply {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   json: any;
   text: string;
+  headers: http.IncomingHttpHeaders;
 }
 
 async function freePort(): Promise<number> {
@@ -41,9 +42,16 @@ async function freePort(): Promise<number> {
 
 /**
  * One request on a connection of its own. A 200 from a stream is answered as soon as its headers
- * arrive, and the stream is closed.
+ * arrive, and the stream is closed. `headers` go out beside the bearer's.
  */
-export function call(server: Apiserver, method: string, route: string, bearer?: string, body?: unknown): Promise<Reply> {
+export function call(
+  server: Apiserver,
+  method: string,
+  route: string,
+  bearer?: string,
+  body?: unknown,
+  headers: Record<string, string> = {},
+): Promise<Reply> {
   return new Promise((resolve, reject) => {
     const payload = body === undefined ? undefined : JSON.stringify(body);
     const req = http.request(
@@ -54,6 +62,7 @@ export function call(server: Apiserver, method: string, route: string, bearer?: 
         method,
         agent: false,
         headers: {
+          ...headers,
           ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
           ...(payload ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) } : {}),
         },
@@ -61,7 +70,7 @@ export function call(server: Apiserver, method: string, route: string, bearer?: 
       (res) => {
         res.on('error', () => undefined);
         if (res.statusCode === 200 && String(res.headers['content-type']).startsWith('text/event-stream')) {
-          resolve({ status: 200, json: null, text: '' });
+          resolve({ status: 200, json: null, text: '', headers: res.headers });
           req.destroy();
           return;
         }
@@ -75,7 +84,7 @@ export function call(server: Apiserver, method: string, route: string, bearer?: 
           } catch {
             json = null;
           }
-          resolve({ status: res.statusCode ?? 0, json, text });
+          resolve({ status: res.statusCode ?? 0, json, text, headers: res.headers });
         });
       },
     );

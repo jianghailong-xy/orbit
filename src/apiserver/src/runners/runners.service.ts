@@ -31,6 +31,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import {
   CLAUDE_ACCOUNT_REMOVE_V1,
+  ANTIGRAVITY_ACCOUNT_REMOVE_V1,
   CODEX_ACCOUNT_REMOVE_V1,
   LOGIN_RELAY_TIMEOUT_MS,
 } from '../runner-api/runner-api.controller';
@@ -311,7 +312,7 @@ export class RunnersService {
   async getDeviceEnrollment(ownerId: string, userCode: string) {
     this.rateLimitDeviceLookup(ownerId);
     const s = await this.prisma.deviceEnrollment.findUnique({ where: { userCode } });
-    if (!s || s.expiresAt < new Date()) {
+    if (!s || s.expiresAt < new Date() || approvedByAnother(s, ownerId)) {
       throw new NotFoundException('enrollment request not found or expired');
     }
     // Warn (don't block) if a runner with this name is already registered, so the
@@ -338,7 +339,7 @@ export class RunnersService {
   async approveDeviceEnrollment(ownerId: string, userCode: string) {
     this.rateLimitDeviceLookup(ownerId);
     const s = await this.prisma.deviceEnrollment.findUnique({ where: { userCode } });
-    if (!s || s.expiresAt < new Date()) {
+    if (!s || s.expiresAt < new Date() || approvedByAnother(s, ownerId)) {
       throw new NotFoundException('enrollment request not found or expired');
     }
     const runnerName = s.name;
@@ -439,6 +440,10 @@ export class RunnersService {
    * Antigravity signs in a Google account, which only a runner that relays that sign-in can do: any
    * other is refused here, in words the person who pressed the button can act on, rather than left
    * to fail on the machine.
+   *
+   * Kimi may be told which of its two sites to sign in on (`region`: kimi.com or kimi.ai, whose
+   * accounts are separate). Naming none is the bare `kimi login` it always was, which goes wherever
+   * the CLI decides; a runner too old to choose is refused at the heartbeat that would hand it over.
    */
   async startLogin(ownerId: string, id: string, dto: StartLoginDto = {}): Promise<RunnerLoginState> {
     const engine: LoginEngine = dto.engine ?? 'claude';
@@ -454,6 +459,9 @@ export class RunnersService {
     if (dto.accountName != null && !accountName) {
       throw new BadRequestException('A new account needs a name');
     }
+    if (dto.region != null && engine !== 'kimi') {
+      throw new BadRequestException('Only Kimi Code signs in on a site of your choosing');
+    }
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
     if (!runner) throw new NotFoundException('runner not found');
     if (runner.status === 'OFFLINE') {
@@ -468,6 +476,7 @@ export class RunnersService {
         loginEngine: engine,
         loginAccount: dto.account ?? null,
         loginAccountName: accountName ?? null,
+        loginRegion: dto.region ?? null,
         loginUrl: null,
         loginUserCode: null,
         loginCode: null,
@@ -541,6 +550,7 @@ export class RunnersService {
         loginEngine: stopOnRunner ? runner.loginEngine : null,
         loginAccount: null,
         loginAccountName: null,
+        loginRegion: null,
         loginUrl: null,
         loginUserCode: null,
         loginCode: null,
@@ -950,12 +960,14 @@ export function installStateOf(r: {
 const ACCOUNT_REMOVE_TOO_OLD: Record<string, string> = {
   codex: 'This runner is too old to remove a Codex account — update it, then try again.',
   claude: 'This runner is too old to remove a Claude account — update it, then try again.',
+  antigravity: 'This runner is too old to remove an Antigravity account — update it, then try again.',
 };
 
 /** The capability each engine's removal needs the runner to declare. */
 const ACCOUNT_REMOVE_CAPABILITIES: Record<string, string> = {
   codex: CODEX_ACCOUNT_REMOVE_V1,
   claude: CLAUDE_ACCOUNT_REMOVE_V1,
+  antigravity: ANTIGRAVITY_ACCOUNT_REMOVE_V1,
 };
 
 /** Project a runner row onto the browser-facing account-removal view. */
@@ -994,4 +1006,13 @@ function loginStateOf(r: {
     message: r.loginMessage,
     account: status ? (r.loginAccount ?? null) : null,
   };
+}
+
+/**
+ * A device enrollment nobody has approved is open to whoever holds its code — that is the device
+ * flow. Once approved it is the approver's: to every other account the code is one that names
+ * nothing, so its machine's name and host, and whether it exists at all, stay the approver's.
+ */
+function approvedByAnother(s: { status: string; approvedById: string | null }, ownerId: string): boolean {
+  return s.status === 'APPROVED' && s.approvedById !== ownerId;
 }

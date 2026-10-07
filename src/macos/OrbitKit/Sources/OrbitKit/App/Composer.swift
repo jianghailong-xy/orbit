@@ -296,10 +296,12 @@ public enum ComposerLogic {
     }
 
     /// The human sentence out of a Nest error body (`{"message": "…"}`, or an array of them for a
-    /// validation failure); the raw body when it isn't one, nil when there's nothing to show.
+    /// validation failure); the raw body when it isn't one, nil when there's nothing to show. A page
+    /// of markup is nothing to show: what a proxy in front of the server answers a 502 with is a whole
+    /// HTML document, and the project's sessions page once drew every line of it.
     static func serverMessage(_ body: String?) -> String? {
         let trimmed = body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !trimmed.isEmpty else { return nil }
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("<") else { return nil }
         guard let data = trimmed.data(using: .utf8),
               let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
             return trimmed

@@ -111,6 +111,12 @@ final class ProjectDetailModel {
     private(set) var graph: ProjectDependencyGraph?
     private(set) var readyQueue: ProjectReadyToRun?
     private(set) var readyQueueUnread = false
+    /// What has been asked about work crossing into or out of this project (`ProjectCrossings`),
+    /// and whether that read failed with no earlier answer to draw.
+    private(set) var crossings: [ProjectCrossing]?
+    private(set) var crossingsUnread = false
+    /// The crossing an answer is on its way for: its row says so and takes no second press.
+    private(set) var answeringCrossing: String?
     /// Run-queue rows a Run press is starting: the row says so until the next read has it running.
     private(set) var starting: Set<String> = []
     private(set) var tasks: [ProjectTaskRow] = []
@@ -163,6 +169,7 @@ final class ProjectDetailModel {
             : nil
         let queueRead = Task { try await api.projectReadyToRun(projectID) }
         let tasksRead = Task { try await refreshedTaskWindow(count: max(100, tasks.count)) }
+        let crossingsRead = Task { try await api.projectCrossings(projectID: projectID) }
         defer {
             documentRead.cancel()
             panoramaRead.cancel()
@@ -172,6 +179,7 @@ final class ProjectDetailModel {
             graphRead?.cancel()
             queueRead.cancel()
             tasksRead.cancel()
+            crossingsRead.cancel()
         }
         do {
             let fetched = try await documentRead.value
@@ -213,6 +221,12 @@ final class ProjectDetailModel {
         if let page = try? await tasksRead.value {
             tasks = page.items
             nextTaskCursor = page.nextCursor
+        }
+        if let rows = try? await crossingsRead.value {
+            crossings = rows
+            crossingsUnread = false
+        } else {
+            crossingsUnread = crossings == nil
         }
     }
 
@@ -288,6 +302,19 @@ final class ProjectDetailModel {
         return await runWrite(RunSettings.notSaved) {
             self.integration = try await self.api.updateProjectIntegration(self.projectID, body)
         }
+    }
+
+    /// Retry, on a landing job the server judged timed out (`POST /projects/:id/integration/jobs/
+    /// :jobId/retry`): its silent generation ends and the next one is queued. The answer is the line
+    /// read again, which the job list redraws from at once; then the page reads everything again,
+    /// since the lanes move with it. Throws what the server answered, for the job's row to say.
+    func retryIntegrationJob(_ jobID: String) async throws {
+        integration = try await api.retryIntegrationJob(projectID, jobID: jobID)
+        integrationUnread = false
+        integrationReadAt = Date()
+        integrationReadFailed = false
+        onChanged()
+        await load()
     }
 
     /// Pause project, or Resume project — the owner's, and a press rather than a setting: it stops
@@ -378,6 +405,24 @@ final class ProjectDetailModel {
             try await self.api.resolveProjectBlocker(projectID: self.projectID, blockerID: blockerID,
                                                      reason: reason)
         }
+    }
+
+    /// Answer a crossing from its row's second press. Nil when the door took it — a yes to a move
+    /// has moved the task by then — and the page re-reads, so the row says what the answer left;
+    /// otherwise the door's own code and reason, for the row it was given on.
+    func decideCrossing(_ crossing: ProjectCrossing,
+                        _ decision: ProjectCrossingDecision) async -> ProjectCrossings.Refusal? {
+        guard answeringCrossing == nil else { return nil }
+        answeringCrossing = crossing.id
+        defer { answeringCrossing = nil }
+        do {
+            try await api.decideProjectCrossing(projectID: projectID, crossing: crossing, decision)
+        } catch {
+            return ProjectCrossings.refusal(error)
+        }
+        onChanged()
+        await load()
+        return nil
     }
 
     /// Run one ready task from the run queue. The press is named here, once — see

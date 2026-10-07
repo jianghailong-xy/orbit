@@ -1,0 +1,1429 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/node_modules/@playwright/test/cli.js",
+   "test",
+   "--config",
+   "/tmp/orbit-p23-reference/src/web/ui-migration/reference.config.mjs"
+  ],
+  "configFile": "/tmp/orbit-p23-reference/src/web/ui-migration/reference.config.mjs",
+  "rootDir": "/tmp/orbit-p23-reference/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/tmp/orbit-p23-reference/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/tmp/orbit-p23-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/tmp/orbit-p23-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "reference.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p23-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/tmp/orbit-p23-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "reference.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p23-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/tmp/orbit-p23-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "reference.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p23-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/tmp/orbit-p23-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "reference.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p23-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/tmp/orbit-p23-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "reference.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p23-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/tmp/orbit-p23-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "reference.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p23-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/tmp/orbit-p23-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "reference.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p23-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/tmp/orbit-p23-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "reference.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/tmp/orbit-p23-reference/src/web/.toasts-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4178 --strictPort",
+   "cwd": "/tmp/orbit-p23-reference/src/web/",
+   "url": "http://127.0.0.1:4178",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "reference.browser.mjs",
+   "file": "reference.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "reference Dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2995,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:19:54.073Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-f0e28df20fb64408474a",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1635,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:19:57.153Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-a47da3f453c63c3a87e8",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Bottom drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1237,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:19:58.798Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-fa4c79ca2878ad23b298",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1205,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:20:00.337Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-13a36c085adac270c8d8",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1654,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:20:01.601Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-de62ff070d7d8ae306b5",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Bottom drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1100,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:20:03.260Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-3f7880e63ed303a42e66",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1061,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:20:04.696Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-43d3e31eee4d4fb99101",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1041,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:20:05.827Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-99ba9fd219f396d09ae3",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Bottom drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 929,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:20:06.873Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-9a1569c86dc109c04b46",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1255,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:20:08.042Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-5a659a45194616b85900",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1020,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:20:09.350Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-36eb08ad8a8300a8c970",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Bottom drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1032,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:20:10.375Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-9222d1464eb5c53f7e5f",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 979,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:20:11.632Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-a1a7b16f116b2a322ad3",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 838,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:20:12.730Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-12aee158c9252f0a59af",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Bottom drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 847,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:20:13.574Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-fb8d1331d45d7c99f2a8",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 832,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:20:14.671Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-543765b750ff955820cd",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 855,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:20:15.570Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-acb79ffdadd853a2ca7a",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Bottom drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 867,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:20:16.431Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-0c203cee4baaa652f6c9",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 873,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:20:17.560Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-d3c6652c71fd50d2fe5c",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 845,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:20:18.501Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-482e70e5f9b42381e110",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Bottom drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 835,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:20:19.351Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-4629d391a5a70bd589b0",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 867,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:20:20.458Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-c6c25dc068c8461343e4",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 819,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:20:21.395Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-bc397163c37225a5d0ff",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    },
+    {
+     "title": "reference Bottom drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 805,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:20:22.220Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c1b0ba60022fc9df2352-fbdeb6dbe4bc691b7292",
+     "file": "reference.browser.mjs",
+     "line": 42,
+     "column": 57
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T06:19:51.765Z",
+  "duration": 31406.367,
+  "expected": 24,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

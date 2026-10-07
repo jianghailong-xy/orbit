@@ -44,6 +44,7 @@ const railRow = {
   title: 'the rail',
   status: 'OPEN',
   createdAt: '2026-08-01T00:00:00.000Z',
+  startedAt: '2026-08-02T00:00:00.000Z',
   buckets: { running: 2 },
   taskCounts: { done: 4, failed: 1, total: 9 },
   lastActivityAt: '2026-10-02T00:00:00.000Z',

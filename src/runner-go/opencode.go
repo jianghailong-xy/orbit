@@ -897,6 +897,7 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 			envWiki:                     wikiEnv(job.WikiDisabled),
 			envOrchestrationToken:       job.OrchestrationToken,
 			envMCPPermissionPrompt:      "0",
+			envRunnerChild:              "1",
 		}
 		// Where `orbit mcp` reaches the runner to start a background job the runner
 		// owns. Written here as well as into the OpenCode process env, because this

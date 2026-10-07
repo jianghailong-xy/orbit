@@ -1,0 +1,185 @@
+{
+ "method": "notification region + 12 px of each production screenshot vs the P0.2 notification-error.png (the P2.3 audit box), all RGBA pixels, no tolerance",
+ "runs": {
+  "E1 no compositing hint (expE1)": [
+   {
+    "project": "chromium-dark-desktop",
+    "box": [
+     892,
+     4,
+     1276,
+     174
+    ],
+    "differentPixels": 89,
+    "maxChannelDelta": 2
+   },
+   {
+    "project": "chromium-dark-phone",
+    "box": [
+     4,
+     44,
+     386,
+     230
+    ],
+    "differentPixels": 73,
+    "maxChannelDelta": 2
+   },
+   {
+    "project": "chromium-light-desktop",
+    "box": [
+     892,
+     4,
+     1276,
+     174
+    ],
+    "differentPixels": 129,
+    "maxChannelDelta": 3
+   },
+   {
+    "project": "chromium-light-phone",
+    "box": [
+     4,
+     44,
+     386,
+     230
+    ],
+    "differentPixels": 120,
+    "maxChannelDelta": 3
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "box": [
+     884,
+     4,
+     1268,
+     174
+    ],
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   {
+    "project": "webkit-dark-phone",
+    "box": [
+     4,
+     44,
+     386,
+     230
+    ],
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   {
+    "project": "webkit-light-desktop",
+    "box": [
+     884,
+     4,
+     1268,
+     174
+    ],
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   {
+    "project": "webkit-light-phone",
+    "box": [
+     4,
+     44,
+     386,
+     230
+    ],
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  ],
+  "v1 fix 83d17f1ca": [
+   {
+    "project": "chromium-dark-desktop",
+    "box": [
+     892,
+     4,
+     1276,
+     174
+    ],
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   {
+    "project": "chromium-dark-phone",
+    "box": [
+     4,
+     44,
+     386,
+     230
+    ],
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   {
+    "project": "chromium-light-desktop",
+    "box": [
+     892,
+     4,
+     1276,
+     174
+    ],
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   {
+    "project": "chromium-light-phone",
+    "box": [
+     4,
+     44,
+     386,
+     230
+    ],
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "box": [
+     884,
+     4,
+     1268,
+     174
+    ],
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   {
+    "project": "webkit-dark-phone",
+    "box": [
+     4,
+     44,
+     386,
+     230
+    ],
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   {
+    "project": "webkit-light-desktop",
+    "box": [
+     884,
+     4,
+     1268,
+     174
+    ],
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   {
+    "project": "webkit-light-phone",
+    "box": [
+     4,
+     44,
+     386,
+     230
+    ],
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  ]
+ }
+}

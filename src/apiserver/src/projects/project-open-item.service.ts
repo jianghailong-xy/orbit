@@ -23,6 +23,7 @@ import {
   type ProjectDoneRequestDeclineBody,
   type ProjectDoneRequestDeclined,
   type ProjectDoneRequestFiled,
+  type ProjectIntegrationJob,
   type ProjectStartNotReadyBody,
   type ProjectStartRequest,
   type ProjectStartRequestBody,
@@ -69,9 +70,22 @@ import {
 } from './project-open-item';
 import { escalatesAt } from './open-item-escalation.service';
 import { canonicalJson } from './canonical-json';
-import { RetryableLandingFailureClass, queueLandingRetry } from './project-integration-job';
+import {
+  RetryableLandingFailureClass,
+  SkippedMergeCheckRecord,
+  endTimedOutLanding,
+  queueLandingRetry,
+} from './project-integration-job';
+import {
+  ProjectIntegrationView,
+  projectIntegrationView,
+  readInFlightJobs,
+  readProjectCodebase,
+  readProjectIntegrationView,
+} from './project-integration-line';
 import {
   INTEGRATION_RETRY_COORDINATOR_ONLY,
+  INTEGRATION_RETRY_IN_FLIGHT,
   INTEGRATION_RETRY_NOT_APPLICABLE,
   INTEGRATION_RETRY_NOT_THIS_PROJECT,
   INTEGRATION_RETRY_REASON_REQUIRED,
@@ -79,6 +93,12 @@ import {
   decideIntegrationRetry,
   decidePromotionRetry,
 } from './project-integration-retry';
+import {
+  INTEGRATION_SKIP_CHECK_NOT_THIS_PROJECT,
+  decideIntegrationSkipCheck,
+  isApprovalId,
+  notAnApprovalId,
+} from './project-integration-skip-check';
 import { requeuePromotionCheck } from './project-promotion.service';
 import { FusePausedPayload, fusePausedDetailLine } from './project-fuse';
 import {
@@ -324,6 +344,16 @@ export interface IntegrationRetried {
    *  until it ends, then HANDLED or superseded by its own failure's item (§4.7 H1–H3). Empty when
    *  none was open — it may already have been closed by hand. */
   handlingItemIds: string[];
+}
+
+/**
+ * A landing queued with its merge check not run (§2.4 J-S5), as `integration_skip_merge_check`
+ * answers it: a rerun's answer plus the skip the generation carries, which is itself the record a
+ * reader of that landing reads — and the same three facts any item it opens will carry.
+ */
+export interface IntegrationSkipChecked extends IntegrationRetried {
+  /** The check that did not run, who approved skipping it, and the card it was approved on. */
+  skippedCheck: SkippedMergeCheckRecord;
 }
 
 /** A blocked candidate's check the coordinator ran again (§4.7 H1), as `integration_retry` with a
@@ -672,6 +702,15 @@ export class ProjectOpenItemService {
       if (error instanceof QuestionNotAskable) throw new BadRequestException(error.message);
       throw error;
     }
+    // The tasks a question blocks are the account's own. Any other id is refused as one that names
+    // nothing — and is never stored on the question, from where every coordinator rotation would read
+    // whether that task is still open (`blocksUnsettledWork`).
+    if (question.blocksTaskIds.length > 0) {
+      const own = await this.prisma.task.count({ where: { id: { in: question.blocksTaskIds }, ownerId } });
+      if (own !== question.blocksTaskIds.length) {
+        throw new NotFoundException('blocksTaskIds names a task this account does not have');
+      }
+    }
     // The caller's own key for this question, so a tool call retried after a lost response files
     // one question rather than asking the owner the same thing twice.
     const dedupeKey = `CQ:${asked.clientQuestionId?.trim() || randomKey()}`;
@@ -730,6 +769,16 @@ export class ProjectOpenItemService {
    * that has just started. The plan is checked under it and a plan that is not ready is refused with
    * every finding, writing nothing; one that is ready supersedes the request already open, if any,
    * and files this one — unless it is that same request again, which writes nothing.
+   *
+   * The check's warnings are the COORDINATOR's, and only its: they come back in this answer and are
+   * not filed with the request (the owner, 2026-10-07). Every one of them is about how the plan is
+   * written — work that looks codeless, tasks set to start by hand, no merge check — which only the
+   * coordinator can change, and a card that opened on a freshly planned project with a column of
+   * warnings the owner could do nothing about was the experience being removed. So the stored
+   * payload carries none, which is also what the two clients draw from.
+   *
+   * Automatic left out is on: the owner's card opens with it on whatever is sent, and a coordinator
+   * that would keep it off says so in `why`.
    */
   async requestStart(
     ownerId: string,
@@ -751,7 +800,7 @@ export class ProjectOpenItemService {
     const settings: ProjectStartSettings = {
       line: body.line,
       ...(body.projectBranchName != null ? { projectBranchName: body.projectBranchName } : {}),
-      automatic: body.automatic,
+      automatic: body.automatic ?? true,
       maxConcurrentTasks: body.maxConcurrentTasks,
       mergeCheckCommand: body.mergeCheckCommand?.trim() || null,
     };
@@ -805,14 +854,22 @@ export class ProjectOpenItemService {
         criteriaDigest: plan.criteriaDigest,
         planDigest: plan.planDigest,
         repository: plan.repository,
-        warnings: findings,
+        // The coordinator's, returned below and not filed: see above.
+        warnings: [],
       };
       const open = await tx.projectOpenItem.findFirst({
         where: { projectId, kind: START_REQUEST_KIND, state: 'OPEN' },
         select: { id: true, payload: true },
       });
       if (open && canonicalJson(open.payload) === canonicalJson(request)) {
-        return { ...request, itemId: open.id, state: 'OPEN', alreadyOpen: true, superseded: null };
+        return {
+          ...request,
+          warnings: findings,
+          itemId: open.id,
+          state: 'OPEN',
+          alreadyOpen: true,
+          superseded: null,
+        };
       }
       const now = new Date();
       // Named before either write, so the request it replaces can say which one did — a row that is
@@ -854,6 +911,7 @@ export class ProjectOpenItemService {
       });
       return {
         ...request,
+        warnings: findings,
         itemId,
         state: 'OPEN',
         alreadyOpen: false,
@@ -1563,6 +1621,12 @@ export class ProjectOpenItemService {
    * would refuse the second row anyway. What happens next is the line's: a landing makes those items
    * HANDLED in the coordinator's name and continues to the project branch's merge check (§3.4), and a
    * failure supersedes them with its own item, classified, for whoever the project routes it to.
+   *
+   * A TIMED-OUT LANDING (§2.2 J-T9). A RUNNING newest landing whose runner has said nothing past its
+   * limit is judged here by the read the job list draws (`readInFlightJobs`), and a retry of it first
+   * ends it as `ERROR · RUNNER_LOST` — a compare-and-set on the heartbeat it was judged from — then
+   * queues the next generation like any other rerun. The account owner may press that one without an
+   * item of theirs: nothing has opened one yet.
    */
   async retryIntegration(
     ownerId: string,
@@ -1571,6 +1635,8 @@ export class ProjectOpenItemService {
     given: { reason?: string },
     actingSessionId: string | undefined,
     requester?: { userId: string },
+    /** Refuse unless the task's newest landing is still this job — the job list's press names one. */
+    expectJobId?: string,
   ): Promise<IntegrationRetried> {
     const reason = rerunReason(given);
     const project = await this.prisma.project.findFirst({
@@ -1616,6 +1682,17 @@ export class ProjectOpenItemService {
         orderBy: [{ generation: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
         select: { id: true, generation: true, state: true, checks: true, phase: true },
       });
+      if (expectJobId && newestLanding?.id !== expectJobId) {
+        throw new ConflictException({
+          code: INTEGRATION_RETRY_NOT_APPLICABLE,
+          message: 'this task\'s landing has moved on since it was read: another generation is its newest '
+            + 'now. Read the project again.',
+        });
+      }
+      // Whether a RUNNING landing timed out, by the rule the job list draws it with (§1.6).
+      const [silent] = newestLanding?.state === 'RUNNING'
+        ? await readInFlightJobs(tx, projectId, newestLanding.id)
+        : [];
       const openItems = await tx.projectOpenItem.findMany({
         where: { projectId, taskId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN' },
         select: { id: true, kind: true, assignee: true, assigneeReason: true },
@@ -1629,11 +1706,18 @@ export class ProjectOpenItemService {
         requester: ownerRequester ? 'OWNER' : 'COORDINATOR',
         coordinatorEnabled: current.coordinatorEnabled,
         taskStatus: locked.status,
-        newestLanding,
+        newestLanding: newestLanding && { ...newestLanding, timedOut: silent?.timedOut === true },
         openItems,
         ownerBlockers,
       });
       if (!decision.ok) throw new HttpException(decision.body, decision.status);
+      if (decision.endsTimedOutJob && !(silent && await endTimedOutLanding(tx, silent))) {
+        throw new ConflictException({
+          code: INTEGRATION_RETRY_IN_FLIGHT,
+          message: 'this landing\'s runner reported again while the retry was being decided, so it has not '
+            + 'timed out any more. Read the project again.',
+        });
+      }
 
       const queued = await queueLandingRetry(tx, {
         ownerId,
@@ -1682,6 +1766,254 @@ export class ProjectOpenItemService {
     given: { reason?: string },
   ): Promise<IntegrationRetried> {
     return this.retryIntegration(ownerId, projectId, taskId, given, undefined, { userId: ownerId });
+  }
+
+  /**
+   * The account owner's Retry on a job the integration view calls timed out — the press on the landing
+   * row's job list (`POST /projects/:id/integration/jobs/:jobId/retry`, §2.2 J-T9).
+   *
+   * The job's own facts are the reason, so the server writes it; the rerun is `retryIntegration`, the
+   * same door every landing retry goes through, held to this job by id. Answers with the integration
+   * view read after it, which is what the list redraws from.
+   */
+  async retryTimedOutJobAsOwner(
+    ownerId: string,
+    projectId: string,
+    jobId: string,
+  ): Promise<ProjectIntegrationView> {
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, ownerId },
+      select: { exceptionEscalationSeconds: true },
+    });
+    if (!project) throw new NotFoundException('project not found');
+    const [job] = await readInFlightJobs(this.prisma, projectId, jobId);
+    if (!job) {
+      throw new ConflictException({
+        code: INTEGRATION_RETRY_NOT_APPLICABLE,
+        message: 'this job is not in flight any more: it finished, or a retry already replaced it. Read '
+          + 'the project again.',
+      });
+    }
+    if (!job.retryable || !job.taskId) {
+      throw new ConflictException(job.timedOut
+        ? {
+          code: INTEGRATION_RETRY_NOT_APPLICABLE,
+          message: 'only a task\'s landing can be retried after a timeout. A merge check or a merge into '
+            + 'main that stopped reporting is not retried from here.',
+        }
+        : {
+          code: INTEGRATION_RETRY_IN_FLIGHT,
+          message: `this job's runner has reported within its limit, so it is still `
+            + `${job.state === 'RUNNING' ? 'running' : 'queued'}: nothing is retried beside it.`,
+        });
+    }
+    await this.retryIntegration(
+      ownerId, projectId, job.taskId, { reason: timedOutRetryReason(job) }, undefined, { userId: ownerId }, jobId,
+    );
+    return readProjectIntegrationView(this.prisma, projectId, projectIntegrationView(
+      await readProjectCodebase(this.prisma, projectId),
+      project.exceptionEscalationSeconds,
+    ));
+  }
+
+  /**
+   * The project's coordinator queues one of its failed landings again with the merge check NOT RUN
+   * (`integration_skip_merge_check`, §2.4 J-S5) — `retryIntegration` plus the one semantic, and only
+   * with the account owner's yes on a confirmation card.
+   *
+   * WHY A SKIP AND NOT A RERUN. A red merge check can be about the check rather than the delivery:
+   * the command runs on the machine the runner is on, and on 2026-10-07 that machine's bash had
+   * neither `mapfile` nor a GNU `timeout`, so the check of project 34bZ3i4AvgJaaoaw5E9tH failed
+   * whatever the work did. Rerunning it runs the same command again (integration_retry), sending the
+   * work back blames work that is not at fault (task_reopen), and the check COMMAND is the account
+   * owner's to change — so the decision "this landing goes on without that check" is the owner's, and
+   * the card is where they make it.
+   *
+   * WHO MAY ASK, AND WHO MUST AGREE. The conversation the project is coordinated from, exactly as for
+   * a rerun, plus an ALLOWED card raised by that same conversation about THIS project and THIS task
+   * (`decideIntegrationSkipCheck` reads all four off the row, and a call naming none is refused with
+   * nothing queued). The owner's own channel is the other way round: their press IS the approval, so
+   * `skipIntegrationMergeCheckAsOwner` needs no card and records them as the one who gave it — which
+   * is also what the CLI at a terminal does, where the caller is the person.
+   *
+   * WHAT IT WRITES. One transaction under the task row (FOR NO KEY UPDATE, the lock the DONE
+   * transaction holds): the decision over the facts read under it, then exactly one new LAND_TASK
+   * generation (`queueLandingRetry` with `skipMergeCheck`) carrying what it reruns, why, who approved
+   * the skip and the card it was approved on, then the coordinator's open items about the failed
+   * landing marked as being HANDLED by that generation (§4.7 H1) — still OPEN, because nobody knows
+   * yet whether it lands. Nothing else changes: the project's `mergeCheckCommand` is not touched, the
+   * generation after this one is queued without the flag, and promotion checks are not this door's at
+   * all. The check is skipped, never passed: the row says so, and so does any item the landing goes
+   * on to open.
+   */
+  async skipIntegrationMergeCheck(
+    ownerId: string,
+    projectId: string,
+    taskId: string,
+    given: { reason?: string; approvalId?: string },
+    actingSessionId: string | undefined,
+    requester?: { userId: string },
+  ): Promise<IntegrationSkipChecked> {
+    const reason = rerunReason(given);
+    const approvalId = typeof given?.approvalId === 'string' ? given.approvalId.trim() : '';
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, ownerId },
+      select: { coordinatorSessionId: true },
+    });
+    if (!project) throw new NotFoundException('project not found');
+    const asking = actingSessionId?.trim();
+    const ownerRequester = requester?.userId ?? null;
+    if (!ownerRequester && (!asking || asking !== project.coordinatorSessionId)) {
+      throw rerunCoordinatorOnly();
+    }
+    const task = await this.prisma.task.findFirst({
+      where: { id: taskId, ownerId },
+      select: { projectId: true },
+    });
+    if (!task) throw new NotFoundException('task not found');
+    if (task.projectId !== projectId) {
+      throw new ForbiddenException({
+        code: INTEGRATION_SKIP_CHECK_NOT_THIS_PROJECT,
+        message:
+          'this task is not filed under this project, and a project\'s coordinator skips a check on '
+          + 'its own project\'s landings. The task\'s own project, and its coordinator, decide this one.',
+      });
+    }
+
+    return withTransactionRetry(this.prisma, async (tx) => {
+      const [locked] = await tx.$queryRaw<Array<{ status: string }>>(Prisma.sql`
+        SELECT "status"::text AS "status" FROM "task"
+         WHERE "id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid
+           AND "project_id" = ${projectId}::uuid
+         FOR NO KEY UPDATE`);
+      if (!locked) throw new NotFoundException('task not found in this project');
+      // Read again under the lock, as the rerun door does: the pointer can rotate while the call was
+      // on its way here, and a card answered for one coordinator is not another's to spend.
+      const current = await tx.project.findUniqueOrThrow({
+        where: { id: projectId },
+        select: { coordinatorEnabled: true, coordinatorSessionId: true },
+      });
+      if (!ownerRequester && current.coordinatorSessionId !== asking) throw rerunCoordinatorOnly();
+      const newestLanding = await tx.projectIntegrationJob.findFirst({
+        where: { taskId, kind: 'LAND_TASK' },
+        orderBy: [{ generation: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+        select: { id: true, generation: true, state: true, checks: true, phase: true },
+      });
+      const openItems = await tx.projectOpenItem.findMany({
+        where: { projectId, taskId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN' },
+        select: { id: true, kind: true, assignee: true, assigneeReason: true },
+        orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
+      });
+      const ownerBlockers = await tx.projectBlocker.findMany({
+        where: { projectId, subjectType: 'TASK', subjectId: taskId, owner: 'USER', resolvedAt: null },
+        select: { id: true, kind: true },
+      });
+      // The card, read by the id the caller handed over. Read as the row it is rather than trusted as
+      // a sentence: whether it was answered, by which conversation, and about which landing are all
+      // facts on this row, and `decideIntegrationSkipCheck` refuses anything but an answered card
+      // about this very task. An owner-channel call names none and needs none.
+      //
+      // Only among this account's own cards: another account's is no card here, refused as an id that
+      // names nothing is, so a refusal never repeats what is on somebody else's row — its tool, its
+      // answer, the conversation it was raised in (tenant-isolation-runner-cases.ts).
+      //
+      // An id that is not an id is refused here rather than looked up: an approval id is a uuid, and
+      // anything else would reach a uuid column and come back as a 500 from the database.
+      if (!ownerRequester && approvalId && !isApprovalId(approvalId)) {
+        const refusal = notAnApprovalId(approvalId);
+        throw new HttpException(refusal.body, refusal.status);
+      }
+      const approval = ownerRequester || !approvalId ? null : await tx.approval.findFirst({
+        where: { id: approvalId, session: { ownerId } },
+        select: {
+          id: true, toolName: true, status: true, sessionId: true, input: true, decidedById: true,
+        },
+      });
+      const decision = decideIntegrationSkipCheck({
+        requester: ownerRequester ? 'OWNER' : 'COORDINATOR',
+        coordinatorEnabled: current.coordinatorEnabled,
+        taskStatus: locked.status,
+        newestLanding,
+        openItems,
+        ownerBlockers,
+        projectId,
+        taskId,
+        actingSessionId: ownerRequester ? null : asking!,
+        approval: approval
+          ? {
+            id: approval.id,
+            toolName: approval.toolName,
+            status: approval.status,
+            sessionId: approval.sessionId,
+            input: (approval.input ?? null) as { projectId?: unknown; taskId?: unknown } | null,
+            decidedById: approval.decidedById,
+          }
+          : null,
+      });
+      if (!decision.ok) throw new HttpException(decision.body, decision.status);
+
+      // Whose yes this is, and it is always somebody: the owner's own press on their channel, or the
+      // person the card names as its decider — the decision above refuses an ALLOWED card that names
+      // nobody, so a skip is never recorded as approved by a rule. The last fallback is the account
+      // owner, unreachable through this door and there so the row always carries a name.
+      const approvedByUserId = ownerRequester ?? approval?.decidedById ?? ownerId;
+      const queued = await queueLandingRetry(tx, {
+        ownerId,
+        projectId,
+        taskId,
+        retry: {
+          ofJobId: decision.retryOfJobId,
+          failureClass: decision.failureClass,
+          reason,
+          requestedBySessionId: ownerRequester ? undefined : asking!,
+          requestedByUserId: ownerRequester ?? undefined,
+        },
+        skipMergeCheck: {
+          reason,
+          approvedByUserId,
+          approvalId: approval?.id ?? null,
+        },
+      });
+      if (!queued) {
+        throw new ConflictException({
+          code: INTEGRATION_RETRY_NOT_APPLICABLE,
+          message:
+            'the landing could not be queued: the task has no work branch to hand the line, or the '
+            + 'project no longer integrates on a branch of its own.',
+        });
+      }
+      await markOpenItemsHandling(tx, decision.handle, {
+        jobId: queued.jobId,
+        sessionId: ownerRequester ? null : asking!,
+        userId: ownerRequester,
+        reason,
+      });
+      return {
+        taskId,
+        jobId: queued.jobId,
+        generation: queued.generation,
+        sourceRef: queued.sourceRef,
+        retryOfJobId: decision.retryOfJobId,
+        failureClass: decision.failureClass,
+        reason,
+        skippedCheck: {
+          reason,
+          approvedByUserId,
+          approvalId: approval?.id ?? null,
+        },
+        handlingItemIds: decision.handle,
+      };
+    }, loggedRetry(this.logger, 'projectOpenItem.skipIntegrationMergeCheck'));
+  }
+
+  /** The account owner's user-channel door for skipping one landing's merge check. */
+  async skipIntegrationMergeCheckAsOwner(
+    ownerId: string,
+    projectId: string,
+    taskId: string,
+    given: { reason?: string },
+  ): Promise<IntegrationSkipChecked> {
+    return this.skipIntegrationMergeCheck(ownerId, projectId, taskId, given, undefined, { userId: ownerId });
   }
 
   /**
@@ -1953,10 +2285,10 @@ export class ProjectOpenItemService {
   ): Promise<void> {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
-      select: { coordinatorSessionId: true },
+      select: { coordinatorSessionId: true, ownerId: true },
     });
     const sessionId = project?.coordinatorSessionId ?? null;
-    if (!sessionId) return;
+    if (!project || !sessionId) return;
     const answered = await this.prisma.projectOpenItem.findMany({
       where: {
         projectId,
@@ -1972,17 +2304,17 @@ export class ProjectOpenItemService {
     for (const item of answered.reverse()) {
       const replaced = !!replacedSessionId && item.askedBySessionId === replacedSessionId;
       const question = item.payload as unknown as CoordinatorQuestion;
-      if (!replaced && !(await this.blocksUnsettledWork(question.blocksTaskIds))) continue;
+      if (!replaced && !(await this.blocksUnsettledWork(project.ownerId, question.blocksTaskIds))) continue;
       await this.deliverAnswer(item.id);
     }
   }
 
-  /** Whether any of these tasks is still somebody's to do. */
-  private async blocksUnsettledWork(taskIds: ReadonlyArray<string> | undefined): Promise<boolean> {
+  /** Whether any of these tasks of the account's is still somebody's to do. */
+  private async blocksUnsettledWork(ownerId: string, taskIds: ReadonlyArray<string> | undefined): Promise<boolean> {
     const ids = unique(taskIds ?? []);
     if (ids.length === 0) return false;
     return (await this.prisma.task.count({
-      where: { id: { in: ids }, status: { notIn: ['DONE', 'CANCELLED'] } },
+      where: { id: { in: ids }, ownerId, status: { notIn: ['DONE', 'CANCELLED'] } },
     })) > 0;
   }
 
@@ -2642,6 +2974,14 @@ function handlingOf(
     generation: job.generation,
     state: job.state as OpenItemHandling['state'],
   };
+}
+
+/** What a timeout retry says it reruns and why, written from the job's own facts (≤ 2000 characters). */
+function timedOutRetryReason(job: ProjectIntegrationJob<Date>, now = Date.now()): string {
+  const silent = Math.max(0, Math.floor((now - (job.heartbeatAt ?? job.startedAt).getTime()) / 60_000));
+  const runner = job.runnerName ? `runner ${job.runnerName}` : 'its runner';
+  return `Retried by the account owner after a timeout: no report from ${runner} for ${silent} minutes `
+    + `(limit ${Math.round((job.limitSeconds ?? 0) / 60)}), last step ${job.phase ?? 'none'}.`;
 }
 
 /**

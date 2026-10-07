@@ -124,13 +124,15 @@ final class ProjectRunSettingsCopyParityTests: XCTestCase {
                      "mergeCheckCommand: view.mergeCheckCommand ?? null,",
                      "return graph.marks.some((mark) => mark.kind === 'RUN')",
                      "|| graph.edges.some((edge) => live.has(edge.sourceMarkId) && live.has(edge.targetMarkId));",
-                     // Not asked: no "asked by", no "suggested by", no "Orbit checked the plan", no
-                     // Chat — and no request for the press to answer.
-                     "askedAt={null}", "why: '',", "warnings: [],", "start.mutate(startBody(request, draft, null));"] {
+                     // Not asked: nobody quoted, no "the coordinator's suggestion", no Chat — and no
+                     // request for the press to answer.
+                     "askedAt={null}", "why: '',", "warnings: [],", "start.mutate(startBody(request, draft, null));",
+                     "facts={startProjectFacts(document, false)}"] {
             assertSays(card, rule, in: Self.card)
         }
-        assertSays(card, "{asked ? <span className=\"start-card-section-aside\">{START_SUGGESTED_BY_COORDINATOR}</span> : null}",
+        assertSays(card, "{startHowItRunsNote(asked, asked && request.settings.automatic === false)}",
                    in: Self.card)
+        assertSays(card, "{asked && request.why ? (", in: Self.card)
         assertSays(card, "{onChatAbout ? (", in: Self.card)
     }
 

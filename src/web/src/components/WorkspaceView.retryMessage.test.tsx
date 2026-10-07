@@ -31,9 +31,11 @@ vi.mock('../api', async (importOriginal) => {
   return {
     ...actual,
     api: vi.fn(),
+    getSession: vi.fn(),
     getSessionEventPage: vi.fn(),
     getSessionRetryMessage: vi.fn(),
     listQueuedTurns: vi.fn(),
+    resumeSession: vi.fn(),
   };
 });
 // jsdom has no IndexedDB, and a cached transcript would seed the window instead of the stub.
@@ -42,7 +44,8 @@ vi.mock('../lib/transcriptStore', () => ({
   saveTranscript: async () => {},
 }));
 
-const { api, getSessionEventPage, getSessionRetryMessage, listQueuedTurns } = await import('../api');
+const { api, getSession, getSessionEventPage, getSessionRetryMessage, listQueuedTurns, resumeSession } =
+  await import('../api');
 const apiMock = vi.mocked(api);
 const { WorkspaceView } = await import('./WorkspaceView');
 const { encodeId } = await import('../lib/idCodec');
@@ -150,6 +153,8 @@ describe('the Retry button on a run that a provider outage killed', { timeout: 6
     apiMock.mockReset();
     vi.mocked(getSessionRetryMessage).mockReset();
     vi.mocked(getSessionRetryMessage).mockResolvedValue({ text: BURIED_MESSAGE });
+    vi.mocked(getSession).mockReset();
+    vi.mocked(resumeSession).mockReset();
     vi.mocked(listQueuedTurns).mockImplementation(async () => []);
     apiMock.mockImplementation((path: string) => {
       const reply = (value: unknown) => Promise.resolve(value) as Promise<never>;
@@ -220,6 +225,38 @@ describe('the Retry button on a run that a provider outage killed', { timeout: 6
     expect(vi.mocked(getSessionRetryMessage).mock.calls.map(([id]) => id)).toContain(SESSION_PUBLIC);
     expect(retryButton()!.textContent).toBe('Retry now');
     expect(card().textContent).toContain(BURIED_MESSAGE);
+  });
+
+  // A limit that killed a turn nobody sent: there are no words of the reader's to re-send, and the
+  // server says so. What the card offers then is Continue — and, because the sentence is the
+  // platform's rather than theirs, the card quotes it under the button it will go out from.
+  it('offers Continue when the server says there is nothing to re-send, and sends that sentence', async () => {
+    vi.mocked(getSessionRetryMessage).mockResolvedValue({ text: '', nothingToResend: true });
+    // A run parked the way an outage leaves it: not live, but resumable — so the press revives
+    // THIS session rather than starting a new one.
+    vi.mocked(getSession).mockResolvedValue({ ...SESSION, startedAt: '2026-09-17T18:32:20Z' } as never);
+    vi.mocked(resumeSession).mockResolvedValue({
+      turnId: 'turn-continue', seq: 3_010, kind: 'message' as never, placement: 'accepted',
+    } as never);
+    await mount(TAIL_WITHOUT_THE_MESSAGE);
+
+    await act(async () => {
+      await vi.waitFor(() => expect(retryButton()).not.toBeNull(), { timeout: 20_000, interval: 20 });
+    });
+    expect(retryButton()!.textContent).toBe('Continue');
+    expect(card().textContent).toContain('Nothing to re-send');
+    expect(card().textContent).toContain('Sends “Continue where you left off.”');
+
+    await act(async () => {
+      retryButton()!.click();
+    });
+    await act(async () => {
+      await vi.waitFor(() => expect(vi.mocked(resumeSession).mock.calls.length).toBe(1),
+        { timeout: 20_000, interval: 20 });
+    });
+    // The sentence the card quoted is the sentence that goes out — sent as the reader's own
+    // message, so it travels through the ordinary resume with everything the composer holds.
+    expect(vi.mocked(resumeSession).mock.calls[0][1]).toBe('Continue where you left off.');
   });
 
   it('asks nobody when the message is right there in the window', async () => {

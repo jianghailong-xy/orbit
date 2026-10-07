@@ -40,6 +40,34 @@ final class RunnerPageFormatTests: XCTestCase {
                                                    "primary":{"utilization":91,"windowDurationMins":300}}}}}}
     """
 
+    /// HPC, 2026-10-07 — a machine whose heartbeat carried one provider alone, so Claude comes flat:
+    /// every added account's own snapshot sits at the payload's top level, beside Default's windows
+    /// (web `planUsageSnapshotForProvider` returns that object as it stands).
+    private static let hpcJSON = """
+    {"id":"0199a0c4-7a1e-7c3e-9d4f-2a6b8c0d1e31","name":"workstation-gpu","displayName":"HPC",
+     "hostname":"workstation","status":"ONLINE","online":true,"version":"0.1.219",
+     "lastHeartbeatAt":"2026-10-07T05:50:00Z","enrolledAt":"2026-06-18T02:00:00Z",
+     "maxConcurrent":16,"activeSessions":7,"runsAsRoot":true,"minFreeDiskMb":null,
+     "engines":[
+       {"engine":"claude","installed":true,"version":"2.1.292 (Claude Code)","auth":"yes",
+        "accounts":[{"id":"default","name":"jianghailong.wikova@gmail.com","home":"/root/.claude","auth":"yes"},
+                    {"id":"1e84046c","name":"jianghailong.rd@gmail.com",
+                     "home":"/root/.orbit/claude-accounts/1e84046c","auth":"yes"},
+                    {"id":"44bf2acd","name":"jianghailong.orbit@gmail.com",
+                     "home":"/root/.orbit/claude-accounts/44bf2acd","auth":"yes"}]}
+     ],
+     "planUsage":{"provider":"claude",
+                  "fiveHour":{"utilization":84,"resetsAt":"2026-10-06T22:50:00.392895+00:00"},
+                  "sevenDay":{"utilization":77,"resetsAt":"2026-10-09T04:00:00.392921+00:00"},
+                  "accounts":{"1e84046c":{"provider":"claude",
+                                          "fiveHour":{"utilization":0,"resetsAt":"2026-10-07T03:09:59.561135+00:00"},
+                                          "sevenDay":{"utilization":41,"resetsAt":"2026-10-12T10:59:59.561155+00:00"}},
+                              "44bf2acd":{"provider":"claude",
+                                          "fiveHour":{"utilization":0},
+                                          "sevenDay":{"utilization":0,"resetsAt":"2026-10-13T22:00:00+00:00"}}},
+                  "fetchedAt":"2026-10-06T22:18:26Z"}}
+    """
+
     private static let macMiniJSON = """
     {"id":"0199a0c4-7a1e-7c3e-9d4f-2a6b8c0d1e30","name":"longdeMac-mini.local","displayName":null,
      "hostname":"longdeMac-mini.local","status":"OFFLINE","online":false,"version":"0.1.155",
@@ -271,11 +299,17 @@ final class RunnerPageFormatTests: XCTestCase {
 
     func testTheRowShowsDefaultsQuotaAndEachAccountHasItsOwn() throws {
         let wikova = try wikova()
-        let claude = RunnerPageFormat.engineWindows(wikova, engine: "claude")
-        XCTAssertEqual(claude.map(\.label), ["5-hour limit", "Weekly · all models"])
-        XCTAssertEqual(claude.map(\.percent), [14, 98])
-        XCTAssertEqual(RunnerPageFormat.engineWindows(wikova, engine: "codex"), [],
-                       "with two accounts each one's quota is on the engine page")
+        // One window on the row — the one closest to its limit — and every window on the engine page.
+        let claude = RunnerPageFormat.engineWindows(wikova, engine: "claude", now: now)
+        XCTAssertEqual(claude.map(\.label), ["Weekly · all models"])
+        XCTAssertEqual(claude.map(\.percent), [98])
+        XCTAssertEqual(RunnerPageFormat.accountWindows(wikova, engine: "claude", account: "default").map(\.label),
+                       ["5-hour limit", "Weekly · all models"])
+        XCTAssertNil(RunnerPageFormat.engineNextAccount(wikova, engine: "claude", now: now), "one account: none to name")
+        // With two, the row carries the window of the one a new session starts on, named: Work's 5 hours
+        // are nearly spent (91%), so Default. Each one's every window is the engine page's.
+        XCTAssertEqual(RunnerPageFormat.engineNextAccount(wikova, engine: "codex", now: now), "Default")
+        XCTAssertEqual(RunnerPageFormat.engineWindows(wikova, engine: "codex", now: now).map(\.percent), [20])
         XCTAssertEqual(RunnerPageFormat.accountWindows(wikova, engine: "codex", account: "default").map(\.percent),
                        [20])
         XCTAssertEqual(RunnerPageFormat.accountWindows(wikova, engine: "codex", account: "1fda3f43").map(\.percent),
@@ -283,6 +317,32 @@ final class RunnerPageFormatTests: XCTestCase {
         XCTAssertEqual(RunnerPageFormat.accountWindows(wikova, engine: "codex", account: "gone"), [])
         XCTAssertEqual(RunnerPageFormat.engineWindows(try macMini(), engine: "claude"), [],
                        "a signed-out engine shows no quota")
+    }
+
+    /// A machine that reports one provider at a time sends Claude flat, its added accounts' snapshots
+    /// at the payload's top level: rebuilding the snapshot without them left every added account
+    /// "No quota reported" while Default — whose windows a flat payload's own are — read fine.
+    func testAFlatPayloadKeepsEveryAddedAccountsOwnQuota() throws {
+        let hpc = try runner(Self.hpcJSON)
+        XCTAssertEqual(RunnerPageFormat.accountWindows(hpc, engine: "claude", account: "1e84046c").map(\.percent),
+                       [0, 41])
+        XCTAssertEqual(RunnerPageFormat.accountWindows(hpc, engine: "claude", account: "44bf2acd").map(\.percent),
+                       [0, 0])
+        XCTAssertEqual(RunnerPageFormat.accountWindows(hpc, engine: "claude", account: "default").map(\.percent),
+                       [84, 77], "Default's are the flat payload's own windows, not an added account's")
+        XCTAssertEqual(RunnerPageFormat.accountWindows(hpc, engine: "codex", account: "1e84046c"), [],
+                       "a flat Claude payload is no Codex snapshot")
+    }
+
+    /// The same machine's Claude row names the account a new session starts on and carries its window:
+    /// Default's 5 hours are nearly spent (84%), and of the other two rd's week runs out first.
+    func testTheRowNamesTheAccountANewSessionStartsOn() throws {
+        let hpc = try runner(Self.hpcJSON)
+        let at = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-10-06T22:18:26Z"))
+        XCTAssertEqual(RunnerPageFormat.engineNextAccount(hpc, engine: "claude", now: at), "jianghailong.rd@gmail.com")
+        let row = try XCTUnwrap(RunnerPageFormat.engineWindows(hpc, engine: "claude", now: at).first)
+        XCTAssertEqual([row.label, "\(row.percent)"], ["Weekly · all models", "41"])
+        XCTAssertEqual(RunnerPageFormat.engineWindows(hpc, engine: "claude", now: at).count, 1)
     }
 
     func testAFailedUpdateIsTheRowsOnlyOnceItIsAProblem() throws {
@@ -441,7 +501,7 @@ final class RunnerPageFormatTests: XCTestCase {
         XCTAssertEqual(RunnerPageFormat.resetsWhen("2026-09-29T02:59:59Z", now: now, timeZone: utc),
                        "2:59 AM", "the same instant, read where the reader is")
         XCTAssertNil(RunnerPageFormat.resetsWhen("not a time", now: now))
-        let row = try XCTUnwrap(RunnerPageFormat.engineWindows(try wikova(), engine: "claude").first)
+        let row = try XCTUnwrap(RunnerPageFormat.accountWindows(try wikova(), engine: "claude", account: "default").first)
         XCTAssertEqual(RunnerPageFormat.resetsLine(row, now: now, timeZone: shanghai), "Resets 10:59 AM")
         XCTAssertEqual(RunnerPageFormat.lastSeen("2026-09-14T14:25:09Z", timeZone: shanghai), "Sep 14, 10:25 PM")
         XCTAssertEqual(RunnerPageFormat.day("2026-09-13T16:54:10Z", now: now, timeZone: utc), "Sep 13")

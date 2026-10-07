@@ -23,9 +23,12 @@ final class AntigravityGoogleClientTests: XCTestCase {
         let health = try XCTUnwrap(runner.engines?.first)
         XCTAssertEqual(runner.antigravity?.googleLogin, .available)
         XCTAssertEqual(health.authSource, "google")
-        XCTAssertEqual(RunnerPageFormat.engineStatus(health)?.text, "Google account")
+        XCTAssertEqual(RunnerPageFormat.engineStatus(health)?.text, "Signed in",
+                       "a Google sign-in is signed in, in the words Claude Code's and Codex's rows use")
         XCTAssertTrue(RunnerPageFormat.antigravityCanSignIn(runner))
-        let rows = RunnerPageFormat.engineWindows(runner, engine: "antigravity")
+        // The row carries the bucket closest to its limit; the engine page every bucket.
+        XCTAssertEqual(RunnerPageFormat.engineWindows(runner, engine: "antigravity").map(\.groupLabel), ["3p-5h"])
+        let rows = RunnerPageFormat.accountWindows(runner, engine: "antigravity", account: "default")
         XCTAssertEqual(rows.map(\.label), ["Weekly", "5-hour"])
         XCTAssertEqual(rows.map(\.groupLabel), ["gemini-weekly", "3p-5h"])
         XCTAssertEqual(rows.map(\.percent), [72, 18])
@@ -139,21 +142,40 @@ final class AntigravityGoogleClientTests: XCTestCase {
         XCTAssertEqual(EngineAuth.googleTermsWarning, "Google terms restrict personal account sign-in through third-party tools; your account may be suspended.")
     }
 
+    /// Antigravity's engine page is Claude Code's and Codex's: its Google sign-ins are the Accounts
+    /// section's rows, signed in through the same card, with Add Account where the runner keeps an
+    /// added one apart, and Google's terms under the section — not a section of its own with one
+    /// account to replace. The row on the runner's page says why it can't sign in where it can't, and
+    /// otherwise offers Sign In the way every engine's does, with no terms and no button of its own.
     func testSharedNativeViewsUseTheseLoginAndQuotaData() throws {
         let engine = try String(contentsOf: file("src/macos/OrbitApp/Sources/OrbitApp/Views/RunnerEnginePage.swift"), encoding: .utf8)
         let relay = try String(contentsOf: file("src/macos/OrbitApp/Sources/OrbitApp/Views/RunnerSignInView.swift"), encoding: .utf8)
         let rows = try String(contentsOf: file("src/macos/OrbitApp/Sources/OrbitApp/Views/RunnerPageParts.swift"), encoding: .utf8)
-        XCTAssertTrue(engine.contains("RunnerPageFormat.antigravityCanSignIn(runner)"))
-        XCTAssertTrue(engine.contains("RunnerSignInView(runnerID: runner.id, engine: .antigravity)"))
-        XCTAssertTrue(engine.contains("Re-sign in · change Google account"))
-        XCTAssertTrue(engine.contains("GoogleSignInTermsView()"))
-        XCTAssertTrue(engine.contains("RunnerPageFormat.engineStatus($0, runner: runner)"))
+        for piece in ["RunnerPageFormat.accountLines(health)",
+                      "RunnerSignInView(runnerID: runner.id, engine: login, account: line.signInAccount)",
+                      "if RunnerPageFormat.canAddAccount(runner, engine: engine) {",
+                      "} else if let hint = RunnerPageFormat.signInHint(runner, engine: engine) {",
+                      "} else if RunnerPageFormat.canSignIn(runner, engine: engine) && (!line.envKey || alone) {",
+                      "Button(line.envKey ? \"Sign in with Google\" : line.auth == \"yes\" ? \"Sign In Again\" : RunnerPageCopy.RUNNER_SIGN_IN) {",
+                      "if engine == \"antigravity\" && RunnerPageFormat.antigravityCanSignIn(runner) {",
+                      "GoogleSignInTermsView()",
+                      "} else if line.envKey {",
+                      "Text(\"env key · runs on your Gemini key\")"] {
+            XCTAssertTrue(engine.contains(piece), "the engine page lost \(piece)")
+        }
+        XCTAssertFalse(engine.contains("antigravitySection"), "Antigravity has no section of its own")
+        XCTAssertFalse(engine.contains("Re-sign in"), "an account is signed in again on its own row")
         XCTAssertTrue(relay.contains("case .awaitingCode:"))
         XCTAssertTrue(relay.contains("PasteBackForm(model: model)"))
         XCTAssertTrue(relay.contains("console.runnerAntigravity?.googleLogin == .available"))
         XCTAssertTrue(relay.contains("EngineAuth.googleTermsURL"))
-        XCTAssertTrue(rows.contains("EngineAuth.antigravityLoginHint(runner.antigravity?.googleLogin)"))
-        XCTAssertTrue(rows.contains("GoogleSignInTermsView()"))
+        let start = try XCTUnwrap(rows.range(of: "struct RunnerEngineRow: View {"))
+        let end = try XCTUnwrap(rows.range(of: "struct RunnerWorkspaceRow: View {", range: start.upperBound..<rows.endIndex))
+        let engineRow = String(rows[start.lowerBound..<end.lowerBound])
+        XCTAssertTrue(engineRow.contains("if let hint = RunnerPageFormat.signInHint(runner, engine: health.engine) {"))
+        XCTAssertTrue(engineRow.contains("} else if RunnerPageFormat.needsSignIn(health) {"))
+        XCTAssertFalse(engineRow.contains("GoogleSignInTermsView()"), "Google's terms are the engine page's, not the row's")
+        XCTAssertFalse(engineRow.contains("Re-sign in"))
         XCTAssertTrue(rows.contains("remaining"))
     }
 }

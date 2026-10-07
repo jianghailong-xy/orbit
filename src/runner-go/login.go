@@ -243,13 +243,15 @@ type loginRun struct {
 	// and kind is the engine whose store it lives in. They belong to the run rather than to the
 	// relay — several attempts can be in flight at once, each with a slot of its own — so the run
 	// that ends without signing in knows exactly which empty account to take away again.
-	slot     string
-	kind     accountSlotKind
-	google   *antigravityGoogleLoginOutput
-	ctx      context.Context
-	binPath  string
-	finished chan struct{}
-	signedIn bool
+	slot   string
+	kind   accountSlotKind
+	google *antigravityGoogleLoginOutput
+	// googleDir is the Gemini directory an Antigravity sign-in writes: Default's, or its account's.
+	googleDir string
+	ctx       context.Context
+	binPath   string
+	finished  chan struct{}
+	signedIn  bool
 }
 
 // loginAccountKey names the account a sign-in writes: the engine's one login, or — for an engine
@@ -389,6 +391,16 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 			return
 		}
 	}
+	// Kimi signs in on one of two sites, each with accounts of its own (kimi_region.go). A start
+	// naming one passes it on; one naming none is the bare `kimi login` it always was.
+	if flow.engine == providerKimi && lr.Region != "" {
+		argv, refusal := kimiLoginArgv(flow.argv, lr.Region)
+		if refusal != "" {
+			giveUp(refusal)
+			return
+		}
+		flow.argv = argv
+	}
 	r.mu.Lock()
 	if prev := r.runs[key]; prev != nil {
 		if attempt == "" || attempt == prev.attempt {
@@ -438,7 +450,7 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 		}
 		cmd.Env = envWithValue(cmd.Env, "SSH_CONNECTION", "127.0.0.1 1 127.0.0.1 2")
 		cmd.Env = envWithValue(cmd.Env, "TERM", "xterm-256color")
-		finishGoogle, err = preserveAntigravityGoogleLogin()
+		finishGoogle, err = preserveAntigravityGoogleLogin(antigravityGoogleDirIn(env))
 		if err != nil {
 			r.mu.Unlock()
 			cancel()
@@ -491,7 +503,7 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 		giveUp(signInStartError(startErr, flow))
 		return
 	}
-	run = &loginRun{key: key, attempt: attempt, stdin: stdin, cancel: cancel, out: out, slot: createdSlot, kind: kind, google: google, ctx: ctx, binPath: binPath, finished: make(chan struct{})}
+	run = &loginRun{key: key, attempt: attempt, stdin: stdin, cancel: cancel, out: out, slot: createdSlot, kind: kind, google: google, googleDir: antigravityGoogleDirIn(env), ctx: ctx, binPath: binPath, finished: make(chan struct{})}
 	if r.runs == nil {
 		r.runs = map[string]*loginRun{}
 	}
@@ -529,9 +541,28 @@ func (r *loginRelay) stop() {
 func (r *loginRelay) cancelLogin(lr LoginCommand) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if run := r.runs[loginAccountKey(lr.Engine, lr.Account)]; run != nil && (lr.Attempt == "" || lr.Attempt == run.attempt) {
+	if run := r.runFor(lr); run != nil && (lr.Attempt == "" || lr.Attempt == run.attempt) {
 		run.cancel()
 	}
+}
+
+// runFor is the sign-in a code or a cancel is for: the one running in the account it names — or, when
+// it names none, Default's, else the one this engine is running for its attempt. A control plane that
+// predates Antigravity accounts names no account in either, and the attempt is the one name a new
+// account's sign-in has before its account is reported. Called with r.mu held.
+func (r *loginRelay) runFor(lr LoginCommand) *loginRun {
+	if run := r.runs[loginAccountKey(lr.Engine, lr.Account)]; run != nil || lr.Account != "" || lr.Attempt == "" {
+		return run
+	}
+	if _, ok := accountSlotKindFor(lr.Engine); !ok {
+		return nil
+	}
+	for key, run := range r.runs {
+		if strings.HasPrefix(key, lr.Engine+"/") && run.attempt == lr.Attempt {
+			return run
+		}
+	}
+	return nil
 }
 
 // pump watches the sign-in: publish the URL as soon as it appears, then wait for the CLI to exit
@@ -540,6 +571,10 @@ func (r *loginRelay) cancelLogin(lr LoginCommand) {
 func (r *loginRelay) pump(run *loginRun, flow loginFlow, cmd *exec.Cmd, env []string, report func(LoginResultRequest)) {
 	if run.google != nil {
 		r.pumpAntigravityGoogle(run, cmd, report)
+		// An account this attempt added and nobody signed in goes again, as below.
+		if !run.signedIn {
+			r.reclaimAddedSlot(run)
+		}
 		return
 	}
 	out := run.out
@@ -703,7 +738,7 @@ func (r *loginRelay) submitCode(lr LoginCommand, report func(LoginResultRequest)
 	// Claude's flow is the one that takes a pasted code, and it names the account the code belongs
 	// to: with more than one Claude account a sign-in can be waiting in any of them, and an older
 	// control plane that names none means the machine's own login (loginAccountKey).
-	run := r.runs[loginAccountKey(lr.Engine, lr.Account)]
+	run := r.runFor(lr)
 	r.mu.Unlock()
 	if run == nil || run.stdin == nil {
 		report(LoginResultRequest{Status: loginFailed, Message: "the sign-in expired before the code arrived — start it again"})

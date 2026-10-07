@@ -1,0 +1,450 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/choices.config.mjs",
+   "choices-open-value.browser.mjs",
+   "--project=chromium-light-desktop"
+  ],
+  "configFile": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+   "cwd": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/",
+   "url": "http://127.0.0.1:4177",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "choices-open-value.browser.mjs",
+   "file": "choices-open-value.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "expiry dims the current value while open and restores it on Escape",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 2050,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 1\u001b[39m\n\n\u001b[33m@@ -11,11 +11,11 @@\u001b[39m\n\u001b[2m    \"open\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[2m        \"color\": \"rgb(31, 35, 41)\",\u001b[22m\n\u001b[2m        \"fontSize\": \"14px\",\u001b[22m\n\u001b[2m        \"fontWeight\": \"400\",\u001b[22m\n\u001b[32m-       \"opacity\": 0.25,\u001b[39m\n\u001b[31m+       \"opacity\": 1,\u001b[39m\n\u001b[2m        \"text\": \"Never\",\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m    ],\u001b[22m\n\u001b[2m    \"restored\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 1\u001b[39m\n\n\u001b[33m@@ -11,11 +11,11 @@\u001b[39m\n\u001b[2m    \"open\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[2m        \"color\": \"rgb(31, 35, 41)\",\u001b[22m\n\u001b[2m        \"fontSize\": \"14px\",\u001b[22m\n\u001b[2m        \"fontWeight\": \"400\",\u001b[22m\n\u001b[32m-       \"opacity\": 0.25,\u001b[39m\n\u001b[31m+       \"opacity\": 1,\u001b[39m\n\u001b[2m        \"text\": \"Never\",\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m    ],\u001b[22m\n\u001b[2m    \"restored\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-open-value.browser.mjs:46:25",
+          "location": {
+           "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-open-value.browser.mjs",
+           "column": 25,
+           "line": 46
+          },
+          "snippet": "  44 |   }\n  45 |   await info.attach('open-value', { body: JSON.stringify(samples, null, 2), contentType: 'application/json' });\n> 46 |   expect(samples.orbit).toEqual(samples.antd);\n     |                         ^\n  47 |   expect(samples.orbit.closed).toHaveLength(1);\n  48 |   expect(samples.orbit.open).toHaveLength(1);\n  49 |   expect(samples.orbit.closed[0].opacity).toBe(1);"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-open-value.browser.mjs",
+            "column": 25,
+            "line": 46
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 1\u001b[39m\n\n\u001b[33m@@ -11,11 +11,11 @@\u001b[39m\n\u001b[2m    \"open\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[2m        \"color\": \"rgb(31, 35, 41)\",\u001b[22m\n\u001b[2m        \"fontSize\": \"14px\",\u001b[22m\n\u001b[2m        \"fontWeight\": \"400\",\u001b[22m\n\u001b[32m-       \"opacity\": 0.25,\u001b[39m\n\u001b[31m+       \"opacity\": 1,\u001b[39m\n\u001b[2m        \"text\": \"Never\",\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m    ],\u001b[22m\n\u001b[2m    \"restored\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\n  44 |   }\n  45 |   await info.attach('open-value', { body: JSON.stringify(samples, null, 2), contentType: 'application/json' });\n> 46 |   expect(samples.orbit).toEqual(samples.antd);\n     |                         ^\n  47 |   expect(samples.orbit.closed).toHaveLength(1);\n  48 |   expect(samples.orbit.open).toHaveLength(1);\n  49 |   expect(samples.orbit.closed[0].opacity).toBe(1);\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-open-value.browser.mjs:46:25"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:41:40.541Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/choices-open-value.browser-522b6-n-and-restores-it-on-Escape-chromium-light-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/choices-open-value.browser-522b6-n-and-restores-it-on-Escape-chromium-light-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-open-value.browser.mjs",
+          "column": 25,
+          "line": 46
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-a0cffd93333a46ab6fd4",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "account dims the current value while open and restores it on Escape",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 2078,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 1\u001b[39m\n\n\u001b[33m@@ -11,11 +11,11 @@\u001b[39m\n\u001b[2m    \"open\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[2m        \"color\": \"rgb(31, 35, 41)\",\u001b[22m\n\u001b[2m        \"fontSize\": \"14px\",\u001b[22m\n\u001b[2m        \"fontWeight\": \"400\",\u001b[22m\n\u001b[32m-       \"opacity\": 0.25,\u001b[39m\n\u001b[31m+       \"opacity\": 1,\u001b[39m\n\u001b[2m        \"text\": \"Automatic\",\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m    ],\u001b[22m\n\u001b[2m    \"restored\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 1\u001b[39m\n\n\u001b[33m@@ -11,11 +11,11 @@\u001b[39m\n\u001b[2m    \"open\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[2m        \"color\": \"rgb(31, 35, 41)\",\u001b[22m\n\u001b[2m        \"fontSize\": \"14px\",\u001b[22m\n\u001b[2m        \"fontWeight\": \"400\",\u001b[22m\n\u001b[32m-       \"opacity\": 0.25,\u001b[39m\n\u001b[31m+       \"opacity\": 1,\u001b[39m\n\u001b[2m        \"text\": \"Automatic\",\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m    ],\u001b[22m\n\u001b[2m    \"restored\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-open-value.browser.mjs:46:25",
+          "location": {
+           "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-open-value.browser.mjs",
+           "column": 25,
+           "line": 46
+          },
+          "snippet": "  44 |   }\n  45 |   await info.attach('open-value', { body: JSON.stringify(samples, null, 2), contentType: 'application/json' });\n> 46 |   expect(samples.orbit).toEqual(samples.antd);\n     |                         ^\n  47 |   expect(samples.orbit.closed).toHaveLength(1);\n  48 |   expect(samples.orbit.open).toHaveLength(1);\n  49 |   expect(samples.orbit.closed[0].opacity).toBe(1);"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-open-value.browser.mjs",
+            "column": 25,
+            "line": 46
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 1\u001b[39m\n\n\u001b[33m@@ -11,11 +11,11 @@\u001b[39m\n\u001b[2m    \"open\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[2m        \"color\": \"rgb(31, 35, 41)\",\u001b[22m\n\u001b[2m        \"fontSize\": \"14px\",\u001b[22m\n\u001b[2m        \"fontWeight\": \"400\",\u001b[22m\n\u001b[32m-       \"opacity\": 0.25,\u001b[39m\n\u001b[31m+       \"opacity\": 1,\u001b[39m\n\u001b[2m        \"text\": \"Automatic\",\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m    ],\u001b[22m\n\u001b[2m    \"restored\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\n  44 |   }\n  45 |   await info.attach('open-value', { body: JSON.stringify(samples, null, 2), contentType: 'application/json' });\n> 46 |   expect(samples.orbit).toEqual(samples.antd);\n     |                         ^\n  47 |   expect(samples.orbit.closed).toHaveLength(1);\n  48 |   expect(samples.orbit.open).toHaveLength(1);\n  49 |   expect(samples.orbit.closed[0].opacity).toBe(1);\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-open-value.browser.mjs:46:25"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:41:42.949Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/choices-open-value.browser-60149-n-and-restores-it-on-Escape-chromium-light-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/choices-open-value.browser-60149-n-and-restores-it-on-Escape-chromium-light-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-open-value.browser.mjs",
+          "column": 25,
+          "line": 46
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-574c9785ee3995397957",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "search dims the current value while open and restores it on Escape",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 3283,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 2\u001b[39m\n\u001b[31m+ Received  + 2\u001b[39m\n\n\u001b[33m@@ -8,14 +8,14 @@\u001b[39m\n\u001b[2m        \"text\": \"Never\",\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m    ],\u001b[22m\n\u001b[2m    \"open\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[32m-       \"color\": \"rgb(31, 35, 41)\",\u001b[39m\n\u001b[31m+       \"color\": \"rgba(0, 0, 0, 0.25)\",\u001b[39m\n\u001b[2m        \"fontSize\": \"14px\",\u001b[22m\n\u001b[2m        \"fontWeight\": \"400\",\u001b[22m\n\u001b[32m-       \"opacity\": 0.25,\u001b[39m\n\u001b[31m+       \"opacity\": 1,\u001b[39m\n\u001b[2m        \"text\": \"Never\",\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m    ],\u001b[22m\n\u001b[2m    \"restored\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 2\u001b[39m\n\u001b[31m+ Received  + 2\u001b[39m\n\n\u001b[33m@@ -8,14 +8,14 @@\u001b[39m\n\u001b[2m        \"text\": \"Never\",\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m    ],\u001b[22m\n\u001b[2m    \"open\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[32m-       \"color\": \"rgb(31, 35, 41)\",\u001b[39m\n\u001b[31m+       \"color\": \"rgba(0, 0, 0, 0.25)\",\u001b[39m\n\u001b[2m        \"fontSize\": \"14px\",\u001b[22m\n\u001b[2m        \"fontWeight\": \"400\",\u001b[22m\n\u001b[32m-       \"opacity\": 0.25,\u001b[39m\n\u001b[31m+       \"opacity\": 1,\u001b[39m\n\u001b[2m        \"text\": \"Never\",\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m    ],\u001b[22m\n\u001b[2m    \"restored\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-open-value.browser.mjs:46:25",
+          "location": {
+           "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-open-value.browser.mjs",
+           "column": 25,
+           "line": 46
+          },
+          "snippet": "  44 |   }\n  45 |   await info.attach('open-value', { body: JSON.stringify(samples, null, 2), contentType: 'application/json' });\n> 46 |   expect(samples.orbit).toEqual(samples.antd);\n     |                         ^\n  47 |   expect(samples.orbit.closed).toHaveLength(1);\n  48 |   expect(samples.orbit.open).toHaveLength(1);\n  49 |   expect(samples.orbit.closed[0].opacity).toBe(1);"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-open-value.browser.mjs",
+            "column": 25,
+            "line": 46
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 2\u001b[39m\n\u001b[31m+ Received  + 2\u001b[39m\n\n\u001b[33m@@ -8,14 +8,14 @@\u001b[39m\n\u001b[2m        \"text\": \"Never\",\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m    ],\u001b[22m\n\u001b[2m    \"open\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\u001b[32m-       \"color\": \"rgb(31, 35, 41)\",\u001b[39m\n\u001b[31m+       \"color\": \"rgba(0, 0, 0, 0.25)\",\u001b[39m\n\u001b[2m        \"fontSize\": \"14px\",\u001b[22m\n\u001b[2m        \"fontWeight\": \"400\",\u001b[22m\n\u001b[32m-       \"opacity\": 0.25,\u001b[39m\n\u001b[31m+       \"opacity\": 1,\u001b[39m\n\u001b[2m        \"text\": \"Never\",\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m    ],\u001b[22m\n\u001b[2m    \"restored\": Array [\u001b[22m\n\u001b[2m      Object {\u001b[22m\n\n  44 |   }\n  45 |   await info.attach('open-value', { body: JSON.stringify(samples, null, 2), contentType: 'application/json' });\n> 46 |   expect(samples.orbit).toEqual(samples.antd);\n     |                         ^\n  47 |   expect(samples.orbit.closed).toHaveLength(1);\n  48 |   expect(samples.orbit.open).toHaveLength(1);\n  49 |   expect(samples.orbit.closed[0].opacity).toBe(1);\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-open-value.browser.mjs:46:25"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:41:45.526Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/choices-open-value.browser-01664-n-and-restores-it-on-Escape-chromium-light-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/choices-open-value.browser-01664-n-and-restores-it-on-Escape-chromium-light-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-open-value.browser.mjs",
+          "column": 25,
+          "line": 46
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-62d578103cff27b500a1",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T09:41:39.789Z",
+  "duration": 9432.554,
+  "expected": 0,
+  "skipped": 0,
+  "unexpected": 3,
+  "flaky": 0
+ }
+}

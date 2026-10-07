@@ -625,23 +625,28 @@ test('unit L4: a crossing is declared, answered and spent exactly once', { skip,
     assert.equal(spent.applied_task_id, landed.id);
   });
 
-  // The asymmetry every client surface now has to describe honestly, pinned so the prose cannot rot.
-  //
-  // `UpdateTaskDto` accepts `handoff` and the move gate does not read it: `TasksService.update`
-  // admits a re-filing as `UPDATE_TASK`, so §4 R7 refuses a DECLARED move exactly as it refuses an
-  // undeclared one, and files nothing anybody could answer. That is why `task_update`'s tool
-  // description says asking reaches the CREATE doors and a move goes to the account owner instead —
-  // and the day `MOVE_TASK` gets a writer, this test is the one that says those words have to change
-  // with it.
-  await t.test('a declared MOVE is still R7: the edit door files no question', async () => {
+  // The edit door's half, as the pair of writes that differ in one thing — the same move, undeclared
+  // and declared. Until 0386 the edit door read no `handoff` and both came back R7, which is what
+  // `task_update`'s tool description still says; the task that rewrites those words is the one that
+  // has to read this case. `task-move-request.pg.spec.ts` is the whole of the request's behaviour.
+  await t.test('a declared MOVE files a question on the edit door; an undeclared one is still R7', async () => {
     const w = await seed('declared-move');
-    const refusal = await refusalOf(() => tasks.update(w.ownerId, w.taskInA, {
-      projectId: w.projectB, handoff: { reason: 'it belongs over there' },
-    } as never, w.sessionA)) as Record<string, unknown>;
-    assert.equal(refusal.code, 'PROJECT_SCOPE_MISMATCH');
-    assert.equal(refusal.rule, 'R7_UNDECLARED_CROSSING');
-    assert.deepEqual(await rows(w.ownerId), [], 'the edit door declared nothing');
-    // And the task did not move.
+    const move = (handoff?: { reason: string }) => refusalOf(() => tasks.update(w.ownerId, w.taskInA, {
+      projectId: w.projectB, ...(handoff ? { handoff } : {}),
+    } as never, w.sessionA)) as Promise<Record<string, unknown>>;
+    const undeclared = await move();
+    assert.equal(undeclared.code, 'PROJECT_SCOPE_MISMATCH');
+    assert.equal(undeclared.rule, 'R7_UNDECLARED_CROSSING');
+    assert.deepEqual(await rows(w.ownerId), [], 'an undeclared move asks nobody anything');
+
+    const declared = await move({ reason: 'it belongs over there' });
+    assert.equal(declared.code, 'CROSS_PROJECT_APPROVAL_REQUIRED');
+    const [question] = await rows(w.ownerId);
+    assert.equal(question.kind, 'MOVE_TASK');
+    assert.equal(question.subject_task_id, w.taskInA);
+    assert.equal(question.state, 'PENDING');
+    assert.equal(declared.handoffId, question.id);
+    // And the task did not move: a question is not a write.
     const { rows: [row] } = await admin.query<{ project_id: string }>(
       'SELECT "project_id" FROM "task" WHERE "id" = $1::uuid', [w.taskInA]);
     assert.equal(row.project_id, w.projectA);

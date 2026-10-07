@@ -1,0 +1,358 @@
+[
+ {
+  "trace": "chromium-dark-desktop--email-tags-support-controlled-typing-separators-composition-Enter-blur-and-deletion--trace.zip",
+  "moduleRequests": 60,
+  "failedRequests": [
+   {
+    "url": ":4177/src/components/ui/Floating.css",
+    "status": -1,
+    "failure": null,
+    "ms": 43.9
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@base-ui_react_menu.js?v=0af5afcc",
+    "status": -1,
+    "failure": null,
+    "ms": 44.3
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@base-ui_react_tooltip.js?v=0af5afcc",
+    "status": -1,
+    "failure": null,
+    "ms": 44.3
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@base-ui_react_select.js?v=0af5afcc",
+    "status": -1,
+    "failure": null,
+    "ms": 44.3
+   },
+   {
+    "url": ":4177/src/components/ui/Spinner.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 44.3
+   },
+   {
+    "url": ":4177/src/components/ui/SelectEmpty.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 44.3
+   },
+   {
+    "url": ":4177/src/components/ui/Select.css",
+    "status": -1,
+    "failure": null,
+    "ms": 44.3
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@base-ui_react_combobox.js?v=0af5afcc",
+    "status": -1,
+    "failure": null,
+    "ms": 44.3
+   },
+   {
+    "url": ":4177/src/components/ui/ComboboxOption.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 44.3
+   }
+  ],
+  "networkChangedConsoleErrors": 9,
+  "slowestRequests": [
+   {
+    "url": ":4177/node_modules/.vite/deps/antd.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 246.2
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@ant-design_icons.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 191.4
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/react.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 162.7
+   },
+   {
+    "url": ":4177/src/components/ui/foundation.css",
+    "status": 200,
+    "failure": null,
+    "ms": 158.0
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@tanstack_react-query.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 136.4
+   }
+  ],
+  "console": [
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   }
+  ],
+  "pageErrors": [
+   ""
+  ],
+  "lastActions": [
+   {
+    "api": "hook",
+    "title": "Worker Cleanup",
+    "start": 776157.833,
+    "error": null
+   },
+   {
+    "api": "fixture",
+    "title": "Fixture \"browser\"",
+    "start": 776159.042,
+    "error": null
+   },
+   {
+    "api": "fixture",
+    "title": "Fixture \"browserName\"",
+    "start": 776215.598,
+    "error": null
+   },
+   {
+    "api": "newPage",
+    "title": null,
+    "start": 760183.5,
+    "error": null
+   },
+   {
+    "api": "goto",
+    "title": null,
+    "start": 760212.734,
+    "error": null
+   },
+   {
+    "api": "expect",
+    "title": "Expect \"toHaveText\"",
+    "start": 760873.986,
+    "error": null
+   }
+  ]
+ },
+ {
+  "trace": "chromium-light-desktop--popover-end-zoom-origin-matches--trace.zip",
+  "moduleRequests": 10,
+  "failedRequests": [
+   {
+    "url": ":4177/src/components/ui/__fixtures__/ChoicesFixture.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 15.3
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/react_jsx-dev-runtime.js?v=0af5afcc",
+    "status": -1,
+    "failure": null,
+    "ms": 15.5
+   }
+  ],
+  "networkChangedConsoleErrors": 2,
+  "slowestRequests": [
+   {
+    "url": ":4177/node_modules/.vite/deps/react.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 69.7
+   },
+   {
+    "url": ":4177/src/components/ui/foundation.css",
+    "status": 200,
+    "failure": null,
+    "ms": 67.9
+   },
+   {
+    "url": ":4177/src/index.css",
+    "status": 200,
+    "failure": null,
+    "ms": 51.2
+   },
+   {
+    "url": ":4177/ui-migration/choices.html?sample=popover&system=antd&align=end&anchor=right",
+    "status": 200,
+    "failure": null,
+    "ms": 44.3
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/react-dom_client.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 34.0
+   }
+  ],
+  "console": [
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   }
+  ],
+  "pageErrors": [
+   "",
+   ""
+  ],
+  "lastActions": [
+   {
+    "api": "emulateMedia",
+    "title": null,
+    "start": 155224.753,
+    "error": null
+   },
+   {
+    "api": "goto",
+    "title": null,
+    "start": 155244.373,
+    "error": null
+   },
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 155373.169,
+    "error": null
+   },
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 155376.966,
+    "error": null
+   },
+   {
+    "api": "click",
+    "title": null,
+    "start": 155386.196,
+    "error": null
+   },
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 245225.007,
+    "error": null
+   }
+  ]
+ },
+ {
+  "trace": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-attachment--trace.zip",
+  "moduleRequests": 270,
+  "failedRequests": [],
+  "networkChangedConsoleErrors": 0,
+  "slowestRequests": [
+   {
+    "url": ":4177/node_modules/.vite/deps/antd.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 153.7
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@ant-design_icons.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 143.1
+   },
+   {
+    "url": ":4177/src/theme.ts",
+    "status": 200,
+    "failure": null,
+    "ms": 137.2
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@tanstack_react-query.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 128.5
+   },
+   {
+    "url": ":4177/src/lib/theme.tsx",
+    "status": 200,
+    "failure": null,
+    "ms": 127.1
+   }
+  ],
+  "console": [],
+  "pageErrors": [
+   "",
+   ""
+  ],
+  "lastActions": [
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 1125678.688,
+    "error": null
+   },
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 1125720.363,
+    "error": null
+   },
+   {
+    "api": "click",
+    "title": null,
+    "start": 1125739.425,
+    "error": null
+   },
+   {
+    "api": "expect",
+    "title": "Expect \"toBeVisible\"",
+    "start": 1125910.419,
+    "error": null
+   },
+   {
+    "api": "waitForFunction",
+    "title": null,
+    "start": 1126170.158,
+    "error": null
+   },
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 1212371.136,
+    "error": null
+   }
+  ]
+ }
+]

@@ -75,7 +75,11 @@ final class ProjectDoneWiringTests: XCTestCase {
                                      to: "private func donePlacement("))
         XCTAssertTrue(adopt.contains("ProjectDone.live(openItems: openItems, status: projectDone?.status)"))
         XCTAssertTrue(adopt.contains("ProjectDone.slot(subject: projectDone, request: live, waitingKind: sessionWaitingKind,"))
-        XCTAssertTrue(adopt.contains("case .none: break"), "a read that has not answered changes nothing on screen")
+        // A read that has not answered changes nothing on screen; one that answered and asks
+        // nothing — the project does not look finished, nothing is asked or recorded — takes the
+        // closing card down, as the browser draws none.
+        XCTAssertTrue(adopt.contains("case .none: if projectDone != nil { decisionCards.removeAll { $0.kind == .projectDone || $0.kind == .projectNotDone } }"),
+                      "a read that answered with nothing to ask leaves no closing card behind")
         XCTAssertTrue(adopt.contains("decisionCards.removeAll { $0.kind == .projectDone } deliver(.projectNotDone)"),
                       "why it is not done replaces the done card")
         XCTAssertTrue(adopt.contains("decisionCards.removeAll { $0.kind == .projectNotDone } deliver(.projectDone, placement: donePlacement(live))"),
@@ -188,7 +192,7 @@ final class ProjectDoneWiringTests: XCTestCase {
         for call in ["ProjectDone.WhyNotDone(subject: subject, withCoordinator: withCoordinator,",
                      "title: ProjectDone.whyHeading", "group(ProjectDone.waitingOnWork, why.waiting, waiting: true,",
                      "group(ProjectDone.needsYourCall, why.needsCall, waiting: false,",
-                     "Text(ProjectDone.whyNotDoneTally(subject.counts))",
+                     "Text(ProjectDone.whyNotDoneTally(subject.derivedDone))",
                      "Text(ProjectDone.rowState(criterion))",
                      "Text(ProjectDone.rowDetail(criterion, waitingOnWork: waiting))",
                      "ProjectDone.askedAside(waiting: ProjectDone.requestWaiting($0))",

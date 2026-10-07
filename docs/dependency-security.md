@@ -45,6 +45,7 @@ The root Node.js requirement is therefore 20.19 or newer.
 | Override | Reason | Removal condition |
 | --- | --- | --- |
 | `deepmerge-ts` pinned to `^8.0.2` | Prisma 7.9.1's CLI pins `@prisma/config` to `deepmerge-ts` 7.1.5, which carries [GHSA-ggr8-5vv4-36mx](https://github.com/advisories/GHSA-ggr8-5vv4-36mx) (high; stack exhaustion when merging recursive object graphs). The package reaches the production tree through `@prisma/client`'s optional `prisma` peer, so it is not a dev-only finding. `@prisma/config` uses only `deepmerge` as c12's config merger, and 8.x keeps that export with the same semantics for plain objects. | Drop the `overrides` entry once a Prisma release depends on `deepmerge-ts` 8 or later. |
+| `katex` pinned to `^0.18.2` | `micromark-extension-math` 3.1.0, which the `markdownlint` documentation linter pins, asks for `katex` `^0.16.0`, and no 0.16 release fixes [GHSA-238p-pmpm-9mq7](https://github.com/advisories/GHSA-238p-pmpm-9mq7) (low; inherited `Object.prototype` properties, `trust` among them, are read as renderer options). The extension calls only `katex.renderToString`, which 0.17 and 0.18 left unchanged: their breaking changes are the internal `__defineFunction` API and prefixed CSS class names. | Drop the `overrides` entry once the `markdownlint` release in use resolves a `micromark-extension-math` that accepts `katex` 0.18.2 or later. |
 | `@deepseek-ai/libreoffice-kit` → `fflate` pinned to `0.8.3` in `scripts/deepseek-harness-p0/package.json` | The P0 harness's `@deepseek-ai/libreoffice-kit` 0.1.5 pins vulnerable `fflate` 0.8.2 exactly; the scoped override fixes [GHSA-px8p-9vwx-vf98](https://github.com/advisories/GHSA-px8p-9vwx-vf98) while retaining the recorded DSH release. | Remove when the harness adopts an upstream `libreoffice-kit` release whose dependency resolves to patched `fflate` without the override, or when the P0 harness is retired. |
 
 ## Multer aborted-upload cleanup (2026-09-30)
@@ -102,6 +103,24 @@ Audit this independent dependency tree separately:
 ```sh
 npm audit --prefix scripts/deepseek-harness-p0 --package-lock-only
 ```
+
+## proxy-addr, source-map-js and KaTeX (2026-10-06)
+
+[Dependabot alerts #72](https://github.com/jianghailong-xy/orbit/security/dependabot/72),
+[#73](https://github.com/jianghailong-xy/orbit/security/dependabot/73), and
+[#74](https://github.com/jianghailong-xy/orbit/security/dependabot/74) cover three advisories that GitHub reviewed on
+2026-10-05. `npm audit` reported the same three against the root lockfile; the P0 harness and `dsh-install`
+lockfiles, `go.mod`, and the Swift packages were not affected.
+
+| Package | Advisory | Locked before | Reachability | Locked after |
+| --- | --- | --- | --- | --- |
+| `proxy-addr` | [GHSA-jqcg-44mw-7w3h](https://github.com/advisories/GHSA-jqcg-44mw-7w3h) (critical) | 2.0.7 | Production, through Express. Only a trust subnet written as IPv4-mapped IPv6 with a short prefix, such as `::ffff:10.0.0.0/8`, is affected: it matches every IPv4 client, which can then set `req.ip` through `X-Forwarded-For`. Orbit never sets Express's `trust proxy` and never reads `req.ip`; `visitorAddress` takes the nginx proxies' `X-Real-IP` or the socket address, so the flaw is not reachable. | 2.0.8 |
+| `source-map-js` | [GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q) (high) | 1.2.1 | Development only, through `postcss` and `css-tree` in the Vite build, which reads only this repository's sources and their maps. | 1.2.2 |
+| `katex` | [GHSA-238p-pmpm-9mq7](https://github.com/advisories/GHSA-238p-pmpm-9mq7) (low) | 0.16.47 | Development only, through the documentation linter: `markdownlint` → `micromark-extension-math` → `katex`. The linter parses math syntax in tracked Markdown and never renders it. | 0.18.2 |
+
+`proxy-addr` and `source-map-js` move inside the ranges their dependents ask for (`^2.0.7` from `express`, `^1.2.1`
+from `postcss` and `css-tree`). KaTeX needs the root override listed under [Active overrides](#active-overrides); the
+lockfile takes 0.18.2, the first patched release, which keeps KaTeX's own `commander` dependency at the locked 8.3.0.
 
 ## Verification
 

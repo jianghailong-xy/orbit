@@ -27,7 +27,9 @@
  *     not the approver). A compare-and-set on the state it was read in, so two clicks produce one
  *     answer and one 409 rather than an answer that depends on timing. Re-approving a live yes
  *     writes nothing at all: it is a stable read-back, not a second decision, so nobody can extend
- *     their own deadline by clicking approve again.
+ *     their own deadline by clicking approve again. A yes to a MOVE_TASK is the exception, because
+ *     it is not a permission somebody spends later: confirming a move IS the move (account owner,
+ *     2026-10-06), so it is answered, applied and spent in one transaction by `HandoffMoveApplier`.
  *   - **spend** runs INSIDE the caller's transaction as one compare-and-set that pins every column
  *     of the authority tuple. A second application updates no row and throws, which aborts the
  *     caller's transaction and takes the task it was about to write with it. That is exactly-once
@@ -41,20 +43,25 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { uuidToBase62 } from '@orbit/shared';
 
+import type { AuthCredential } from '../common/current-user.decorator';
 import { orderedIds } from '../common/lock-order';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import { IN_FLIGHT_JOB_STATES, LANDING_JOB_KINDS } from './criterion-landing-reason';
+import { criterionKeyOf } from './project-acceptance';
 import {
   HANDOFF_APPROVAL_TTL_MS,
   decideHandoffAcceptance,
   handoffApprovalOf,
   handoffDependentDigest,
   handoffCrossingKey,
+  handoffMoveDigest,
   handoffPayloadDigest,
   nextHandoffState,
   sessionTriggerEvent,
@@ -63,6 +70,7 @@ import {
   type HandoffRequestIdentity,
   type HandoffStoredState,
 } from './project-handoff';
+import { SCOPE_RULES } from './project-scope-contract';
 import type { HandoffApproval } from './project-scope-decision';
 
 /** The columns every read below needs. Spelled once so no caller invents a narrower read. */
@@ -86,6 +94,7 @@ const HANDOFF_SELECT = {
   expiresAt: true,
   appliedTaskId: true,
   appliedAt: true,
+  requestedCriterionDefinitionId: true,
 } as const;
 
 export interface HandoffRow {
@@ -108,6 +117,29 @@ export interface HandoffRow {
   expiresAt: Date | null;
   appliedTaskId: string | null;
   appliedAt: Date | null;
+  /** MOVE_TASK only: the target project's criterion the moved task will declare (0386). */
+  requestedCriterionDefinitionId: string | null;
+}
+
+/**
+ * A row as `GET /projects/:id/handoffs` serves it: the stored answer, both ends by name, and what a
+ * person needs in front of them to answer a MOVE_TASK — which task, what it will count towards over
+ * there, and which of the source project's criteria it stops serving.
+ */
+export interface HandoffListRow extends HandoffRow {
+  fromProject: { title: string; status: string };
+  toProject: { title: string; status: string };
+  /** The task a MOVE_TASK moves, or a DEPEND_ON_TASK waits on, as it reads now. Null for a filing,
+   *  and for a subject that has since been deleted. */
+  subjectTask: { id: string; title: string } | null;
+  /** The session that asked, by title. Null once it is gone: the row keeps its id regardless. */
+  requestedBySession: { id: string; title: string } | null;
+  /** MOVE_TASK: the target project's criterion the request names, with its words now. `text` is
+   *  null when that criterion has since been deleted. Null when the request names none. */
+  requestedCriterion: { key: string; text: string | null } | null;
+  /** MOVE_TASK: the source project's criterion the task declares today, which the move takes
+   *  back. Null when it declares none, or none of the source project's. */
+  withdrawnCriterion: { key: string; text: string } | null;
 }
 
 /**
@@ -141,7 +173,15 @@ export interface HandoffDeclaration {
    * dependent's whole plan rather than a row id that does not exist yet.
    */
   dependentTaskId?: string | null;
-  /** Every field of the write this answer would authorise, plus where the work was noticed. */
+  /**
+   * MOVE_TASK only: the target project's criterion the moved task will declare once it is there,
+   * or null for none. Bound into the payload, and stored, so the person answering sees it.
+   */
+  requestedCriterionDefinitionId?: string | null;
+  /**
+   * Every field of the write this answer would authorise, plus where the work was noticed. A move
+   * files no plan, so for MOVE_TASK only `source` is read.
+   */
   identity: HandoffRequestIdentity;
   /** Display only. */
   title: string;
@@ -172,24 +212,56 @@ export interface HandoffAnswer {
 /** A read client: the plain Prisma service, or the caller's transaction. */
 type HandoffReadClient = Pick<Prisma.TransactionClient, 'projectHandoffApproval'>;
 
+/**
+ * What applies the account owner's yes to a MOVE_TASK: `TasksService.applyMoveApproval`.
+ *
+ * A move writes a task, and every rule about writing one — the hierarchy it must not split, the
+ * criterion it declares, what the projects hear afterwards — lives in `TasksService`, which already
+ * depends on this service. So the dependency is handed over rather than injected back: the
+ * `TasksService` built over this instance binds itself here (one of each in the server; a fixture
+ * that builds both gets the same pair). Typed by the one method, so this module imports nothing
+ * from the tasks module.
+ */
+export interface HandoffMoveApplier {
+  applyMoveApproval(
+    ownerId: string,
+    userId: string,
+    handoffId: string,
+    now: Date,
+    credential?: AuthCredential,
+  ): Promise<void>;
+}
+
 @Injectable()
 export class ProjectHandoffService {
   private readonly log = new Logger(ProjectHandoffService.name);
+  private moveApplier?: HandoffMoveApplier;
 
   constructor(private readonly prisma: PrismaService) {}
+
+  /** Called by the `TasksService` that shares this instance; see `HandoffMoveApplier`. */
+  bindMoveApplier(applier: HandoffMoveApplier): void {
+    this.moveApplier = applier;
+  }
 
   /** The canonical authority tuple of a declaration, as everything below spells it. */
   authorityOf(ownerId: string, declaration: HandoffDeclaration): HandoffAuthority {
     // A dependency's payload is WHO is being made to wait — by id when that task exists, by its
-    // whole plan when this batch is about to create it. Everything else is filed or moved, and its
-    // payload is the plan itself. Two digests because they answer two different questions, one
-    // function because both have to be recomputed identically at the moment the yes is spent.
+    // whole plan when this batch is about to create it. A move's is what the moved task will
+    // declare over there, and who asked. A filing's is the plan itself. Three digests because they
+    // answer three different questions, one function because each has to be recomputed identically
+    // at the moment the yes is spent.
     const payloadDigest = declaration.kind === 'DEPEND_ON_TASK'
       ? handoffDependentDigest({
           taskId: declaration.dependentTaskId ?? null,
           identity: declaration.identity,
         })
-      : handoffPayloadDigest(declaration.identity);
+      : declaration.kind === 'MOVE_TASK'
+        ? handoffMoveDigest({
+            criterionDefinitionId: declaration.requestedCriterionDefinitionId ?? null,
+            source: declaration.identity.source,
+          })
+        : handoffPayloadDigest(declaration.identity);
     return {
       ownerId,
       fromProjectId: declaration.fromProjectId,
@@ -292,6 +364,103 @@ export class ProjectHandoffService {
   }
 
   /**
+   * The question already standing for one move — this task, out of this project, into that one —
+   * or null.
+   *
+   * Looked up by the move rather than by the crossing key, on purpose. The key binds who asked and
+   * what the task would declare over there, and the account owner's decision (2026-10-06) is that a
+   * second request for a move that is already waiting — from any session, with any reason or
+   * criterion — is answered with the one that waits, not filed beside it or written over it.
+   * Migration 0386's partial unique index says the same thing at the database.
+   *
+   * Checked against itself, not against the caller: nothing is spent here, the row is only the
+   * question the caller is told has been asked, so it may have been asked by somebody else.
+   */
+  async pendingMove(
+    db: HandoffReadClient,
+    ownerId: string,
+    move: { fromProjectId: string; toProjectId: string; subjectTaskId: string },
+    now: Date,
+  ): Promise<HandoffAnswer | null> {
+    const row = (await db.projectHandoffApproval.findFirst({
+      where: {
+        ownerId,
+        kind: 'MOVE_TASK',
+        state: 'PENDING',
+        subjectTaskId: move.subjectTaskId,
+        fromProjectId: move.fromProjectId,
+        toProjectId: move.toProjectId,
+      },
+      select: HANDOFF_SELECT,
+    })) as HandoffRow | null;
+    if (!row) return null;
+    this.assertSelfConsistent(row);
+    return this.answerOf(row, now);
+  }
+
+  /**
+   * Whether a task serves one of the acceptance criteria `projectId` states — its criterion
+   * declaration names one of them. The fact R8 and HP1 read about a move out of a settled project
+   * (`settledEndRule`), read from the rows by each door that decides one: the request, the question
+   * filed under `declare`'s locks, and the confirmation under its own.
+   */
+  async servesCriterionOf(
+    db: Pick<Prisma.TransactionClient, 'task'>,
+    ownerId: string,
+    taskId: string,
+    projectId: string,
+  ): Promise<boolean> {
+    const serving = await db.task.findFirst({
+      where: { id: taskId, ownerId, criterionDefinition: { projectId } },
+      select: { id: true },
+    });
+    return serving !== null;
+  }
+
+  /**
+   * A task is not moved while its own landing is queued or running — refused when the move is
+   * asked for, and again by whatever applies it.
+   *
+   * The landing was enqueued for the project the task is in: its line, its receipts and the
+   * criterion it lands for are all that project's, and a task that changed goals in the middle would
+   * leave a job landing work for a project that no longer owns it. Nothing about the request is
+   * wrong, so nothing has to change in it: once the job has ended the same request can be made, or
+   * answered, again. `confirming` is the request being answered, when that is who is asking.
+   */
+  async assertMoveNotLanding(
+    db: Pick<Prisma.TransactionClient, 'projectIntegrationJob'>,
+    ownerId: string,
+    taskId: string,
+    confirming?: { handoffId: string; handoffState: string },
+  ): Promise<void> {
+    const job = await db.projectIntegrationJob.findFirst({
+      where: {
+        ownerId,
+        taskId,
+        kind: { in: [...LANDING_JOB_KINDS] },
+        state: { in: [...IN_FLIGHT_JOB_STATES] },
+      },
+      select: { id: true, kind: true, state: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!job) return;
+    throw new ConflictException({
+      code: 'MOVE_TASK_LANDING_IN_FLIGHT',
+      requiredAction: 'WAIT_FOR_THE_LANDING',
+      taskId,
+      jobId: job.id,
+      ...(confirming ?? {}),
+      message:
+        `task ${uuidToBase62(taskId)} is being landed (${job.kind} ${uuidToBase62(job.id)} is `
+        + `${job.state}), and a landing belongs to the project the task is in — nothing was `
+        + (confirming
+          ? 'written and the request is still waiting. Confirm it again once that job has ended, '
+            + 'or deny it.'
+          : 'written. Ask for the move again once that job has ended.'),
+    });
+  }
+
+  /**
    * File the question, or find the one already standing.
    *
    * ONE transaction, and every fact it decides on is DERIVED inside it from rows this server owns.
@@ -367,23 +536,57 @@ export class ProjectHandoffService {
 
       await this.assertDeclarationIsDerivable(tx, ownerId, declaration, scope);
 
+      // One question per move at a time, whoever asks it (0386). Read under both project locks,
+      // which every declaration of the same move takes first, so two requests for it arrive here one
+      // after the other and the second is handed the first's row.
+      const move = declaration.kind === 'MOVE_TASK' && declaration.subjectTaskId
+        ? {
+            fromProjectId: declaration.fromProjectId,
+            toProjectId: declaration.toProjectId,
+            subjectTaskId: declaration.subjectTaskId,
+          }
+        : null;
+      const standing = move ? await this.pendingMove(tx, ownerId, move, now) : null;
+      if (standing) return standing;
+
       const existing = await this.answerFor(tx, authority, now);
       if (existing) return existing;
 
       const acceptance = await this.acceptanceUnderLock(tx, ownerId, declaration);
+      // A move nobody's answer could make is not asked about: confirming it would be refused, so a
+      // question filed for it would only be a card nobody can say yes to. HP1 under these locks is
+      // R8 as the caller's admission read it — a settled end, or a task its settled source counts —
+      // re-read here in case either moved since.
+      if (acceptance.acceptedBy === null) {
+        const rule = SCOPE_RULES.find((candidate) => candidate.code === acceptance.refusal);
+        throw new ForbiddenException({
+          code: acceptance.refusal,
+          rule: rule?.id ?? null,
+          requiredAction: rule?.requiredAction ?? null,
+          taskId: declaration.subjectTaskId,
+          message:
+            (acceptance.refusal === 'MOVE_TASK_SERVES_SETTLED_CRITERION'
+              ? 'this task serves an acceptance criterion of the settled project it would leave'
+              : 'a settled project takes no work until it is reopened')
+            + ' — nothing was written and no question was filed',
+        });
+      }
       // Asked rather than assumed, and it can only come back a person's answer: the one row that
       // used to say `POLICY` was the automatic acceptance, and the column it was read from is gone.
       // So a declaration its author is allowed to make files a QUESTION, and nothing here writes a
       // `decided_by` of its own.
       const decided = acceptance.acceptedBy === 'POLICY';
       const state: HandoffStoredState = decided ? 'APPROVED' : 'PENDING';
-      await tx.$executeRaw(Prisma.sql`
+      // No conflict target: the crossing key is one unique index this insert can lose on, and
+      // 0386's one-pending-move index is the other. Losing on either leaves the row that won.
+      const inserted = await tx.$executeRaw(Prisma.sql`
         INSERT INTO "project_handoff_approval" (
           "id", "owner_id", "from_project_id", "to_project_id", "kind", "subject_task_id",
           "payload_digest", "crossing_key", "state", "title", "reason",
           "requested_by_session_id", "requested_at",
           "decided_by", "decided_by_user_id", "decided_at", "expires_at",
-          "applied_task_id", "applied_at", "created_at", "updated_at"
+          "applied_task_id", "applied_at", "created_at", "updated_at",
+          "requested_criterion_definition_id"
         ) VALUES (
           ${randomUUID()}::uuid, ${ownerId}::uuid, ${declaration.fromProjectId}::uuid,
           ${declaration.toProjectId}::uuid, ${declaration.kind},
@@ -392,19 +595,22 @@ export class ProjectHandoffService {
           ${declaration.reason ?? null}, ${declaration.requestedBySessionId}::uuid, ${now},
           ${decided ? 'POLICY' : null}, NULL, ${decided ? now : null},
           ${decided ? new Date(now.getTime() + HANDOFF_APPROVAL_TTL_MS) : null},
-          NULL, NULL, ${now}, ${now}
+          NULL, NULL, ${now}, ${now},
+          ${declaration.requestedCriterionDefinitionId ?? null}::uuid
         )
-        ON CONFLICT ("owner_id", "crossing_key") DO NOTHING
+        ON CONFLICT DO NOTHING
       `);
       // Read back unconditionally, whether this statement inserted or lost: what the caller needs
       // is the answer that now stands, and a loser reporting its own intended state would announce
       // a PENDING question the user may already have answered. Verified like any other read — the
-      // row this transaction is handed is authority for the write that follows.
-      const filed = await this.answerFor(tx, authority, now);
+      // row this transaction is handed is authority for the write that follows. A move that lost
+      // to another asker's question for the same move is handed that question instead.
+      const filed = (await this.answerFor(tx, authority, now))
+        ?? (move ? await this.pendingMove(tx, ownerId, move, now) : null);
       if (!filed) {
         throw new Error(`failed to file handoff approval for crossing ${authority.crossingKey}`);
       }
-      return { ...filed, filed: true };
+      return { ...filed, filed: inserted === 1 };
     }, loggedRetry(this.log, 'projectHandoff.declare'));
   }
 
@@ -422,12 +628,15 @@ export class ProjectHandoffService {
     declaration: HandoffDeclaration,
     scope: HandoffScopeClaim,
   ): Promise<void> {
+    const isMove = declaration.kind === 'MOVE_TASK';
     const refuseScope = (why: string): never => {
       throw new ForbiddenException({
         code: 'PROJECT_SCOPE_MISMATCH',
         message:
-          `this crossing cannot be declared from here (${why}) — nothing was written; declare it `
-          + 'from the project the work is leaving',
+          `this crossing cannot be declared from here (${why}) — nothing was written; `
+          + (isMove
+            ? 'ask for a move from the project the task is in or the project it would go to'
+            : 'declare it from the project the work is leaving'),
         requiredAction: 'FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF',
       });
     };
@@ -462,8 +671,17 @@ export class ProjectHandoffService {
         requiredAction: 'YIELD_TO_CURRENT_SCOPE',
       });
     }
-    if (derivedSourceProjectId !== declaration.fromProjectId) {
-      refuseScope('it names a source project this session does not hold');
+    // Which end the asker must hold is the kind's. Work filed or made to wait is declared from the
+    // project it leaves. A move may be asked for from either end — the project losing the task or
+    // the one that would take it (account owner, 2026-10-06: the request that started this was the
+    // target's coordinator pulling a task out of a settled project) — but never by a bystander.
+    if (isMove
+      ? derivedSourceProjectId !== declaration.fromProjectId
+        && derivedSourceProjectId !== declaration.toProjectId
+      : derivedSourceProjectId !== declaration.fromProjectId) {
+      refuseScope(isMove
+        ? 'this session holds neither end of the move'
+        : 'it names a source project this session does not hold');
     }
 
     // The four provenance columns the target task will carry, derived exactly as
@@ -552,6 +770,26 @@ export class ProjectHandoffService {
         );
       }
     }
+    // The criterion a moved task will declare over there is one the TARGET states — the same rule
+    // `TasksService.resolveCriterionDeclarations` applies to any declaration, asked again here
+    // because this row is what the answer will be about.
+    if (declaration.requestedCriterionDefinitionId) {
+      const criterion = isMove
+        ? await tx.projectAcceptanceCriterionDefinition.findFirst({
+            where: {
+              id: declaration.requestedCriterionDefinitionId,
+              projectId: declaration.toProjectId,
+              project: { ownerId },
+            },
+            select: { id: true },
+          })
+        : null;
+      if (!criterion) {
+        throw new BadRequestException(
+          'the criterion this crossing names is not one the project the task would move into states',
+        );
+      }
+    }
   }
 
   /**
@@ -575,9 +813,19 @@ export class ProjectHandoffService {
     const from = ends.find((row) => row.id === declaration.fromProjectId);
     const to = ends.find((row) => row.id === declaration.toProjectId);
     if (!from || !to) throw new ForbiddenException('project not found');
+    // A move's subject is under this transaction's FOR SHARE, so what it serves cannot change
+    // before the insert.
+    const move = declaration.kind === 'MOVE_TASK' && declaration.subjectTaskId
+      ? {
+          servesSourceCriterion: await this.servesCriterionOf(
+            tx, ownerId, declaration.subjectTaskId, declaration.fromProjectId,
+          ),
+        }
+      : null;
     return decideHandoffAcceptance(
       { status: from.status as 'OPEN' | 'DONE' | 'CANCELLED' },
       { status: to.status as 'OPEN' | 'DONE' | 'CANCELLED' },
+      move,
     );
   }
 
@@ -603,13 +851,13 @@ export class ProjectHandoffService {
     ownerId: string,
     projectId: string,
     options: { state?: HandoffStoredState; limit?: number } = {},
-  ): Promise<HandoffRow[]> {
+  ): Promise<HandoffListRow[]> {
     const project = await this.prisma.project.findFirst({
       where: { id: projectId, ownerId },
       select: { id: true },
     });
     if (!project) throw new NotFoundException('project not found');
-    return (await this.prisma.projectHandoffApproval.findMany({
+    const rows = (await this.prisma.projectHandoffApproval.findMany({
       where: {
         ownerId,
         OR: [{ fromProjectId: projectId }, { toProjectId: projectId }],
@@ -628,7 +876,82 @@ export class ProjectHandoffService {
       },
       orderBy: { requestedAt: 'desc' },
       take: Math.min(Math.max(options.limit ?? 100, 1), 200),
-    })) as unknown as HandoffRow[];
+    })) as unknown as Array<Omit<HandoffListRow,
+      'subjectTask' | 'requestedBySession' | 'requestedCriterion' | 'withdrawnCriterion'>>;
+    return this.withRequestDetail(ownerId, rows);
+  }
+
+  /**
+   * What a person answering a row has to be able to read without leaving the card: the task it is
+   * about and the session that asked, by name, and for a move the two criteria it changes — the
+   * target's it will count towards and the source's it stops serving.
+   *
+   * Read at list time rather than stored: the titles and words are display, and the card should
+   * show the task as it is now. What the answer binds is on the row already (the subject, and the
+   * requested criterion by id). Three bounded reads for the whole page, never one per row.
+   */
+  private async withRequestDetail(
+    ownerId: string,
+    rows: ReadonlyArray<Omit<HandoffListRow,
+      'subjectTask' | 'requestedBySession' | 'requestedCriterion' | 'withdrawnCriterion'>>,
+  ): Promise<HandoffListRow[]> {
+    const ids = (values: Array<string | null>): string[] =>
+      [...new Set(values.filter((value): value is string => !!value))];
+    const subjectIds = ids(rows.map((row) => row.subjectTaskId));
+    const sessionIds = ids(rows.map((row) => row.requestedBySessionId));
+    const [subjects, sessions] = await Promise.all([
+      subjectIds.length
+        ? this.prisma.task.findMany({
+            where: { id: { in: subjectIds }, ownerId },
+            select: { id: true, title: true, criterionDefinitionId: true },
+          })
+        : Promise.resolve([]),
+      sessionIds.length
+        ? this.prisma.session.findMany({
+            where: { id: { in: sessionIds }, ownerId },
+            select: { id: true, title: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const criterionIds = ids([
+      ...rows.map((row) => row.requestedCriterionDefinitionId),
+      ...subjects.map((task) => task.criterionDefinitionId),
+    ]);
+    const criteria = criterionIds.length
+      ? await this.prisma.projectAcceptanceCriterionDefinition.findMany({
+          where: { id: { in: criterionIds }, project: { ownerId } },
+          select: { id: true, projectId: true, text: true },
+        })
+      : [];
+    const subjectById = new Map(subjects.map((task) => [task.id, task]));
+    const sessionById = new Map(sessions.map((session) => [session.id, session]));
+    const criterionById = new Map(criteria.map((criterion) => [criterion.id, criterion]));
+    return rows.map((row) => {
+      const subject = row.subjectTaskId ? subjectById.get(row.subjectTaskId) ?? null : null;
+      const session = sessionById.get(row.requestedBySessionId) ?? null;
+      const requested = row.requestedCriterionDefinitionId
+        ? criterionById.get(row.requestedCriterionDefinitionId) ?? null
+        : null;
+      // Only the source's own criterion is the one a move takes back: once the task has gone, what
+      // it declares belongs to the project it is in now, and that is nobody's to withdraw.
+      const declared = row.kind === 'MOVE_TASK' && subject?.criterionDefinitionId
+        ? criterionById.get(subject.criterionDefinitionId) ?? null
+        : null;
+      return {
+        ...row,
+        subjectTask: subject ? { id: subject.id, title: subject.title } : null,
+        requestedBySession: session ? { id: session.id, title: session.title } : null,
+        requestedCriterion: row.requestedCriterionDefinitionId
+          ? {
+              key: criterionKeyOf(row.requestedCriterionDefinitionId),
+              text: requested?.text.trim() ?? null,
+            }
+          : null,
+        withdrawnCriterion: declared && declared.projectId === row.fromProjectId
+          ? { key: criterionKeyOf(declared.id), text: declared.text.trim() }
+          : null,
+      };
+    });
   }
 
   /**
@@ -646,6 +969,13 @@ export class ProjectHandoffService {
    *     second decision, which is an expiry that can always be outrun.
    *   - The write is a compare-and-set on the state that was read, so two clicks produce one answer
    *     and one 409 rather than an answer that depends on timing.
+   *
+   * A yes to a MOVE_TASK is not written here. Confirming a move is the move (account owner,
+   * 2026-10-06), so the answer, the task write and the spend are one transaction, and that
+   * transaction is the `HandoffMoveApplier`'s: if the move can no longer be made, the yes is not
+   * recorded either and the request stays as it was. A no to a move, and every answer about the
+   * other two kinds, is the compare-and-set below, unchanged. `credential` is the door the person
+   * answered through, recorded with the move.
    */
   async decide(
     ownerId: string,
@@ -653,17 +983,22 @@ export class ProjectHandoffService {
     id: string,
     decision: 'APPROVE' | 'DENY',
     now: Date,
+    credential?: AuthCredential,
   ): Promise<HandoffAnswer> {
     const { row } = await this.get(ownerId, id, now);
     const state = row.state as HandoffStoredState;
     const next = nextHandoffState(state, decision);
-    if (!next) {
-      throw new ConflictException(
-        `handoff approval ${uuidToBase62(row.id)} is ${state} and cannot be ${decision}D; `
-        + (state === 'DENIED'
-          ? 'a refused crossing stays refused — file the work yourself if you have changed your mind'
-          : 'a spent approval authorised one crossing and is finished'),
-      );
+    if (!next) throw this.transitionRefusal(row, decision);
+    if (row.kind === 'MOVE_TASK' && next === 'APPROVED') {
+      if (!this.moveApplier) {
+        // Fail closed: recording the yes without the move would leave exactly the approved-but-not-
+        // moved row this path exists to stop producing.
+        throw new ServiceUnavailableException(
+          'this server cannot apply a move right now — nothing was written; try again',
+        );
+      }
+      await this.moveApplier.applyMoveApproval(ownerId, userId, row.id, now, credential);
+      return this.get(ownerId, id, now);
     }
     if (next === state) return this.get(ownerId, id, now);
     const approved = next === 'APPROVED';
@@ -685,6 +1020,119 @@ export class ProjectHandoffService {
       );
     }
     return this.get(ownerId, id, now);
+  }
+
+  /** The 409 for an answer §6 has no edge for — `decide`'s, and a confirmation's under its lock. */
+  private transitionRefusal(row: HandoffRow, decision: 'APPROVE' | 'DENY'): ConflictException {
+    return new ConflictException(
+      `handoff approval ${uuidToBase62(row.id)} is ${row.state} and cannot be ${decision}D; `
+      + (row.state === 'DENIED'
+        ? 'a refused crossing stays refused — file the work yourself if you have changed your mind'
+        : 'a spent approval authorised one crossing and is finished'),
+    );
+  }
+
+  /**
+   * The MOVE_TASK request a confirmation is answering, locked (rank 60) inside the confirmation's
+   * transaction and checked again there: against itself, and against the answer it can still take.
+   *
+   * PENDING is the request as asked. APPROVED is a yes an earlier build recorded without moving
+   * anything, and confirming it again applies it — unless it has expired, which is R13's answer
+   * here too (`APPROVAL_EXPIRED`), with nothing written. Anything else was answered while this
+   * one was on its way, and is refused exactly as `decide` refuses it.
+   */
+  async lockMoveForConfirmation(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    id: string,
+    now: Date,
+  ): Promise<HandoffRow> {
+    const [locked] = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT "id" FROM "project_handoff_approval"
+       WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+       FOR UPDATE`;
+    const row = locked
+      ? ((await tx.projectHandoffApproval.findFirst({
+          where: { id, ownerId },
+          select: HANDOFF_SELECT,
+        })) as HandoffRow | null)
+      : null;
+    if (!row) throw new NotFoundException('handoff approval not found');
+    this.assertSelfConsistent(row);
+    if (row.kind !== 'MOVE_TASK' || !row.subjectTaskId) {
+      throw new Error(`handoff approval ${row.id} is a ${row.kind}, not a move`);
+    }
+    if (row.state !== 'PENDING' && row.state !== 'APPROVED') {
+      throw this.transitionRefusal(row, 'APPROVE');
+    }
+    if (this.answerOf(row, now).approval.state === 'EXPIRED') {
+      throw new ConflictException({
+        code: 'APPROVAL_EXPIRED',
+        requiredAction: 'AWAIT_HANDOFF_APPROVAL',
+        handoffId: row.id,
+        handoffState: row.state,
+        taskId: row.subjectTaskId,
+        message:
+          `the yes recorded on handoff approval ${uuidToBase62(row.id)} expired before it was `
+          + 'applied, and an expired answer moves nothing — nothing was written. The task can be '
+          + 'asked for again, or moved by you directly.',
+      });
+    }
+    return row;
+  }
+
+  /**
+   * The person's yes, written inside the transaction that applies it, and the authority `spend`
+   * then spends — the row's own tuple, every column of which it has just been checked to reproduce.
+   *
+   * The same answer `decide` writes for the other kinds, by the same compare-and-set on the state it
+   * was read in, pinned on the whole crossing like `spend`: a row that changed underneath updates
+   * nothing and the transaction ends here. A yes already on the row is not given a second time —
+   * its decider, moment and expiry are what the spend keeps (0155).
+   */
+  async approveMoveForConfirmation(
+    tx: Prisma.TransactionClient,
+    row: HandoffRow,
+    userId: string,
+    now: Date,
+  ): Promise<HandoffAuthority> {
+    const authority: HandoffAuthority = {
+      ownerId: row.ownerId,
+      fromProjectId: row.fromProjectId,
+      toProjectId: row.toProjectId,
+      kind: row.kind as HandoffKind,
+      subjectTaskId: row.subjectTaskId,
+      payloadDigest: row.payloadDigest,
+      crossingKey: row.crossingKey,
+      requestedBySessionId: row.requestedBySessionId,
+    };
+    if (row.state !== 'PENDING') return authority;
+    const approved = await tx.$executeRaw(Prisma.sql`
+      UPDATE "project_handoff_approval"
+         SET "state" = 'APPROVED',
+             "decided_by" = 'USER',
+             "decided_by_user_id" = ${userId}::uuid,
+             "decided_at" = ${now},
+             "expires_at" = ${new Date(now.getTime() + HANDOFF_APPROVAL_TTL_MS)},
+             "updated_at" = ${now}
+       WHERE "id" = ${row.id}::uuid
+         AND "owner_id" = ${authority.ownerId}::uuid
+         AND "from_project_id" = ${authority.fromProjectId}::uuid
+         AND "to_project_id" = ${authority.toProjectId}::uuid
+         AND "kind" = ${authority.kind}
+         AND "subject_task_id" IS NOT DISTINCT FROM ${authority.subjectTaskId}::uuid
+         AND "payload_digest" = ${authority.payloadDigest}
+         AND "crossing_key" = ${authority.crossingKey}
+         AND "requested_by_session_id" = ${authority.requestedBySessionId}::uuid
+         AND "state" = 'PENDING'
+    `);
+    if (approved !== 1) {
+      throw new ConflictException(
+        `handoff approval ${uuidToBase62(row.id)} was answered by somebody else while you were `
+        + 'deciding; re-read it before answering again',
+      );
+    }
+    return authority;
   }
 
   /**

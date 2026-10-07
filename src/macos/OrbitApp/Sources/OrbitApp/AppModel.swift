@@ -1,3 +1,4 @@
+import AuthenticationServices
 import Foundation
 import Observation
 import OrbitKit
@@ -35,6 +36,14 @@ final class AppModel {
     var password = ""
     var errorText: String?
     var busy = false
+    /// Continue with Google is under way: its sheet is up, or its ticket is being traded.
+    var googleBusy = false
+    /// What the login page's server offers besides a password (`GET /auth/methods`,
+    /// docs/google-sign-in-design.md §6), read when the page appears and again when the server
+    /// changes. Password only until the server answers, and for a server that can't say.
+    private(set) var signInMethods = SignInMethods.passwordOnly
+    /// The server `signInMethods` was asked of.
+    @ObservationIgnored private var signInMethodsServer: URL?
 
     // data
     var user: User? {
@@ -76,6 +85,9 @@ final class AppModel {
     var selectedSection: AppSection {
         get { nav.section }
         set {
+            // Coming into the Wiki from another section, it opens the space bound to the workspace the
+            // reader was in (wiki design §12.3.4) — read off the stack being left, before the switch.
+            if newValue == .wiki && nav.section != .wiki { wiki?.open(fromWorkspace: workspaceInView) }
             nav.section = newValue
             // Switching sections tears down the other sections' *views* (the compact shell renders
             // one at a time), but not their navigation: each section keeps its own stack, so coming
@@ -93,7 +105,7 @@ final class AppModel {
     /// Latches the one-shot default-landing resolution so it runs only after the first successful
     /// agent-list load, and never overrides a later user/deep-link choice.
     private var didResolveDefaultLanding = false
-    /// The workspace a cold launch landed on from its snapshot (`restoreLaunchSnapshot`) before the
+    /// The workspace a cold launch landed on from its snapshot (`adoptLaunchSnapshot`) before the
     /// workspace fetch answered. While it is still the one selected nobody has chosen anything, so
     /// `resolveDefaultLanding` decides afresh once the fetch succeeds.
     private var provisionalLandingAgentID: String?
@@ -341,11 +353,17 @@ final class AppModel {
     private static let runnerSnapshotRefreshInterval: TimeInterval = 15
     #endif
     private var lastSnapshot: [Session]?
-    /// True from a cold launch's restore (`restoreLaunchSnapshot`) until the first fetched Open
+    /// True from a cold launch's restore (`adoptLaunchSnapshot`) until the first fetched Open
     /// snapshot lands. The list in hand until then is the previous run's, or built on it by an
     /// in-place update, and a diff against it would announce everything that changed while the app
     /// was gone — so it never becomes `lastSnapshot`, and that first fetch only primes.
     private var openListFromLaunchSnapshot = false
+    /// Whether a server-answered Open list has landed since the last sign-out — the race guard for
+    /// the launch restore, which reads its file off the main thread and must never put the previous
+    /// run's rows over this run's fetch. Distinct from `openListFromLaunchSnapshot`, which says what
+    /// the list in hand IS: this one is latched, so a list that later turns out to be a snapshot's
+    /// cannot un-answer it.
+    private var openListAnswered = false
     /// Sessions known to be leaving Open because somebody FILED them (completed / trashed), rather
     /// than because a run finished. Filing drops the row from Open, which the snapshot diff would
     /// otherwise read as the run finishing and announce with a "Session finished" banner — reporting
@@ -446,6 +464,9 @@ final class AppModel {
     private(set) var admin: AdminModel?
     /// Every public link the account has made: Settings → Shared links, and the count on its row.
     private(set) var sharedLinks: SharedLinksModel?
+    /// Every personal access token the account has issued: Settings → Access tokens, and the count
+    /// on its row.
+    private(set) var accessTokens: AccessTokensModel?
     /// The shared pools the account is in: Settings → Providers, and each pool's page.
     private(set) var sharedPools: SharedPoolsModel?
     /// The account's watches: Following, the console's Watching card, and every session's row and header.
@@ -459,6 +480,9 @@ final class AppModel {
     /// What the next cold launch draws first (`persistLaunchSnapshot` / `restoreLaunchSnapshot`),
     /// scoped to this instance.
     @ObservationIgnored private var launchSnapshots: LaunchSnapshotStore?
+    /// The launch restore's read of that file, off the main thread — held so a switch of instance
+    /// cancels it rather than letting the old instance's snapshot land on the new one's app.
+    @ObservationIgnored private var launchSnapshotRestore: Task<Void, Never>?
     #if os(macOS)
     /// The local runner this Mac may host. Shared between the menu-bar tray (status + quick
     /// Start/Stop) and the runner-manager window (log + enroll). Created per instance. macOS-only:
@@ -468,6 +492,8 @@ final class AppModel {
     #endif
 
     private func configure(_ url: URL) {
+        launchSnapshotRestore?.cancel()
+        launchSnapshotRestore = nil
         controlRefreshGeneration &+= 1
         controlRefreshTask?.cancel()
         controlRefreshTask = nil
@@ -508,6 +534,7 @@ final class AppModel {
         runners = RunnersModel(baseURL: url, tokenStore: tokenStore)
         admin = AdminModel(baseURL: url, tokenStore: tokenStore)
         sharedLinks = SharedLinksModel(baseURL: url, tokenStore: tokenStore)
+        accessTokens = AccessTokensModel(baseURL: url, tokenStore: tokenStore)
         sharedPools = SharedPoolsModel(baseURL: url, tokenStore: tokenStore)
         let watchesModel = WatchesModel(baseURL: url, tokenStore: tokenStore)
         #if os(macOS)
@@ -730,6 +757,69 @@ final class AppModel {
         }
     }
 
+    /// Ask the login page's server how it signs people in (`signInMethods`). A server from before
+    /// Google sign-in answers 404, which reads as password only; so does one that can't be reached.
+    func loadSignInMethods() async {
+        guard let url = ServerURL.normalize(instanceField) else {
+            signInMethods = .passwordOnly
+            signInMethodsServer = nil
+            return
+        }
+        // Never another server's Google button, not even while this one is asked.
+        if url != signInMethodsServer { signInMethods = .passwordOnly }
+        signInMethodsServer = url
+        let methods = (try? await APIClient(baseURL: url, tokenStore: tokenStore).signInMethods()) ?? .passwordOnly
+        // The server changed while this one was asked: the answer isn't the page's any more.
+        guard ServerURL.normalize(instanceField) == url else { return }
+        signInMethods = methods
+    }
+
+    /// Continue with Google (docs/google-sign-in-design.md §8.2): the server's Google sign-in in the
+    /// system's web authentication sheet, then in the way `login` is — the session kept and read
+    /// back, the server remembered, the account read. Closing the sheet is not a failure.
+    func loginWithGoogle() async {
+        // A second press before the button has redrawn as disabled: one sheet at a time.
+        guard !busy, !googleBusy else { return }
+        errorText = nil
+        guard let url = ServerURL.normalize(instanceField) else {
+            errorText = "Enter a valid instance URL"
+            return
+        }
+        guard let anchor = googleSignInAnchor else {
+            errorText = LoginFailure.googleUnavailable
+            return
+        }
+        configure(url)
+
+        googleBusy = true
+        defer { googleBusy = false }
+        let sheet = GoogleWebAuthentication(anchor: anchor)
+        do {
+            _ = try await GoogleSignIn.signIn(api: api!) { try await sheet.authenticate($0) }
+            UserDefaults.standard.set(instanceField, forKey: Self.instanceKey)
+            user = try? await api!.me()
+            password = ""
+            signedIn = true
+        } catch GoogleSignInError.cancelled {
+            // The sheet was closed: the page stays as it was.
+        } catch {
+            errorText = LoginFailure.googleMessage(for: error)
+        }
+    }
+
+    /// The window Continue with Google's sheet is presented over, which macOS has to be told: the
+    /// key window, whose button was just pressed.
+    private var googleSignInAnchor: ASPresentationAnchor? {
+        #if os(macOS)
+        NSApp.keyWindow ?? NSApp.mainWindow
+        #else
+        let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+        return scene?.windows.first(where: { $0.isKeyWindow }) ?? scene?.windows.first
+        #endif
+    }
+
     func logout() {
         apiGeneration &+= 1
         pendingDefaultModels = [:]
@@ -781,11 +871,13 @@ final class AppModel {
         projectSessions = []
         projectSessionsAddress = nil
         projectSessionsError = nil
+        projectCompletedSessions = [:]
         #endif
         sessionDetails.removeAll()
         resetNavigation()
         lastSnapshot = nil
         openListFromLaunchSnapshot = false
+        openListAnswered = false
         openListIsReaderBase = false
         eventWrittenRows = []
         menuSummary = .empty
@@ -1416,6 +1508,7 @@ final class AppModel {
     /// `notify: false` is for a snapshot whose transitions the caller already accounted for (a local
     /// purge), where the diff would otherwise post a bogus "finished" alert.
     private func applySessionSnapshot(_ list: [Session], notify: Bool = true) {
+        openListAnswered = true   // a server-answered list is in hand; see `openListAnswered`
         openListReader?.invalidate()   // see `openListReader`; a fetch marks it adopted once this is done
         openListIsReaderBase = false
         // Notify on snapshot-to-snapshot transitions (skip the first load, which only primes). Skip
@@ -1558,6 +1651,7 @@ final class AppModel {
     /// `list` is `sessions` in another order (`fetchOpenSessions` has already applied every row that
     /// differs). Nothing transitions, so nothing is announced; only what is read in list order moves.
     private func adoptOpenOrder(_ list: [Session]) {
+        openListAnswered = true   // server-ordered rows; see `openListAnswered`
         sessions = list
         lastSnapshot = list
         var derived = OpenListDerived(needsYou: needsYouSessions, agentNeedsYou: agentNeedsYou,
@@ -1785,6 +1879,31 @@ final class AppModel {
     /// The drawer row the screen belongs to (`NavState.drawerDestination`): the row drawn as
     /// selected, and the one whose tap only closes the drawer.
     var drawerDestination: DrawerDestination { nav.drawerDestination(agentID: selectedAgentID) }
+
+    /// The workspace the reader is in, for the space the Wiki opens when they come into it (wiki design
+    /// §12.3.4): the one whose session list is showing, a project's coordinator workspace on its pages, and
+    /// none on the Projects or Tasks list.
+    private var workspaceInView: String? {
+        WikiSpaceLogic.workspaceInView(nav, agentID: selectedAgentID,
+                                       coordinatorWorkspace: { self.coordinatorWorkspaceID(ofProject: $0) })
+    }
+
+    /// The workspace a project's coordinator runs in, for the space the Wiki opens from its pages: what its
+    /// page's read says, else the workspace of the coordinator's conversation among the sessions held.
+    private func coordinatorWorkspaceID(ofProject projectID: String) -> String? {
+        if let id = projects?.detail(projectID).document?.coordinatorWorkspaceId { return id }
+        let key = PublicID.storageKey(projectID)
+        #if os(iOS)
+        let held = sessions + (agents?.allSessions ?? [])
+        #else
+        let held = sessions
+        #endif
+        let coordinator = held.first {
+            $0.projectMembership?.role == .coordinator
+                && $0.projectMembership.map { PublicID.storageKey($0.projectId) } == key
+        }
+        return coordinator.flatMap { $0.agent?.id ?? $0.agentId }
+    }
 
     /// iOS compact: the page on top is its drawer destination's own — a section's list, or a
     /// project's sessions page put up as the project's own rather than pushed by a list row — so the
@@ -2210,10 +2329,21 @@ final class AppModel {
     private(set) var projectSessionsIntegration: ProjectIntegrationView?
     private(set) var projectSessionsIntegrationReadAt: Date?
     private(set) var projectSessionsIntegrationReadFailed = false
-    private var projectSessionsAddress: SessionProjectAddress?
+    /// The page the state above is for. The page reads it so that nothing held for another address,
+    /// and nothing before its own load has begun, is drawn as its own.
+    private(set) var projectSessionsAddress: SessionProjectAddress?
+    /// Each project's Completed members as its page last read them: what a poll takes them from,
+    /// and what the page opens on when it comes back to the project. The Open members are always
+    /// the app's own Open list's.
+    private var projectCompletedSessions: [String: [Session]] = [:]
+    /// When this page's members were last read; nil until a read has answered for it.
+    private var projectSessionsReadAt: Date?
     /// The merge into main for the project whose sessions page is showing: the card under its
     /// progress card and the merges on its timeline (owner decision 2026-10-06).
     private(set) var projectSessionsMerge: ProjectMergeModel?
+    /// The open items of the project whose sessions page is showing, read only while nobody has
+    /// started it: what the progress card's start row is drawn from (`StartProject.pageRow`).
+    private(set) var projectSessionsOpenItems: ProjectOpenItemsView?
 
     var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
 
@@ -2277,20 +2407,26 @@ final class AppModel {
     }
 
     /// Project membership spans Workspaces; this request deliberately has no runner/agent filter.
+    /// A new address opens on what the app already holds of the project — its Open members from
+    /// the app's Open list, a workspace list's rows, the Completed ones its page last read — rather
+    /// than on none, and the read replaces them when it answers.
     func loadProjectSessions(_ address: SessionProjectAddress) async {
         guard let api else { return }
+        let key = PublicID.storageKey(address.projectID)
         if projectSessionsAddress != address {
             projectSessionsAddress = address
-            projectSessions = []
+            projectSessions = SessionProjectMembers.members(
+                of: address.projectID,
+                in: sessions + (agents?.allSessions ?? []) + (projectCompletedSessions[key] ?? []))
+            projectSessionsReadAt = nil
             projectSessionsError = nil
             projectSessionsIntegration = nil
             projectSessionsIntegrationReadAt = nil
             projectSessionsIntegrationReadFailed = false
+            projectSessionsOpenItems = nil
         }
         projectSessionsLoading = true
         defer { if projectSessionsAddress == address { projectSessionsLoading = false } }
-        let integrationRead = Task { try await api.projectIntegration(address.projectID) }
-        defer { integrationRead.cancel() }
         do {
             let openRead = Task { try await api.listSessions(view: .open, projectId: address.projectID) }
             let completedRead = Task { try await api.listSessions(view: .completed, projectId: address.projectID) }
@@ -2301,18 +2437,54 @@ final class AppModel {
             let rows = try await openRead.value + completedRead.value
             guard projectSessionsAddress == address, !Task.isCancelled else { return }
             // An older server may ignore projectId. It must never put unrelated sessions here.
-            var seen = Set<String>()
-            projectSessions = rows.filter {
-                $0.projectMembership?.projectId == address.projectID &&
-                    $0.effectiveLifecycleState != .trash && seen.insert($0.id).inserted
-            }.sorted { ($0.lastTurnAt ?? $0.createdAt ?? "") > ($1.lastTurnAt ?? $1.createdAt ?? "") }
+            projectSessions = SessionProjectMembers.members(of: address.projectID, in: rows)
+            projectCompletedSessions[key] = projectSessions.filter { $0.effectiveLifecycleState != .open }
+            projectSessionsReadAt = Date()
             projectSessionsError = nil
             for row in projectSessions { sessionDetails.store(row) }
         } catch {
             guard projectSessionsAddress == address, !Task.isCancelled else { return }
             projectSessionsError = APIClient.failureReason(error)
         }
-        let integration = try? await integrationRead.value
+    }
+
+    /// One poll of the page's members that asks again for neither list unless something moved. The
+    /// Open members are the app's own Open list's, kept current by its poll and the control stream;
+    /// the Completed ones are read again only when an Open member has left that list — how a
+    /// session joins them from here — or `SessionProjectMembers.completedRefresh` after the last
+    /// read. Until a read has answered for this page, or before the server has answered the app's
+    /// Open list (`openListAnswered`), a poll is the full read.
+    func pollProjectSessions(_ address: SessionProjectAddress) async {
+        guard let api, projectSessionsAddress == address else { return }
+        guard projectSessionsError == nil, let readAt = projectSessionsReadAt, openListAnswered else {
+            return await loadProjectSessions(address)
+        }
+        let key = PublicID.storageKey(address.projectID)
+        let poll = SessionProjectMembers.poll(shown: projectSessions, projectID: address.projectID,
+                                              openList: sessions, completed: projectCompletedSessions[key] ?? [])
+        if poll.members != projectSessions { projectSessions = poll.members }
+        guard poll.moved || Date().timeIntervalSince(readAt) >= SessionProjectMembers.completedRefresh else { return }
+        do {
+            let rows = try await api.listSessions(view: .completed, projectId: address.projectID)
+            guard projectSessionsAddress == address, !Task.isCancelled else { return }
+            let completed = SessionProjectMembers.members(of: address.projectID, in: rows)
+            projectCompletedSessions[key] = completed
+            projectSessionsReadAt = Date()
+            let members = SessionProjectMembers.members(of: address.projectID, in: sessions + completed)
+            if members != projectSessions { projectSessions = members }
+            for row in completed { sessionDetails.store(row) }
+        } catch {
+            guard projectSessionsAddress == address, !Task.isCancelled else { return }
+            projectSessionsError = APIClient.failureReason(error)
+        }
+    }
+
+    /// One poll of the landing line's read, beside the members' reads rather than behind them: it
+    /// is the live line, and the member lists are the slowest reads the page makes. A read that
+    /// fails keeps the last answer and says it is stale.
+    func loadProjectIntegration(_ address: SessionProjectAddress) async {
+        guard let api else { return }
+        let integration = try? await api.projectIntegration(address.projectID)
         guard projectSessionsAddress == address, !Task.isCancelled else { return }
         if let integration {
             projectSessionsIntegration = integration
@@ -2321,6 +2493,14 @@ final class AppModel {
         } else {
             projectSessionsIntegrationReadFailed = true
         }
+    }
+
+    /// Retry, on a landing job the server judged timed out, from the page's job list
+    /// (`ProjectLandingJobsSheet`): its silent generation ends and the next one is queued. Throws
+    /// what the server answered, for the job's row to say; the page reads its line again itself.
+    func retryIntegrationJob(_ projectID: String, jobID: String) async throws {
+        guard let api else { throw APIError.notConfigured }
+        _ = try await api.retryIntegrationJob(projectID, jobID: jobID)
     }
 
     /// One poll of the page's merge into main. Kept apart from `loadProjectSessions` so the
@@ -2332,6 +2512,23 @@ final class AppModel {
             projectSessionsMerge = ProjectMergeModel(projectID: address.projectID, api: api)
         }
         await projectSessionsMerge?.load(force: force)
+    }
+
+    /// One poll of what the page's start row needs (docs/mocks/project-start-sessions-page): the
+    /// project's open items — the coordinator's request to start among them — while the sidebar row
+    /// says nobody has started it. A started project, or one the row does not say about, reads
+    /// nothing more than before; a read that fails keeps the last answer rather than drawing none.
+    func loadProjectStart(_ address: SessionProjectAddress) async {
+        guard let api else { return }
+        let key = PublicID.storageKey(address.projectID)
+        let row = projects?.sidebarProjects.first { PublicID.storageKey($0.id) == key }
+        guard row?.status == .open, row?.started == false else {
+            projectSessionsOpenItems = nil
+            return
+        }
+        let items = try? await api.projectOpenItems(projectID: address.projectID)
+        guard projectSessionsAddress == address, !Task.isCancelled, let items else { return }
+        projectSessionsOpenItems = items
     }
 
     /// A member may belong to another Workspace. Carry its record into the console's cache, which
@@ -2873,30 +3070,63 @@ final class AppModel {
         provisionalLandingAgentID = nil
     }
 
+    /// Read what the previous run left (`persistLaunchSnapshot`) and adopt it — off the main thread,
+    /// so the first frame is not held behind reading and decoding the whole Open list. Called from
+    /// `init`, where the old synchronous `load()` used to run before the first frame; the read now
+    /// runs beside the launch and `adoptLaunchSnapshot` applies it as it arrives.
+    private func restoreLaunchSnapshot() {
+        guard let store = launchSnapshots else { return }
+        launchSnapshotRestore?.cancel()
+        launchSnapshotRestore = Task { [weak self] in
+            let snapshot = await store.loadOffMain()
+            guard !Task.isCancelled, let self, let snapshot else { return }
+            self.adoptLaunchSnapshot(snapshot)
+        }
+    }
+
     /// Draw a cold launch from what the previous run left (`persistLaunchSnapshot`): the account, the
     /// workspace list and the Open sessions, landed on the workspace you were in — so the first frame
     /// is that workspace's session list rather than a spinner. Nothing here is treated as an answer:
     /// the launch's own fetches replace every list as they land, and the landing made here is only
     /// provisional (see `resolveDefaultLanding`). Nothing is announced off this list either: see
     /// `openListFromLaunchSnapshot`.
-    private func restoreLaunchSnapshot() {
-        guard let snapshot = launchSnapshots?.load(), let agents else { return }
-        let landing = snapshot.landingAgentID(
-            lastAgentID: UserDefaults.standard.string(forKey: Self.lastAgentKey))
-        user = snapshot.user
-        // Points the landing's list at its Open rows, which `adoptOpenList` then fills.
-        agents.adoptLaunchSnapshot(snapshot, showing: landing)
-        openListFromLaunchSnapshot = true
-        adoptOpenList(snapshot.openSessions)
-        guard let landing else { return }
-        provisionalLandingAgentID = landing
-        selectedAgentID = landing
+    ///
+    /// This runs when the snapshot's file finishes decoding rather than in `init`, so a fetch may
+    /// already have answered — and that answer is newer than a file written as the previous run left
+    /// the foreground. `fillIn` is what keeps the two apart: what the launch already has is not
+    /// adopted, so the previous run's rows can never land on top of this run's.
+    private func adoptLaunchSnapshot(_ snapshot: LaunchSnapshot) {
+        guard signedIn, let agents else { return }
+        let fillIn = snapshot.fillIn(accountAnswered: user != nil,
+                                     workspacesAnswered: agents.loadState.hasLoaded,
+                                     openListAnswered: openListAnswered)
+        guard !fillIn.isEmpty else { return }
+        if let account = fillIn.user { user = account }
+        if let workspaces = fillIn.workspaces {
+            let landing = snapshot.landingAgentID(
+                lastAgentID: UserDefaults.standard.string(forKey: Self.lastAgentKey))
+            // Points the landing's list at its Open rows, which `adoptOpenList` then fills.
+            agents.adoptLaunchSnapshot(workspaces, showing: landing)
+            if let landing {
+                provisionalLandingAgentID = landing
+                selectedAgentID = landing
+            }
+        }
+        if let openSessions = fillIn.openSessions {
+            openListFromLaunchSnapshot = true
+            adoptOpenList(openSessions)
+        }
     }
 
     /// Write what the next cold launch draws first. Called as the app leaves the foreground — the
     /// last moment it is sure of the CPU — and synchronous for the same reason
     /// `ConsoleRegistry.persistAll` is. Only once this run's workspace fetch has answered: a run that
     /// never reached the server leaves the previous snapshot as it was.
+    ///
+    /// Deliberately still synchronous, unlike the read (`restoreLaunchSnapshot`): the encode is of
+    /// the same size, but it is paid on the way out of the foreground — where a write that is still
+    /// in flight when iOS suspends is a write that never happened — and never on the launch path the
+    /// first frame waits behind.
     func persistLaunchSnapshot() {
         guard signedIn, let agents, agents.loadState.hasLoaded, let launchSnapshots else { return }
         launchSnapshots.save(LaunchSnapshot(user: user, agents: agents.items,

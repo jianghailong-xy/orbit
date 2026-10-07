@@ -1,0 +1,4889 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/var/tmp/p2kw-c2604b/after2/node_modules/@playwright/test/cli.js",
+   "test",
+   "--config",
+   "docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.config.mjs",
+   "--project",
+   "chromium-dark-desktop",
+   "--grep",
+   " select-down-end-enter "
+  ],
+  "configFile": "/var/tmp/p2kw-c2604b/after2/docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.config.mjs",
+  "rootDir": "/var/tmp/p2kw-c2604b/after2/docs/evidence/base-ui-migration/p2-keyboard-window",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/var/tmp/p2kw-c2604b/after2/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/var/tmp/p2kw-c2604b/after2/src/web/.choices-results/p2-keyboard-window",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/var/tmp/p2kw-c2604b/after2/docs/evidence/base-ui-migration/p2-keyboard-window",
+    "testIgnore": [],
+    "testMatch": [
+     "keyboard-window.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p2kw-c2604b/after2/src/web/.choices-results/p2-keyboard-window",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/var/tmp/p2kw-c2604b/after2/docs/evidence/base-ui-migration/p2-keyboard-window",
+    "testIgnore": [],
+    "testMatch": [
+     "keyboard-window.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p2kw-c2604b/after2/src/web/.choices-results/p2-keyboard-window",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/var/tmp/p2kw-c2604b/after2/docs/evidence/base-ui-migration/p2-keyboard-window",
+    "testIgnore": [],
+    "testMatch": [
+     "keyboard-window.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p2kw-c2604b/after2/src/web/.choices-results/p2-keyboard-window",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/var/tmp/p2kw-c2604b/after2/docs/evidence/base-ui-migration/p2-keyboard-window",
+    "testIgnore": [],
+    "testMatch": [
+     "keyboard-window.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p2kw-c2604b/after2/src/web/.choices-results/p2-keyboard-window",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/var/tmp/p2kw-c2604b/after2/docs/evidence/base-ui-migration/p2-keyboard-window",
+    "testIgnore": [],
+    "testMatch": [
+     "keyboard-window.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p2kw-c2604b/after2/src/web/.choices-results/p2-keyboard-window",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/var/tmp/p2kw-c2604b/after2/docs/evidence/base-ui-migration/p2-keyboard-window",
+    "testIgnore": [],
+    "testMatch": [
+     "keyboard-window.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p2kw-c2604b/after2/src/web/.choices-results/p2-keyboard-window",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/var/tmp/p2kw-c2604b/after2/docs/evidence/base-ui-migration/p2-keyboard-window",
+    "testIgnore": [],
+    "testMatch": [
+     "keyboard-window.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p2kw-c2604b/after2/src/web/.choices-results/p2-keyboard-window",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/var/tmp/p2kw-c2604b/after2/docs/evidence/base-ui-migration/p2-keyboard-window",
+    "testIgnore": [],
+    "testMatch": [
+     "keyboard-window.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/var/tmp/p2kw-c2604b/after2/src/web/.choices-results/p2-keyboard-window/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+   "cwd": "/var/tmp/p2kw-c2604b/after2/src/web/",
+   "url": "http://127.0.0.1:4177",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "keyboard-window.browser.mjs",
+   "file": "keyboard-window.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "orbit-field select-down-end-enter burst sample 0",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1894,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T05:59:33.858Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-a0f91a3752ed2c8fb266",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter burst sample 1",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1510,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T05:59:35.823Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-c632fd61e9b42191fab5",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter burst sample 2",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1848,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T05:59:37.337Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-1c8dfa5919c6efe30877",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter burst sample 3",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1858,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T05:59:39.194Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-195839ad449320c6029f",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter burst sample 4",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1771,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T05:59:41.061Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-d5e852df2622280bbb83",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter burst sample 5",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1468,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T05:59:42.837Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-9fb983f2f284e390d678",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter burst sample 6",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1667,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T05:59:44.310Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-57afe60158698b65df48",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter burst sample 7",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1663,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T05:59:45.982Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-52d8184bc773e1c59a5f",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter burst sample 8",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1809,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T05:59:47.650Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-20b63aec3a1c1500bd82",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter burst sample 9",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1491,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T05:59:49.465Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-161166e665d7c74980c3",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter burst sample 10",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1626,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T05:59:50.972Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-0133d3bf5eaf23629e22",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter burst sample 11",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1534,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T05:59:52.604Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-0fc7e1894850a814fae0",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter burst sample 12",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1571,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T05:59:54.142Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-8c45fee17e735f104bb4",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter burst sample 13",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1488,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T05:59:55.717Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-0d4faa1b02a771d1e106",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter burst sample 14",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1588,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T05:59:57.208Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-579f8856e55242aa3a16",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter burst sample 15",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1525,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T05:59:58.800Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-df0b30d3f912f23d883f",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter burst sample 16",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1587,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:00.329Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-1a1a894285507d691606",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter burst sample 17",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1576,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:01.920Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-81055a98416a95e0972f",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter burst sample 18",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1549,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:03.500Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-6f49fbc4c9490d545379",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter burst sample 19",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1609,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:05.053Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-62e8b15142ae9b4f0a6b",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter paced sample 0",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2423,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:06.668Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-b23734d52d079a952a30",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter paced sample 1",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2471,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:09.095Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-518a46489bbf05466eb3",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter paced sample 2",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2525,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:11.570Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-2d9b2bfc48534ec136c8",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter paced sample 3",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2774,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:14.101Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-be866cd51660764dddd9",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter paced sample 4",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2633,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:16.878Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-1c04b53c1c4f65612b52",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter paced sample 5",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2477,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:19.515Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-98e23a92cae941e0e5f8",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter paced sample 6",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2432,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:21.996Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-b5ab2ce06716e32d611f",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter paced sample 7",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2643,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:24.433Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-789ea76db0caa218feec",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter paced sample 8",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2363,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:27.080Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-35ef625495bb202321e2",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter paced sample 9",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2811,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:29.446Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-414470edb69955724d44",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter paced sample 10",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3144,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:32.261Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-d6bf697c05fa94593c87",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter paced sample 11",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2661,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:35.410Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-9fe7a95c9c75c4cb6b83",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter paced sample 12",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3245,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:38.076Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-cebb44f7ae397b36a3ea",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter paced sample 13",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3613,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:41.324Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-0a2cef61b611f54554ea",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter paced sample 14",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3083,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:44.942Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-18da53e853daaec11b4c",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter paced sample 15",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2609,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:48.039Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-0186f5dcb3a1f76603b4",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter paced sample 16",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2527,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:50.661Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-5607f138ea5ef8c877f8",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter paced sample 17",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2539,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:53.191Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-8c9a2623419a0b85b638",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter paced sample 18",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2376,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:55.735Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-d02bef62860816b68319",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-field select-down-end-enter paced sample 19",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2352,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:00:58.115Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-bd476f1f56117fd70a76",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter burst sample 0",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1485,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:00.471Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-b92d8c2f21db5291a304",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter burst sample 1",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1480,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:01.960Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-8de5513be5b29629f1e9",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter burst sample 2",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1503,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:03.444Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-9a81d73a6cd6e8ff7228",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter burst sample 3",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1539,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:04.951Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-6547b4772f14ea1d005d",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter burst sample 4",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1572,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:06.494Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-3eab66432b28044a2adc",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter burst sample 5",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1521,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:08.071Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-3800ecf5b910d54dd1d3",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter burst sample 6",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1646,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:09.596Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-eeefab1b581de4604f3a",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter burst sample 7",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1511,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:11.245Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-072ca6ba16f49679eba4",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter burst sample 8",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1506,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:12.761Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-15381d56baeadef23f28",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter burst sample 9",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1587,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:14.271Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-fe773d413203af381fdd",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter burst sample 10",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1483,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:15.861Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-0ee7232533d608875f90",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter burst sample 11",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1472,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:17.349Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-182853c31f81a1cd2dcc",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter burst sample 12",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1609,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:18.826Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-7af438433d062c6c3aef",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter burst sample 13",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1658,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:20.439Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-8e1f6fb0e175d8964073",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter burst sample 14",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1392,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:22.101Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-ffc858fb656cbd9de038",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter burst sample 15",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1615,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:23.497Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-7a8bc1639a54135562bc",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter burst sample 16",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1605,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:25.119Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-b5384917a6446befff56",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter burst sample 17",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1578,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:26.729Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-7e8583fcde4d88bdc9b4",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter burst sample 18",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1573,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:28.313Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-377aaa5343fc8fc07c55",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter burst sample 19",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1524,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:29.891Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-b5490b02d4b9f6825ad9",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter paced sample 0",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2498,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:31.419Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-3a39c89bec8d6a6ed961",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter paced sample 1",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2605,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:33.922Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-c2af7c6ada9cec4591ed",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter paced sample 2",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2775,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:36.534Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-64664d955949a9fec513",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter paced sample 3",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2747,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:39.319Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-53d248eb012cc3e8201a",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter paced sample 4",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2374,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:42.071Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-0d2e6b20c30b0790bfcd",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter paced sample 5",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2456,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:44.449Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-24aaa381fb6890fa0b48",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter paced sample 6",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2481,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:46.909Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-967e1dc6025508fccfff",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter paced sample 7",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2476,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:49.395Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-7fb9a98523c718888cf3",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter paced sample 8",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2539,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:51.877Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-2657b37ba08f00d49956",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter paced sample 9",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2345,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:54.420Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-b06d7f7bfaabc5f5a915",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter paced sample 10",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2315,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:56.779Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-87822c35b730fa55a7ec",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter paced sample 11",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2453,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:01:59.098Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-fa5c17e2ea15e697a5b3",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter paced sample 12",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2446,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:01.555Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-34096e20568a2644c208",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter paced sample 13",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2592,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:04.006Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-b8460cf14a987e719a4e",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter paced sample 14",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2809,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:06.602Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-32782942de9a1afbffc0",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter paced sample 15",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2571,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:09.415Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-6428f93b013e77a57eaa",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter paced sample 16",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2466,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:11.998Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-270ebf51bf0de62d502a",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter paced sample 17",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2674,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:14.468Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-8909a37099fff8f9ecbb",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter paced sample 18",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2641,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:17.146Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-5f208960c298d66dcbd1",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample select-down-end-enter paced sample 19",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2522,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:19.791Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-db9a85462b8a51d34565",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter burst sample 0",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1431,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:22.317Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-c33be22192ea99926698",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter burst sample 1",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1552,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:23.752Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-b4020a216c0e952b52a7",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter burst sample 2",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1691,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:25.308Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-8d47127f8252d3500c3f",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter burst sample 3",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1598,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:27.003Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-73ea8be1b71184a688dd",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter burst sample 4",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1582,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:28.605Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-44dad7a55e6c7856a1fd",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter burst sample 5",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1551,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:30.192Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-13e939c92b0dbced260d",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter burst sample 6",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1524,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:31.747Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-30a2478e2d89272fd17e",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter burst sample 7",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1375,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:33.276Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-12284f5f98fb4742feb7",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter burst sample 8",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1630,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:34.656Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-b50f1e1e0f97d9895cd7",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter burst sample 9",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1655,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:36.290Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-0c5de30bb59fc6321176",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter burst sample 10",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1479,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:37.949Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-cc2152933ac5a1bd4350",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter burst sample 11",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1595,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:39.432Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-bbf84a0217604c54f6b9",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter burst sample 12",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1570,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:41.031Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-22cc6c1fecfcef526500",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter burst sample 13",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1424,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:42.604Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-2e8df90fde14836e7e51",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter burst sample 14",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1722,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:44.033Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-ab473f459ff0220a08a2",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter burst sample 15",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1508,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:45.759Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-f5cf3fe1d294c9e235ec",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter burst sample 16",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1669,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:47.271Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-af3a8d8bf7407d49f40d",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter burst sample 17",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1721,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:48.945Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-85003a3fcc3e1ed6f581",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter burst sample 18",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1490,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:50.670Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-ca6aef7dd3ad089c836f",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter burst sample 19",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1629,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:52.164Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-3409d9ee91f8c47a8e63",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter paced sample 0",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2619,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:53.798Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-f277b318d6f439029a1f",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter paced sample 1",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2509,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:56.421Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-393fcb8c3316f517e625",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter paced sample 2",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2661,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:02:58.934Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-fd47ce8efe0984a3b32d",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter paced sample 3",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2483,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:03:01.600Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-c010889b69a80c9a159c",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter paced sample 4",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2514,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:03:04.088Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-6cbb910562a16c976bbd",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter paced sample 5",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2387,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:03:06.608Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-4edc721f91eb6df99814",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter paced sample 6",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2484,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:03:08.998Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-9b2a0da450dc0bf1eaf9",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter paced sample 7",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2384,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:03:11.486Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-7f95cbd2ad4905aba640",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter paced sample 8",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2463,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:03:13.873Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-4c456b318aabf338f35b",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter paced sample 9",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2428,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:03:16.341Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-3a0922400a8acb7d7127",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter paced sample 10",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2458,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:03:18.774Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-6d689fa0287b2d911136",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter paced sample 11",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2463,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:03:21.236Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-38eb6d2f855916c5c200",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter paced sample 12",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2653,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:03:23.703Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-cad7043d6de869236cbf",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter paced sample 13",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2377,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:03:26.359Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-8c0f166616cd56ca893c",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter paced sample 14",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2512,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:03:28.740Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-979610d6ffb34229ada4",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter paced sample 15",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2532,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:03:31.255Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-23b782eccbf25899927b",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter paced sample 16",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2406,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:03:33.792Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-0c7c2fc9244351466dd1",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter paced sample 17",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2432,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:03:36.201Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-484450e79a964ffd06d6",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter paced sample 18",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2606,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:03:38.638Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-db3eb857f807a75de82c",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    },
+    {
+     "title": "antd-sample select-down-end-enter paced sample 19",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2539,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T06:03:41.274Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-window",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "00492c0a91c87ce5edd1-7cb3d34177f3154f4703",
+     "file": "keyboard-window.browser.mjs",
+     "line": 101,
+     "column": 3
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-07T05:59:32.745Z",
+  "duration": 251339.558,
+  "expected": 120,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

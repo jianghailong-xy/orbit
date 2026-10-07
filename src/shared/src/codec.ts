@@ -92,6 +92,11 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'retryRequestedBySessionId',
   'retryRequestedByUserId',
   'handlingItemIds',
+  // A landing that ran without its merge check (migration 0393): the account owner whose yes it is,
+  // and the confirmation card it was approved on — an address the owner's own sessions page follows
+  // back to the card, absent when they queued the skip themselves.
+  'skipApprovedByUserId',
+  'skipApprovalId',
   // How the coordinator handled an item (migration 0368): the job its rerun queued, the conversation
   // that asked, and the job whose terminal state ended the item. Addresses a reader follows to the
   // job or the session — history with no foreign key, never a fence.
@@ -275,6 +280,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'requestedBySessionId',
   'decidedByUserId',
   'appliedTaskId',
+  // A move request's target criterion (0386): the definition row `criterionDefinitionId` names on
+  // a task, here as what the moved task WILL declare. An address for the same reason.
+  'requestedCriterionDefinitionId',
   // The account owner who resolved a project blocker (0269), named exactly as `decidedByUserId` is.
   'resolvedByUserId',
   // And the one who resumed a paused coordinator (0280), which is the same kind of name.
@@ -397,6 +405,11 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'createdById',
   'approvedById',
   'decidedById',
+  // The administrator who last saved a sign-in provider (`sign_in_provider`, migration 0390): a user,
+  // named the way `createdById` names one.
+  'updatedById',
+  // The signed-in user a Google LINK flow would link to (`oauth_login_flow`, migration 0391).
+  'linkUserId',
   'actorId',
   'mentions',
   // Wire-only aggregates: no column of their own, but they carry the same ids in request and

@@ -190,6 +190,8 @@ type engineHealth struct {
 	planUsage     *PlanUsage
 	onServicePath bool // found on the background service's baked PATH (not just the shell's)
 	installError  string
+	// Kimi only: the site its own login is on (kimi_region.go), "" when there is none.
+	kimiRegion string
 }
 
 // serviceLoginPath reconstructs the PATH the background service runs with, the
@@ -273,6 +275,9 @@ func checkEngine(spec engineSpec, servicePath string) engineHealth {
 		h.auth, h.authSource, h.planUsage = probeAntigravityAuth(ctx, abs, nil)
 	} else {
 		h.auth = probeAuth(spec.bin, abs)
+	}
+	if spec.bin == providerKimi {
+		h.kimiRegion = probeKimiLoginRegion(abs)
 	}
 	return h
 }
@@ -578,12 +583,17 @@ func remoteMachine() bool {
 // on an unknown argument. env is the CLI's environment (nil: this process's own):
 // even printing its help, codex writes helper binaries into its CODEX_HOME.
 func supportsLoginFlag(binPath string, spec engineSpec, env []string) bool {
+	return loginHelpMentions(binPath, spec, env, spec.loginRemoteFlag)
+}
+
+// loginHelpMentions is supportsLoginFlag for any flag of the sign-in — Kimi's `--region`.
+func loginHelpMentions(binPath string, spec engineSpec, env []string, flag string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, binPath, append(append([]string{}, spec.loginArgs...), "--help")...)
 	cmd.Env = env
 	out, _ := cmd.CombinedOutput()
-	return strings.Contains(string(out), spec.loginRemoteFlag)
+	return strings.Contains(string(out), flag)
 }
 
 // signInEngine asks for consent, then runs the CLI's sign-in with the terminal
@@ -599,6 +609,13 @@ func signInEngine(spec engineSpec, binPath string) bool {
 	}
 	if !confirm(fmt.Sprintf("\nSign in to %s now? (%s)\n  %s\n  [Y/n] ", spec.name, note, cmdLine), true) {
 		return false
+	}
+	// Kimi's two sites keep separate accounts, and left to itself the CLI picks one (kimi_region.go).
+	if spec.bin == providerKimi && interactive() && loginHelpMentions(binPath, spec, nil, "--region") {
+		if region := askKimiRegion(); region != "" {
+			args = append(args, "--region", region)
+			cmdLine += " --region " + region
+		}
 	}
 	fmt.Printf("  running: %s\n", cmdLine)
 	cmd := exec.Command(binPath, args...)

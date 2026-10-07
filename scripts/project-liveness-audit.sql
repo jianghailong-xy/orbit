@@ -91,7 +91,8 @@ SELECT "id"                      AS project_id,
 -- §4.2 — open items that nobody owes any more, counted per project and kind.
 --
 -- An item is closed by the transaction that moves what it is about: a candidate leaving the live
--- states, a task cancelled or replaced. A door that misses that edge leaves the item open about
+-- states, a task cancelled or replaced, a delivery under review whose task is no longer DONE
+-- (0375's `DELIVERY_REVIEW`). A door that misses that edge leaves the item open about
 -- something that is gone — in front of the owner, on their badge, and (for an integration item)
 -- holding off the project's Automatic merges. The escalation tick's backstop
 -- (`ProjectOpenItemEscalationService.reconcile`) closes such an item within a minute, with a
@@ -134,6 +135,11 @@ SELECT item."project_id"                                       AS project_id,
         SELECT 1 FROM "task" owed_task
          WHERE owed_task."id" = "item"."task_id"
            AND owed_task."status" <> 'CANCELLED'
+           AND owed_task."superseded_by_task_id" IS NULL)
+      WHEN "item"."task_id" IS NOT NULL AND "item"."kind" = 'DELIVERY_REVIEW' THEN EXISTS (
+        SELECT 1 FROM "task" owed_task
+         WHERE owed_task."id" = "item"."task_id"
+           AND owed_task."status" = 'DONE'
            AND owed_task."superseded_by_task_id" IS NULL)
       ELSE true
     END)

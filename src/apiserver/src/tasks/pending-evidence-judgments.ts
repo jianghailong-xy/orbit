@@ -6,8 +6,11 @@ import { ownerEvidenceCard, reviewerHolds, type OwnerEvidenceCard } from './evid
 import {
   CRITERION_MOVED_ACTION,
   REQUIRES_INDEPENDENT_SESSION_ACTION,
+  TASK_IN_ANOTHER_PROJECT_ACTION,
   criterionStandingRefusal,
   decidingSessionDisqualification,
+  decidingSessionProject,
+  taskProjectDisqualification,
 } from './task-evidence-decision';
 import {
   describeEvidenceCitations,
@@ -246,7 +249,8 @@ function ageSeconds(readAt: Date, submittedAt: Date): number {
  * A revision is held while ALL of these are true when it is read:
  *
  *   * its wake was DELIVERED — the revision the task's latest evidence row names, by the fact's own
- *     key, under the project the task is filed under now;
+ *     key or by the key a confirmed move handed it over under, under the project the task is filed
+ *     under now (a delivery to the project it was moved out of holds nothing);
  *   * that project is still Automatic: switched off, it is the owner's card again, as it is for
  *     every project that is not (2026-09-10's behaviour, kept for them unchanged);
  *   * the conversation it was delivered to has not ended (`sessionHasEnded`, the line the delivery
@@ -272,12 +276,17 @@ async function coordinatorHolds(
   const subjects = new Map<string, { taskId: string; projectId: string }>();
   for (const row of latest) {
     if (row.projectId == null) continue;
-    const key = completionEvidenceWakeKey(row.taskId, {
+    const revision = {
       revision: row.revision.toString(),
       criterionRevision: row.criterionRevision,
       evidenceDigest: row.evidenceDigest,
-    });
-    subjects.set(key, { taskId: row.taskId, projectId: row.projectId });
+    };
+    const subject = { taskId: row.taskId, projectId: row.projectId };
+    // Two keys a delivery to the project the task is in now can carry: the revision's own, when it
+    // was submitted there, and the one a confirmed move handed it over under when the task was
+    // moved there with it undecided (`completionEvidenceRevisedFact`'s `movedFromProjectId`).
+    subjects.set(completionEvidenceWakeKey(row.taskId, revision), subject);
+    subjects.set(completionEvidenceWakeKey(row.taskId, revision, row.projectId), subject);
   }
   const held = new Set<string>();
   if (subjects.size === 0) return held;
@@ -458,6 +467,9 @@ export async function readPendingEvidenceJudgments(
   const pending: PendingEvidenceJudgment[] = [];
   const waitingOnYou: PendingEvidenceJudgment[] = [];
   const unanswered = await unansweredLatestEvidence(tx, ownerId, readAt);
+  // The project this reader acts for, read once: the door refuses it a task filed under another
+  // (`assertDecidingSessionInTaskProject`) — a task moved away included — so this read does too.
+  const actsFor = await decidingSessionProject(tx, ownerId, decidingSession.id);
   for (const { task, latest, heldByCoordinator, dispatching, heldByReviewer, ownerCard } of unanswered) {
     const envelope = storedEnvelope(latest.evidence);
     const disqualification = await decidingSessionDisqualification(
@@ -465,6 +477,7 @@ export async function readPendingEvidenceJudgments(
       { ownerId, taskId: task.id },
       decidingSession,
     );
+    const elsewhere = taskProjectDisqualification(task.projectId, actsFor);
     // A row in no project is asked of the one conversation its owner card is drawn in. That card
     // decides as its dispatching session wherever it is drawn, so there that session is the one the
     // door's independence question is about; with no dispatching session it is the owner's own
@@ -480,6 +493,8 @@ export async function readPendingEvidenceJudgments(
           : await decidingSessionDisqualification(
             tx, { ownerId, taskId: task.id }, { id: dispatching.id, taskId: dispatching.taskId },
           );
+    // What the door would refuse this reader, in the door's order: the work first, then the project.
+    const refusedHere = independenceOf ?? elsewhere;
     // Asked of the door's own predicate rather than re-derived from `envelope` above: whether a
     // decision can be recorded is the door's question, and a second opinion here is exactly the
     // drift that would put an undecidable row back among the answerable ones.
@@ -504,9 +519,11 @@ export async function readPendingEvidenceJudgments(
         requiredAction: standing === null ? null : CRITERION_MOVED_ACTION,
       },
       independence: {
-        independent: independenceOf === null,
-        disqualification: independenceOf,
-        requiredAction: independenceOf === null ? null : REQUIRES_INDEPENDENT_SESSION_ACTION,
+        independent: refusedHere === null,
+        disqualification: refusedHere,
+        requiredAction: independenceOf !== null
+          ? REQUIRES_INDEPENDENT_SESSION_ACTION
+          : elsewhere !== null ? TASK_IN_ANOTHER_PROJECT_ACTION : null,
       },
       ownerCard,
     };
@@ -531,8 +548,9 @@ export async function readPendingEvidenceJudgments(
       }
       continue;
     }
+    // A row of another project's task is that project's to decide, and is not asked of this reader.
     if (standing === null) {
-      if (disqualification === null && !heldByCoordinator) pending.push(row);
+      if (disqualification === null && elsewhere === null && !heldByCoordinator) pending.push(row);
     } else if (disqualification !== null) {
       waitingOnYou.push(row);
     }

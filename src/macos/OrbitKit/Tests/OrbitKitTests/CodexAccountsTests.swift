@@ -96,6 +96,21 @@ final class CodexAccountsTests: XCTestCase {
         XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(100, 18, nil), now: now), pro)
     }
 
+    /// Paused by hand, an account waits as a spent one does until its pause ends (shared
+    /// `rankAccounts`): passed over while another can run, and with every one held, the first free.
+    func testAPausedAccountWaitsUntilItsPauseEnds() {
+        let paused = [account("default"), RunnerEngineAccount(id: pro, auth: "yes", pausedUntil: "2026-08-03T15:00:00Z")]
+        // Pro's week ends first, so it would go first — but it is paused for two more hours.
+        XCTAssertEqual(CodexAccounts.toStartOn(paused, usage: usage(5, 18, 40, proReset: "2026-08-05T13:00:00Z"), now: now),
+                       "default")
+        let over = [account("default"), RunnerEngineAccount(id: pro, auth: "yes", pausedUntil: "2026-08-03T12:00:00Z")]
+        XCTAssertEqual(CodexAccounts.toStartOn(over, usage: usage(5, 18, 40, proReset: "2026-08-05T13:00:00Z"), now: now),
+                       pro, "a pause that has ended holds nothing")
+        // Default spent until its 5 hours reset tomorrow at 01:00, Pro paused until 15:00 today: Pro.
+        XCTAssertEqual(CodexAccounts.toStartOn(paused, usage: usage(100, 18, 40, proReset: "2026-08-05T13:00:00Z"), now: now),
+                       pro)
+    }
+
     func testNeverPicksASignedOutAccount() {
         XCTAssertEqual(CodexAccounts.toStartOn([account("default"), account(pro, "no")], usage: usage(90, 18, 0), now: now), "default")
         XCTAssertNil(CodexAccounts.toStartOn([account("default", "no"), account(pro, "no")], usage: usage(0, 0, 0), now: now))

@@ -137,7 +137,7 @@ test('account pools against PostgreSQL', { skip, concurrency: 1, timeout: 300_00
     // everything the write returned it says the same.
     const listed = (await service.listPools(alice)).map(({ resetsAt: _resetsAt, unavailable: _unavailable, members, ...rest }) => ({
       ...rest,
-      members: members.map(({ id, slug, label }) => ({ id, slug, label })),
+      members: members.map(({ id, slug, label, pausedUntil }) => ({ id, slug, label, pausedUntil })),
     }));
     assert.deepEqual(listed, [pool], 'the list reads back exactly what the write returned');
     assert.deepEqual(await service.listPools(bob), [], 'and to its owner only');

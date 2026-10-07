@@ -415,10 +415,10 @@ export interface PlanUsageSnapshot {
   /** Codex earned rate-limit reset state (docs/codex-rate-limit-reset-contract.md). Absent from
    *  older runners and from non-Codex snapshots. */
   rateLimitReset?: PlanUsageRateLimitReset;
-  /** Codex only: the snapshot of every other account on the runner, keyed by its id
-   *  (RunnerEngineAccount.id); the windows beside it are Default's (codexAccountSnapshot). An entry
-   *  never carries a reset block — reset is Default's alone. Absent from older runners, and until the
-   *  runner has read an account other than Default. */
+  /** The snapshot of every other account on the runner — of Codex, Claude Code or Antigravity —
+   *  keyed by its id (RunnerEngineAccount.id); the windows beside it are Default's
+   *  (codexAccountSnapshot). An entry never carries a reset block — reset is Default's alone. Absent
+   *  from older runners, and until the runner has read an account other than Default. */
   accounts?: Record<string, PlanUsageSnapshot>;
   /** Antigravity only: the Google account's quota buckets from the runner's `/usage` probe
    *  (docs/antigravity-runtime-contract.md §16.6), flattened across agy's model groups. */
@@ -450,6 +450,10 @@ export interface PlanUsage extends PlanUsageSnapshot {
   claude?: PlanUsageSnapshot;
   codex?: PlanUsageSnapshot;
   kimi?: PlanUsageSnapshot;
+  /** Antigravity's Google accounts. Never in a heartbeat's own planUsage: a runner reports it with the
+   *  engine's health (RunnerEngineHealth.planUsage), and a reader that weighs every engine's quota the
+   *  same way folds it in here first (withEnginePlanUsage). */
+  antigravity?: PlanUsageSnapshot;
 }
 
 export interface RunnerHeartbeatRequest {
@@ -1027,8 +1031,22 @@ export interface CodexRateLimitResetResultRefusal {
  */
 export type LoginEngine = 'claude' | 'codex' | 'kimi' | 'antigravity';
 
-/** Engines with an install action in Providers: every engine a runner signs in with. */
-export type InstallEngine = LoginEngine | 'dsh';
+/**
+ * Kimi Code's two sign-in sites, as `kimi login --region` names them: `mainland-cn` is kimi.com,
+ * `global` is kimi.ai. Each keeps accounts, a sign-in page and an API of its own, so an account of
+ * one cannot sign in on the other.
+ */
+export type KimiRegion = 'mainland-cn' | 'global';
+export const KIMI_REGIONS: readonly KimiRegion[] = ['mainland-cn', 'global'];
+
+/** Runner signs Kimi Code in on the site a login `start` names (`region`). One that does not runs a
+ *  bare `kimi login`, which goes wherever the CLI decides — the site it last signed in to, or the one
+ *  its installer came from — so it is handed no start naming a site. */
+export const KIMI_LOGIN_REGION_V1 = 'kimi-login-region/v1';
+
+/** Engines with an install action in Providers: every engine a runner signs in with, plus `dsh` and
+ *  OpenCode, which are installed without one — the relay needs an install command, not a way in. */
+export type InstallEngine = LoginEngine | 'opencode' | 'dsh';
 
 /**
  * Every engine CLI a runner reports on, which is a wider set than the ones it can sign into:
@@ -1108,6 +1126,10 @@ export interface LoginCommand {
   account?: string;
   /** Codex only: sign in a NEW account, which the runner adds under this name. */
   accountName?: string;
+  /** Kimi only: the site to sign in on (`kimi login --region`). Only a runner that declares
+   *  `kimi-login-region/v1` is handed a start naming one; absent, the runner runs a bare `kimi login`,
+   *  exactly as before the choice. */
+  region?: KimiRegion;
 }
 
 /**
@@ -1187,19 +1209,26 @@ export interface RunnerEngineHealth {
   /** What the runner's updater last did to this engine. Absent from an older runner, and until
    *  the first pass — shown as "not reported yet", never as a problem. */
   update?: RunnerEngineUpdate;
-  /** Codex only: every account signed into this machine's CLI, Default first, each with its own
-   *  sign-in state. `auth` above stays Default's answer, which is what every reader older than
-   *  accounts takes it for. Absent from an older runner, and whenever the runner couldn't list its
-   *  accounts — read as the one account every machine had before accounts. */
+  /** Codex, Claude Code and Antigravity: every account signed into this machine's CLI, Default
+   *  first, each with its own sign-in state. `auth` above stays the engine's answer, which is what
+   *  every reader older than accounts takes it for — for Antigravity that may be a GEMINI_API_KEY,
+   *  while its Default account is the runner's Google sign-in alone. Absent from an older runner, and
+   *  whenever the runner couldn't list its accounts — read as the one account every machine had
+   *  before accounts. */
   accounts?: RunnerEngineAccount[];
   /** Antigravity only: the credential `auth` is about — the runner's Google sign-in, which wins
    *  when there is one, or the `GEMINI_API_KEY` in its environment. Absent when it has neither,
    *  and from a runner older than Google sign-in. */
   authSource?: AntigravityAuthSource;
-  /** Antigravity only: the Google account's quota, read by the same probe that answered `auth`.
-   *  Carries `provider`, `fetchedAt` and `buckets`, nothing else; present only while that sign-in
-   *  answers `yes`. */
+  /** Antigravity only: its Google accounts' quota, read by the same probe that answered each one's
+   *  sign-in. Default's `buckets` (with `fetchedAt`) are present only while the runner's own Google
+   *  sign-in answers `yes`; every other signed-in account's are under `accounts`, by its id. */
   planUsage?: PlanUsageSnapshot;
+  /** Kimi only: the site the CLI's own login is on, read from the managed Kimi Code provider it keeps
+   *  in config.toml — still reported once that login has expired, and absent before the first sign-in
+   *  on this machine (an installer's default is not a sign-in), after a logout, and from an older
+   *  runner. */
+  kimiRegion?: KimiRegion;
 }
 
 export interface DshRuntimeHealth {
@@ -1214,7 +1243,8 @@ export interface DshRuntimeHealth {
 
 /**
  * One account on a runner: a directory the CLI keeps that login in — a Codex CODEX_HOME, a Claude
- * Code's CLAUDE_CONFIG_DIR — which the runner signs in and runs sessions on.
+ * Code's CLAUDE_CONFIG_DIR, an Antigravity Google sign-in's Gemini directory — which the runner signs
+ * in and runs sessions on.
  *
  * Nothing here names the account itself. Neither its email nor its account id leaves the machine
  * (docs/codex-rate-limit-reset-contract.md §3): `name` is what the user called the slot, and

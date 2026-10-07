@@ -1,0 +1,1125 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/node_modules/@playwright/test/cli.js",
+   "test",
+   "--config",
+   "docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.config.mjs"
+  ],
+  "configFile": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-probe.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-probe.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-probe.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-probe.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-probe.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-probe.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-probe.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-probe.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+   "cwd": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/",
+   "url": "http://127.0.0.1:4177",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "scroll-probe.browser.mjs",
+   "file": "scroll-probe.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2705,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:43:26.515Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "page-scroll",
+           "contentType": "application/json"
+          },
+          {
+           "name": "nested-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "353f8d049c9bf5ea6a5a-23dd95a90e43be7b1639",
+     "file": "scroll-probe.browser.mjs",
+     "line": 51,
+     "column": 51
+    },
+    {
+     "title": "reduce Dialog Popover Select exits restore one layer at a time",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1192,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:43:29.331Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "page-scroll",
+           "contentType": "application/json"
+          },
+          {
+           "name": "nested-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "353f8d049c9bf5ea6a5a-1b00c4aeac96475e5cc0",
+     "file": "scroll-probe.browser.mjs",
+     "line": 51,
+     "column": 51
+    },
+    {
+     "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2640,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:43:30.725Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "page-scroll",
+           "contentType": "application/json"
+          },
+          {
+           "name": "nested-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "353f8d049c9bf5ea6a5a-bf75cb8850a2c97ab960",
+     "file": "scroll-probe.browser.mjs",
+     "line": 51,
+     "column": 51
+    },
+    {
+     "title": "reduce Dialog Popover Select exits restore one layer at a time",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1246,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:43:33.413Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "page-scroll",
+           "contentType": "application/json"
+          },
+          {
+           "name": "nested-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "353f8d049c9bf5ea6a5a-86e754cc584bb2c8a132",
+     "file": "scroll-probe.browser.mjs",
+     "line": 51,
+     "column": 51
+    },
+    {
+     "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2690,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:43:34.877Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "page-scroll",
+           "contentType": "application/json"
+          },
+          {
+           "name": "nested-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "353f8d049c9bf5ea6a5a-bc9c85bbd69bbe664b99",
+     "file": "scroll-probe.browser.mjs",
+     "line": 51,
+     "column": 51
+    },
+    {
+     "title": "reduce Dialog Popover Select exits restore one layer at a time",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1359,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:43:37.617Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "page-scroll",
+           "contentType": "application/json"
+          },
+          {
+           "name": "nested-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "353f8d049c9bf5ea6a5a-b3f7f5baa12cddadc8f9",
+     "file": "scroll-probe.browser.mjs",
+     "line": 51,
+     "column": 51
+    },
+    {
+     "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2630,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:43:39.185Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "page-scroll",
+           "contentType": "application/json"
+          },
+          {
+           "name": "nested-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "353f8d049c9bf5ea6a5a-9fdbe2ac5a6e280aad9d",
+     "file": "scroll-probe.browser.mjs",
+     "line": 51,
+     "column": 51
+    },
+    {
+     "title": "reduce Dialog Popover Select exits restore one layer at a time",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1312,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:43:41.863Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "page-scroll",
+           "contentType": "application/json"
+          },
+          {
+           "name": "nested-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "353f8d049c9bf5ea6a5a-6759638e29a810cfb545",
+     "file": "scroll-probe.browser.mjs",
+     "line": 51,
+     "column": 51
+    },
+    {
+     "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2783,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:43:43.399Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "page-scroll",
+           "contentType": "application/json"
+          },
+          {
+           "name": "nested-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "353f8d049c9bf5ea6a5a-910890ea5fb012970694",
+     "file": "scroll-probe.browser.mjs",
+     "line": 51,
+     "column": 51
+    },
+    {
+     "title": "reduce Dialog Popover Select exits restore one layer at a time",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1298,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:43:46.292Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "page-scroll",
+           "contentType": "application/json"
+          },
+          {
+           "name": "nested-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "353f8d049c9bf5ea6a5a-7a4b5a72358cba53021c",
+     "file": "scroll-probe.browser.mjs",
+     "line": 51,
+     "column": 51
+    },
+    {
+     "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 3118,
+         "error": {
+          "message": "Error: mouse.wheel: Mouse wheel is not supported in mobile WebKit",
+          "stack": "Error: mouse.wheel: Mouse wheel is not supported in mobile WebKit\n    at scrollPageWithWheel (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs:75:20)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:101:18",
+          "location": {
+           "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs",
+           "column": 20,
+           "line": 75
+          },
+          "snippet": "\u001b[90m   at \u001b[39mscroll-observation.mjs:75\n\n  73 |   });\n  74 |   // Trusted browser input, not scrollTo/scrollTop or a synthetic DOM event.\n> 75 |   await page.mouse.wheel(0, 240);\n     |                    ^\n  76 |   return page.evaluate(async () => {\n  77 |     const state = window.choicePageScroll;\n  78 |     await state.complete;"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs",
+            "column": 20,
+            "line": 75
+           },
+           "message": "Error: mouse.wheel: Mouse wheel is not supported in mobile WebKit\n\n   at scroll-observation.mjs:75\n\n  73 |   });\n  74 |   // Trusted browser input, not scrollTo/scrollTop or a synthetic DOM event.\n> 75 |   await page.mouse.wheel(0, 240);\n     |                    ^\n  76 |   return page.evaluate(async () => {\n  77 |     const state = window.choicePageScroll;\n  78 |     await state.complete;\n    at scrollPageWithWheel (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs:75:20)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:101:18"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:43:47.832Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-probe.browser.mjs-n-8e941-restore-one-layer-at-a-time-webkit-light-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-probe.browser.mjs-n-8e941-restore-one-layer-at-a-time-webkit-light-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs",
+          "column": 20,
+          "line": 75
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "353f8d049c9bf5ea6a5a-fc8db9267b2df4d3082b",
+     "file": "scroll-probe.browser.mjs",
+     "line": 51,
+     "column": 51
+    },
+    {
+     "title": "reduce Dialog Popover Select exits restore one layer at a time",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 1407,
+         "error": {
+          "message": "Error: mouse.wheel: Mouse wheel is not supported in mobile WebKit",
+          "stack": "Error: mouse.wheel: Mouse wheel is not supported in mobile WebKit\n    at scrollPageWithWheel (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs:75:20)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:101:18",
+          "location": {
+           "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs",
+           "column": 20,
+           "line": 75
+          },
+          "snippet": "\u001b[90m   at \u001b[39mscroll-observation.mjs:75\n\n  73 |   });\n  74 |   // Trusted browser input, not scrollTo/scrollTop or a synthetic DOM event.\n> 75 |   await page.mouse.wheel(0, 240);\n     |                    ^\n  76 |   return page.evaluate(async () => {\n  77 |     const state = window.choicePageScroll;\n  78 |     await state.complete;"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs",
+            "column": 20,
+            "line": 75
+           },
+           "message": "Error: mouse.wheel: Mouse wheel is not supported in mobile WebKit\n\n   at scroll-observation.mjs:75\n\n  73 |   });\n  74 |   // Trusted browser input, not scrollTo/scrollTop or a synthetic DOM event.\n> 75 |   await page.mouse.wheel(0, 240);\n     |                    ^\n  76 |   return page.evaluate(async () => {\n  77 |     const state = window.choicePageScroll;\n  78 |     await state.complete;\n    at scrollPageWithWheel (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs:75:20)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:101:18"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:43:51.366Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-probe.browser.mjs-r-82c09-restore-one-layer-at-a-time-webkit-light-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-probe.browser.mjs-r-82c09-restore-one-layer-at-a-time-webkit-light-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs",
+          "column": 20,
+          "line": 75
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "353f8d049c9bf5ea6a5a-8d10f59d678deb916291",
+     "file": "scroll-probe.browser.mjs",
+     "line": 51,
+     "column": 51
+    },
+    {
+     "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2695,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:43:53.117Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "page-scroll",
+           "contentType": "application/json"
+          },
+          {
+           "name": "nested-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "353f8d049c9bf5ea6a5a-0247b81d4a3ba853ce6e",
+     "file": "scroll-probe.browser.mjs",
+     "line": 51,
+     "column": 51
+    },
+    {
+     "title": "reduce Dialog Popover Select exits restore one layer at a time",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1302,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:43:55.879Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "page-scroll",
+           "contentType": "application/json"
+          },
+          {
+           "name": "nested-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "353f8d049c9bf5ea6a5a-748ccd0442f6b4043a05",
+     "file": "scroll-probe.browser.mjs",
+     "line": 51,
+     "column": 51
+    },
+    {
+     "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 8,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 2667,
+         "error": {
+          "message": "Error: mouse.wheel: Mouse wheel is not supported in mobile WebKit",
+          "stack": "Error: mouse.wheel: Mouse wheel is not supported in mobile WebKit\n    at scrollPageWithWheel (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs:75:20)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:101:18",
+          "location": {
+           "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs",
+           "column": 20,
+           "line": 75
+          },
+          "snippet": "\u001b[90m   at \u001b[39mscroll-observation.mjs:75\n\n  73 |   });\n  74 |   // Trusted browser input, not scrollTo/scrollTop or a synthetic DOM event.\n> 75 |   await page.mouse.wheel(0, 240);\n     |                    ^\n  76 |   return page.evaluate(async () => {\n  77 |     const state = window.choicePageScroll;\n  78 |     await state.complete;"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs",
+            "column": 20,
+            "line": 75
+           },
+           "message": "Error: mouse.wheel: Mouse wheel is not supported in mobile WebKit\n\n   at scroll-observation.mjs:75\n\n  73 |   });\n  74 |   // Trusted browser input, not scrollTo/scrollTop or a synthetic DOM event.\n> 75 |   await page.mouse.wheel(0, 240);\n     |                    ^\n  76 |   return page.evaluate(async () => {\n  77 |     const state = window.choicePageScroll;\n  78 |     await state.complete;\n    at scrollPageWithWheel (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs:75:20)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:101:18"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:43:57.420Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-probe.browser.mjs-n-8e941-restore-one-layer-at-a-time-webkit-dark-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-probe.browser.mjs-n-8e941-restore-one-layer-at-a-time-webkit-dark-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs",
+          "column": 20,
+          "line": 75
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "353f8d049c9bf5ea6a5a-d82763e55ad078d0ecb9",
+     "file": "scroll-probe.browser.mjs",
+     "line": 51,
+     "column": 51
+    },
+    {
+     "title": "reduce Dialog Popover Select exits restore one layer at a time",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 9,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 1328,
+         "error": {
+          "message": "Error: mouse.wheel: Mouse wheel is not supported in mobile WebKit",
+          "stack": "Error: mouse.wheel: Mouse wheel is not supported in mobile WebKit\n    at scrollPageWithWheel (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs:75:20)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:101:18",
+          "location": {
+           "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs",
+           "column": 20,
+           "line": 75
+          },
+          "snippet": "\u001b[90m   at \u001b[39mscroll-observation.mjs:75\n\n  73 |   });\n  74 |   // Trusted browser input, not scrollTo/scrollTop or a synthetic DOM event.\n> 75 |   await page.mouse.wheel(0, 240);\n     |                    ^\n  76 |   return page.evaluate(async () => {\n  77 |     const state = window.choicePageScroll;\n  78 |     await state.complete;"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs",
+            "column": 20,
+            "line": 75
+           },
+           "message": "Error: mouse.wheel: Mouse wheel is not supported in mobile WebKit\n\n   at scroll-observation.mjs:75\n\n  73 |   });\n  74 |   // Trusted browser input, not scrollTo/scrollTop or a synthetic DOM event.\n> 75 |   await page.mouse.wheel(0, 240);\n     |                    ^\n  76 |   return page.evaluate(async () => {\n  77 |     const state = window.choicePageScroll;\n  78 |     await state.complete;\n    at scrollPageWithWheel (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs:75:20)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs:101:18"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:44:00.471Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-probe.browser.mjs-r-82c09-restore-one-layer-at-a-time-webkit-dark-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-probe.browser.mjs-r-82c09-restore-one-layer-at-a-time-webkit-dark-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs",
+          "column": 20,
+          "line": 75
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "353f8d049c9bf5ea6a5a-40bcfbb725d01a84f009",
+     "file": "scroll-probe.browser.mjs",
+     "line": 51,
+     "column": 51
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T11:43:25.768Z",
+  "duration": 36226.916,
+  "expected": 12,
+  "skipped": 0,
+  "unexpected": 4,
+  "flaky": 0
+ }
+}

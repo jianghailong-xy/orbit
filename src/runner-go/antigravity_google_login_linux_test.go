@@ -8,7 +8,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -201,7 +200,7 @@ func TestAntigravityGoogleLoginReplaySuccess(t *testing.T) {
 		t.Fatal("OSC target was not preserved")
 	}
 	h.relay.mu.Lock()
-	run := h.relay.runs[providerAntigravity]
+	run := h.relay.runs[loginAccountKey(providerAntigravity, "")]
 	h.relay.mu.Unlock()
 	h.code()
 	done := h.wait(t, loginDone)
@@ -281,7 +280,7 @@ func TestAntigravityGoogleLoginIgnoresStaleCode(t *testing.T) {
 	h.wait(t, loginAwaitingCode)
 	h.relay.submitCode(LoginCommand{Engine: providerAntigravity, Attempt: "old-attempt", Code: googleReplayCode}, func(r LoginResultRequest) { h.reports <- r })
 	h.relay.mu.Lock()
-	run := h.relay.runs[providerAntigravity]
+	run := h.relay.runs[loginAccountKey(providerAntigravity, "")]
 	h.relay.mu.Unlock()
 	run.google.mu.Lock()
 	submitted := run.google.submitted
@@ -385,7 +384,7 @@ func TestAntigravityGoogleLoginReplayCancel(t *testing.T) {
 	// A cancellation belonging to an old attempt must not kill this one.
 	h.relay.cancelLogin(LoginCommand{Engine: providerAntigravity, Attempt: "old-attempt"})
 	h.relay.mu.Lock()
-	run := h.relay.runs[providerAntigravity]
+	run := h.relay.runs[loginAccountKey(providerAntigravity, "")]
 	h.relay.mu.Unlock()
 	if run.ctx.Err() != nil {
 		t.Fatal("stale cancellation killed the current login")
@@ -407,10 +406,7 @@ func TestAntigravityGoogleLoginReplayCancel(t *testing.T) {
 }
 
 func TestAntigravityGoogleContractSignedOut(t *testing.T) {
-	path, err := exec.LookPath(agyExecutable)
-	if err != nil {
-		t.Fatal("real agy is required for the Linux Google contract tests:", err)
-	}
+	path := requireRealAgy(t)
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	t.Setenv("GEMINI_API_KEY", "")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -424,10 +420,7 @@ func TestAntigravityGoogleContractSignedOut(t *testing.T) {
 }
 
 func TestAntigravityGoogleContractAuthorizationLinkThenCancel(t *testing.T) {
-	path, err := exec.LookPath(agyExecutable)
-	if err != nil {
-		t.Fatal("real agy is required for the Linux Google contract tests:", err)
-	}
+	path := requireRealAgy(t)
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	previous := lookLoginEngine
 	lookLoginEngine = func(engine string) (string, bool) { return path, engine == providerAntigravity }

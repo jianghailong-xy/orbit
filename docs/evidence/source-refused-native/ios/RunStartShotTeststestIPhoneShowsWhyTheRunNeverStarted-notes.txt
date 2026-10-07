@@ -1,0 +1,9 @@
+ios: card shown for S1; body text follows
+ios: refs/heads/project/34bZ3i4AvgJaaow5E9tH shown
+ios: git: fatal: couldn't find remote ref refs/heads/project/34bZ3i4AvgJaaow5E9tH shown
+ios: BASE_REF_NOT_FOUND shown
+ios: Start it again shown
+ios: Chat about this shown
+ios: Send it again shown
+ios: code+ref shown
+ios: task row shown

@@ -1,0 +1,382 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/choices.config.mjs",
+   "--project=chromium-light-desktop",
+   "--grep",
+   "attachment matches|tooltip matches"
+  ],
+  "configFile": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+   "cwd": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/",
+   "url": "http://127.0.0.1:4177",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "choices.browser.mjs",
+   "file": "choices.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "attachment matches the current surface, density and option states",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 3359,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 1\u001b[39m\n\n\u001b[33m@@ -46,10 +46,10 @@\u001b[39m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"color\": \"rgb(31, 35, 41)\",\u001b[22m\n\u001b[2m      \"height\": 18.84375,\u001b[22m\n\u001b[2m      \"kind\": \"SPAN\",\u001b[22m\n\u001b[2m      \"paths\": Array [],\u001b[22m\n\u001b[32m-     \"width\": 14,\u001b[39m\n\u001b[31m+     \"width\": 12,\u001b[39m\n\u001b[2m      \"x\": 16,\u001b[22m\n\u001b[2m      \"y\": 147.578125,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m  ]\u001b[22m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 1\u001b[39m\n\n\u001b[33m@@ -46,10 +46,10 @@\u001b[39m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"color\": \"rgb(31, 35, 41)\",\u001b[22m\n\u001b[2m      \"height\": 18.84375,\u001b[22m\n\u001b[2m      \"kind\": \"SPAN\",\u001b[22m\n\u001b[2m      \"paths\": Array [],\u001b[22m\n\u001b[32m-     \"width\": 14,\u001b[39m\n\u001b[31m+     \"width\": 12,\u001b[39m\n\u001b[2m      \"x\": 16,\u001b[22m\n\u001b[2m      \"y\": 147.578125,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m  ]\u001b[22m\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:141:35",
+          "location": {
+           "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs",
+           "column": 35,
+           "line": 141
+          },
+          "snippet": "  139 |         expect(glyphs.orbit.filter(({ kind }) => kind === 'svg').map(({ x, width, height }) => ({ x, width, height }))).toEqual(Array(4).fill({ x: 31, width: 19, height: 19 }));\n  140 |         expect(glyphs.orbit.find(({ kind }) => kind === 'SPAN')).toMatchObject({ x: 31, width: 19 });\n> 141 |       } else expect(glyphs.orbit).toEqual(glyphs.antd);\n      |                                   ^\n  142 |     }\n  143 |     if (kind === 'attachment' && info.project.use.hasTouch) {\n  144 |       // P0's original phone sample also measured 14px items: AntD's generated"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs",
+            "column": 35,
+            "line": 141
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 1\u001b[39m\n\n\u001b[33m@@ -46,10 +46,10 @@\u001b[39m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"color\": \"rgb(31, 35, 41)\",\u001b[22m\n\u001b[2m      \"height\": 18.84375,\u001b[22m\n\u001b[2m      \"kind\": \"SPAN\",\u001b[22m\n\u001b[2m      \"paths\": Array [],\u001b[22m\n\u001b[32m-     \"width\": 14,\u001b[39m\n\u001b[31m+     \"width\": 12,\u001b[39m\n\u001b[2m      \"x\": 16,\u001b[22m\n\u001b[2m      \"y\": 147.578125,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m  ]\u001b[22m\n\n  139 |         expect(glyphs.orbit.filter(({ kind }) => kind === 'svg').map(({ x, width, height }) => ({ x, width, height }))).toEqual(Array(4).fill({ x: 31, width: 19, height: 19 }));\n  140 |         expect(glyphs.orbit.find(({ kind }) => kind === 'SPAN')).toMatchObject({ x: 31, width: 19 });\n> 141 |       } else expect(glyphs.orbit).toEqual(glyphs.antd);\n      |                                   ^\n  142 |     }\n  143 |     if (kind === 'attachment' && info.project.use.hasTouch) {\n  144 |       // P0's original phone sample also measured 14px items: AntD's generated\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:141:35"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:00:05.377Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-attachment-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-attachment-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "menu-glyphs",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/choices.browser.mjs-attach-b3ab6-e-density-and-option-states-chromium-light-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/choices.browser.mjs-attach-b3ab6-e-density-and-option-states-chromium-light-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs",
+          "column": 35,
+          "line": 141
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-abb5ac390dbd95d33ee8",
+     "file": "choices.browser.mjs",
+     "line": 82,
+     "column": 3
+    },
+    {
+     "title": "tooltip matches the current surface, density and option states",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 3323,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 1\u001b[39m\n\n\u001b[33m@@ -11,11 +11,11 @@\u001b[39m\n\u001b[2m        \"clipPath\": \"path(\\\"M 0 8 A 4 4 0 0 0 2.82843 6.82843 L 6.58579 3.07107 A 2 2 0 0 1 9.41421 3.07107 L 13.1716 6.82843 A 4 4 0 0 0 16 8 Z\\\")\",\u001b[22m\n\u001b[2m        \"fill\": \"rgba(0, 0, 0, 0.85)\",\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m      \"triggerOffset\": Object {\u001b[22m\n\u001b[2m        \"x\": 0,\u001b[22m\n\u001b[32m-       \"y\": 12,\u001b[39m\n\u001b[31m+       \"y\": 8,\u001b[39m\n\u001b[2m      },\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    \"popup\": Object {\u001b[22m\n\u001b[2m      \"rows\": Array [],\u001b[22m\n\u001b[2m      \"surface\": Object {\u001b[22m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 1\u001b[39m\n\n\u001b[33m@@ -11,11 +11,11 @@\u001b[39m\n\u001b[2m        \"clipPath\": \"path(\\\"M 0 8 A 4 4 0 0 0 2.82843 6.82843 L 6.58579 3.07107 A 2 2 0 0 1 9.41421 3.07107 L 13.1716 6.82843 A 4 4 0 0 0 16 8 Z\\\")\",\u001b[22m\n\u001b[2m        \"fill\": \"rgba(0, 0, 0, 0.85)\",\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m      \"triggerOffset\": Object {\u001b[22m\n\u001b[2m        \"x\": 0,\u001b[22m\n\u001b[32m-       \"y\": 12,\u001b[39m\n\u001b[31m+       \"y\": 8,\u001b[39m\n\u001b[2m      },\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    \"popup\": Object {\u001b[22m\n\u001b[2m      \"rows\": Array [],\u001b[22m\n\u001b[2m      \"surface\": Object {\u001b[22m\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:156:39",
+          "location": {
+           "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs",
+           "column": 39,
+           "line": 156
+          },
+          "snippet": "  154 |       }));\n  155 |       expect(measurements.orbit).toEqual(expected);\n> 156 |     } else expect(measurements.orbit).toEqual(measurements.antd);\n      |                                       ^\n  157 |   });\n  158 | }\n  159 |"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs",
+            "column": 39,
+            "line": 156
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 1\u001b[39m\n\n\u001b[33m@@ -11,11 +11,11 @@\u001b[39m\n\u001b[2m        \"clipPath\": \"path(\\\"M 0 8 A 4 4 0 0 0 2.82843 6.82843 L 6.58579 3.07107 A 2 2 0 0 1 9.41421 3.07107 L 13.1716 6.82843 A 4 4 0 0 0 16 8 Z\\\")\",\u001b[22m\n\u001b[2m        \"fill\": \"rgba(0, 0, 0, 0.85)\",\u001b[22m\n\u001b[2m      },\u001b[22m\n\u001b[2m      \"triggerOffset\": Object {\u001b[22m\n\u001b[2m        \"x\": 0,\u001b[22m\n\u001b[32m-       \"y\": 12,\u001b[39m\n\u001b[31m+       \"y\": 8,\u001b[39m\n\u001b[2m      },\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    \"popup\": Object {\u001b[22m\n\u001b[2m      \"rows\": Array [],\u001b[22m\n\u001b[2m      \"surface\": Object {\u001b[22m\n\n  154 |       }));\n  155 |       expect(measurements.orbit).toEqual(expected);\n> 156 |     } else expect(measurements.orbit).toEqual(measurements.antd);\n      |                                       ^\n  157 |   });\n  158 | }\n  159 |\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:156:39"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:00:09.249Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-tooltip-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-tooltip-context",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-tooltip-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-tooltip-context",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/choices.browser.mjs-toolti-6ca31-e-density-and-option-states-chromium-light-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/choices.browser.mjs-toolti-6ca31-e-density-and-option-states-chromium-light-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs",
+          "column": 39,
+          "line": 156
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-1d130ed67a9f45b589cf",
+     "file": "choices.browser.mjs",
+     "line": 82,
+     "column": 3
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T08:00:04.501Z",
+  "duration": 8293.177000000001,
+  "expected": 0,
+  "skipped": 0,
+  "unexpected": 2,
+  "flaky": 0
+ }
+}

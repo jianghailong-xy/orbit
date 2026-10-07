@@ -1,0 +1,1095 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2-keyboard-window/fix-held-frames-before/<name>",
+ "files": [
+  {
+   "name": "chromium-dark-desktop--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+   "bytes": 707,
+   "sha256": "6456526d45460b38152659ed15a35de80aa36fe2efe2aecd52ca17ce50d8dd52",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 693,
+   "sha256": "3c8ce8f07d4db82cb0e1c83ae301261d089c97ceb6561dd7934412a2813bb1fa",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "/Command"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 497,
+   "sha256": "e877744788ba4b1559006f17318328c3e9a65d47e3fec0271b0624c92908426c",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 681,
+   "sha256": "beadc82162af30741385a1de1882bcdf638cdd38dc7457022a6f3814bd98e032",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "File"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell--menu-held-frames.json",
+   "bytes": 707,
+   "sha256": "a8abb643a9c0edd47698c9b7cb1f649bf4104de8366959564fee66d2cd3c1b2f",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 497,
+   "sha256": "711e11cc006eb0b4b2274418962cafb0ee29c785dd1c1e0298c83920dd6acd74",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+   "bytes": 699,
+   "sha256": "cb703a73bfceb9f59e1f4c55abece42190ce389aa88859c561748b8194abb2cc",
+   "fields": {
+    "keys": [
+     "Enter",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 685,
+   "sha256": "23aab71223f2d9d193dfabf9839f5e69fc07be7ff26744d5f77e9b8e2e8f5067",
+   "fields": {
+    "keys": [
+     "Enter",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "/Command"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--attachment-menu-Enter-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 489,
+   "sha256": "df20e5d3d508fd7e758ec050ec0a5704d45992844f6a4acd82467ce913b39699",
+   "fields": {
+    "keys": [
+     "Enter",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row--menu-held-frames.json",
+   "bytes": 488,
+   "sha256": "bf93ca76e4fd7182dbc6f37bfdda584a09edfdeb344a72f8f558fc3e695c1e03",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Row actions"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+   "bytes": 707,
+   "sha256": "6456526d45460b38152659ed15a35de80aa36fe2efe2aecd52ca17ce50d8dd52",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 693,
+   "sha256": "3c8ce8f07d4db82cb0e1c83ae301261d089c97ceb6561dd7934412a2813bb1fa",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "/Command"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 497,
+   "sha256": "e877744788ba4b1559006f17318328c3e9a65d47e3fec0271b0624c92908426c",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 681,
+   "sha256": "beadc82162af30741385a1de1882bcdf638cdd38dc7457022a6f3814bd98e032",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "File"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell--menu-held-frames.json",
+   "bytes": 707,
+   "sha256": "a8abb643a9c0edd47698c9b7cb1f649bf4104de8366959564fee66d2cd3c1b2f",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 497,
+   "sha256": "711e11cc006eb0b4b2274418962cafb0ee29c785dd1c1e0298c83920dd6acd74",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+   "bytes": 699,
+   "sha256": "cb703a73bfceb9f59e1f4c55abece42190ce389aa88859c561748b8194abb2cc",
+   "fields": {
+    "keys": [
+     "Enter",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 685,
+   "sha256": "23aab71223f2d9d193dfabf9839f5e69fc07be7ff26744d5f77e9b8e2e8f5067",
+   "fields": {
+    "keys": [
+     "Enter",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "/Command"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--attachment-menu-Enter-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 489,
+   "sha256": "df20e5d3d508fd7e758ec050ec0a5704d45992844f6a4acd82467ce913b39699",
+   "fields": {
+    "keys": [
+     "Enter",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row--menu-held-frames.json",
+   "bytes": 488,
+   "sha256": "bf93ca76e4fd7182dbc6f37bfdda584a09edfdeb344a72f8f558fc3e695c1e03",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Row actions"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+   "bytes": 707,
+   "sha256": "6456526d45460b38152659ed15a35de80aa36fe2efe2aecd52ca17ce50d8dd52",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 693,
+   "sha256": "3c8ce8f07d4db82cb0e1c83ae301261d089c97ceb6561dd7934412a2813bb1fa",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "/Command"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 497,
+   "sha256": "e877744788ba4b1559006f17318328c3e9a65d47e3fec0271b0624c92908426c",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 681,
+   "sha256": "beadc82162af30741385a1de1882bcdf638cdd38dc7457022a6f3814bd98e032",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "File"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell--menu-held-frames.json",
+   "bytes": 707,
+   "sha256": "a8abb643a9c0edd47698c9b7cb1f649bf4104de8366959564fee66d2cd3c1b2f",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 497,
+   "sha256": "711e11cc006eb0b4b2274418962cafb0ee29c785dd1c1e0298c83920dd6acd74",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+   "bytes": 699,
+   "sha256": "cb703a73bfceb9f59e1f4c55abece42190ce389aa88859c561748b8194abb2cc",
+   "fields": {
+    "keys": [
+     "Enter",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 685,
+   "sha256": "23aab71223f2d9d193dfabf9839f5e69fc07be7ff26744d5f77e9b8e2e8f5067",
+   "fields": {
+    "keys": [
+     "Enter",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "/Command"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--attachment-menu-Enter-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 489,
+   "sha256": "df20e5d3d508fd7e758ec050ec0a5704d45992844f6a4acd82467ce913b39699",
+   "fields": {
+    "keys": [
+     "Enter",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row--menu-held-frames.json",
+   "bytes": 488,
+   "sha256": "bf93ca76e4fd7182dbc6f37bfdda584a09edfdeb344a72f8f558fc3e695c1e03",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Row actions"
+   }
+  },
+  {
+   "name": "chromium-light-phone--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+   "bytes": 707,
+   "sha256": "6456526d45460b38152659ed15a35de80aa36fe2efe2aecd52ca17ce50d8dd52",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-light-phone--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 693,
+   "sha256": "3c8ce8f07d4db82cb0e1c83ae301261d089c97ceb6561dd7934412a2813bb1fa",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "/Command"
+   }
+  },
+  {
+   "name": "chromium-light-phone--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 497,
+   "sha256": "e877744788ba4b1559006f17318328c3e9a65d47e3fec0271b0624c92908426c",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-light-phone--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 681,
+   "sha256": "beadc82162af30741385a1de1882bcdf638cdd38dc7457022a6f3814bd98e032",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "File"
+   }
+  },
+  {
+   "name": "chromium-light-phone--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell--menu-held-frames.json",
+   "bytes": 707,
+   "sha256": "a8abb643a9c0edd47698c9b7cb1f649bf4104de8366959564fee66d2cd3c1b2f",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-light-phone--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 497,
+   "sha256": "711e11cc006eb0b4b2274418962cafb0ee29c785dd1c1e0298c83920dd6acd74",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-light-phone--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+   "bytes": 699,
+   "sha256": "cb703a73bfceb9f59e1f4c55abece42190ce389aa88859c561748b8194abb2cc",
+   "fields": {
+    "keys": [
+     "Enter",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-light-phone--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 685,
+   "sha256": "23aab71223f2d9d193dfabf9839f5e69fc07be7ff26744d5f77e9b8e2e8f5067",
+   "fields": {
+    "keys": [
+     "Enter",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "/Command"
+   }
+  },
+  {
+   "name": "chromium-light-phone--attachment-menu-Enter-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 489,
+   "sha256": "df20e5d3d508fd7e758ec050ec0a5704d45992844f6a4acd82467ce913b39699",
+   "fields": {
+    "keys": [
+     "Enter",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "chromium-light-phone--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row--menu-held-frames.json",
+   "bytes": 488,
+   "sha256": "bf93ca76e4fd7182dbc6f37bfdda584a09edfdeb344a72f8f558fc3e695c1e03",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Row actions"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+   "bytes": 707,
+   "sha256": "6456526d45460b38152659ed15a35de80aa36fe2efe2aecd52ca17ce50d8dd52",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 693,
+   "sha256": "3c8ce8f07d4db82cb0e1c83ae301261d089c97ceb6561dd7934412a2813bb1fa",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "/Command"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 497,
+   "sha256": "e877744788ba4b1559006f17318328c3e9a65d47e3fec0271b0624c92908426c",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 681,
+   "sha256": "beadc82162af30741385a1de1882bcdf638cdd38dc7457022a6f3814bd98e032",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "File"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell--menu-held-frames.json",
+   "bytes": 707,
+   "sha256": "a8abb643a9c0edd47698c9b7cb1f649bf4104de8366959564fee66d2cd3c1b2f",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 497,
+   "sha256": "711e11cc006eb0b4b2274418962cafb0ee29c785dd1c1e0298c83920dd6acd74",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+   "bytes": 699,
+   "sha256": "cb703a73bfceb9f59e1f4c55abece42190ce389aa88859c561748b8194abb2cc",
+   "fields": {
+    "keys": [
+     "Enter",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 685,
+   "sha256": "23aab71223f2d9d193dfabf9839f5e69fc07be7ff26744d5f77e9b8e2e8f5067",
+   "fields": {
+    "keys": [
+     "Enter",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "/Command"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--attachment-menu-Enter-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 489,
+   "sha256": "df20e5d3d508fd7e758ec050ec0a5704d45992844f6a4acd82467ce913b39699",
+   "fields": {
+    "keys": [
+     "Enter",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row--menu-held-frames.json",
+   "bytes": 488,
+   "sha256": "bf93ca76e4fd7182dbc6f37bfdda584a09edfdeb344a72f8f558fc3e695c1e03",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Row actions"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+   "bytes": 707,
+   "sha256": "6456526d45460b38152659ed15a35de80aa36fe2efe2aecd52ca17ce50d8dd52",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 693,
+   "sha256": "3c8ce8f07d4db82cb0e1c83ae301261d089c97ceb6561dd7934412a2813bb1fa",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "/Command"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 497,
+   "sha256": "e877744788ba4b1559006f17318328c3e9a65d47e3fec0271b0624c92908426c",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 681,
+   "sha256": "beadc82162af30741385a1de1882bcdf638cdd38dc7457022a6f3814bd98e032",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "File"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell--menu-held-frames.json",
+   "bytes": 707,
+   "sha256": "a8abb643a9c0edd47698c9b7cb1f649bf4104de8366959564fee66d2cd3c1b2f",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 497,
+   "sha256": "711e11cc006eb0b4b2274418962cafb0ee29c785dd1c1e0298c83920dd6acd74",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+   "bytes": 699,
+   "sha256": "cb703a73bfceb9f59e1f4c55abece42190ce389aa88859c561748b8194abb2cc",
+   "fields": {
+    "keys": [
+     "Enter",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 685,
+   "sha256": "23aab71223f2d9d193dfabf9839f5e69fc07be7ff26744d5f77e9b8e2e8f5067",
+   "fields": {
+    "keys": [
+     "Enter",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "/Command"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--attachment-menu-Enter-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 489,
+   "sha256": "df20e5d3d508fd7e758ec050ec0a5704d45992844f6a4acd82467ce913b39699",
+   "fields": {
+    "keys": [
+     "Enter",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row--menu-held-frames.json",
+   "bytes": 488,
+   "sha256": "bf93ca76e4fd7182dbc6f37bfdda584a09edfdeb344a72f8f558fc3e695c1e03",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Row actions"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+   "bytes": 707,
+   "sha256": "6456526d45460b38152659ed15a35de80aa36fe2efe2aecd52ca17ce50d8dd52",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 693,
+   "sha256": "3c8ce8f07d4db82cb0e1c83ae301261d089c97ceb6561dd7934412a2813bb1fa",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "/Command"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 497,
+   "sha256": "e877744788ba4b1559006f17318328c3e9a65d47e3fec0271b0624c92908426c",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 681,
+   "sha256": "beadc82162af30741385a1de1882bcdf638cdd38dc7457022a6f3814bd98e032",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "File"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell--menu-held-frames.json",
+   "bytes": 707,
+   "sha256": "a8abb643a9c0edd47698c9b7cb1f649bf4104de8366959564fee66d2cd3c1b2f",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 497,
+   "sha256": "711e11cc006eb0b4b2274418962cafb0ee29c785dd1c1e0298c83920dd6acd74",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+   "bytes": 699,
+   "sha256": "cb703a73bfceb9f59e1f4c55abece42190ce389aa88859c561748b8194abb2cc",
+   "fields": {
+    "keys": [
+     "Enter",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 685,
+   "sha256": "23aab71223f2d9d193dfabf9839f5e69fc07be7ff26744d5f77e9b8e2e8f5067",
+   "fields": {
+    "keys": [
+     "Enter",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "/Command"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--attachment-menu-Enter-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 489,
+   "sha256": "df20e5d3d508fd7e758ec050ec0a5704d45992844f6a4acd82467ce913b39699",
+   "fields": {
+    "keys": [
+     "Enter",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row--menu-held-frames.json",
+   "bytes": 488,
+   "sha256": "bf93ca76e4fd7182dbc6f37bfdda584a09edfdeb344a72f8f558fc3e695c1e03",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Row actions"
+   }
+  },
+  {
+   "name": "webkit-light-phone--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+   "bytes": 707,
+   "sha256": "6456526d45460b38152659ed15a35de80aa36fe2efe2aecd52ca17ce50d8dd52",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-light-phone--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 693,
+   "sha256": "3c8ce8f07d4db82cb0e1c83ae301261d089c97ceb6561dd7934412a2813bb1fa",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "/Command"
+   }
+  },
+  {
+   "name": "webkit-light-phone--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 497,
+   "sha256": "e877744788ba4b1559006f17318328c3e9a65d47e3fec0271b0624c92908426c",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-light-phone--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 681,
+   "sha256": "beadc82162af30741385a1de1882bcdf638cdd38dc7457022a6f3814bd98e032",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "File"
+   }
+  },
+  {
+   "name": "webkit-light-phone--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell--menu-held-frames.json",
+   "bytes": 707,
+   "sha256": "a8abb643a9c0edd47698c9b7cb1f649bf4104de8366959564fee66d2cd3c1b2f",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-light-phone--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 497,
+   "sha256": "711e11cc006eb0b4b2274418962cafb0ee29c785dd1c1e0298c83920dd6acd74",
+   "fields": {
+    "keys": [
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-light-phone--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+   "bytes": 699,
+   "sha256": "cb703a73bfceb9f59e1f4c55abece42190ce389aa88859c561748b8194abb2cc",
+   "fields": {
+    "keys": [
+     "Enter",
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-light-phone--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+   "bytes": 685,
+   "sha256": "23aab71223f2d9d193dfabf9839f5e69fc07be7ff26744d5f77e9b8e2e8f5067",
+   "fields": {
+    "keys": [
+     "Enter",
+     "ArrowUp",
+     "Enter"
+    ],
+    "heldFrames": 2,
+    "focused": "/Command"
+   }
+  },
+  {
+   "name": "webkit-light-phone--attachment-menu-Enter-Enter-with-frames-held-runs-file--menu-held-frames.json",
+   "bytes": 489,
+   "sha256": "df20e5d3d508fd7e758ec050ec0a5704d45992844f6a4acd82467ce913b39699",
+   "fields": {
+    "keys": [
+     "Enter",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Add attachment"
+   }
+  },
+  {
+   "name": "webkit-light-phone--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row--menu-held-frames.json",
+   "bytes": 488,
+   "sha256": "bf93ca76e4fd7182dbc6f37bfdda584a09edfdeb344a72f8f558fc3e695c1e03",
+   "fields": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "heldFrames": 3,
+    "focused": "Row actions"
+   }
+  }
+ ]
+}

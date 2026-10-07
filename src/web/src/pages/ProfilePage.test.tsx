@@ -36,7 +36,8 @@ describe('Profile · the photo and the name are the owner\'s to change', () => {
     expect(html).toContain(`<span>${CHOOSE_PHOTO}</span>`);
     expect(html).not.toContain(REMOVE_PHOTO);
     expect(html).toMatch(/<input[^>]*type="file"[^>]*accept="image\/\*"/);
-    expect(html).toMatch(/ant-avatar-string[^>]*>J</);
+    expect(html).toMatch(/orbit-avatar-string[^>]*>J</);
+    expect(html).not.toContain('<img');
   });
 
   it('draws the photo an account has, and offers to remove it', () => {

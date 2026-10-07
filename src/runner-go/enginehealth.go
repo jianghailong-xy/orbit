@@ -76,6 +76,7 @@ func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
 			AuthSource:        h.authSource,
 			PlanUsage:         h.planUsage,
 			InstallationError: h.installError,
+			KimiRegion:        h.kimiRegion,
 		}
 		if spec.bin == providerDsh {
 			report.Auth = "unknown"
@@ -89,7 +90,17 @@ func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
 		// An engine whose CLI keeps a login per directory reports one entry per account: the one
 		// the user added, and Default. The engines without accounts simply say nothing here.
 		if kind, ok := accountSlotKindFor(spec.bin); ok && h.installed {
-			report.Accounts = accountHealth(kind, h.path, h.auth)
+			defaultAuth := h.auth
+			// Antigravity's Default account is the runner's Google sign-in. A runner that runs agy on
+			// its own GEMINI_API_KEY is signed in as an engine, but that account is not.
+			if spec.bin == providerAntigravity && h.authSource != "google" {
+				defaultAuth = authNo
+			}
+			var usage map[string]*PlanUsage
+			report.Accounts, usage = accountHealthWithUsage(kind, h.path, defaultAuth)
+			if len(usage) > 0 {
+				report.PlanUsage = withAccountUsage(report.PlanUsage, spec.bin, usage)
+			}
 		}
 		out = append(out, report)
 	}
@@ -102,15 +113,34 @@ func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
 // is what selects Default — so its answer is reused instead of asked twice. Nil when the slots can't
 // be listed: the report then reads as the one account it was before.
 func accountHealth(kind accountSlotKind, binPath string, defaultAuth authState) []EngineAccountReport {
+	out, _ := accountHealthWithUsage(kind, binPath, defaultAuth)
+	return out
+}
+
+// accountHealthWithUsage is accountHealth plus, for a kind whose status question reads quota too
+// (usageStatus), each added account's own quota by slot id. Default's is the engine probe's own.
+func accountHealthWithUsage(kind accountSlotKind, binPath string, defaultAuth authState) ([]EngineAccountReport, map[string]*PlanUsage) {
 	slots, err := kind.list()
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	out := make([]EngineAccountReport, 0, len(slots))
+	var usage map[string]*PlanUsage
 	for _, slot := range slots {
 		auth := defaultAuth
 		if slot.ID != accountSlotDefaultID {
-			auth = accountLoginStatus(kind, binPath, slot.Dir)
+			if kind.usageStatus != nil {
+				var read *PlanUsage
+				auth, read = accountUsageStatus(kind, binPath, slot.Dir)
+				if read != nil {
+					if usage == nil {
+						usage = map[string]*PlanUsage{}
+					}
+					usage[slot.ID] = read
+				}
+			} else {
+				auth = accountLoginStatus(kind, binPath, slot.Dir)
+			}
 		}
 		out = append(out, EngineAccountReport{
 			ID:        slot.ID,
@@ -120,6 +150,19 @@ func accountHealth(kind accountSlotKind, binPath string, defaultAuth authState) 
 			Auth:      authWord(auth),
 		})
 	}
+	return out, usage
+}
+
+// withAccountUsage files each added account's own quota under the engine snapshot's accounts, the
+// way Codex and Claude report theirs (PlanUsage.Accounts): the buckets beside them stay Default's,
+// and a snapshot is made for them when Default has none of its own to report.
+func withAccountUsage(own *PlanUsage, engine string, accounts map[string]*PlanUsage) *PlanUsage {
+	out := &PlanUsage{Provider: engine}
+	if own != nil {
+		copied := *own
+		out = &copied
+	}
+	out.Accounts = accounts
 	return out
 }
 
@@ -132,6 +175,12 @@ func accountLoginStatus(kind accountSlotKind, binPath, dir string) authState {
 	ctx, cancel := context.WithTimeout(context.Background(), accountLoginStatusTimeout)
 	defer cancel()
 	return kind.loginStatus(ctx, binPath, dir)
+}
+
+func accountUsageStatus(kind accountSlotKind, binPath, dir string) (authState, *PlanUsage) {
+	ctx, cancel := context.WithTimeout(context.Background(), accountLoginStatusTimeout)
+	defer cancel()
+	return kind.usageStatus(ctx, binPath, dir)
 }
 
 // codexHomeOf repeats a Codex account's directory under the historical field name. The control
@@ -234,6 +283,10 @@ type engineHealthProbe struct {
 	// An "unknown" isn't conclusive — a CLI that wouldn't say this time says nothing about its
 	// login — so it neither ends a sign-out nor starts one.
 	wasSignedOut map[string]bool
+	// The site Kimi's login was on at the last probe that read one, kept the same way. A sign-in on
+	// the other site rewrites the models Kimi's config lists, so it is a sign-in the catalog has to
+	// hear about even though the engine was never signed out (kimi_region.go).
+	kimiRegion string
 }
 
 func (p *engineHealthProbe) refresh() {
@@ -298,7 +351,7 @@ func (p *engineHealthProbe) refreshEngine(engine string) {
 }
 
 // signedInSinceLastProbe records each engine's answer and says whether one the probe last found
-// signed out is signed in now.
+// signed out is signed in now — or, for Kimi, signed in on the other site.
 func (p *engineHealthProbe) signedInSinceLastProbe(reports []EngineHealthReport) bool {
 	if p.wasSignedOut == nil {
 		p.wasSignedOut = map[string]bool{}
@@ -311,6 +364,10 @@ func (p *engineHealthProbe) signedInSinceLastProbe(reports []EngineHealthReport)
 		case r.signedIn():
 			signedIn = signedIn || p.wasSignedOut[r.Engine]
 			delete(p.wasSignedOut, r.Engine)
+		}
+		if r.Engine == providerKimi && r.KimiRegion != "" {
+			signedIn = signedIn || (r.signedIn() && p.kimiRegion != "" && p.kimiRegion != r.KimiRegion)
+			p.kimiRegion = r.KimiRegion
 		}
 	}
 	return signedIn

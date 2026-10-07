@@ -1,0 +1,366 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/node_modules/@playwright/test/cli.js",
+   "test",
+   "--config",
+   "src/web/ui-migration/controls.config.mjs",
+   "--project",
+   "chromium-light-desktop"
+  ],
+  "configFile": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4175 --strictPort",
+   "cwd": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/",
+   "url": "http://127.0.0.1:4175",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "controls.browser.mjs",
+   "file": "controls.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "fixed control states match AntD geometry, typography and surfaces",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 3232,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 50\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 4,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-small texts 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 10,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 4,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-small texts 1\",\u001b[39m\n\u001b[31m+     \"orbit\": 10,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 4,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-small texts 2\",\u001b[39m\n\u001b[31m+     \"orbit\": 10,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 8,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-middle texts 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 18,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 8,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-middle texts 1\",\u001b[39m\n\u001b[31m+     \"orbit\": 18,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 8,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-middle texts 2\",\u001b[39m\n\u001b[31m+     \"orbit\": 18,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": \"rgba(0, 35, 11, 0.2) 0px 2px 4px 0px\",\u001b[39m\n\u001b[31m+     \"case\": \"switch-disabled thumb surface\",\u001b[39m\n\u001b[31m+     \"orbit\": \"none\",\u001b[39m\n\u001b[31m+     \"property\": \"boxShadow\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": \"rgba(0, 35, 11, 0.2) 0px 2px 4px 0px\",\u001b[39m\n\u001b[31m+     \"case\": \"switch-loading thumb surface\",\u001b[39m\n\u001b[31m+     \"orbit\": \"none\",\u001b[39m\n\u001b[31m+     \"property\": \"boxShadow\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 50\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 4,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-small texts 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 10,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 4,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-small texts 1\",\u001b[39m\n\u001b[31m+     \"orbit\": 10,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 4,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-small texts 2\",\u001b[39m\n\u001b[31m+     \"orbit\": 10,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 8,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-middle texts 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 18,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 8,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-middle texts 1\",\u001b[39m\n\u001b[31m+     \"orbit\": 18,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 8,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-middle texts 2\",\u001b[39m\n\u001b[31m+     \"orbit\": 18,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": \"rgba(0, 35, 11, 0.2) 0px 2px 4px 0px\",\u001b[39m\n\u001b[31m+     \"case\": \"switch-disabled thumb surface\",\u001b[39m\n\u001b[31m+     \"orbit\": \"none\",\u001b[39m\n\u001b[31m+     \"property\": \"boxShadow\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": \"rgba(0, 35, 11, 0.2) 0px 2px 4px 0px\",\u001b[39m\n\u001b[31m+     \"case\": \"switch-loading thumb surface\",\u001b[39m\n\u001b[31m+     \"orbit\": \"none\",\u001b[39m\n\u001b[31m+     \"property\": \"boxShadow\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at /root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs:126:23",
+          "location": {
+           "file": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs",
+           "column": 23,
+           "line": 126
+          },
+          "snippet": "  124 |   await info.attach('controls-state-comparison', { body: await page.screenshot({ fullPage: true, animations: 'disabled' }), contentType: 'image/png' });\n  125 |   expect(errors).toEqual([]);\n> 126 |   expect(differences).toEqual([]);\n      |                       ^\n  127 | });\n  128 |\n  129 | test('hover and keyboard focus preserve visible control feedback', async ({ page }, info) => {"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs",
+            "column": 23,
+            "line": 126
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 50\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 4,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-small texts 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 10,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 4,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-small texts 1\",\u001b[39m\n\u001b[31m+     \"orbit\": 10,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 4,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-small texts 2\",\u001b[39m\n\u001b[31m+     \"orbit\": 10,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 8,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-middle texts 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 18,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 8,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-middle texts 1\",\u001b[39m\n\u001b[31m+     \"orbit\": 18,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 8,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-middle texts 2\",\u001b[39m\n\u001b[31m+     \"orbit\": 18,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": \"rgba(0, 35, 11, 0.2) 0px 2px 4px 0px\",\u001b[39m\n\u001b[31m+     \"case\": \"switch-disabled thumb surface\",\u001b[39m\n\u001b[31m+     \"orbit\": \"none\",\u001b[39m\n\u001b[31m+     \"property\": \"boxShadow\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": \"rgba(0, 35, 11, 0.2) 0px 2px 4px 0px\",\u001b[39m\n\u001b[31m+     \"case\": \"switch-loading thumb surface\",\u001b[39m\n\u001b[31m+     \"orbit\": \"none\",\u001b[39m\n\u001b[31m+     \"property\": \"boxShadow\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  124 |   await info.attach('controls-state-comparison', { body: await page.screenshot({ fullPage: true, animations: 'disabled' }), contentType: 'image/png' });\n  125 |   expect(errors).toEqual([]);\n> 126 |   expect(differences).toEqual([]);\n      |                       ^\n  127 | });\n  128 |\n  129 | test('hover and keyboard focus preserve visible control feedback', async ({ page }, info) => {\n    at /root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs:126:23"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:49:47.029Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "controls-state-comparison",
+           "contentType": "image/png"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results/controls.browser.mjs-fixed-01a2a-try-typography-and-surfaces-chromium-light-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results/controls.browser.mjs-fixed-01a2a-try-typography-and-surfaces-chromium-light-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs",
+          "column": 23,
+          "line": 126
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-dc4841ad186cedb83459",
+     "file": "controls.browser.mjs",
+     "line": 48,
+     "column": 1
+    },
+    {
+     "title": "hover and keyboard focus preserve visible control feedback",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5050,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:49:50.654Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "hover-focus-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-360441424e88234115f9",
+     "file": "controls.browser.mjs",
+     "line": 129,
+     "column": 1
+    },
+    {
+     "title": "keyboard, labels, loading, disabled and native form values work",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1444,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:49:55.768Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "behavior-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "interactive-controls",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-a82299bf175ad3e573b4",
+     "file": "controls.browser.mjs",
+     "line": 162,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T01:49:46.144Z",
+  "duration": 11144.263,
+  "expected": 2,
+  "skipped": 0,
+  "unexpected": 1,
+  "flaky": 0
+ }
+}

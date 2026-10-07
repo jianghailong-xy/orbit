@@ -1,0 +1,40 @@
+[WebServer] (node:1676514) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 88 P0.2 originals, 152 main drift references, 12 accepted migration differences.
+
+Running 4 tests using 1 worker
+
+(node:1676604) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p32acc/runs/share-close-dark/snapshots/chromium-dark-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32acc/runs/share-close-dark/snapshots/chromium-dark-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32acc/runs/share-close-dark/snapshots/chromium-dark-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32acc/runs/share-close-dark/snapshots/chromium-dark-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32acc/runs/share-close-dark/snapshots/chromium-dark-desktop/task-share-dialog.png, writing actual.
+  ✓  1 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (2.9s)
+(node:1676825) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p32acc/runs/share-close-dark/snapshots/chromium-dark-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32acc/runs/share-close-dark/snapshots/chromium-dark-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32acc/runs/share-close-dark/snapshots/chromium-dark-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32acc/runs/share-close-dark/snapshots/chromium-dark-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32acc/runs/share-close-dark/snapshots/chromium-dark-phone/task-share-dialog.png, writing actual.
+  ✓  2 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (2.7s)
+(node:1677349) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p32acc/runs/share-close-dark/snapshots/webkit-dark-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32acc/runs/share-close-dark/snapshots/webkit-dark-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32acc/runs/share-close-dark/snapshots/webkit-dark-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32acc/runs/share-close-dark/snapshots/webkit-dark-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32acc/runs/share-close-dark/snapshots/webkit-dark-desktop/task-share-dialog.png, writing actual.
+  ✓  3 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (3.5s)
+(node:1677762) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p32acc/runs/share-close-dark/snapshots/webkit-dark-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32acc/runs/share-close-dark/snapshots/webkit-dark-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32acc/runs/share-close-dark/snapshots/webkit-dark-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32acc/runs/share-close-dark/snapshots/webkit-dark-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32acc/runs/share-close-dark/snapshots/webkit-dark-phone/task-share-dialog.png, writing actual.
+  ✓  4 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (2.8s)
+
+  4 passed (13.8s)

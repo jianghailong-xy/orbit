@@ -82,4 +82,27 @@ public enum TailPinning {
             return (readerDriven || current.contentHeight == previous.contentHeight) ? false : wasPinned
         }
     }
+
+    /// Whether a pinned transcript should be carried back to its tail because the VIEWPORT changed
+    /// size under it — the keyboard rising and covering the last line, the composer growing a line,
+    /// a phone's chrome folding away.
+    ///
+    /// `pinned` answers "did the reader leave the tail?" and says nothing about the other direction:
+    /// the tail leaving the reader. A pinned transcript whose container shrinks keeps its content
+    /// offset — nothing in a `List` re-anchors the bottom on a resize — so the last line ends up
+    /// below the fold and stays there until the next publish happens to re-pin it, which in a quiet
+    /// session is never. The owner's report: focus the composer and the conversation is no longer at
+    /// the bottom.
+    ///
+    /// Web decides this with a `ResizeObserver` on the scroller (`WorkspaceView.tsx`: "Re-pin to the
+    /// tail on any such resize while the user is still at the bottom"), off the same pin. Kept here
+    /// beside it so a client whose platform reports the viewport's height asks the same question —
+    /// and so what "the viewport moved" means has one definition. 0 is "not measured yet", which no
+    /// real viewport is: an unknown is never a resize.
+    public static func followsResize(wasPinned: Bool,
+                                     from previousHeight: Double,
+                                     to currentHeight: Double) -> Bool {
+        guard wasPinned, previousHeight > 0, currentHeight > 0 else { return false }
+        return currentHeight != previousHeight
+    }
 }
