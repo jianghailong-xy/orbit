@@ -230,7 +230,7 @@ def main():
         device.note(device.shell(f'am start -W -n {package}/{ACTIVITY}'))
         device.find(texts=('Update available',), timeout=120)
         offered = f"Orbit {new['manifest']['versionName']} ({new['manifest']['versionCode']}) is available."
-        assert device.find(texts=(offered,), timeout=10), offered
+        device.find(texts=(offered,), timeout=10)  # Raises when the offered version is missing.
         device.screenshot('prompt')
         device.tap(device.find(texts=('Update',)))
         device.note('Accepted the update prompt')
