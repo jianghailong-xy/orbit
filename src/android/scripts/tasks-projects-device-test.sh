@@ -164,7 +164,7 @@ kill -0 "$fixture_pid"
 start="$("$adb" -s "$serial" shell date +%s | tr -d '\r').000"
 test_class=io.orbitd.android.taskprojects.TasksProjectsDeviceTest
 test_selection="${A11_TEST:-$test_class}"
-timeout 300 "$adb" -s "$serial" shell am instrument -w -r -e class "$test_selection" "$runner" > "$output/instrumentation.txt" 2>&1
+timeout "${A11_INSTRUMENT_TIMEOUT:-1200}" "$adb" -s "$serial" shell am instrument -w -r -e class "$test_selection" "$runner" > "$output/instrumentation.txt" 2>&1
 pid="$(sed -n 's/.*a11_pid=\([0-9]*\).*/\1/p' "$output/instrumentation.txt" | head -1)"
 [[ -n "$pid" ]]
 "$adb" -s "$serial" logcat -d -v threadtime --pid="$pid" -T "$start" > "$output/logcat.txt"

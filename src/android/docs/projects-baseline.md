@@ -1,45 +1,53 @@
-# A11 Projects — static implementation correspondence
+# A11 Projects — implementation against the iOS baseline
 
-This is a source correspondence at the A11 combination, **not a frozen iOS installation matrix or a cross-device business result**. Development input is the ordinary merge `b075423118dacfb0a3c90c36b9f1aacad1feffd4`, whose A07 parent is the requested `51bbcc303cec3c64dfb217316afce9498add760d`. The route-only checkpoint is `cfe49df7a`. No upstream composer, attachment, auth, reader, or card implementation is authored by this module.
+A source correspondence plus controlled-fixture and emulator results, **not** a frozen iOS installation matrix or a cross-device business result. Development input is the ordinary merge `b075423118dacfb0a3c90c36b9f1aacad1feffd4` (A07 parent `51bbcc303cec3c64dfb217316afce9498add760d`); route-only checkpoint `cfe49df7a`. No composer, attachment, auth, reader or card implementation is changed by this module.
 
-## Sources and feature correspondence
+Source baseline: `src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectsView.swift` (index, page, `OwnerStartProjectSheet`, `MergeCheckEditor`), `ProjectGraphView.swift`, `ProjectLandingRow.swift`, `ApprovalCards.swift` (`StartProjectCard`), `ProjectsModel.swift`; OrbitKit `ProjectAttention.swift`, `ProjectPage.swift`, `ProjectPageSections.swift`, `ProjectGraphLayout.swift`, `ProjectRunSettings.swift`, `StartProject.swift`, `CriteriaDecision.swift`, `ShareMarkdown.swift`, `APIClient.swift`.
 
-| Existing source / entry | Android implementation | Contract and behavior |
+## How the baseline is carried over
+
+OrbitKit's project rules are ported as pure Kotlin over the server's JSON — `ProjectAttention.kt` (lanes, order, chips), `ProjectPage.kt` (`ProjectPage`, `StartProjectCopy`, `RunSettings`, `ProjectMarkdown`), `ProjectGraphLayout.kt` (folds, run expansion, layered layout with direction fit) — and held to Swift by tests: `ProjectPageTest` ports the XCTest cases of `ProjectPageTests`, `ProjectPageSectionsTests`, `StartProjectTests` and `ProjectRunSettingsTests`; `ProjectGraphLayoutTest` ports `ProjectGraphLayoutTests`; `ProjectCopyParityTest` fails when any Android copy string is not a literal in the pinned Swift sources.
+
+| iOS entry | Android | Contract |
 | --- | --- | --- |
-| `Views/ProjectsView.swift` / `ProjectsListView`, OrbitKit `ProjectAttention.swift` | `projects/ProjectsScreen.kt`, `ProjectData.kt` | Authenticated `GET /projects`; title/goal search; Needs attention, Running, Ready, Waiting, Needs definition and folded Completed. Owner items, start request, integration/coordinator activity and quiet task activity influence lanes. Missing timestamp makes no inactivity claim. |
-| `ProjectsView.swift` / `ProjectDetailView` and `ProjectsModel.swift` | `ProjectsApi.page` and project detail | Reads document, panorama, integration, open items, coordinator status, dependency graph, ready queue, task page and criteria confirmation. Independent optional-section failures are shown. Document or auxiliary 401/403 withdraws page; document 404 clears it. Old data after transport failure is read-only. |
-| Work overview, `ProjectLandingRow.swift` | `ProjectOverview` | Server seven buckets and optional integration lanes; actual integration kind/state/phase, task title, start and last report timestamps; per-task landing blocking reason. No done-from-count inference. |
-| `ProjectGraphView.swift`, OrbitKit `ProjectPlan.swift`, graph endpoint | `ProjectGraph.kt` | Draws server marks and prerequisite-to-dependent edges; full view, zoom controls, group/member inspection and task navigation. Preserves server truncation notice. It does not invent runnable state from graph position. |
-| Coordinator section / `openCoordinator`, `replaceCoordinator` | Coordinator controls | `GET /coordinator/status` grants `canOpen`; POST resolve-or-create; replacement is a separately confirmed request and preserves agent/workspace. Server refusal/required action displayed. Existing host stack handles return navigation. |
-| Open items / Review, Answer, exception and merge review | `ProjectOpenItems` → coordinator session | Uses server `actions`, preserves owner/coordinator attribution and routes Review to the coordinator as Swift does. The conversation renders and submits unchanged A08 `CardCatalog`, `BusinessCard`, `CardActions`, `CardAuthority`, `CardRequests`. No local criteria/merge/exception approval rules are introduced. Unknown kinds remain visible. |
-| Owner's own `Start…` and `OwnerStartProjectSheet` | `ProjectStartDialog` | Shown only when OPEN, explicit `startedAt:null`, and successful open-items read reports no request. Reads criteria digest and integration/graph. Reuses A08 `BusinessCard` settings and `CardRequests` validation; omits `requestId` on the owner-only request. The locally constructed presentation card is not a coordinator request or an authority grant. Backend verifies current digest and owner authority. |
-| `ProjectRunSettings.swift` / How it runs | `ProjectSettingsDialog` | Saves `automatic` and concurrency with exact string `expectedConfigRevision`; never sends legacy `coordinatorEnabled` for Automatic. Separate line/check/escalation writes; locked line disabled. Pause and resume use their existing owner endpoints. Settings 409 and unknown-write messages are visible in the modal. |
-| Blockers section | Project blocker cards | Required action, owner/severity, criterion text, agent argument and paths; USER-owned blocker resolution records a required reason through the dedicated endpoint. Coordinator/system blockers remain visible. Resolved history includes actor/note. |
-| Ready queue | Ready to run section | Only server `runState:READY` offers Run; PAUSED offers a confirmed list resume naming release counts; queued/running can open their session. Task execute uses a new trigger, but transport fence identity excludes the random trigger and includes displayed row identity. |
-| Criteria/instructions/tasks | Native Markdown and task rows | Criteria text, satisfied/landing, verification method and unmet task links; instructions; paginated real task rows with work/dependency/integration state. Refresh re-reads the previously loaded task window. |
-| Lifecycle menu | Project options | Confirmed record done/cancelled/reopen; empty-project delete; copied object link and Markdown. Final displayed state always comes from a fresh read. |
+| `ProjectsListView` | `ProjectsScreen.kt` index | `GET /projects`; search title/goal; lanes Needs attention, Running, Ready, Waiting, Needs definition, Completed (folded, Show/Hide); each row: title + quiet age, the attention chip, lane meter + counts, the line its work lands on; failed/empty/no-match placeholders with iOS words |
+| `ProjectDetailView` reads | `ProjectDetail` | Document, panorama, integration, open items, coordinator status, dependency graph, ready queue (`limit=5`), share and the loaded task window, read together; a section whose read fails keeps its last answer; refreshed on A04 invalidation (400 ms) and every 15 s while visible (graph excluded) |
+| Header | Title, status chip (Not started / Open / …), task count, integration facts or the undecided line | `ProjectPage.integrationFacts`, `RunSettings.undecidedLine` |
+| Open items | Needs you / With the coordinator, the start row | Server `actions`; the primary action is the first this client can carry out (Review, Answer, Resume, Open coordinator, Open task session); tapping a row opens the coordinator conversation, where A08 draws and answers the card |
+| Start (asked) / Start… (own) | Start row; `OwnerStartSheet` | Asked: Review opens the coordinator's start card (A08). Own: a native sheet set by `StartProject.defaultSettings` over the seal from `GET /acceptance/confirmation` — Done when, Plan (order line), How it runs (line, Automatic, At most, merge check), explanation — pressing `POST /projects/:id/start` with every setting and `requestId:null`; a refusal stays on the sheet in the door's words |
+| Work overview, landing row | Overview cells, meter, landing row (1 s clock), manual-ready and wrap-up banners | `ProjectPage.overviewCells`, `landingLine` (stale heartbeat / read freezes the clock), `manualReady`, `wrappingUp` |
+| Coordinator | Pill, last active · Nth coordinator, Workspace, Wake-ups, Self-started today, dispatch note, Open/Reply + ▾ Start a new coordinator | `GET /coordinator/status`; `POST /coordinator` resolve-or-create; `POST /coordinator/replace` behind the menu and confirmed unless the conversation is finished |
+| How it runs | `ProjectSettings.kt` `RunSettingsSection` (shown unless the project was never started) | Line options or the locked line; Automatic `PATCH {automatic, expectedConfigRevision}` (never `coordinatorEnabled`); At most stepper, one write 700 ms after the presses stop; merge check on its own sheet (`MergeCheckEditor`, refusal kept on the sheet); Escalate after; Pause/Resume project |
+| Goal, instructions | Markdown folded with More/Less | A06 renderer |
+| Task graph | `ProjectGraph.kt` inline + full screen | Server marks and prerequisite → dependent edges, settled folds and run expansion as OrbitKit; pinch/pan plus Zoom in/out; a task mark opens the task; truncation notice |
+| Blockers | Open rows + resolved fold | Headline/subject/decision/paths/since; Resolve… / Review… dialog with the decision's own words, reason ≤ 2000, `POST /blockers/:id/resolve {reason}` |
+| Run queue | Rows with Run / Resume list / Open session / tag | Only `runState:READY` offers Run (`POST /tasks/:id/execute`, one trigger per press, 3 resends); PAUSED resumes the list (`PATCH /task-lists/:id {paused:false, note}`) after the iOS confirmation |
+| Acceptance criteria | Ordinal marks met / unmet / unanswered, work lines, held-up task links, How it's checked, first 4 + View all | `ProjectPage.criterionWork`, `criteriaDisclosure` (compact) |
+| Tasks | Bands (Running, Pending landing, Ready, Waiting for landing, Blocked by level, Landed, Done / Cancelled) with tags, waits/blocks, Load more | `GET /projects/:id/tasks/page`; a refresh re-reads the loaded window from the top |
+| ⋯ menu | Record as done / cancelled or Reopen; Copy Link; Share…; Copy as Markdown; Delete project (only with no tasks) | `PATCH {status}` as the pinned Swift menu does; `/projects/:id/share`; `ProjectMarkdown.project`; `DELETE` |
 
-All HTTP uses inherited A03 `AuthSession` / `SessionHandle` through `DirectoryApi`; invalidation is A04's revision and directory freshness. A11's `taskprojects/FeatureWrites` provides transport mutex and durable ambiguous-write fencing, without defining permissions. Settings/start/blocker/lifecycle responses do not optimistically change task or project state. Shared navigation is only the Tasks/Projects branch handoff owned by A11's root; this module does not edit other destination branches.
+Refusals surface as "Couldn't do that" with OrbitKit's sentences ("These settings were not saved — …", "That start was not recorded — …", "Couldn't start the task: …"), the server's own words after the dash (`failureReason` = `APIClient.failureReason`).
 
-## Known source differences and remaining evidence
+## Write authority, offline, permissions
 
-- The current backend also has durable owner `/projects/:id/done` semantics. The pinned Swift menu calls compatibility `PATCH {status:DONE}`; this implementation follows that entry and reports the returned/derived server state. It does not invent a new done decision card outside A08.
-- The node graph preserves the server folds. Swift additionally folds settled blocks client-side and uses pinch zoom; Android currently uses explicit zoom controls and a member inspection dialog. Relationship/task reachability is preserved; pixel parity is not claimed.
-- List attention ordering within a lane currently uses activity/title; Swift applies detailed owner-item priority/severity/wait tie-breakers. This is a visible presentation difference, not an authorization difference.
-- The pinned Swift public Share panel is not present in the first business checkpoint; Copy link and Copy as Markdown are present. This entry must be completed or retained as an explicit acceptance gap.
-- Static source APIs and controlled fixture success do not establish same-account iOS/Android/Web final business state. No installed iOS baseline, physical Android 10–16 GMS phone, actual role account matrix or production integration runner credentials were provided. Those checks remain pending.
+Writes use `ProjectApi` over A03's handle and A11's `FeatureWrites`: gated on the CONNECTED account stream (refused locally while it is down), named once per press, fenced for 60 s when the answer is unknown. A `403` or `404` on the project read withdraws the page: "This project is gone — It was deleted, or it belongs to another account." **Difference:** iOS withdraws on 404 and keeps the page on 403.
 
-## Local verification ownership
+## Differences from the iOS baseline (deliberate, recorded)
 
-`app/src/test/kotlin/io/orbitd/android/projects/ProjectDataTest.kt` covers attention/activity distinctions, bigint config revision and Automatic body, graph direction/default start line, loaded-page restoration with independent 503, and auxiliary 403 revocation. Root runs these with the original Android gates using Gradle `--max-workers=2`; test existence alone is not a pass claim. Root owns the controlled HTTP fixture/device tests and records exact SHA/APK identity and failed evidence. No emulator is controlled by this subtask.
+1. **Owner's own Start… is a native sheet, not A08's card.** iOS reuses `StartProjectCard` with a locally built owner request; on Android the start card belongs to A08 and authorizes only cards read from a session, so a fabricated card is not used. The sheet carries the same words (held by `ProjectCopyParityTest`) and sends the same body. Coordinator-asked starts, exceptions, questions, merge reviews and criteria changes are answered on A08's cards in the coordinator conversation.
+2. **Focus on a card in the coordinator conversation.** iOS opens the conversation focused on the item's card; the open-items read carries no record id, so Android opens the conversation and the card is drawn among its cards.
+3. **Record as done** keeps the pinned compatibility `PATCH {status:DONE}`; the server may keep the project OPEN, and the page shows what it reads back. The durable `POST /projects/:id/done` decision is not in the pinned iOS client.
+4. **403 withdraws the page**; **offline writes are refused locally**; graph Zoom buttons are additions.
 
-## Authored paths
+## Verification
 
-- `app/src/main/kotlin/io/orbitd/android/projects/ProjectsScreen.kt`
-- `app/src/main/kotlin/io/orbitd/android/projects/ProjectData.kt`
-- `app/src/main/kotlin/io/orbitd/android/projects/ProjectGraph.kt`
-- `app/src/main/kotlin/io/orbitd/android/projects/ProjectSettings.kt`
-- `app/src/test/kotlin/io/orbitd/android/projects/ProjectDataTest.kt`
-- `docs/projects-baseline.md`
+- Unit (JVM): `ProjectDataTest` (every call's method, path, query and body, as `testEveryProjectCallHitsItsRoute`; task window re-read; offline refusal before any request; refusal words), `ProjectPageTest` (19 ported OrbitKit cases), `ProjectGraphLayoutTest` (15), `ProjectCopyParityTest` (5).
+- Emulator (API 36 `emulator-5554`, controlled fixture): index → page → How it runs (At most write fenced on revision 1, Automatic writes only `automatic` + revision 2), graph full screen → task → back; stale revision 409 shown with the server's words and nothing changed; 403 withdrawal; exception open item → coordinator conversation → A08 card resolved with its note → back to the page; owner's own Start… with `requestId:null`; delivery blocker reviewed with its reason recorded. Results, logs and screenshots are in the evidence directory named in the task's evidence envelope.
 
-Paths above are relative to `src/android`. Source inherited by the ordinary A07 merge is not A11-authored work.
+## Gaps that remain
+
+Not established: same-account installed iOS/Android/Web final state, physical GMS Android 10–16 phones, real deployed role accounts and their integration runners, FCM/release credentials, the deployed backend SHA. The fixture answers start, blockers and outages under the shared contracts; that is controlled wiring, not a business result.
+
+## Authored paths (relative to `src/android`)
+
+`app/src/main/kotlin/io/orbitd/android/projects/{ProjectsScreen,ProjectSettings,ProjectData,ProjectPage,ProjectAttention,ProjectGraph,ProjectGraphLayout}.kt`, the Projects branch line in `MainActivity.kt`, tests `app/src/test/kotlin/io/orbitd/android/projects/*`, and this document.

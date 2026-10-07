@@ -111,6 +111,18 @@ For object reads/actions, a stale response after account/server/route switch mus
 4. **Owner-initiated no-request start and task panel confirm differ from request cards.** A08 START is generated only from a startRequest and owner confirmation only from waiting requests. Swift has direct owner doors for no-request start / no-waiting panel confirm. Do not fabricate waiting request ids to reuse a card.
 5. **Acceptance editing can encounter newer server guard.** An edit deriving a different completion criterion requires override reason, although the fixed simple Swift editor sends only acceptance fields. Surface the actual refusal and leave task unchanged; retain this as a parity issue until a concrete UI decision is reviewed.
 
+## Dispositions at the A11 implementation
+
+The audit above is the read-only inventory it was written as. How the implementation (`tasks-baseline.md`, `projects-baseline.md`) disposes of each difference:
+
+1. **Task Mark done** — not offered on Android; completion goes through evidence, owner confirmation or the server's criterion.
+2. **Project done** — the ⋯ menu keeps the pinned compatibility `PATCH {status:DONE}` and shows what the server reads back; `POST /projects/:id/done` is not offered because the pinned iOS client does not offer it.
+3. **Open-item vocabulary** — rows show any kind with the server's title/detail; only actions this client can carry out get a press; tapping opens the coordinator conversation, where A08 answers what it knows.
+4. **Owner-initiated start / panel confirm** — native owner doors with no fabricated request: the project start sends `requestId:null` from a native sheet; the task panel confirm sends `{decision:CONFIRM, requestId:null, reviewRecordId:null}` after a re-read and is withheld while a run is waiting.
+5. **Acceptance edit guard** — the editor sends only the acceptance fields; a refusal is shown in the server's words and the task is left as read.
+
+Further recorded differences: a 403 withdraws the task or project page (iOS keeps the task page beside a banner); writes are refused locally while the account stream is down; the "Created in ‹session›" scope has no Android entry until A08's created-tasks strip links it; the coordinator conversation opens without focusing a specific card (the open-items read carries no record id).
+
 ## Existing fixtures and meaningful verification
 
 - `src/shared/src/interaction-cards.fixture.json`: full task/project standing, allowed actions, payload contracts used by inherited card tests.
@@ -121,6 +133,6 @@ For object reads/actions, a stale response after account/server/route switch mus
 - Swift tests `TaskAPIClientTests`, `TaskListLogicTests`, `TaskDetailLogicTests`, `TaskReopenTests`, `TaskRunHandoffTests`, `ProjectPageTests`, `ProjectPageSectionsTests`, `ProjectRunSettingsTests`, `ProjectGraphLayoutTests`, `StartProjectTests`, plus wiring/codable tests are executable descriptions of the fixed baseline.
 - Existing Android controlled servers/scripts: `scripts/cards-fixture.py`, `cards-device-test.sh`, `realtime-fixture.py`, `realtime-device-test.sh`, `directory-device-test.sh`, `scripts/verify.sh`. Preserve original gates and old evidence identities; fixture success proves controlled transport/UI behavior only.
 
-New A11 checks should cover actual HTTP query/body serialization, stale generation/403/404 withdrawal, cancelled project/runnable false, unknown status/action, dependency mutation/refusal, schedule null, partial batch failure, duplicate run gesture fencing, 409 config/merge/review staleness, and session → detail → original session. Device execution must hold `/var/lib/orbit/android/ui.lock` with flock, use Gradle `--max-workers=2`, restore settings, exit fixture, remove reverse, and release lock. This read-only audit performed no Gradle/device runs.
+New A11 checks should cover actual HTTP query/body serialization, stale generation/403/404 withdrawal, cancelled project/runnable false, unknown status/action, dependency mutation/refusal, schedule null, partial batch failure, duplicate run gesture fencing, 409 config/merge/review staleness, and session → detail → original session. Device execution must hold `/var/lib/orbit/android/ui.lock` with flock, use Gradle `--max-workers=2`, restore settings, exit fixture, remove reverse, and release lock. This read-only audit performed no Gradle/device runs; the implementation's runs are recorded in the task's evidence.
 
 Still unestablished: installed iOS identity, same-account real Android/iOS/Web final API state, physical Android 10–16/GMS behavior, deployed role/FCM/release credentials, and actual deployment SHA. Follow-up must capture client build ids + backend/shared identity, execute the same named seeded business objects on each real client, compare final API records, and preserve screenshots/logs without relabeling controlled fixtures as business results.
