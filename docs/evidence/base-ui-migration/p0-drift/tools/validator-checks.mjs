@@ -1,11 +1,11 @@
 // Negative controls for the registration checks in src/web/ui-migration/expected-screenshots.mjs:
-// copies the module and the p0-drift layers into a scratch tree (P0.2 is linked read-only), registers
-// two valid accepted migration differences (one on a P0.2 original, one stacked on a main drift
-// reference), and then breaks one rule per case. Every broken case must stop the P0 globalSetup with
+// copies the module and the p0-drift layers into a scratch tree (P0.2 and the other evidence
+// directories are linked read-only), registers two valid accepted migration differences (one on a
+// P0.2 original, one stacked on a main drift reference), and then breaks one rule per case. Every broken case must stop the P0 globalSetup with
 // the named rule; the valid case must assemble with the two entries on the accepted layer.
 // Usage: node validator-checks.mjs <worktree> <scratch dir>   (prints JSON, exits 1 on any miss)
 import { createHash } from 'node:crypto';
-import { cpSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -16,7 +16,8 @@ rmSync(scratch, { recursive: true, force: true });
 mkdirSync(join(scratch, 'src/web/ui-migration'), { recursive: true });
 cpSync(join(worktree, 'src/web/ui-migration/expected-screenshots.mjs'), join(scratch, 'src/web/ui-migration/expected-screenshots.mjs'));
 mkdirSync(ev(scratch), { recursive: true });
-symlinkSync(join(ev(worktree), 'p0.2'), join(ev(scratch), 'p0.2'));
+// Registry entries cite documents beside p0-drift (a batch README, a fix's decision and isolation proofs).
+for (const entry of readdirSync(ev(worktree))) if (entry !== 'p0-drift') symlinkSync(join(ev(worktree), entry), join(ev(scratch), entry));
 const drift = join(ev(scratch), 'p0-drift');
 const pristine = join(scratch, 'pristine-p0-drift');
 cpSync(join(ev(worktree), 'p0-drift/reference'), join(pristine, 'reference'), { recursive: true });
