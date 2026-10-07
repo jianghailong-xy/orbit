@@ -128,22 +128,29 @@
     },
     {
       "screenshot": "chromium-dark-desktop/breakpoint-961-wiki.png",
-      "sha256": "971b7d14633ffd65c5c21fafd46a985d94799628cb81407bce947951cd35de8e",
+      "sha256": "c974bb0b1108c8d61632ded42a0b5b4b994ea37d493231381a279d37a1039b0d",
       "p0Baseline": "e50858dbdf17697929bb5e3aabc6e59d5c707b4755c4ff9856a3b103c1c50598",
       "mainCommits": [
-        "e64d0c72a85190e77b94ea114c5f3da4592e5ccf"
+        "e64d0c72a85190e77b94ea114c5f3da4592e5ccf",
+        "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+        "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+        "a884fda36851b6257d6777efbc038c325cd75a45"
       ],
       "generatedFrom": {
-        "commit": "e64d0c72a85190e77b94ea114c5f3da4592e5ccf",
+        "commit": "a884fda36851b6257d6777efbc038c325cd75a45",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "m5-e64d0c72a"
+        "run": "full-maint-a884fda36"
       },
       "projectLine": [
-        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e"
+        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e",
+        "dd1d197ef0dde7a6e2693a761401778138426bb5"
       ],
       "group": "wiki 961px dark",
       "change": [
-        "A5"
+        "A5",
+        "A7",
+        "A8",
+        "A9"
       ]
     },
     {

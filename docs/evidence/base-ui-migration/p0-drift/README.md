@@ -196,7 +196,7 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 | 会话列表行 | session-idle、session-streaming、session-composer-focus、session-attachment-menu、session-attachment-staged、notification-error、breakpoint-961-session（4 个桌面项目） | 28 | `918034e7…`、`f5bdd7fd…` | `f5bdd7fd3`（运行 full2-f5bdd7fd3） |
 | 项目页 | project-overview、project-graph（8 项目），project-graph-fullscreen、breakpoint-639/641-graph（桌面） | 28 | `93d3ec58…` | `93d3ec580`（full2-93d3ec580） |
 | 任务面板与设置 | task-detail、task-action-hover/focus/menu、task-share-dialog、settings、settings-saved（8 项目），breakpoint-599/601-dialog（桌面） | 64 | `4088d37e…` | `4088d37e6`（full2-4088d37e6） |
-| Wiki 961px 暗色 | breakpoint-961-wiki（chromium-dark-desktop） | 1 | `e64d0c72…` | `e64d0c72a`（m5-e64d0c72a） |
+| Wiki 961px 暗色 | breakpoint-961-wiki（chromium-dark-desktop）。第 2 批按第 6 条追加 main 提交并替换参考图，旧图在 git 历史里 | 1 | `e64d0c72…`、`6c4e0ac0…`、`2f9cc095…`、`a884fda3…` | `a884fda36`（full-maint-a884fda36）；第 1 批为 `e64d0c72a`（m5-e64d0c72a） |
 | 资料页（第 2 批，A6） | profile（8 项目），profile-validation（WebKit 桌面 2 个项目） | 10 | `d233a6cd…` | `d233a6cd0`（full-maint-d233a6cd0） |
 | 资料页，第 7 条例外（第 2 批，A6） | profile-validation（Chromium 4 个项目，WebKit 手机 2 个项目） | 6 | `d233a6cd…` | `d233a6cd0` 加 B1 修复 `3ec9cf83d`，即 `dcb5fd1bd`（full-maint-xfix-d233a6cd0），见 `migrationFix` |
 | Wiki 首页窄屏与 959px（第 2 批，A7、A8） | wiki-home、wiki-new-entry（手机 4 个项目），breakpoint-959-wiki（桌面 4 个项目） | 12 | `6c4e0ac0…`、`2f9cc095…` | `2f9cc095f`（full-maint-2f9cc095f） |
