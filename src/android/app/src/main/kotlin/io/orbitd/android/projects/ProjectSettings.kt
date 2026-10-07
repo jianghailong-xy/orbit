@@ -8,7 +8,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -262,7 +261,8 @@ private fun StartCard(doc: JsonObject, digest: String, state: ProjectPageState, 
     StartHead(StartProjectCopy.planHead(plan.count))
     StartPanel {
         plan.order?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        Text(StartProjectCopy.viewTasks, Modifier.clickable(onClick = viewTasks).testTag("project-start-view-tasks"), style = MaterialTheme.typography.bodySmall,
+        // Not while the start is out: leaving the sheet then would lose the server's answer to it.
+        Text(StartProjectCopy.viewTasks, Modifier.clickable(enabled = !starting, onClick = viewTasks).testTag("project-start-view-tasks"), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.primary)
     }
     StartHead(StartProjectCopy.howItRuns)

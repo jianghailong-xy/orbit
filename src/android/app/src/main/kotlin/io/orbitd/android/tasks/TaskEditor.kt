@@ -36,14 +36,14 @@ import java.util.UUID
 
 /** `Start at`: the one time the task starts by itself, saved explicitly, never in the past. */
 @Composable
-internal fun ScheduleSheet(task: JsonObject, enabled: Boolean, error: String?, close: () -> Unit, save: (String?) -> Unit) {
+internal fun ScheduleSheet(task: JsonObject, enabled: Boolean, error: String?, sending: Boolean = false, close: () -> Unit, save: (String?) -> Unit) {
     val context = LocalContext.current
     val zone = ZoneId.systemDefault()
     var picked by rememberSaveable(task.text("id")) { mutableStateOf(TaskTime.parse(task.text("runAt"))?.toEpochMilli()
         ?: Instant.now().truncatedTo(ChronoUnit.HOURS).plus(1, ChronoUnit.HOURS).toEpochMilli()) }
     val instant = Instant.ofEpochMilli(picked)
     val future = instant.isAfter(Instant.now())
-    AlertDialog(onDismissRequest = close, title = { Text(TaskDetailCopy.startAtLabel) }, modifier = Modifier.testTag("task-schedule-sheet"),
+    AlertDialog(onDismissRequest = { if (!sending) close() }, title = { Text(TaskDetailCopy.startAtLabel) }, modifier = Modifier.testTag("task-schedule-sheet"),
         text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(TaskTime.local(instant.toString()) ?: "", style = MaterialTheme.typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -65,17 +65,17 @@ internal fun ScheduleSheet(task: JsonObject, enabled: Boolean, error: String?, c
         } },
         confirmButton = { TextButton(onClick = { save(instant.truncatedTo(ChronoUnit.MILLIS).toString()) }, enabled = enabled && future,
             modifier = Modifier.testTag("task-save-schedule")) { Text(TaskDetailCopy.saveSchedule) } },
-        dismissButton = { TextButton(onClick = close) { Text(TaskDetailCopy.cancel) } })
+        dismissButton = { TextButton(onClick = close, enabled = !sending, modifier = Modifier.testTag("task-sheet-cancel")) { Text(TaskDetailCopy.cancel) } })
 }
 
 /** The acceptance editor: criteria, and the command with the exit code that counts as done — together or not at all. */
 @Composable
-internal fun AcceptanceSheet(current: AcceptanceDraft, enabled: Boolean, error: String?, close: () -> Unit, save: (JsonObject) -> Unit) {
+internal fun AcceptanceSheet(current: AcceptanceDraft, enabled: Boolean, error: String?, sending: Boolean = false, close: () -> Unit, save: (JsonObject) -> Unit) {
     var criteria by rememberSaveable { mutableStateOf(current.criteria) }
     var command by rememberSaveable { mutableStateOf(current.command) }
     var exitCode by rememberSaveable { mutableStateOf(current.exitCode) }
     val draft = AcceptanceDraft(criteria, command, exitCode)
-    AlertDialog(onDismissRequest = close, title = { Text(TaskDetailCopy.acceptanceHeading) }, modifier = Modifier.testTag("task-acceptance-sheet"),
+    AlertDialog(onDismissRequest = { if (!sending) close() }, title = { Text(TaskDetailCopy.acceptanceHeading) }, modifier = Modifier.testTag("task-acceptance-sheet"),
         text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(TaskDetailCopy.acceptanceCriteriaLabel, style = MaterialTheme.typography.labelMedium)
             OutlinedTextField(criteria, { criteria = it }, Modifier.fillMaxWidth().testTag("task-acceptance-criteria"), placeholder = { Text(TaskDetailCopy.acceptanceCriteriaPlaceholder) },
@@ -91,7 +91,7 @@ internal fun AcceptanceSheet(current: AcceptanceDraft, enabled: Boolean, error: 
         } },
         confirmButton = { TextButton(onClick = { save(draft.patch(current)) }, enabled = enabled && draft.canSave(current),
             modifier = Modifier.testTag("task-save-acceptance")) { Text(TaskDetailCopy.saveAcceptance) } },
-        dismissButton = { TextButton(onClick = close) { Text(TaskDetailCopy.cancel) } })
+        dismissButton = { TextButton(onClick = close, enabled = !sending, modifier = Modifier.testTag("task-sheet-cancel")) { Text(TaskDetailCopy.cancel) } })
 }
 
 /** The conditions Follow offers over one task (`WatchEditing.conditions(for: .task)`) and how each reads. */
@@ -124,11 +124,11 @@ object TaskFollow {
 
 /** Follow task: wait for a condition on this task, then notify you — until a deadline. One key per sheet. */
 @Composable
-internal fun FollowSheet(task: JsonObject, enabled: Boolean, error: String?, close: () -> Unit, follow: (JsonObject, Int, String) -> Unit) {
+internal fun FollowSheet(task: JsonObject, enabled: Boolean, error: String?, sending: Boolean = false, close: () -> Unit, follow: (JsonObject, Int, String) -> Unit) {
     var condition by rememberSaveable { mutableIntStateOf(0) }
     var ttl by rememberSaveable { mutableIntStateOf(TaskFollow.defaultDeadline) }
     val key = rememberSaveable { UUID.randomUUID().toString().lowercase() }
-    AlertDialog(onDismissRequest = close, title = { Text(TaskDetailCopy.followTask) }, modifier = Modifier.testTag("task-follow-sheet"),
+    AlertDialog(onDismissRequest = { if (!sending) close() }, title = { Text(TaskDetailCopy.followTask) }, modifier = Modifier.testTag("task-follow-sheet"),
         text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(TaskDetailCopy.watchingLabel, style = MaterialTheme.typography.labelMedium)
             Text(task.text("title").orEmpty(), maxLines = 3)
@@ -152,12 +152,12 @@ internal fun FollowSheet(task: JsonObject, enabled: Boolean, error: String?, clo
         } },
         confirmButton = { TextButton(onClick = { follow(TaskFollow.conditions[condition], ttl, key) }, enabled = enabled, modifier = Modifier.testTag("task-follow-confirm")) {
             Text(TaskDetailCopy.follow) } },
-        dismissButton = { TextButton(onClick = close) { Text(TaskDetailCopy.cancel) } })
+        dismissButton = { TextButton(onClick = close, enabled = !sending, modifier = Modifier.testTag("task-sheet-cancel")) { Text(TaskDetailCopy.cancel) } })
 }
 
 /** The bounded, server-searched prerequisite picker (`TaskDependencyPicker`). */
 @Composable
-internal fun DependencyPicker(api: TaskApi, taskId: String, existing: List<String>, enabled: Boolean, refused: String?, close: () -> Unit, pick: (String) -> Unit) {
+internal fun DependencyPicker(api: TaskApi, taskId: String, existing: List<String>, enabled: Boolean, refused: String?, sending: Boolean = false, close: () -> Unit, pick: (String) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     var candidates by remember { mutableStateOf<List<JsonObject>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -176,7 +176,7 @@ internal fun DependencyPicker(api: TaskApi, taskId: String, existing: List<Strin
         id != null && !io.orbitd.android.navigation.ObjectId.same(id, taskId) && existing.none { io.orbitd.android.navigation.ObjectId.same(it, id) } &&
             (needle.isEmpty() || candidate.text("title").orEmpty().contains(needle, ignoreCase = true))
     }
-    AlertDialog(onDismissRequest = close, title = { Text(TaskDetailCopy.addPrerequisite) }, modifier = Modifier.testTag("task-dependency-picker"),
+    AlertDialog(onDismissRequest = { if (!sending) close() }, title = { Text(TaskDetailCopy.addPrerequisite) }, modifier = Modifier.testTag("task-dependency-picker"),
         text = { LazyColumn(Modifier.heightIn(max = 460.dp)) {
             item { OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().testTag("task-dependency-search"), label = { Text(TaskListCopy.searchTasks) }, singleLine = true) }
             if (loading && shown.isEmpty()) item { LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp)) }
@@ -190,7 +190,7 @@ internal fun DependencyPicker(api: TaskApi, taskId: String, existing: List<Strin
                 }
             }
         } },
-        confirmButton = {}, dismissButton = { TextButton(onClick = close) { Text(TaskDetailCopy.cancel) } })
+        confirmButton = {}, dismissButton = { TextButton(onClick = close, enabled = !sending, modifier = Modifier.testTag("task-sheet-cancel")) { Text(TaskDetailCopy.cancel) } })
 }
 
 /** The Why of one routed run: the router's own sentences, then its policy and when it decided. */

@@ -131,7 +131,11 @@ private fun ProjectIndex(app: OrbitApplication, handle: SessionHandle, revision:
         finally { loading = false }
     }
     LaunchedEffect(handle) { load() }
-    LaunchedEffect(handle, revision) { if (revision > 0 && projects != null) { delay(400); load() } }
+    // Live events are coalesced as iOS `ProjectsModel.nudge` does — one read two seconds after the first of a burst, never
+    // cancelled by the next — and the index is read again every 15 s while it is shown (`refreshIfDue`).
+    val nudge = remember(handle) { RefreshNudge(scope) { if (projects != null) load() } }
+    LaunchedEffect(handle, revision) { if (revision > 0) nudge.nudge() }
+    LaunchedEffect(handle) { while (true) { delay(15_000); if (projects != null && !loading) load() } }
     LaunchedEffect(Unit) { while (true) { delay(60_000); now = Instant.now() } }
     val matching = projects.orEmpty().filter { ProjectAttention.matches(it, query) }
     Column(Modifier.fillMaxSize()) {

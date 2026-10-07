@@ -67,6 +67,9 @@ private class TaskListData {
     var query = TaskQuery()
     /** Every read is a new generation; only the newest may write what it read. */
     var generation = 0
+    /** The query of the read out now, and whether something asked for another read of it meanwhile. */
+    var reading: TaskQuery? = null
+    var again = false
     /** Whether the screen is still shown: a write that outlives it finishes, but reads nothing back. */
     var attached = true
 }
@@ -113,9 +116,13 @@ internal fun TaskBrowser(app: OrbitApplication, handle: SessionHandle, route: Or
     /** One scope's page and the bounded reads beside it. The page decides the error; the strip,
      * the counts and the label table are optional — a failed one keeps what it last showed. */
     suspend fun load(reset: Boolean) {
+        // A refresh of the query already being read waits for that read and goes once it lands, instead of replacing
+        // it: under a steady stream of events a read slower than the coalescing would otherwise never land.
+        if (!reset && data.loading && data.reading == data.query) { data.again = true; return }
         // The query this read is for is the one shown when it starts — never one a closure kept.
         val key = data.query
         val generation = ++data.generation
+        data.reading = key; data.again = false
         fun current() = generation == data.generation && key == data.query
         if (reset) { data.rows = emptyList(); data.cursor = null; data.overview = null; data.pinned = emptyList(); data.pinnedTotal = 0; data.labels = null; data.loaded = false }
         data.loading = true
@@ -142,6 +149,7 @@ internal fun TaskBrowser(app: OrbitApplication, handle: SessionHandle, route: Or
         } catch (cancel: CancellationException) { throw cancel }
         catch (failure: Exception) { if (current()) data.error = taskError(failure) }
         finally { if (generation == data.generation) data.loading = false }
+        if (current() && data.again && data.attached) load(reset = false)
     }
     // A new query starts empty after the browser's 250 ms debounce; the same query re-reads in place.
     LaunchedEffect(handle, query) { delay(250); load(reset = true) }
@@ -271,20 +279,21 @@ internal fun TaskBrowser(app: OrbitApplication, handle: SessionHandle, route: Or
                     if (data.cursor != null) item {
                         TextButton(onClick = {
                             val cursor = data.cursor ?: return@TextButton
-                            val generation = data.generation
                             val key = data.query
                             data.loadingMore = true
+                            // Not tied to the reads beside it: the next page joins the list while it is the same list at the
+                            // same place (a refresh in between keeps the rows past the first page), and the press always ends.
                             scope.launch {
                                 try {
                                     val page = api.page(key, cursor)
-                                    if (generation == data.generation && key == data.query) {
+                                    if (key == data.query && cursor == data.cursor) {
                                         val known = data.rows.mapNotNull { it.text("id") }.toSet()
                                         data.rows = data.rows + page.objects("items").filter { it.text("id") !in known }
                                         data.cursor = page.text("nextCursor")
                                     }
                                 } catch (cancel: CancellationException) { throw cancel }
-                                catch (failure: Exception) { if (generation == data.generation) data.error = taskError(failure) }
-                                finally { if (generation == data.generation) data.loadingMore = false }
+                                catch (failure: Exception) { if (key == data.query) data.error = taskError(failure) }
+                                finally { data.loadingMore = false }
                             }
                         }, enabled = !data.loadingMore && !data.loading, modifier = Modifier.fillMaxWidth().testTag("tasks-load-more")) {
                             Text(if (data.loadingMore) TaskListCopy.loading else TaskListCopy.loadMore)
@@ -317,11 +326,11 @@ internal fun TaskBrowser(app: OrbitApplication, handle: SessionHandle, route: Or
         val ids = selected.toList()
         fun finish(assignee: String? = null) {
             batchAction = null
+            // The selection ends with the press, not with the answer: an answer after the page was left would end a
+            // selection the page's saved state still holds, and reopening it would offer the same action again.
+            selecting = false; selected = emptyList()
             val trigger = UUID.randomUUID().toString()
-            mutate(null) {
-                api.batch(action, ids, trigger, assignee, revision = ids.sorted().joinToString(",") + ":" + trigger)
-                selecting = false; selected = emptyList()
-            }
+            mutate(null) { api.batch(action, ids, trigger, assignee, revision = ids.sorted().joinToString(",") + ":" + trigger) }
         }
         AlertDialog(onDismissRequest = { batchAction = null }, title = { Text(TaskListCopy.batchTitle(action, ids.size)) },
             text = { Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

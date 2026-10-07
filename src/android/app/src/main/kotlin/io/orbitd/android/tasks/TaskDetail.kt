@@ -46,6 +46,16 @@ import kotlinx.serialization.json.*
 import java.util.UUID
 
 /** Everything the page read for one task. A re-read replaces it in place; a failed one keeps it. */
+/** Comment drafts are the app's, not the route's saved state: a comment the server took clears its draft even when the
+ * page was left while it went out, so reopening the task never offers the sent text again; one the server refused stays
+ * to be sent again (iOS clears the field only on success). Keyed by account and task. */
+internal object TaskCommentDrafts {
+    private val drafts = mutableStateMapOf<String, String>()
+    operator fun get(key: String): String = drafts[key].orEmpty()
+    operator fun set(key: String, text: String) { if (text.isEmpty()) drafts.remove(key) else drafts[key] = text }
+    fun sent(key: String, body: String) { if (drafts[key]?.trim() == body) drafts.remove(key) }
+}
+
 private class TaskDetailData {
     var task by mutableStateOf<JsonObject?>(null)
     var missing by mutableStateOf(false)
@@ -90,7 +100,8 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
     DisposableEffect(data) { data.attached = true; onDispose { data.attached = false } }
     var sheet by rememberSaveable(id) { mutableStateOf<String?>(null) }
     var confirm by remember { mutableStateOf<DetailConfirm?>(null) }
-    var comment by rememberSaveable(id) { mutableStateOf("") }
+    val draft = "${handle.account.server}|${handle.account.userId}|$id"
+    val comment = TaskCommentDrafts[draft]
     var dependencyView by rememberSaveable(id) { mutableStateOf<String?>(null) }
     var menu by remember { mutableStateOf(false) }
     var viewing by remember { mutableStateOf<JsonObject?>(null) }
@@ -141,18 +152,20 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
     LaunchedEffect(data.notice) { if (data.notice != null) { delay(3000); data.notice = null } }
 
     /** A write belongs to the app, not to this page (iOS's model-owned Task): leaving does not cancel it,
-     * so a Run's resends and a comment still go out. A sheet that sent it closes only once it is taken. */
-    fun mutate(fromSheet: Boolean = false, done: () -> Unit = {}, operation: suspend () -> Unit) {
+     * so a Run's resends and a comment still go out. A sheet that sent it closes only once it is taken, and its
+     * answer is that sheet's alone — shown under it, or on the page's banner once it (or the page) is gone. */
+    fun mutate(fromSheet: String? = null, done: () -> Unit = {}, operation: suspend () -> Unit) {
         if (data.busy) return
         data.busy = true; data.error = null; data.conflict = null; data.sheetError = null
         app.processScope.launch {
-            try { operation(); done() }
+            fun ownSheet() = fromSheet != null && data.attached && sheet == fromSheet
+            try { operation(); if (fromSheet == null || ownSheet()) done() }
             catch (cancel: CancellationException) { throw cancel }
             catch (failure: Exception) {
                 val conflict = TaskRunHandoff.readConflict(failure)
                 when {
                     conflict != null -> data.conflict = conflict
-                    fromSheet -> data.sheetError = taskError(failure)
+                    ownSheet() -> data.sheetError = taskError(failure)
                     else -> data.error = taskError(failure)
                 }
             } finally {
@@ -163,7 +176,7 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
         }
     }
     fun revisionOf(task: JsonObject) = "${task.text("id")}:${task.text("updatedAt")}"
-    fun patch(fields: JsonObject, saved: String? = null, fromSheet: Boolean = false, done: () -> Unit = {}) { val task = data.task ?: return
+    fun patch(fields: JsonObject, saved: String? = null, fromSheet: String? = null, done: () -> Unit = {}) { val task = data.task ?: return
         mutate(fromSheet, done) { api.update(id, fields, revisionOf(task) + ":" + fields); saved?.let { data.notice = it } } }
     fun closeSheet() { sheet = null; data.sheetError = null }
 
@@ -214,7 +227,7 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                             DropdownMenu(menu, { menu = false }) {
                                 DropdownMenuItem(text = { Text(SharePanelCopy.copyLink) }, onClick = { menu = false; clipboard.setText(AnnotatedString(webUrl)); data.notice = SharePanelCopy.linkCopied })
                                 DropdownMenuItem(text = { Column { Text(SharePanelCopy.share); SharePanel.menuStatus(data.share)?.let { Text(it, style = MaterialTheme.typography.bodySmall) } } },
-                                    onClick = { menu = false; sheet = "share" })
+                                    enabled = enabled, onClick = { menu = false; sheet = "share" })
                                 DropdownMenuItem(text = { Text(SharePanelCopy.copyAsMarkdown) }, onClick = {
                                     menu = false
                                     clipboard.setText(AnnotatedString(TaskMarkdown.task(task, webUrl) { iso -> TaskTime.local(iso) ?: "—" }))
@@ -368,14 +381,14 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
         }
         // The comment box stays on screen: asking an agent about this task is one tap away.
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
-            OutlinedTextField(comment, { comment = it }, Modifier.weight(1f).testTag("task-comment"),
+            OutlinedTextField(comment, { TaskCommentDrafts[draft] = it }, Modifier.weight(1f).testTag("task-comment"),
                 placeholder = { Text(TaskDetailCopy.commentPlaceholder, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 maxLines = 4, shape = RoundedCornerShape(22.dp))
             TextButton(onClick = {
                 val body = comment.trim()
                 if (body.isNotEmpty()) mutate {
                     api.addComment(id, body, mentionedWorkspaceIds(body, workspaces), revisionOf(task) + ":" + body)
-                    comment = ""
+                    TaskCommentDrafts.sent(draft, body)
                 }
             }, enabled = enabled && comment.isNotBlank(), modifier = Modifier.testTag("task-post-comment").semantics { contentDescription = "Send comment" }) { Text("➤") }
         }
@@ -392,7 +405,8 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
             confirmButton = { TextButton(onClick = {
                 confirm = null
                 when (pending) {
-                    DetailConfirm.Delete -> mutate { api.delete(id, revisionOf(task)); back() }
+                    // Back only from this page: answered after it was left, it must not pop whatever is shown now.
+                    DetailConfirm.Delete -> mutate { api.delete(id, revisionOf(task)); if (data.attached) back() }
                     DetailConfirm.Reopen -> mutate { api.reopen(id, revisionOf(task)) }
                     is DetailConfirm.RemoveInput -> mutate { api.removeInput(pending.input.text("id").orEmpty(), revisionOf(task)) }
                     is DetailConfirm.RemovePrerequisite -> mutate { api.removeDependency(id, pending.row.id, revisionOf(task)) }
@@ -411,22 +425,23 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
         // Each sheet stays up until the server takes what it sent (iOS `TaskDetailParts`), so a refusal
         // — an override reason the server asks for, the account going offline, an unknown answer —
         // leaves what was typed where it was, with the server's words under it.
-        "schedule" -> ScheduleSheet(task, enabled, data.sheetError, close = ::closeSheet) { runAt ->
+        // A sheet cannot be put away while what it sent is out: its answer is shown under it.
+        "schedule" -> ScheduleSheet(task, enabled, data.sheetError, sending = data.busy, close = ::closeSheet) { runAt ->
             patch(buildJsonObject { put("runAt", runAt?.let(::JsonPrimitive) ?: JsonNull) },
-                if (runAt == null) TaskDetailCopy.scheduleCancelled else TaskDetailCopy.scheduleSaved, fromSheet = true) { closeSheet() }
+                if (runAt == null) TaskDetailCopy.scheduleCancelled else TaskDetailCopy.scheduleSaved, fromSheet = "schedule") { closeSheet() }
         }
-        "acceptance" -> AcceptanceSheet(AcceptanceDraft(task), enabled, data.sheetError, close = ::closeSheet) { fields ->
-            patch(fields, TaskDetailCopy.acceptanceSaved, fromSheet = true) { closeSheet() }
+        "acceptance" -> AcceptanceSheet(AcceptanceDraft(task), enabled, data.sheetError, sending = data.busy, close = ::closeSheet) { fields ->
+            patch(fields, TaskDetailCopy.acceptanceSaved, fromSheet = "acceptance") { closeSheet() }
         }
-        "follow" -> FollowSheet(task, enabled, data.sheetError, close = ::closeSheet) { predicate, ttl, key ->
-            mutate(fromSheet = true, done = { closeSheet() }) {
+        "follow" -> FollowSheet(task, enabled, data.sheetError, sending = data.busy, close = ::closeSheet) { predicate, ttl, key ->
+            mutate(fromSheet = "follow", done = { closeSheet() }) {
                 val watch = api.follow(id, predicate, ttl, key)
                 data.notice = if (watch?.text("state") == "MATCHED") TaskDetailCopy.followMatchedAtOnce else TaskDetailCopy.following
             }
         }
         "dependency" -> DependencyPicker(api, id, task.objects("dependsOn").mapNotNull { it.obj("dependsOnTask")?.text("id") }, enabled, data.sheetError,
-            close = ::closeSheet) { prerequisite ->
-            mutate(fromSheet = true, done = { closeSheet() }) { api.addDependency(id, prerequisite, revisionOf(task)) }
+            sending = data.busy, close = ::closeSheet) { prerequisite ->
+            mutate(fromSheet = "dependency", done = { closeSheet() }) { api.addDependency(id, prerequisite, revisionOf(task)) }
         }
         else -> if (current.startsWith("why:")) task.objects("sessions").firstOrNull { it.text("id") == current.removePrefix("why:") }?.let { run ->
             TaskDetailLogic.runRoute(run)?.let { route -> RouteWhySheet(route, { modelName(it, task, data) }) { sheet = null } }
