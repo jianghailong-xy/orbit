@@ -199,12 +199,19 @@ final class ConsoleModel {
     }
 
     /// The web page a picker row's `fixEngine` is fixed on, or nil when the fix is this runner's
-    /// own Engines section: Antigravity's and Harness's rows are fixed in Providers.
+    /// own Engines section. Providers is where an engine's install and sign-in live for every
+    /// engine the page has a row for — the login engines and OpenCode with them, Antigravity and
+    /// Harness — and `?engine=` focuses the row that was asked for, so a row's "Not installed,
+    /// sign in →" lands on the one press that keeps it. Only an engine neither end has a row for
+    /// is nil, and that press falls back to the runner's own page.
     func webFixURL(engine: String, runnerID: String) -> URL? {
         if engine == DshRuntime.connectFix {
             return api.baseURL.appendingPathComponent("providers/new/\(DshRuntime.presetSlug)")
         }
-        return engine == "antigravity" || engine == "dsh" ? providersURL(engine: engine, runnerID: runnerID) : nil
+        // Web's `ROW_ENGINES` (RunnerEngines.tsx), plus Harness, whose key row the page draws with
+        // the configured providers rather than under "On your runners".
+        let inProviders = ["claude", "codex", "kimi", "opencode", "antigravity", "dsh"]
+        return inProviders.contains(engine) ? providersURL(engine: engine, runnerID: runnerID) : nil
     }
 
     func installDsh() async {
