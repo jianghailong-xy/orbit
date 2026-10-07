@@ -540,7 +540,7 @@ private fun LazyListScope.openItemsSection(state: ProjectPageState, doc: JsonObj
         items(needsYou, key = { "item:${it.text("itemId")}" }) { row ->
             val action = ProjectPage.primaryAction(row)
             ItemRow(row.text("title").orEmpty(), row.text("detailLine").orEmpty(), "${ProjectPage.who(row)} · ${ProjectPage.waitingLabel(row, now)}", true,
-                action?.let(ProjectPage::actionLabel), enabled, tag = "item:${row.text("itemId")}", press = { action?.let { perform(it, row) } }, tap = { perform("REVIEW", row) })
+                action?.let(ProjectPage::actionLabel), enabled, tag = "open-item:${row.text("itemId")}", press = { action?.let { perform(it, row) } }, tap = { perform("REVIEW", row) })
         }
     }
     if (withCoordinator.isNotEmpty()) {
@@ -548,7 +548,7 @@ private fun LazyListScope.openItemsSection(state: ProjectPageState, doc: JsonObj
         items(withCoordinator, key = { "coordinator-item:${it.text("itemId")}" }) { row ->
             val action = ProjectPage.primaryAction(row)
             ItemRow(row.text("title").orEmpty(), row.text("detailLine").orEmpty(), "${ProjectPage.who(row)} · ${ProjectPage.waitingLabel(row, now)}", false,
-                action?.let(ProjectPage::actionLabel), enabled, tag = "item:${row.text("itemId")}", press = { action?.let { perform(it, row) } }, tap = { perform("OPEN_COORDINATOR", row) })
+                action?.let(ProjectPage::actionLabel), enabled, tag = "open-item:${row.text("itemId")}", press = { action?.let { perform(it, row) } }, tap = { perform("OPEN_COORDINATOR", row) })
         }
     }
 }

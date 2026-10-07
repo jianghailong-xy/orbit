@@ -61,7 +61,7 @@ def reset():
     generation = state.get('generation', 0) + 1
     state.update(case='normal', pending=True, denied=False, mode='', assignment=None, final=None,
                  denyTasks=False, denyProjects=False, readError=False, generation=generation, journal=old_journal,
-                 runTriggers={}, mutations=0)
+                 runTriggers={}, mutations=0, streamDown=False)
     state.update(shares={}, watches=[], attachments={})
     state['tasks'] = {
         OUTSIDE: task(OUTSIDE, 'A11 task checklist', labels=['Mobile', 'Sprint, one']),
@@ -103,7 +103,7 @@ def snapshot():
     value = original_snapshot()
     value['detail'].update(title='A11 coordinator review', workspaceId=WS)
     value['standing']['project'] = copy.deepcopy(state['project'])
-    if state['case'] == 'start':
+    if state['case'] in ('start', 'own-start'):
         value['standing']['project']['startedAt'] = None
     view = value['standing']['ownerConfirmation']
     view.update(title=state['tasks'].get(TID, {}).get('title', 'A11 project delivery'))
@@ -177,6 +177,14 @@ def project_buckets():
                 cancelled=sum(r['status'] == 'CANCELLED' for r in rows), integrating=0, onIntegrationLine=0, onUpstream=0, doneNotIntegrated=0, waitingForLanding=0)
 
 
+def project_row(row):
+    # The project page's row, with the work fields the server derives (`ProjectTaskRow`).
+    work = 'RUNNING' if row['running'] or row['queued'] else 'READY' if row['runnable'] else row['status'] if row['status'] in ('DONE', 'FAILED', 'CANCELLED') else 'BLOCKED'
+    blocks = sum(1 for other in state['tasks'].values() for edge in other['dependsOn'] if edge['dependsOnTaskId'] == row['id'])
+    unmet = sum(1 for edge in row['dependsOn'] if edge['dependsOnTask']['status'] != 'DONE')
+    return dict(row, workState=work, topoLevel=1 if row['dependsOn'] else 0, unmetCount=unmet, blocksCount=blocks, landingWaitCount=0, integration=None)
+
+
 class Handler(cards.Handler):
     def reply(self, body, code=200):
         if getattr(self, '_journal_row', None) is not None:
@@ -196,7 +204,9 @@ class Handler(cards.Handler):
             with LOCK: return self.reply(copy.deepcopy(state))
         if not path.startswith('/api/'): return super().do_GET()
         if self.headers.get('Authorization') != 'Bearer a08-fixture-access': return self.reply({}, 401)
-        if path == '/api/events': return self.control_stream()
+        if path == '/api/events':
+            if state.get('streamDown'): return self.reply(dict(message='Controlled stream outage'), 503)
+            return self.control_stream()
         with LOCK:
             self.journal(path, query)
             if state['readError'] and (path.startswith('/api/tasks') or path.startswith('/api/projects')):
@@ -224,6 +234,7 @@ class Handler(cards.Handler):
                 return self.reply(dict(link=state['shares'].get(path), counts=dict(tasks=2 if path.startswith('/api/projects/') else 1, comments=0, files=0, runs=1, transcripts=1)))
             if path in ('/api/projects', '/api/projects/sidebar'):
                 project = copy.deepcopy(state['project'])
+                if state['case'] in ('start', 'own-start'): project['startedAt'] = None
                 project.update(buckets=project_buckets(), attention=dict(ownerItems=[], coordinatorItems=None, userBlockers=0, systemBlockers=0, coordinatorBlockers=0),
                                integration=dict(line=state['integration']['line'], activeJobCount=state['integration']['integratingCount'], queuedJobCount=0, commitsAheadOfUpstream=1),
                                coordinatorActivity=dict(working=False, lastTurnAt=NOW))
@@ -267,7 +278,7 @@ class Handler(cards.Handler):
                 if suffix == '/panorama': return self.reply(dict(buckets=project_buckets(), shape=dict(taskCount=2, edgeCount=1)))
                 if suffix == '/integration': return self.reply(state['integration'])
                 if suffix == '/dependency-graph': return self.reply(graph(project=True))
-                if suffix == '/tasks/page': return self.reply(dict(items=[r for r in state['tasks'].values() if r['projectId'] == PID], nextCursor=None))
+                if suffix == '/tasks/page': return self.reply(dict(items=[project_row(r) for r in state['tasks'].values() if r['projectId'] == PID], nextCursor=None))
                 if suffix == '/panorama/ready':
                     rows = [r for r in state['tasks'].values() if r['projectId'] == PID and (r['runnable'] or r['running'] or r['queued'])]
                     return self.reply(dict(total=len(rows), readyCount=sum(r['runnable'] for r in rows), runningCount=sum(r['running'] for r in rows), queuedCount=sum(r['queued'] for r in rows), pausedCount=0,
@@ -290,7 +301,7 @@ class Handler(cards.Handler):
         self.end_headers()
         previous = state['generation']
         try:
-            while True:
+            while not state.get('streamDown'):
                 generation = state['generation']
                 value = dict(type='task.changed', sessionId=SID, data=dict(taskId=OUTSIDE)) if generation != previous else dict(type='ping')
                 self.wfile.write(('data: ' + json.dumps(value) + '\n\n').encode())
@@ -309,7 +320,7 @@ class Handler(cards.Handler):
         if path == '/__control':
             with LOCK:
                 if body.get('reset'): reset()
-                for key in ('case', 'mode', 'pending', 'denied', 'denyTasks', 'denyProjects', 'readError', 'assignment'):
+                for key in ('case', 'mode', 'pending', 'denied', 'denyTasks', 'denyProjects', 'readError', 'assignment', 'streamDown'):
                     if key in body: state[key] = body[key]
                 if 'case' in body: state['pending'] = body.get('pending', True)
                 if 'task' in body:
@@ -329,6 +340,7 @@ class Handler(cards.Handler):
             local = path.startswith('/api/tasks/') and '/owner-confirmation' not in path and '/evidence/' not in path
             local = local or path.startswith('/api/task-lists/') or path in ('/api/projects/' + PID, '/api/projects/' + PID + '/integration',
                 '/api/projects/' + PID + '/pause', '/api/projects/' + PID + '/resume', '/api/projects/' + PID + '/coordinator', '/api/projects/' + PID + '/coordinator/replace')
+            local = local or (path == '/api/projects/' + PID + '/start' and state['case'] == 'own-start') or path.startswith('/api/projects/' + PID + '/blockers/')
             local = local or path.endswith('/share') or path == '/api/watches' or path.startswith('/api/attachments/')
             if not local: return self.delegate_post(raw)
             self.journal(path, body=body)
@@ -402,6 +414,27 @@ class Handler(cards.Handler):
             project['pauseReason'] = 'OWNER' if project['pausedAt'] else None
             bump(project); return dict(projectId=PID, pausedAt=project['pausedAt'], pauseReason=project['pauseReason']), 200
         if '/coordinator' in path: return dict(projectId=PID, sessionId=SID, created=False, workspaceId=WS), 200
+        if path == '/api/projects/' + PID + '/start':
+            required = ('criteriaDigest', 'line', 'automatic', 'maxConcurrentTasks', 'mergeCheckCommand', 'requestId')
+            if any(key not in body for key in required): return dict(message='Every start setting is required'), 400
+            if body['criteriaDigest'] != cards.CORPUS['snapshot']['standing']['acceptanceConfirmation']['currentVersion']['digest']:
+                return dict(code='CRITERIA_DIGEST_MOVED', message='The criteria changed; read them again.'), 409
+            if body['requestId'] is not None: return dict(message='No start request is open'), 409
+            if 'projectBranchName' in body and body['line'] != 'PROJECT_BRANCH': return dict(message='A branch name needs a project branch'), 400
+            state['case'] = 'normal'
+            project.update(startedAt=NOW, coordinatorEnabled=body['automatic'], automatic=body['automatic'], maxConcurrentTasks=body['maxConcurrentTasks'],
+                           configRevision=str(int(project['configRevision']) + 1))
+            state['integration'].update(line=body['line'], mergeCheckCommand=body['mergeCheckCommand'])
+            bump(project); return dict(projectId=PID, startedAt=NOW), 200
+        if path.startswith('/api/projects/' + PID + '/blockers/') and path.endswith('/resolve'):
+            identifier = path.split('/')[-2]
+            blocker = next((b for b in project['blockers']['open'] if b['id'] == identifier), None)
+            if blocker is None: return dict(code='BLOCKER_NOT_OPEN', message='This blocker is no longer open.'), 409
+            if not str(body.get('reason', '')).strip(): return dict(message='A reason is required'), 400
+            project['blockers']['open'].remove(blocker)
+            project['blockers']['resolved'].insert(0, dict(blocker, resolvedAt=NOW, resolvedBy='USER', resolutionNote=body['reason']))
+            project['blockers']['resolvedCount'] += 1
+            bump(project); return dict(blocker, resolvedAt=NOW, resolvedBy='USER', resolutionNote=body['reason']), 200
         parts = path.split('/')[3:]
         if parts[0].startswith('batch-'):
             results = []

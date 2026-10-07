@@ -70,12 +70,14 @@ class ProjectApi(private val auth: AuthSession, private val handle: SessionHandl
     suspend fun replaceCoordinator(id: String, revision: String) = send(revision, listOf("projects", id, "coordinator", "replace")) as? JsonObject
 }
 
-/** `APIClient.failureReason`: the server's own sentence when it wrote one. */
-fun failureReason(error: Throwable): String = when {
-    error is ApiError && error.messages.isNotEmpty() -> error.messages.first()
-    error is ApiError && error.status == 403 -> "You don't have permission to do that"
-    error is ApiError && error.status == 404 -> "It no longer exists"
-    error is ApiError -> "the server answered ${error.status}"
-    error is FeatureWriteUncertain || error is FeatureWriteRefused -> error.message.orEmpty().trimEnd('.')
-    else -> "check your connection"
+/** `APIClient.failureReason`: the server's own sentence when it wrote one (`ComposerLogic.serverMessage`). */
+fun failureReason(error: Throwable): String = when (error) {
+    is ApiError -> when {
+        error.status == 401 -> "you're signed out"
+        error.messages.isNotEmpty() -> error.messages.joinToString("\n")
+        else -> (error.body as? JsonObject)?.text("error")?.takeIf { it.isNotEmpty() } ?: "the server returned ${error.status}"
+    }
+    // Android's own fences (FeatureWrites): a write held or refused locally says so in its own words.
+    is FeatureWriteUncertain, is FeatureWriteRefused -> error.message.orEmpty().trimEnd('.')
+    else -> "the connection dropped"
 }

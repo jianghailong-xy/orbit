@@ -104,9 +104,11 @@ class ProjectDataTest {
         val online = ProjectApi(fixture.session, fixture.handle!!)
         val refused = runCatching { online.authorize("p1", RunSettings.authorization(obj("""{"configRevision":"1"}"""), automatic = false)!!) }.exceptionOrNull()!!
         assertEquals("Configuration changed — reload and try again", failureReason(refused))
-        assertEquals("You don't have permission to do that", failureReason(ApiError.parse(403, "{}".encodeToByteArray())))
-        assertEquals("It no longer exists", failureReason(ApiError.parse(404, "{}".encodeToByteArray())))
-        assertEquals("check your connection", failureReason(NetworkException()))
+        assertEquals("the server returned 403", failureReason(ApiError.parse(403, "{}".encodeToByteArray())))
+        assertEquals("first\nsecond", failureReason(ApiError.parse(400, """{"message":["first","second"]}""".encodeToByteArray())))
+        assertEquals("Not Found", failureReason(ApiError.parse(404, """{"error":"Not Found"}""".encodeToByteArray())))
+        assertEquals("you're signed out", failureReason(ApiError.parse(401, "{}".encodeToByteArray())))
+        assertEquals("the connection dropped", failureReason(NetworkException()))
         assertTrue(failureReason(FeatureWriteUncertain()).isNotEmpty())
     }
 

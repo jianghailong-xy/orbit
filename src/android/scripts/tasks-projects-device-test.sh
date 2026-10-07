@@ -22,7 +22,7 @@ package='io.orbitd.android.debug'
 runner='io.orbitd.android.debug.test/androidx.test.runner.AndroidJUnitRunner'
 emulator_pid=''
 exec 9>"${ANDROID_DEVICE_LOCK:-/var/lib/orbit/android/ui.lock}"
-flock -n 9 || { echo "Device busy; continue offline work" >&2; exit 75; }
+flock -w "${ANDROID_DEVICE_LOCK_WAIT:-7200}" 9 || { echo "Device busy; continue offline work" >&2; exit 75; }
 cleanup() {
   local result=$?
   if [[ -n "${fixture_pid:-}" ]]; then

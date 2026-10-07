@@ -117,7 +117,11 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
         } catch (cancel: CancellationException) { throw cancel }
         catch (failure: Exception) {
             if (failure is ApiError && failure.status == 404) { data.task = null; data.missing = true }
-            else data.loadError = taskError(failure)
+            else {
+                // A read this account may no longer make withdraws what it showed, as A04 withdraws a session.
+                if (failure is ApiError && failure.status == 403) data.task = null
+                data.loadError = taskError(failure)
+            }
         }
     }
     LaunchedEffect(handle, id) { load() }
