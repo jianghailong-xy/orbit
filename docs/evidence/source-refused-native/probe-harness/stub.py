@@ -267,6 +267,16 @@ class Server(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
+    # HTTPServer.server_bind resolves its own name (socket.getfqdn), a reverse lookup that on
+    # macOS raises the "Allow "Python" to find devices on local networks?" prompt — over the app
+    # being photographed. It sat in the middle of the first Mac picture taken on CI (run
+    # 37614770864) and threw the shot away; the crossings probe's stub carries this override and
+    # this one was written without it.
+    def server_bind(self):
+        import socketserver
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = "localhost", self.server_address[1]
+
 
 if __name__ == "__main__":
     Server(("127.0.0.1", PORT), Handler).serve_forever()
