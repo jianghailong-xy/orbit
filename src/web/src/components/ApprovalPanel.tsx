@@ -438,7 +438,9 @@ export function ApprovalPanel({
             : dag
               ? 'Apply changes'
               : batch
-                ? 'Create them'
+                ? // The count, not "them": the question above it scrolls away on a long batch. The
+                  // native card says the same (`Approvals.batchCreateAction`).
+                  `Create ${batch.taskCount ?? 0} task${batch.taskCount === 1 ? '' : 's'}`
                 : create
                   ? 'Create it'
                   : blocker

@@ -394,6 +394,7 @@ import {
   accountOfEnv,
   accountToStartOn,
   AgentProvider,
+  CONTINUE_MESSAGE,
   derivePermissionSemantics,
   fastModeAvailable,
   isAccountEngine,
@@ -7570,6 +7571,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   }).data;
   const serverRetryText = serverRetry?.text ?? '';
   const autoRetryText = retryText || serverRetryText;
+  // …and whether the server said there is nothing at all for a re-send to carry. The card swaps
+  // its verb for a continue then — and there is nothing to quote or to hand `send` as the reader's
+  // words, because the continue is the platform's own sentence (`CONTINUE_MESSAGE`).
+  const nothingToResend = !!serverRetry?.nothingToResend;
   // Whose words those are. Another Orbit session's are not the reader's to send again: through
   // `send` they would go out in the owner's name, signed by nobody. So the Retry asks the server to
   // re-send them as the automatic retry would — that session's, with the request they were, charged
@@ -7657,31 +7662,53 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // The same retry, plus the pending auto-retry, for the quota / provider-error card. Disarming
   // is a plain fire-and-forget: the detail query refetches on settle, and the card's own
   // countdown is driven by the value it reads back.
+  // Whose outage the card names. The session's own provider — deliberately NOT `shownProvider`,
+  // which carries the composer's pending pick: choosing another provider for the next turn (which
+  // is exactly what a person does when a quota is spent) renamed the provider that had actually
+  // failed, so a card about claude's spent window read as deepseek's. `detailForSelected` first,
+  // because a pick just made is the stale thing here, not the detail.
+  const outageProvider = detailForSelected?.provider ?? selected?.provider ?? 'claude';
   const autoRetryHelp: AutoRetryHelp = useMemo(
     () => ({
-      provider: shownProvider,
+      provider: outageProvider,
       runnerName: runner.name,
       retryAt: detailForSelected?.retryAt ?? null,
       attempts: detailForSelected?.retryAttempts ?? 0,
       onRetry:
-        autoRetryText && !selectedTrashed && !selectedMissing
-          ? retryFromSession && selectedId
+        !selectedTrashed && !selectedMissing && selectedId && (nothingToResend || autoRetryText)
+          ? nothingToResend
             ? () => {
-                if (retryInFlight) return;
-                resendFromSessionMutate(selectedId);
-              }
-            : () => {
+                // Nothing of the reader's to send, so the press sends the platform's continue in
+                // their name — the words the note under the button quotes. Through `send`, so the
+                // composer's pick travels with it and a refusal arrives as any send's does.
                 if (retryInFlight) return;
                 sendMutate({
-                  content: autoRetryText,
+                  content: CONTINUE_MESSAGE,
                   images: [],
-                  attachmentIds: retry.attachmentIds,
+                  attachmentIds: [],
                   source: 'autoRetry',
                 });
               }
+            : retryFromSession
+              ? () => {
+                  if (retryInFlight) return;
+                  resendFromSessionMutate(selectedId);
+                }
+              : () => {
+                  if (retryInFlight) return;
+                  sendMutate({
+                    content: autoRetryText,
+                    images: [],
+                    attachmentIds: retry.attachmentIds,
+                    source: 'autoRetry',
+                  });
+                }
           : undefined,
       retryDisabled: retryInFlight,
-      retryText: autoRetryText,
+      // Never the continue: the card states that sentence under its own button, and a "Will
+      // re-send:" quote would read as the reader's own words.
+      retryText: nothingToResend ? '' : autoRetryText,
+      nothingToResend,
       // The card's own Retry goes through `send`, so its refusal arrives in the same handler as a
       // typed message's. Handed to the card rather than left to the toast: it is the card's offer
       // to re-send that has stopped being true, so the card is where that has to show.
@@ -7708,11 +7735,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         : undefined,
     }),
     [
-      shownProvider,
+      outageProvider,
       runner.name,
       detailForSelected?.retryAt,
       detailForSelected?.retryAttempts,
       autoRetryText,
+      nothingToResend,
       retryInFlight,
       retryFromSession,
       runConflict?.conflict,

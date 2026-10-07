@@ -20,6 +20,11 @@ const URL = process.env.COORDINATOR_PG_URL;
 const suite = URL ? test : test.skip;
 process.env.PROVIDER_SECRET_KEY ??= 'pool-pause-spec';
 const realtime = new Proxy({}, { get: (_target, key) => key === 'then' ? undefined : () => undefined }) as RealtimeService;
+/** Where Anthropic's usage endpoint stands. The quota cache asks it about every Claude member a pool read
+ *  touches, and the real one refuses these tokens (401): a refusal that landed before the inbox did made
+ *  the backup member below a refused key, red on a fast network and green on a slow one. Nothing here
+ *  reports a quota. */
+const usageEndpoint = (async () => new Response('unavailable', { status: 500 })) as typeof fetch;
 
 suite('manual pool pauses: permissions, membership scope, next turn, expiry and gateway boundary', { timeout: 600_000 }, async (t) => {
   assertCoordinatorPgUrlIsIsolated(URL);
@@ -27,7 +32,9 @@ suite('manual pool pauses: permissions, membership scope, next turn, expiry and 
   await client.connect();
   await verifyCoordinatorPgIdentity(client);
   const db = prismaClientFor(URL!);
-  t.after(async () => { await db.$disconnect(); await client.end(); });
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = usageEndpoint;
+  t.after(async () => { globalThis.fetch = realFetch; await db.$disconnect(); await client.end(); });
   const prisma = db as unknown as PrismaService;
   const usage = new ProviderPlanUsageService(realtime);
   const providers = new ProvidersService(prisma, realtime, usage);

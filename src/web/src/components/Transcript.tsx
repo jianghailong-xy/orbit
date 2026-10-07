@@ -34,6 +34,7 @@ import { Fragment, createContext, isValidElement, memo, useContext, useEffect, u
 import type { ComponentProps, ReactNode } from 'react';
 import {
   apiErrorRetryAt,
+  CONTINUE_MESSAGE,
   isApiErrorText,
   isAuthErrorText,
   isBenignEngineStderr,
@@ -2022,6 +2023,13 @@ export interface AutoRetryHelp {
    * which chooses with the same code the automatic retry re-sends with.
    */
   onNeedRetryText?: () => void;
+  /**
+   * Nothing of anybody's waits to go out — not the person's words, and not a reply or confirmation
+   * turn the sweep re-sends on its own (`getSessionRetryMessage.nothingToResend`). The card swaps
+   * its verb for the platform's continue (`CONTINUE_MESSAGE`): sent by hand now, or by the server
+   * at the reset through the switch, which is the arm that owns the sentence.
+   */
+  nothingToResend?: boolean;
   /** Turn the pending auto-retry off. */
   onCancelAuto?: () => void;
   /** Put it back, at the instant the card re-derived from the failing reply. */
@@ -2135,6 +2143,11 @@ function AutoRetryCard({
   // card (the session went on) and a share-page one (no context) are history, not an alarm.
   const needsYou = live && !armed && !firing;
   const quota = variant === 'quota';
+  // Nothing for a re-send to carry: the failure landed on a turn nobody sent (a background job's
+  // wake, a turn the runtime started for itself) and the person's own message was answered long
+  // before it. The card says that, and every verb it offers is Continue — by hand, or at the reset
+  // through the switch. Read once: the body, the countdown and the two controls all branch on it.
+  const continues = live && !!help?.nothingToResend;
   const window = quotaWindow(message);
   // The instant a re-armed retry would fire, re-derived from the same two things the server used
   // when it armed the first one: the reply's own "resets 8:20pm" (quota) or the next step of the
@@ -2170,9 +2183,13 @@ function AutoRetryCard({
           : quota
             ? `${window.what} for ${help?.provider ?? 'this provider'}${
                 help?.runnerName ? ` on “${help.runnerName}”` : ''
-              } is used up.${needsYou ? ' Auto-retry is off.' : ''}`
+              } is used up.${continues
+                ? ` Nothing to re-send — the limit landed on a turn that wasn’t yours.`
+                : needsYou ? ' Auto-retry is off.' : ''}`
             : `The ${help?.provider ?? 'provider'} API could not answer — nothing about your
-               message caused it.${needsYou ? ' Auto-retry is off.' : ''}`}
+               message caused it.${continues
+                 ? ` Nothing to re-send — the failure landed on a turn that wasn’t yours.`
+                 : needsYou ? ' Auto-retry is off.' : ''}`}
       </div>
       {/* The error verbatim. Which one it was is the only actionable detail if it keeps
           recurring, and unlike a quota's sentence it is not restated by anything above. */}
@@ -2181,12 +2198,12 @@ function AutoRetryCard({
         <div className="chat-quota-when">
           {quota ? (
             <>
-              Resets <b>{formatResetAt(retryAt!)}</b>{' '}
+              {continues ? 'Continues' : 'Resets'} <b>{formatResetAt(retryAt!)}</b>{' '}
               <span className="chat-quota-in">· {formatCountdown(msLeft)}</span>
             </>
           ) : (
             <>
-              Retrying <b>{formatCountdown(msLeft)}</b>
+              {continues ? 'Continuing' : 'Retrying'} <b>{formatCountdown(msLeft)}</b>
             </>
           )}
         </div>
@@ -2195,12 +2212,16 @@ function AutoRetryCard({
         <div className="chat-quota-auto">
           <div className="chat-quota-auto-txt">
             <div className="chat-quota-auto-l">
-              {quota ? 'Auto-retry when the quota resets' : 'Auto-retry — this usually clears'}
+              {continues
+                ? quota ? 'Continue when the quota resets' : 'Continue — this usually clears'
+                : quota ? 'Auto-retry when the quota resets' : 'Auto-retry — this usually clears'}
             </div>
             <div className="chat-quota-auto-d">
               {armed
                 ? 'Runs on the server — you can close this tab.'
-                : 'Off — nothing will re-send until you do.'}
+                : continues
+                  ? 'Off — nothing will continue until you do.'
+                  : 'Off — nothing will re-send until you do.'}
             </div>
           </div>
           {/* A real two-state switch: off is rendered, not just implied by the row disappearing,
@@ -2225,7 +2246,9 @@ function AutoRetryCard({
       )}
       {firing && !takenOver && (
         <div className="chat-quota-run">
-          <span className="spin" /> Retrying — re-sending your message…
+          <span className="spin" /> {continues
+            ? 'Continuing — picking up where it left off…'
+            : 'Retrying — re-sending your message…'}
         </div>
       )}
       {/* Once the task has moved on, the card stops offering to re-send and says what happened
@@ -2233,12 +2256,13 @@ function AutoRetryCard({
       {takenOver ? (
         <TaskRunHandoffNotice className="chat-quota-handoff" conflict={takenOver} />
       ) : null}
-      {!takenOver && live && !firing && help?.onRetry && help.retryText && (
+      {!takenOver && live && !firing && help?.onRetry && (help.retryText || continues) && (
         <>
           {/* Quoted for the same reason as the sign-in card's: by now it has scrolled away,
               and on a first-turn limit it was never in the transcript at all. When the bubble
-              is the line directly above, it is neither — see `afterUserMsg`. */}
-          {!afterUserMsg && (
+              is the line directly above, it is neither — see `afterUserMsg`. Never for a
+              continue: the platform's sentence is not something the reader wrote. */}
+          {!afterUserMsg && !!help.retryText && (
             <>
               <div className="chat-quota-lastl">Will re-send:</div>
               <div className="chat-quota-last">{help.retryText}</div>
@@ -2252,15 +2276,21 @@ function AutoRetryCard({
               disabled={help.retryDisabled}
               type="button"
             >
-              {armed ? 'Retry now anyway' : 'Retry now'}
+              {armed
+                ? continues ? 'Continue now anyway' : 'Retry now anyway'
+                : continues ? 'Continue' : 'Retry now'}
             </button>
-            {armed && (
+            {armed ? (
               <span className="chat-quota-note">
                 {quota
                   ? 'The quota hasn’t reset yet — this will likely fail again.'
                   : 'The API may still be failing — this could fail again.'}
               </span>
-            )}
+            ) : continues ? (
+              // Said here rather than left to the transcript: the sentence is the platform's, and
+              // this is the one place the reader is told which words the press sends in their name.
+              <span className="chat-quota-note">Sends “{CONTINUE_MESSAGE}”</span>
+            ) : null}
           </div>
         </>
       )}
