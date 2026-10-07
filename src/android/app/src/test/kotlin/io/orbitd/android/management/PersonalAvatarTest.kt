@@ -30,14 +30,23 @@ class PersonalAvatarTest {
         assertFalse(capture.file.parentFile!!.exists())
     }
 
-    @Test fun cropStaysSquareWithinImageAtEveryEdgeAndZoomAndEmits512Pixels() {
+    @Test fun cropStaysSquareWithinImageAtEveryEdgeAndZoomAndNeverUpscales() {
         val source = Bitmap.createBitmap(100, 60, Bitmap.Config.ARGB_8888)
         source.eraseColor(Color.RED)
         for (x in listOf(-1f, 0f, .5f, 1f, 2f)) for (y in listOf(-1f, 0f, 1f, 2f)) for (zoom in listOf(0f, 1f, 5f, 9f)) {
             val cropped = personalCropPhoto(source, zoom, x, y)
-            assertEquals(512, cropped.width); assertEquals(512, cropped.height)
+            val side = (60 / zoom.coerceIn(1f, 5f)).toInt()
+            assertEquals(side, cropped.width); assertEquals(side, cropped.height)
             assertEquals(Color.RED, cropped.getPixel(0, 0))
-            assertEquals(Color.RED, cropped.getPixel(511, 511))
+            assertEquals(Color.RED, cropped.getPixel(side - 1, side - 1))
         }
+        val large = Bitmap.createBitmap(1024, 900, Bitmap.Config.ARGB_8888)
+        assertEquals(512, personalCropPhoto(large, 1f, .5f, .5f).width)
+    }
+
+    @Test fun transparentPhotoIsDrawnOnWhiteAsOrbitAvatarJpegDoes() {
+        val source = Bitmap.createBitmap(40, 40, Bitmap.Config.ARGB_8888)
+        source.eraseColor(Color.TRANSPARENT)
+        assertEquals(Color.WHITE, personalCropPhoto(source, 1f, .5f, .5f).getPixel(10, 10))
     }
 }

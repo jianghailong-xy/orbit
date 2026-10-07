@@ -13,7 +13,7 @@ import kotlinx.serialization.json.*
 /** Management uses the same account generation and rotating credentials as the rest of Orbit.
  *  `background` outlives a page, for a save made as the page goes (the runner's name). */
 class ManagementApi(val session: OrbitApi, val handle: SessionHandle,
-                    val background: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)) {
+                    val background: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)) {
     suspend fun get(path: String, query: List<Pair<String, String>> = emptyList()): JsonElement =
         send(path, HttpMethod.GET, query = query)
     suspend fun post(path: String, body: JsonObject = JsonObject(emptyMap())) = send(path, HttpMethod.POST, body)

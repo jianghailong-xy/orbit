@@ -6,10 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Canvas
 import android.graphics.ImageDecoder
-import android.graphics.Paint
-import android.graphics.Rect
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -403,12 +400,15 @@ internal fun personalCropPhoto(source: Bitmap, zoom: Float, horizontal: Float, v
     val left = ((source.width - side) * horizontal.coerceIn(0f, 1f)).toInt()
     val top = ((source.height - side) * vertical.coerceIn(0f, 1f)).toInt()
     val out = minOf(side, 512)
-    return Bitmap.createBitmap(out, out, Bitmap.Config.ARGB_8888).also { square ->
-        Canvas(square).apply {
-            drawColor(android.graphics.Color.WHITE)
-            drawBitmap(source, Rect(left, top, left + side, top + side), Rect(0, 0, out, out), Paint(Paint.FILTER_BITMAP_FLAG))
-        }
+    val scaled = Bitmap.createScaledBitmap(Bitmap.createBitmap(source, left, top, side, side), out, out, true)
+    // Composited onto white, so a transparent image is not sent as black JPEG.
+    val pixels = IntArray(out * out).also { scaled.getPixels(it, 0, out, 0, 0, out, out) }
+    for (index in pixels.indices) {
+        val p = pixels[index]; val a = p ushr 24
+        fun over(c: Int) = (c * a + 255 * (255 - a)) / 255
+        pixels[index] = (0xFF shl 24) or (over(p shr 16 and 0xFF) shl 16) or (over(p shr 8 and 0xFF) shl 8) or over(p and 0xFF)
     }
+    return Bitmap.createBitmap(out, out, Bitmap.Config.ARGB_8888).apply { setPixels(pixels, 0, out, 0, 0, out, out) }
 }
 
 @Composable
