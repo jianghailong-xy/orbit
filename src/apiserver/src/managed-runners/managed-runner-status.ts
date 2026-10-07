@@ -6,6 +6,7 @@ import {
   type ManagedRunnerStatus,
 } from '@orbit/shared';
 
+import { managedRunnerNotEligibleReason } from './managed-runner-eligibility';
 import { managedRunnerDisabledReason } from './managed-runner-gate';
 
 /** How fresh a heartbeat must be to count, when no profile says otherwise: the reaper's threshold. */
@@ -16,6 +17,8 @@ export interface ManagedRunnerStatusInput {
   enabled: boolean;
   /** Enabled, and this server has a valid environment to reconcile in. */
   available: boolean;
+  /** ManagedRunnerEligibility's answer for an owner without a mapping. Absent: eligible. */
+  eligible?: boolean;
   mapping: ManagedRunner | null;
   runner: { status: RunnerStatus; lastHeartbeatAt: Date | null } | null;
   now: Date;
@@ -49,6 +52,7 @@ export function managedRunnerStatus(input: ManagedRunnerStatusInput): ManagedRun
   const switchReason = !enabled ? managedRunnerDisabledReason() : !available ? managedRunnerUnavailableReason() : null;
 
   if (!mapping) {
+    const eligible = input.eligible !== false;
     return {
       contractVersion: MANAGED_RUNNER_CONTRACT_VERSION,
       enabled,
@@ -60,10 +64,10 @@ export function managedRunnerStatus(input: ManagedRunnerStatusInput): ManagedRun
       heartbeatStatus: null,
       lastHeartbeatAt: null,
       usable: false,
-      reason: switchReason,
+      reason: switchReason ?? (eligible ? null : managedRunnerNotEligibleReason()),
       retryAfter: null,
       initialProvider: null,
-      actions: { ...actions, canEnsure: operable },
+      actions: { ...actions, canEnsure: operable && eligible },
     };
   }
 

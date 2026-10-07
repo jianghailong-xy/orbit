@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { Logger } from '@nestjs/common';
 import { Prisma, type ManagedRunner } from '@prisma/client';
-import type { ManagedRunnerReason } from '@orbit/shared';
+import { MODEL_UNAVAILABLE, type ManagedRunnerReason } from '@orbit/shared';
 
 import { generateToken, sha256 } from '../common/crypto.util';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -23,6 +23,7 @@ import {
   secretIdentityProblem,
   type ManagedRunnerIdentity,
 } from './managed-runner-resources';
+import { managedRuntimeSupply, type ManagedSupplyRunner } from './managed-runner-supply';
 
 /**
  * The managed runner manager: drives one mapping's Kubernetes objects towards its desired state
@@ -34,11 +35,12 @@ import {
  *
  * This version provisions: REQUESTED → PROVISIONING (data PVC, its PV and volume handle, the
  * bootstrap Secret and the runner credential it carries) → STARTING (the one Pod of the current
- * generation, until the runner row has a fresh heartbeat) → READY; and FAILED, with a structured
- * cause, when the attempt budget is spent or what the cluster holds is not what the mapping
- * recorded. It never deletes a PVC, a Secret, a runner row or a workspace. The only object it
- * deletes is a Pod that has already terminated, and only when an explicit retry asked for a fresh
- * start, by UID.
+ * generation, until the runner row has a fresh heartbeat reporting a runtime installed and signed
+ * in — the one READY records as `initialProvider`; without one it reports MODEL_UNAVAILABLE) →
+ * READY; and FAILED, with a structured cause, when the attempt budget is spent or what the cluster
+ * holds is not what the mapping recorded. It never deletes a PVC, a Secret, a runner row or a
+ * workspace. The only object it deletes is a Pod that has already terminated, and only when an
+ * explicit retry asked for a fresh start, by UID.
  *
  * Left to the work that follows, at the places marked below: capacity admission (WAITING_CAPACITY),
  * sleep/wake/drain, deletion, and the single-writer gate — replacing a predecessor Pod needs proof
@@ -95,6 +97,10 @@ const REASONS: Record<string, { message: string; retryable: boolean }> = {
   TRANSIENT: { message: 'A transient infrastructure error interrupted provisioning; it is retried automatically.', retryable: true },
   RETRY_EXHAUSTED: { message: 'Provisioning kept failing on transient infrastructure errors and stopped. It can be retried.', retryable: true },
   STARTUP_TIMEOUT: { message: 'The runner did not report in before its startup deadline. It can be retried.', retryable: true },
+  [MODEL_UNAVAILABLE]: {
+    message: 'The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. Sign one in from Providers; a runner that has stopped waiting for it can then be retried.',
+    retryable: true,
+  },
   POD_TERMINATED: { message: 'The runner instance stopped. A retry releases it and keeps the data volume.', retryable: true },
   KUBERNETES_FORBIDDEN: { message: 'The cluster refused the manager. An operator has to check its permissions; then it can be retried.', retryable: true },
   KUBERNETES_REJECTED: { message: 'The cluster rejected a managed runner object. An operator has to check the environment; then it can be retried.', retryable: true },
@@ -313,18 +319,22 @@ export class ManagedRunnerManager {
     // A released instance still being removed: wait for it to go, then the gate above decides.
     if (pod.metadata.deletionTimestamp) return this.waitWithin(mapping);
     if (podTerminated(pod)) return this.fail(mapping, 'POD_TERMINATED', `Pod ${pod.metadata.uid} is ${pod.status?.phase}`);
-    if (pod.status?.phase === 'Running' && (await this.heartbeatSince(mapping, mapping.stateEnteredAt))) {
-      await this.commit(mapping, {
-        managementState: 'READY',
-        stateEnteredAt: this.now(),
-        attempt: 0,
-        nextAttemptAt: null,
-        startupDeadlineAt: null,
-        lastError: Prisma.DbNull,
-      });
-      return { done: 'READY' };
-    }
-    return this.waitWithin(mapping);
+    const report = pod.status?.phase === 'Running' ? await this.reportSince(mapping, mapping.stateEnteredAt) : null;
+    if (!report) return this.waitWithin(mapping);
+    // READY needs model supply as well as a live instance: the runtime it is found ready with is the
+    // one a default workspace with no history starts on, recorded, never guessed later.
+    const [initialProvider] = managedRuntimeSupply(report);
+    if (!initialProvider) return this.withoutSupply(mapping);
+    await this.commit(mapping, {
+      managementState: 'READY',
+      stateEnteredAt: this.now(),
+      attempt: 0,
+      nextAttemptAt: null,
+      startupDeadlineAt: null,
+      lastError: Prisma.DbNull,
+      initialProvider,
+    });
+    return { done: 'READY' };
   }
 
   private async ready(mapping: ManagedRunner): Promise<Step> {
@@ -444,15 +454,18 @@ export class ManagedRunnerManager {
     return this.reread(mapping.id);
   }
 
-  /** Whether the runner row heartbeated after `since` and is fresh now. Never manufactured here. */
-  private async heartbeatSince(mapping: ManagedRunner, since: Date): Promise<boolean> {
+  /**
+   * What the runner's heartbeats report, once it heartbeated after `since` and is fresh now; null
+   * until then. Never manufactured here.
+   */
+  private async reportSince(mapping: ManagedRunner, since: Date): Promise<ManagedSupplyRunner | null> {
     const runner = await this.prisma.runner.findUnique({
       where: { id: mapping.runnerId },
-      select: { status: true, lastHeartbeatAt: true },
+      select: { status: true, lastHeartbeatAt: true, engines: true, capabilities: true },
     });
     const beat = runner?.lastHeartbeatAt;
-    if (!runner || !beat || runner.status === 'OFFLINE' || beat < since) return false;
-    return this.now().getTime() - beat.getTime() <= this.profile.lifecycle.heartbeatFreshSeconds * 1000;
+    if (!runner || !beat || runner.status === 'OFFLINE' || beat < since) return null;
+    return this.now().getTime() - beat.getTime() <= this.profile.lifecycle.heartbeatFreshSeconds * 1000 ? runner : null;
   }
 
   // ── row writes ─────────────────────────────────────────────────────────────────────────────
@@ -509,6 +522,21 @@ export class ManagedRunnerManager {
   private async waitWithin(mapping: ManagedRunner): Promise<Step> {
     if (mapping.startupDeadlineAt && mapping.startupDeadlineAt <= this.now()) {
       return this.fail(mapping, 'STARTUP_TIMEOUT', `no fresh heartbeat by ${mapping.startupDeadlineAt.toISOString()}`);
+    }
+    return { done: 'WAITING' };
+  }
+
+  /**
+   * The instance is up and reporting, with no runtime installed and signed in: not READY. Said as
+   * MODEL_UNAVAILABLE while the startup deadline lasts — a runtime signed in meanwhile makes the next
+   * pass READY — and then FAILED with that cause, retryable, so the owner can retry once one is.
+   */
+  private async withoutSupply(mapping: ManagedRunner): Promise<Step> {
+    if (mapping.startupDeadlineAt && mapping.startupDeadlineAt <= this.now()) {
+      return this.fail(mapping, MODEL_UNAVAILABLE, `no runtime installed and signed in by ${mapping.startupDeadlineAt.toISOString()}`);
+    }
+    if ((mapping.lastError as { code?: unknown } | null)?.code !== MODEL_UNAVAILABLE) {
+      await this.commit(mapping, { lastError: { ...managedRunnerReason(MODEL_UNAVAILABLE) } });
     }
     return { done: 'WAITING' };
   }

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -11,6 +11,7 @@ import {
   createManagedRunnerRuntime,
   type KubeClientFactory,
 } from './managed-runner-runtime';
+import { MANAGED_RUNNER_SIGN_IN } from './managed-runner-sign-in';
 import { ManagedRunnerController } from './managed-runner.controller';
 import { ManagedRunnerService } from './managed-runner.service';
 
@@ -19,7 +20,11 @@ import { ManagedRunnerService } from './managed-runner.service';
  * and reconcile loop — is built only when the gate is on; off, the factory returns null without
  * reading a profile or a kubeconfig, and the status facade and the refusing guard are all there is.
  * The gate itself comes from the global ManagedRunnerGateModule.
+ *
+ * Global for one export: the sign-in step AuthService.completeLogin calls (MANAGED_RUNNER_SIGN_IN),
+ * which is this module's service, so AuthModule needs no import of it.
  */
+@Global()
 @Module({
   controllers: [ManagedRunnerController],
   providers: [
@@ -37,6 +42,8 @@ import { ManagedRunnerService } from './managed-runner.service';
           : null,
     },
     ManagedRunnerService,
+    { provide: MANAGED_RUNNER_SIGN_IN, useExisting: ManagedRunnerService },
   ],
+  exports: [MANAGED_RUNNER_SIGN_IN],
 })
 export class ManagedRunnerModule {}

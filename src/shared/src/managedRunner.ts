@@ -28,6 +28,16 @@ export const MANAGED_RUNNER_TRANSITION_REFUSED = 'MANAGED_RUNNER_TRANSITION_REFU
 /** A managed runner's row is removed only through the managed deletion workflow, never by unregistering. */
 export const MANAGED_RUNNER_DELETE_REFUSED = 'MANAGED_RUNNER_DELETE_REFUSED';
 
+/** The server decided this account is not given a managed runner (who is, is the server's decision). */
+export const MANAGED_RUNNER_NOT_ELIGIBLE = 'MANAGED_RUNNER_NOT_ELIGIBLE';
+
+/**
+ * The managed runner is up, but none of its runtimes is installed and signed in, so it is not READY
+ * and nothing chooses an engine for its first session. Signing a runtime in on the runner clears it.
+ * Also the refusal of a first session asked for on a runtime the managed runner cannot run.
+ */
+export const MODEL_UNAVAILABLE = 'MODEL_UNAVAILABLE';
+
 /** What the owner asked of the managed runner. */
 export type ManagedRunnerDesiredState = 'RUNNING' | 'SLEEPING' | 'DELETED';
 
@@ -95,6 +105,8 @@ export interface ManagedRunnerStatus {
   usable: boolean;
   reason: ManagedRunnerReason | null;
   retryAfter: string | null;
+  /** The runtime the runner was found installed and signed in with when it became READY: what a
+   *  default workspace with no history starts its first session on. Null until then. */
   initialProvider: string | null;
   actions: ManagedRunnerActions;
 }
