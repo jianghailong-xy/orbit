@@ -112,9 +112,9 @@ final class SettingsStackWiringTests: XCTestCase {
     }
 
     /// The sheet moves a `NavigationStack` whose path IS Settings' stack in `NavState`, and registers
-    /// every frame that stack carries on its root — the runners list, a runner's record and the two
-    /// pages it pushes (an engine's, its name's), the `SettingsPage`s, and an account's record under
-    /// Admin.
+    /// every frame that stack carries on its root — the `SettingsPage`s; what Infrastructure pushes, a
+    /// machine's record and the two pages it pushes (an engine's, its name's) and a pool's page; and an
+    /// account's record under Admin.
     func testTheSheetsStackIsSettingsOwnStack() throws {
         let sheet = code(try slice(try appSource("Views/SettingsSheet.swift"),
                                    from: "struct SettingsSheet: View {", to: "/// The page a `SettingsPage` frame names."))
@@ -123,14 +123,16 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertFalse(sheet.contains("navigationDestination(isPresented:"), "no boolean push")
         let destinations = try slice(sheet, from: ".navigationDestination(for: NavNode.self)",
                                      to: "default:                          EmptyView()")
-        for frame in ["case .settingsRunners:            RunnersSettingsList()",
-                      "case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)",
+        for frame in ["case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)",
                       "case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)",
                       "case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)",
                       "case .settingsPage(let page):     SettingsPageView(page: page)",
+                      "case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)",
+                      "case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)",
                       "case .userDetail(let userID):     AdminUserDetailView(userID: userID)"] {
             XCTAssertTrue(destinations.contains(frame), "the sheet renders \(frame)")
         }
+        XCTAssertFalse(sheet.contains("settingsRunners"), "the runners list's own frame went with the Providers page")
     }
 
     /// Every page the list can open has a view. Adding a `SettingsPage` without one would push a
@@ -143,6 +145,9 @@ final class SettingsStackWiringTests: XCTestCase {
         }
         XCTAssertTrue(pages.contains("AdminUsersView(rowNavigation: .push)"),
                       "Admin is the same list its section shows, pushing onto the stack on screen")
+        XCTAssertTrue(pages.contains("case .infrastructure: RunnersListView(rowNavigation: .push)"),
+                      "and Infrastructure is the page its section shows, the same way")
+        XCTAssertFalse(pages.contains("ProvidersSettingsPage"), "no Providers page of its own any more")
     }
 
     /// The list draws `SettingsHome` — its groups, in order, and each group's rows — and has a
@@ -153,15 +158,26 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertTrue(list.contains("ForEach(SettingsHome.Group.allCases, id: \\.self)"))
         XCTAssertTrue(list.contains("SettingsHome.rows(group, isAdmin: isAdmin)"))
         XCTAssertTrue(list.contains("SettingsHeader(SettingsHome.header(group))"))
+        XCTAssertTrue(list.contains("if let footer = SettingsHome.footer(group) {"),
+                      "Machines & models says what its one row is for")
         let rows = try slice(list, from: "@ViewBuilder private func row(_ row: SettingsHome.Row) -> some View {",
-                             to: "private var runnersValue: String? {")
+                             to: "private var infrastructureValue:")
         for row in SettingsHome.Row.allCases {
             XCTAssertTrue(rows.contains(".\(row.rawValue)"), "the list has no drawing for .\(row.rawValue)")
         }
         // A form row that opens a page is a link, and draws the platform's arrow — the settings
         // shape, where every row that goes somewhere says so.
-        XCTAssertTrue(rows.contains("NavigationLink(value: NavNode.settingsRunners)"))
+        XCTAssertTrue(rows.contains("NavigationLink(value: NavNode.settingsPage(.infrastructure))"))
         XCTAssertTrue(rows.contains("NavigationLink(value: NavNode.settingsPage(page))"))
+        // Infrastructure's value is its page's Needs you, counted the page's own way, in amber while it
+        // holds anything — over lists the list reads for it, pools and their people included.
+        XCTAssertTrue(rows.contains(".foregroundStyle(value.needsYou ? RunnerInk.amber : Color.secondary)"))
+        XCTAssertTrue(list.contains("let needsYou = InfrastructureLists(model).attention.count"))
+        XCTAssertTrue(list.contains("SettingsHome.infrastructureValue(needsYou: needsYou, runners: runners.runners)"))
+        for read in [".task { await model.runners?.load() }", ".task { await model.agents?.reloadPools() }",
+                     ".task { await model.sharedPools?.load() }", "await model.sharedPools?.loadAccess(id)"] {
+            XCTAssertTrue(list.contains(read), "the list reads \(read)")
+        }
         // Session orchestration is one switch for the whole account, so its row is the switch, and
         // it is written the moment it flips.
         XCTAssertTrue(rows.contains("Toggle(isOn: $orchestration) { label }"))
@@ -274,29 +290,33 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertTrue(form.contains("accountMessage = await model.saveName(name)"))
     }
 
-    /// The runners list the sheet pushes carries the same `runnerDetail` frame the Runners section's
-    /// rows do, pushed by hand through `AppModel.push` — which lands on Settings' stack while the
-    /// sheet is up. One frame type, two stacks: the stack on screen is what decides where it lands.
-    /// The same goes for the two pages a runner's record pushes, its engine's and its name's.
-    func testTheRunnersListInsideSettingsPushesTheSameFrameTheRunnersSectionDoes() throws {
+    /// Settings' Infrastructure page is the Infrastructure section's own page, whose rows carry their
+    /// destinations and push them by hand through `AppModel.push` — which lands on Settings' stack while
+    /// the sheet is up. One page and one frame type, two stacks: the stack on screen is what decides
+    /// where a push lands. The same goes for the pages a machine's record pushes, its engine's and its
+    /// name's, and for a pool's page.
+    func testSettingsInfrastructureIsTheSectionsOwnPage() throws {
         let runners = try appSource("Views/SkillsRunnersView.swift")
-        let settingsList = code(try slice(runners, from: "struct RunnersSettingsList: View {",
-                                          to: "/// How a `RunnersModel` list shows its load outcome"))
-        XCTAssertTrue(settingsList.contains("Button { model.push(.runnerDetail(runnerID: r.id)) } label: {"),
-                      "the row carries its destination and pushes it by hand, like the Runners section's")
-        XCTAssertFalse(settingsList.contains("NavigationLink"),
-                       "and is not a link — a disclosure indicator here would be the odd one out "
-                       + "against the section's identical list")
-        XCTAssertTrue(settingsList.contains(".foregroundStyle(Color.primary)"),
+        XCTAssertFalse(runners.contains("struct RunnersSettingsList"), "no second runners list beside it")
+        let list = code(try slice(runners, from: "struct RunnersListView: View {",
+                                  to: "/// How a `RunnersModel` list shows its load outcome"))
+        XCTAssertTrue(list.contains("Button { model.push(.runnerDetail(runnerID: r.id)) } label: {"),
+                      "a machine's row carries its destination and pushes it by hand")
+        XCTAssertFalse(list.contains("NavigationLink"),
+                       "and is not a link — a disclosure indicator here would be the odd one out")
+        XCTAssertTrue(list.contains(".foregroundStyle(Color.primary)"),
                       "its label is the label colour: inside a button's label even `.primary` is the tint")
+        XCTAssertTrue(list.contains("private func push(_ page: NavNode) { model.push(page) }"),
+                      "a pool's row pushes its page the same way")
 
         let shell = code(try slice(try appSource("Views/CompactShell.swift"), from: "case .runners:",
                                    to: "// FOLLOWING"))
-        XCTAssertTrue(shell.contains("case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)"),
-                      "the Runners section renders that same frame — the reuse is the frame type")
-        XCTAssertTrue(shell.contains("RunnerEnginePage(runnerID: runnerID, engine: engine)")
-                        && shell.contains("RunnerNamePage(runnerID: runnerID)"),
-                      "and the pages a record pushes, on its own stack as on Settings'")
+        for frame in ["case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)",
+                      "RunnerEnginePage(runnerID: runnerID, engine: engine)", "RunnerNamePage(runnerID: runnerID)",
+                      "case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)",
+                      "case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)"] {
+            XCTAssertTrue(shell.contains(frame), "the section's stack renders \(frame), as Settings' does")
+        }
     }
 
     /// macOS keeps its one grouped form — in the Settings window and the main window's column — and
