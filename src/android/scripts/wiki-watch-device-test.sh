@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if (( $# != 4 )); then
-  echo "Usage: $0 APP_APK TEST_APK EVIDENCE_DIR SERIAL" >&2
+  echo "Usage: $0 APP_APK TEST_APK EVIDENCE_DIR SERIAL|API29..API35" >&2
   exit 2
 fi
 apk="$(realpath "$1")"
@@ -27,6 +27,7 @@ flock -w "${A12_LOCK_WAIT:-0}" 9 || { echo 'Device lock busy; no device action p
 printf 'lock_acquired_utc=%s\n' "$(date -u +%FT%TZ)" > "$output/lock.txt"
 fixture_pid=''
 old_font=''
+emulator_pid=''
 cleanup() {
   local result=$?
   trap - EXIT
@@ -42,6 +43,11 @@ cleanup() {
     printf 'font=%s\nnight=%s\nrestored=true\n' "$old_font" "$old_night" > "$output/restored-settings.txt"
   fi
   "$adb" -s "$serial" reverse --list > "$output/reverse-after.txt" 2>&1 || true
+  if [[ -n "$emulator_pid" ]]; then
+    kill "$emulator_pid" 2>/dev/null || true; wait "$emulator_pid" 2>/dev/null || true
+    timeout 20 "$adb_bin" -s "$serial" wait-for-disconnect >/dev/null 2>&1 9>&- || result=1
+    printf 'emulator=%s\nstopped=true\n' "$serial" > "$output/emulator-stopped.txt"
+  fi
   printf 'exit_code=%s\nfinished_utc=%s\n' "$result" "$(date -u +%FT%TZ)" >> "$output/result.txt"
   exit "$result"
 }
@@ -49,7 +55,27 @@ trap cleanup EXIT
 printf 'scope=A12 Wiki/Watch controlled HTTP; emulator only; no real deployment or cross-platform result\nstarted_utc=%s\n' "$(date -u +%FT%TZ)" > "$output/result.txt"
 git -C "$scripts" rev-parse HEAD > "$output/source-sha.txt"
 git -C "$scripts" status --porcelain > "$output/source-status.txt"
+if [[ "$serial" =~ ^API(29|3[0-5])$ ]]; then
+  # An older API: its emulator is booted on port 5556 inside this hold and shut down by cleanup, as A10's
+  # push-device-test.sh does; emulator-5554 (API 36) is left alone.
+  avd="orbit-ui-api${serial#API}"
+  # Checked before the serial is taken, so cleanup never touches an emulator another task started.
+  if "$adb" devices | command grep -q "^emulator-5556[[:space:]]"; then echo 'Port 5556 in use; no device action performed' >&2; exit 75; fi
+  serial=emulator-5556
+  ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-/var/lib/orbit/android/avd}" "${ANDROID_HOME:-/opt/android-sdk}/emulator/emulator" -avd "$avd" \
+    -port 5556 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader -accel on -memory 2048 -cores 2 \
+    -camera-back none -camera-front none > "$output/emulator.log" 2>&1 9>&- &
+  emulator_pid=$!
+  timeout 300 "$adb_bin" -s "$serial" wait-for-device 9>&-
+  deadline=$((SECONDS + 300))
+  until [[ "$("$adb" -s "$serial" shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]; do
+    (( SECONDS < deadline )) || { echo 'Boot timed out' >&2; exit 1; }
+    sleep 2
+  done
+fi
 timeout 30 "$adb_bin" -s "$serial" wait-for-device 9>&-
+# Emulators only: a physical phone on the same adb server is scheduled by the coordinator, never here.
+[[ "$("$adb" -s "$serial" shell getprop ro.kernel.qemu | tr -d '\r')" == 1 ]] || { echo "$serial is not an emulator" >&2; exit 2; }
 {
   printf 'serial=%s\n' "$serial"
   for prop in ro.product.model ro.build.version.release ro.build.version.sdk ro.build.fingerprint ro.kernel.qemu; do
@@ -87,6 +113,9 @@ done
 "$adb" -s "$serial" exec-out run-as "$package" cat files/a12-captures.tar > "$output/captures.tar"
 tar --no-same-owner -xf "$output/captures.tar" -C "$output"
 chmod -R a+rX "$output/a12-wiki-watch"
+# A capture the device was too busy to screenshot keeps its semantics tree; the run says how many lack the image.
+printf 'screenshots=%s\nscreenshots_missing=%s\n' "$(find "$output/a12-wiki-watch" -name '*.png' | wc -l)" \
+  "$(find "$output/a12-wiki-watch" -name '*-screenshot-missing.txt' | wc -l)" >> "$output/result.txt"
 command grep -aE 'OK \([0-9]+ tests?\)' "$output/instrumentation.txt" >/dev/null
 if command grep -aE 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed|INSTRUMENTATION_STATUS_CODE: -[234]' "$output/instrumentation.txt"; then exit 1; fi
 if command grep -aE 'a06-fixture-(access|refresh)|a12-fixture-password' "$output"/logcat-*.txt; then exit 1; fi

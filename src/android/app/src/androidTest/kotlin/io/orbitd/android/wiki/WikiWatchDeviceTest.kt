@@ -74,9 +74,11 @@ class WikiWatchDeviceTest {
         // A dialog or a sheet is a second root: every root's tree is kept.
         val roots = compose.onAllNodes(isRoot())
         File(output, "$name-semantics.txt").writeText((0 until roots.fetchSemanticsNodes().size).joinToString("\n\n") { roots[it].printToString() })
-        instrument.uiAutomation.takeScreenshot().let { bitmap ->
-            File(output, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }; bitmap.recycle()
-        }
+        // UiAutomation answers null when the device is too starved to take one in time (seen under host load): it is
+        // asked again, and a capture still without one says so beside its semantics tree instead of failing the journey.
+        val bitmap = (1..3).firstNotNullOfOrNull { attempt -> instrument.uiAutomation.takeScreenshot() ?: null.also { Thread.sleep(1_000L * attempt) } }
+        if (bitmap == null) { File(output, "$name-screenshot-missing.txt").writeText("takeScreenshot returned null 3 times\n"); return }
+        File(output, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }; bitmap.recycle()
     }
     private fun launch(raw: String) = Intent(Intent.ACTION_VIEW, Uri.parse(raw), app, MainActivity::class.java)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
