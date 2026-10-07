@@ -462,6 +462,17 @@ class PushDeviceTest {
         assertTrue("Notification title touch must enter the system input stream", down && up)
         awaitCondition { resumedActivity?.intent?.action == Intent.ACTION_VIEW }
     }
+    private fun tapAt(bounds: Rect) {
+        val downTime = SystemClock.uptimeMillis()
+        fun touch(action: Int): Boolean {
+            val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action,
+                bounds.exactCenterX(), bounds.exactCenterY(), 0).apply { source = InputDevice.SOURCE_TOUCHSCREEN }
+            return try { instrument.uiAutomation.injectInputEvent(event, true) } finally { event.recycle() }
+        }
+        assertTrue(touch(MotionEvent.ACTION_DOWN))
+        SystemClock.sleep(60)
+        assertTrue(touch(MotionEvent.ACTION_UP))
+    }
     private fun dumpHierarchy(label: String) {
         val text = StringBuilder()
         fun visit(node: AccessibilityNodeInfo?, depth: Int) {
@@ -495,8 +506,9 @@ class PushDeviceTest {
         // The first switch on the page is the app's own; the channel switches follow it.
         awaitCondition { master = (instrument.uiAutomation.windows.mapNotNull { it.root } + listOfNotNull(instrument.uiAutomation.rootInActiveWindow))
             .firstNotNullOfOrNull { find(it, 0) }; master != null }
-        if (master!!.isChecked != enabled) assertTrue(master!!.performAction(AccessibilityNodeInfo.ACTION_CLICK))
-        awaitCondition { (manager.areNotificationsEnabled()) == enabled }
+        // Android 10's switch bar takes the click, not the switch node: tap it as a finger does.
+        if (master!!.isChecked != enabled) tapAt(Rect().also(master!!::getBoundsInScreen))
+        awaitCondition { manager.areNotificationsEnabled() == enabled }
         appNotificationsOff = !enabled
         capture("${name.methodName}-settings-${if (enabled) "on" else "off"}")
         assertTrue(instrument.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
