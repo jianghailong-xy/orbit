@@ -42,7 +42,8 @@ function fixture(options: {
     deletedAt: null, mergeStatus: null, commitStatus: null,
   };
   const db = {
-    user: { findUnique: async () => ({ preferences: {} }) },
+    // An admin, for whom a shared row resolves as any row of theirs does (usableProviderScope).
+    user: { findUnique: async () => ({ preferences: {}, role: 'ADMIN' }) },
     workspace: { findFirst: async () => ({ runnerId: runner.id, enableWorktree: false }) },
     runner: { findFirst: async () => runner },
     modelProvider: {
@@ -209,7 +210,10 @@ test('P1b dsh dispatch: unknown runtimes and unavailable providers never resolve
 
 test('P1b dsh dispatch: capability filters preserve configured dsh keyword collisions', async () => {
   const seen: unknown[] = [];
-  const db = { modelProvider: { findMany: async (query: unknown) => { seen.push(query); return [{ slug: 'harness-key' }]; } } };
+  const db = {
+    user: { findUnique: async () => ({ role: 'ADMIN' }) },
+    modelProvider: { findMany: async (query: unknown) => { seen.push(query); return [{ slug: 'harness-key' }]; } },
+  };
   assert.deepEqual(await providerDispatchWhereOn(db as never, ownerId, AgentProvider.DSH), {
     OR: [
       { provider: AgentProvider.DSH, providerBuiltin: true },

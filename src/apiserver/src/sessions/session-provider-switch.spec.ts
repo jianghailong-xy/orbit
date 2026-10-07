@@ -9,6 +9,9 @@ import { SessionsService } from './sessions.service';
 
 const id = '11111111-1111-4111-8111-111111111111';
 const ownerId = '22222222-2222-4222-8222-222222222222';
+/** The caller as usableProviderScope reads them: an admin, for whom a shared row resolves as any row of
+ *  theirs does. A member's is shared-provider-admin-only.pg.spec.ts's. */
+const caller = { findUnique: async () => ({ role: 'ADMIN' }) };
 
 interface ProviderRow {
   slug: string;
@@ -76,6 +79,7 @@ function harness(
         return { id };
       },
     },
+    user: caller,
     modelProvider: {
       findFirst: async ({ where }: { where: { slug: string; enabled?: boolean } }) =>
         providers.find(
@@ -388,6 +392,7 @@ function resumeHarness(session: Record<string, unknown>, providers: ProviderRow[
         $executeRaw: async () => 1,
         session: sessionDelegate,
         conversationTurn: conversationTurnDelegate,
+        user: caller,
         modelProvider: {
           findFirst: async ({ where }: { where: { slug: string; enabled?: boolean } }) =>
             providers.find(

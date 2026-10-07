@@ -11,7 +11,8 @@ test('runner restart reclaims every open session so cold checkouts remain protec
   let where: unknown;
   const prisma = {
     // A runner that names no runtime makes the claim/reclaim ask which providers borrow one
-    // (providerSlugsOn); none do here.
+    // (providerSlugsOn), of the rows its owner may use; none do here.
+    user: { findUnique: async () => null },
     modelProvider: { findMany: async () => [] },
     session: {
       findMany: async (args: { where: unknown }) => {

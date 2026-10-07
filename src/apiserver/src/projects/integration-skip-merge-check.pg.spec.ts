@@ -703,6 +703,39 @@ test('a conversation that does not coordinate the project cannot skip anything',
     }
   });
 
+test("another account's card is no card here: refused as an id that names nothing is, repeating nothing of it",
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'skip-stranger');
+      const { task } = await failedLanding(stack, w, 'skip-stranger');
+      // Another account's coordinator, with a card its owner answered about a landing of its own.
+      const them = await world(stack, 'skip-stranger-them');
+      const theirs = await doneTask(stack, them, 'skip-stranger-theirs');
+      const theirCard = await approvedCard(stack, them, theirs.taskId);
+
+      const refusal = async (approvalId: string) => {
+        const thrown = await skipDoor(stack, w, task.taskId, { reason: REASON, approvalId })
+          .then(() => null, (error: unknown) => error);
+        assert.ok(thrown instanceof HttpException, `the door answered instead of refusing: ${JSON.stringify(thrown)}`);
+        return { status: thrown.getStatus(), body: thrown.getResponse() };
+      };
+      const stranger = await refusal(theirCard);
+      assert.deepEqual(stranger, await refusal(randomUUID()), "another account's card was answered unlike no card");
+      assert.equal(stranger.status, 403);
+      assert.equal((stranger.body as { code?: string }).code, 'INTEGRATION_SKIP_CHECK_APPROVAL_REQUIRED');
+      for (const theirFact of [theirCard, them.coordinatorSessionId, them.projectId, theirs.taskId]) {
+        assert.equal(JSON.stringify(stranger.body).includes(theirFact), false, 'the refusal repeats their card');
+      }
+
+      const rows = await landings(stack.db, task.taskId);
+      assert.deepEqual(rows.map((row) => [row.generation, row.state]), [[1, 'CHECK_FAILED']],
+        `a stranger's card queued a generation — ${await jobsOf(stack.db, task.taskId)}`);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
 test('the skip is ONE generation: the next landing of the same task is handed its merge check again',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();

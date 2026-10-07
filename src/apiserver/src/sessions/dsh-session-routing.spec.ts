@@ -25,6 +25,8 @@ type PoolRow = { slug: string; ownerId: string; engine?: string };
 
 function delegates(providers: ProviderRow[], pools: PoolRow[] = []) {
   return {
+    // An admin, for whom a shared row resolves as any row of theirs does (usableProviderScope).
+    user: { findUnique: async () => ({ role: 'ADMIN' }) },
     modelProvider: {
       findFirst: async ({ where }: { where: { slug: string; enabled?: boolean } }) =>
         providers.find((row) => row.slug === where.slug &&
@@ -52,7 +54,7 @@ function createFixture(
     // A runner that can start Harness: it declares dsh and its engine report shows the pinned CLI ready.
     runner: { findFirst: async () => ({ id: 'runner-1', capabilities: ['provider:dsh'], capabilitiesReportedAt: new Date(),
       engines: [{ engine: 'dsh', installed: true, version: '0.2.0-rc.2', auth: 'unknown', dsh: { versionCompatible: true } }] }) },
-    user: { findUnique: async () => ({ preferences: options.preferences ?? {} }) },
+    user: { findUnique: async () => ({ preferences: options.preferences ?? {}, role: 'ADMIN' }) },
     task: { findFirst: async () => ({
       id: 'task-1', projectId: null, verifiesTaskId: null, pinnedRevision: null,
       codeless: false, attemptGeneration: 1n, knownGoodSha: null,

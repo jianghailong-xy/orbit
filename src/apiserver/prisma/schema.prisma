@@ -5799,9 +5799,10 @@ model ModelProvider {
   enabled       Boolean  @default(true)
   // Picker display order; NULL sorts last.
   position      Int?
-  // NULL = a shared provider (admin-managed, visible to everyone). Set = a personal (BYOK)
-  // provider: visible in, and dispatchable for, only its owner's sessions. Slugs stay globally
-  // unique either way, so dispatch-by-slug is never ambiguous.
+  // NULL = a shared provider (admin-managed): visible in, and dispatchable for, admins' sessions
+  // only (usableProviderScope). Set = a personal (BYOK) provider: visible in, and dispatchable for,
+  // only its owner's sessions. Slugs stay globally unique either way, so dispatch-by-slug is never
+  // ambiguous.
   ownerId       String?  @map("owner_id") @db.Uuid
   owner         User?    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   // The account pools this provider is a member of. Joining one adds a way to dispatch it and

@@ -28,6 +28,11 @@ export const DSH_VERSION_INCOMPATIBLE_ERROR =
 
 export const PROVIDER_UNAVAILABLE_ERROR = 'Provider is unavailable; check its configuration';
 
+/** What a member's session on a shared provider waits with (usableProviderScope): nothing about the
+ *  provider's configuration is wrong, and only an admin can do something about it. */
+export const ADMIN_ONLY_PROVIDER_ERROR =
+  'This provider is available to admins only; ask an admin to add you to a shared pool';
+
 /**
  * The built-in runtimes a runner is handed only once it advertises them, each with the sentence its
  * stalled sessions carry until then.
