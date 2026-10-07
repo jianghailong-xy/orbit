@@ -138,42 +138,46 @@ enum WindowShot {
         let args = ProcessInfo.processInfo.arguments
         guard let i = args.firstIndex(of: "-probe.shot"), args.count > i + 1 else { return }
         let path = args[i + 1]
-        try? await Task.sleep(for: .seconds(10))
-        await MainActor.run {
-            // The window server's own image of THIS app's window. `cacheDisplay` was tried first
-            // and came back as bare backgrounds: SwiftUI draws into layers, and a layer-backed view
-            // has nothing for the drawing path to replay. Reading the app's own window is allowed
-            // without Screen Recording permission — it is the screen that is not.
-            guard let window = NSApp.windows.first(where: { $0.isVisible }),
-                  let image = CGWindowListCreateImage(.null, .optionIncludingWindow,
-                                                      CGWindowID(window.windowNumber),
-                                                      [.boundsIgnoreFraming, .bestResolution]) else {
-                WindowFit.log("shot: no image for \(NSApp.windows.count) windows")
-                FileHandle.standardError.write(Data("probe: no image for \(NSApp.windows.count) windows\n".utf8))
-                return
-            }
-            let rep = NSBitmapImageRep(cgImage: image)
-            rep.size = window.frame.size
-            do {
-                let data = rep.representation(using: .png, properties: [:])
-                try data?.write(to: URL(fileURLWithPath: path))
-                // The window's own size and the shot's, side by side: a picture narrower than the
-                // window is a picture of something else, and this is where that shows.
-                WindowFit.log("shot: \(path) \(data?.count ?? 0) bytes, image \(image.width)x\(image.height), window \(window.frame)")
-            } catch {
-                WindowFit.log("shot: could not write \(path): \(error)")
-                FileHandle.standardError.write(Data("probe: could not write \(path): \(error)\n".utf8))
-            }
+        // Repeated, not once: a launch's first seconds hold a window that has not drawn its page yet
+        // — run 37628981119's S2 shot is an empty window and its project shot still says "Select a
+        // session" — and a window newly resized hands back a stale image for a moment besides. The
+        // file is read after the pass (the app is terminated with the launch), so the LAST write is
+        // the settled state, and any press the pass makes lands in it too.
+        for _ in 0..<90 {
+            try? await Task.sleep(for: .seconds(5))
+            await write(path)
+        }
+    }
+
+    /// `-probe.shot` once: the window server's own image of THIS app's window. `cacheDisplay` was
+    /// tried first and came back as bare backgrounds: SwiftUI draws into layers, and a layer-backed
+    /// view has nothing for the drawing path to replay. Reading the app's own window is allowed
+    /// without Screen Recording permission — it is the screen that is not.
+    @MainActor
+    private static func write(_ path: String) {
+        guard let window = NSApp.windows.first(where: { $0.isVisible }),
+              let image = CGWindowListCreateImage(.null, .optionIncludingWindow,
+                                                  CGWindowID(window.windowNumber),
+                                                  [.boundsIgnoreFraming, .bestResolution]) else {
+            WindowFit.log("shot: no image for \(NSApp.windows.count) windows")
+            FileHandle.standardError.write(Data("probe: no image for \(NSApp.windows.count) windows\n".utf8))
+            return
+        }
+        let rep = NSBitmapImageRep(cgImage: image)
+        rep.size = window.frame.size
+        do {
+            let data = rep.representation(using: .png, properties: [:])
+            try data?.write(to: URL(fileURLWithPath: path))
+            // The window's own size and the shot's, side by side: a picture smaller than the window
+            // is a picture of something else (a resize the window server has not caught up with),
+            // and this is where that shows.
+            WindowFit.log("shot: \(path) \(data?.count ?? 0) bytes, image \(image.width)x\(image.height), window \(window.frame)")
+        } catch {
+            WindowFit.log("shot: could not write \(path): \(error)")
+            FileHandle.standardError.write(Data("probe: could not write \(path): \(error)\n".utf8))
         }
     }
 }
-
-/// `-probe.render <path>`: the app's own read, its own model and its own card view, drawn to a PNG
-/// by `ImageRenderer` — no window and no display, which is what this host can offer: the console is
-/// headless, so `screencapture` answers "could not create image from display" and the UI-test runner
-/// cannot take automation mode. Everything in the picture is still the real app's: the session comes
-/// from `APIClient.session`, the card from `SessionRunStart.card(for:)`, the pixels from the same
-/// `SessionRunStartCardView` the session page draws.
 enum CardRender {
     @MainActor
     static func renderIfAsked(_ model: AppModel) async {
