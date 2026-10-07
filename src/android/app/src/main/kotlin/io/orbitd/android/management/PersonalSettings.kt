@@ -3,35 +3,47 @@ package io.orbitd.android.management
 import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.ImageDecoder
+import android.graphics.Paint
+import android.graphics.Rect
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.core.content.FileProvider
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.HttpMethod
+import io.orbitd.android.core.net.NetworkException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -134,141 +146,218 @@ internal fun PersonalChoice(label: String, current: String, options: List<Pair<S
     }
 }
 
-internal val personalPermissions = listOf("default" to "Default", "acceptEdits" to "Accept edits",
-    "plan" to "Plan", "auto" to "Auto", "dontAsk" to "Don't ask", "bypassPermissions" to "Bypass permissions")
+/** AgentDefaults.permissionModes and their labels; an unset preference is the server's floor, Auto. */
+internal val personalPermissions = listOf("default" to "Default", "acceptEdits" to "Accept Edits",
+    "plan" to "Plan", "auto" to "Auto", "dontAsk" to "Don't Ask", "bypassPermissions" to "Bypass")
+
+/** APIClient.failureReason: the server's own words, else what went wrong. */
+internal fun personalFailure(error: Throwable): String = when (error) {
+    is ApiError -> error.messages.joinToString("; ").ifBlank { "the server returned ${error.status}" }
+    is NetworkException -> "the connection dropped"
+    else -> "the server's reply couldn't be read"
+}
+
+/** What Save does to the photo: nothing, put this one in its place, or take it away (ProfileEdit.Photo). */
+internal sealed interface ProfilePhoto {
+    data object Unchanged : ProfilePhoto
+    class Replaced(val jpeg: ByteArray, val preview: Bitmap) : ProfilePhoto
+    data object Removed : ProfilePhoto
+}
+
+internal sealed interface ProfileStep {
+    class SetPhoto(val jpeg: ByteArray) : ProfileStep
+    data object RemovePhoto : ProfileStep
+    data class Rename(val name: String) : ProfileStep
+}
+
+/** ProfileEdit: Save is live once the draft names someone and changes the name or the photo. */
+internal fun profileCanSave(draft: String, saved: String?, photo: ProfilePhoto) =
+    draft.trim().isNotEmpty() && (draft.trim() != saved || photo != ProfilePhoto.Unchanged)
+
+/** The photo first, then the name, each only when it changed; a step that lands stays landed. */
+internal fun profileSteps(draft: String, saved: String?, photo: ProfilePhoto): List<ProfileStep> {
+    if (!profileCanSave(draft, saved, photo)) return emptyList()
+    return listOfNotNull(when (photo) {
+        is ProfilePhoto.Replaced -> ProfileStep.SetPhoto(photo.jpeg)
+        ProfilePhoto.Removed -> ProfileStep.RemovePhoto
+        ProfilePhoto.Unchanged -> null
+    }, draft.trim().takeIf { it != saved }?.let(ProfileStep::Rename))
+}
+
+/** The account's photo, fetched with its token and keyed by avatarUpdatedAt; never another version's. */
+@Composable
+internal fun rememberAccountPhoto(api: ManagementApi, user: JsonObject?): Bitmap? {
+    val version = user?.text("avatarUpdatedAt").orEmpty()
+    var photo by remember(api) { mutableStateOf<Pair<String, Bitmap>?>(null) }
+    LaunchedEffect(api, version) {
+        if (version.isBlank() || photo?.first == version) return@LaunchedEffect
+        try {
+            val bytes = api.session.request(api.handle, ApiRequest(listOf("users", "me", "avatar"),
+                maxResponseBytes = 2L * 1024 * 1024)).body
+            withContext(Dispatchers.Default) { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }?.let { photo = version to it }
+        } catch (e: CancellationException) { throw e }
+        catch (_: Exception) { /* The monogram stays until the next version or visit. */ }
+    }
+    return photo?.takeIf { it.first == version }?.second
+}
 
 @Composable
-fun PersonalSettings(api: ManagementApi, revision: Long, onAppearance: (String) -> Unit) {
+internal fun AccountAvatar(name: String, photo: Bitmap?, size: Dp) {
+    if (photo != null) Image(photo.asImageBitmap(), null, Modifier.size(size).clip(CircleShape))
+    else Box(Modifier.size(size).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer), Alignment.Center) {
+        Text(name.trim().take(1).uppercase(), style = MaterialTheme.typography.headlineLarge,
+            color = MaterialTheme.colorScheme.onSecondaryContainer)
+    }
+}
+
+/** The card Settings' header opens: the photo and the name. Nothing is written until Save profile. */
+@Composable
+fun EditProfile(api: ManagementApi, revision: Long, done: () -> Unit) {
     val record = remember(api) { PersonalRecord { api.get("users/me") } }
     PersonalRecordLifecycle(record, revision)
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val user = record.value as? JsonObject
-    val preferences = user?.get("preferences") as? JsonObject ?: JsonObject(emptyMap())
-    val appearanceCallback by rememberUpdatedState(onAppearance)
-    LaunchedEffect(record.ready, preferences.text("theme")) {
-        if (record.ready) appearanceCallback(preferences.text("theme").ifBlank { "system" })
-    }
-    var name by remember(api) { mutableStateOf("") }
-    var current by remember(api) { mutableStateOf("") }
-    var fresh by remember(api) { mutableStateOf("") }
-    var confirm by remember(api) { mutableStateOf("") }
-    var notice by remember(api) { mutableStateOf<String?>(null) }
-    var photo by remember(api) { mutableStateOf<Bitmap?>(null) }
-    var draft by remember(api) { mutableStateOf<Bitmap?>(null) }
-    var pendingPhoto by remember(api) { mutableStateOf<ByteArray?>(null) }
-    var pendingPreview by remember(api) { mutableStateOf<Bitmap?>(null) }
-    var removePhoto by remember(api) { mutableStateOf(false) }
-    LaunchedEffect(user?.text("name")) { name = user?.text("name").orEmpty() }
-    LaunchedEffect(user?.text("avatarUpdatedAt"), record.stale) {
-        photo = null
-        if (record.ready && !user?.text("avatarUpdatedAt").isNullOrBlank()) {
-            try {
-                val bytes = api.session.request(api.handle, ApiRequest(listOf("users", "me", "avatar"),
-                    maxResponseBytes = 2L * 1024 * 1024)).body
-                photo = withContext(Dispatchers.Default) { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
-            } catch (e: CancellationException) { throw e }
-            catch (_: Exception) { notice = "Could not load your photo. Refresh to retry." }
-        }
-    }
+    val saved = rememberAccountPhoto(api, user)
+    var draft by rememberSaveable { mutableStateOf<String?>(null) }
+    var photo by remember(api) { mutableStateOf<ProfilePhoto>(ProfilePhoto.Unchanged) }
+    var crop by remember(api) { mutableStateOf<Bitmap?>(null) }
+    var saving by remember(api) { mutableStateOf(false) }
+    var failure by remember(api) { mutableStateOf<String?>(null) }
+    var menu by remember { mutableStateOf(false) }
+    LaunchedEffect(user) { if (draft == null && user != null) draft = user.text("name") }
+    val name = draft.orEmpty()
     fun pick(uri: Uri?) {
         if (uri == null) return
         scope.launch {
-            try { draft = withContext(Dispatchers.IO) { personalDecodePhoto(context.contentResolver, uri) } }
+            try { crop = withContext(Dispatchers.IO) { personalDecodePhoto(context.contentResolver, uri) } }
             catch (e: CancellationException) { throw e }
-            catch (_: Exception) { notice = "Couldn't read that image." }
+            catch (_: Exception) { failure = "Couldn't save your photo — that file isn't an image Orbit can read." }
         }
     }
-    val library = rememberLauncherForActivityResult(ActivityResultContracts.GetContent(), ::pick)
+    val library = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { pick(it) }
     val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument(), ::pick)
     var cameraCapture by remember(api) { mutableStateOf<PersonalCameraCapture?>(null) }
     DisposableEffect(api) { onDispose { cameraCapture?.close(context); cameraCapture = null } }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { captured ->
-        val pending = cameraCapture
-        if (pending != null) {
-            if (!captured) { pending.close(context); cameraCapture = null }
-            else scope.launch {
-                try { draft = withContext(Dispatchers.IO) { personalDecodePhoto(context.contentResolver, pending.uri) } }
-                catch (e: CancellationException) { throw e }
-                catch (_: Exception) { notice = "Couldn't read the camera photo. Take a new photo." }
-                finally { pending.close(context); if (cameraCapture === pending) cameraCapture = null }
-            }
+        val pending = cameraCapture ?: return@rememberLauncherForActivityResult
+        if (!captured) { pending.close(context); cameraCapture = null }
+        else scope.launch {
+            try { crop = withContext(Dispatchers.IO) { personalDecodePhoto(context.contentResolver, pending.uri) } }
+            catch (e: CancellationException) { throw e }
+            catch (_: Exception) { failure = "Couldn't save your photo — the camera photo couldn't be read." }
+            finally { pending.close(context); if (cameraCapture === pending) cameraCapture = null }
         }
     }
-    fun preference(key: String, value: JsonPrimitive) {
+    val hasCamera = remember { context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY) }
+    val showsPhoto = when (photo) { is ProfilePhoto.Replaced -> true; ProfilePhoto.Removed -> false; ProfilePhoto.Unchanged -> !user?.text("avatarUpdatedAt").isNullOrBlank() }
+    fun save() {
+        val steps = profileSteps(name, user?.text("name"), photo)
+        if (saving || steps.isEmpty() || !record.ready) return
+        saving = true; failure = null
         scope.launch {
-            notice = null
-            if (record.mutate { api.patch("users/me/preferences", buildJsonObject { put(key, value) }) } && key == "theme")
-                onAppearance((record.value as JsonObject)["preferences"]!!.jsonObject.text("theme"))
-        }
-    }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Profile & preferences", style = MaterialTheme.typography.titleLarge)
-        PersonalRecordStatus(record)
-        user?.let {
-            (if (removePhoto) null else pendingPreview ?: photo)?.let { Image(it.asImageBitmap(), "Profile photo", Modifier.size(80.dp).clip(CircleShape)) }
-                ?: Text(it.text("name").ifBlank { it.text("email") }.take(1), style = MaterialTheme.typography.displayMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = { library.launch("image/*") }, enabled = record.ready) { Text("Photo library") }
-                TextButton(onClick = { files.launch(arrayOf("image/*")) }, enabled = record.ready) { Text("Choose file") }
-            }
-            TextButton(onClick = {
-                try {
-                    cameraCapture?.close(context)
-                    cameraCapture = personalPrepareCamera(context)
-                    camera.launch(cameraCapture!!.uri)
-                } catch (_: Exception) {
-                    cameraCapture?.close(context); cameraCapture = null
-                    notice = "Couldn't open the camera. Choose a photo from your library or files."
+            try {
+                for (step in steps) {
+                    try {
+                        when (step) {
+                            is ProfileStep.SetPhoto -> { personalUploadAvatar(api, step.jpeg); photo = ProfilePhoto.Unchanged }
+                            ProfileStep.RemovePhoto -> { api.delete("users/me/avatar"); photo = ProfilePhoto.Unchanged }
+                            is ProfileStep.Rename -> api.patch("users/me", buildJsonObject { put("name", step.name) })
+                        }
+                    } catch (e: CancellationException) { throw e }
+                    catch (e: Exception) {
+                        failure = "${if (step is ProfileStep.Rename) "Couldn't save your name" else "Couldn't save your photo"} — ${personalFailure(e)}."
+                        record.load()
+                        return@launch
+                    }
                 }
-            }, enabled = record.ready) { Text("Take photo") }
-            if (it.text("avatarUpdatedAt").isNotBlank() || pendingPhoto != null) TextButton(onClick = {
-                removePhoto = true; pendingPhoto = null; pendingPreview = null
-            }, enabled = record.ready) { Text("Remove photo") }
-            OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true,
-                enabled = record.ready, modifier = Modifier.fillMaxWidth())
-            Text("People in your shared pools see you by this name.")
-            Button(onClick = { scope.launch { record.mutate {
-                // ProfileEdit in OrbitKit: commit the photo first; retry only the remaining step.
-                pendingPhoto?.let { jpeg -> personalUploadAvatar(api, jpeg); pendingPhoto = null; pendingPreview = null }
-                if (removePhoto) { api.delete("users/me/avatar"); removePhoto = false }
-                if (name.trim() != it.text("name")) api.patch("users/me", buildJsonObject { put("name", name.trim()) })
-            } } }, enabled = record.ready && name.trim().isNotEmpty() && name.trim().length <= 80 &&
-                (name.trim() != it.text("name") || pendingPhoto != null || removePhoto)) { Text("Save profile") }
-            SelectionContainer { Text("Email: ${it.text("email")}\nRole: ${it.text("role")}\nInstance: ${api.handle.account.server}") }
-            PersonalChoice("Appearance", preferences.text("theme").ifBlank { "system" },
-                listOf("system" to "System", "light" to "Light", "dark" to "Dark"), record.ready) { preference("theme", JsonPrimitive(it)) }
-            PersonalChoice("Default permission", preferences.text("defaultPermissionMode").ifBlank { "auto" },
-                personalPermissions, record.ready) { preference("defaultPermissionMode", JsonPrimitive(it)) }
-            Text("Session orchestration")
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Switch(modifier = Modifier.semantics { contentDescription = "Let sessions orchestrate" },
-                    checked = (preferences["enableOrchestration"] as? JsonPrimitive)?.booleanOrNull != false,
-                    onCheckedChange = { preference("enableOrchestration", JsonPrimitive(it)) }, enabled = record.ready)
-                Text("Let sessions orchestrate")
-            }
-            Text("Sessions in every workspace can spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused.")
-            HorizontalDivider()
-            Text("Change password", style = MaterialTheme.typography.titleMedium)
-            OutlinedTextField(current, { current = it }, label = { Text("Current password") }, visualTransformation = PasswordVisualTransformation(), enabled = record.ready)
-            OutlinedTextField(fresh, { fresh = it }, label = { Text("New password · at least 6 characters") }, visualTransformation = PasswordVisualTransformation(), enabled = record.ready)
-            OutlinedTextField(confirm, { confirm = it }, label = { Text("Confirm new password") }, visualTransformation = PasswordVisualTransformation(), enabled = record.ready)
-            if (confirm.isNotEmpty() && fresh != confirm) Text("Passwords do not match")
-            Button(onClick = { scope.launch {
-                notice = null
-                if (record.mutate { api.post("auth/change-password", buildJsonObject {
-                    put("currentPassword", current); put("newPassword", fresh)
-                }) }) { current = ""; fresh = ""; confirm = ""; notice = "Password changed" }
-            } }, enabled = record.ready && current.isNotEmpty() && fresh.length >= 6 && fresh == confirm) { Text("Change password") }
+                record.load()
+                done()
+            } finally { saving = false }
         }
-        notice?.let { Text(it) }
     }
-    draft?.let { source -> PersonalPhotoDialog(source, onDismiss = { draft = null }, onSave = { bytes ->
-        draft = null; pendingPhoto = bytes; removePhoto = false
-        pendingPreview = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (user == null) { PersonalRecordStatus(record); return@Column }
+        Box {
+            Box(Modifier.clip(CircleShape).clickable(enabled = !saving, role = Role.Button) { menu = true }
+                .semantics { contentDescription = "Choose photo" }) {
+                AccountAvatar(name, when (val chosen = photo) {
+                    is ProfilePhoto.Replaced -> chosen.preview; ProfilePhoto.Removed -> null; ProfilePhoto.Unchanged -> saved
+                }, 96.dp)
+            }
+            DropdownMenu(menu, { menu = false }) {
+                DropdownMenuItem(text = { Text("Photo library") }, onClick = {
+                    menu = false; library.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                })
+                if (hasCamera) DropdownMenuItem(text = { Text("Take photo") }, onClick = {
+                    menu = false
+                    try {
+                        cameraCapture?.close(context)
+                        cameraCapture = personalPrepareCamera(context)
+                        camera.launch(cameraCapture!!.uri)
+                    } catch (_: Exception) {
+                        cameraCapture?.close(context); cameraCapture = null
+                        failure = "Couldn't save your photo — the camera couldn't be opened."
+                    }
+                })
+                DropdownMenuItem(text = { Text("Choose file") }, onClick = { menu = false; files.launch(arrayOf("image/*")) })
+                if (showsPhoto) DropdownMenuItem(text = { Text("Remove photo", color = MaterialTheme.colorScheme.error) },
+                    onClick = { menu = false; photo = ProfilePhoto.Removed; failure = null })
+            }
+        }
+        if (record.busy || record.stale) PersonalRecordStatus(record)
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            OutlinedTextField(name, { draft = it; failure = null }, Modifier.fillMaxWidth(), enabled = !saving,
+                label = { Text("Name") }, placeholder = { Text("Your name") }, singleLine = true)
+            Text(failure ?: "People in your shared pools see you by this name.", style = MaterialTheme.typography.bodySmall,
+                color = if (failure == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error)
+        }
+        Button(onClick = ::save, enabled = !saving && record.ready && profileCanSave(name, user.text("name"), photo)) {
+            if (saving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Text("Save profile")
+        }
+        TextButton(onClick = done, enabled = !saving) { Text("Cancel") }
+    }
+    crop?.let { source -> PersonalPhotoDialog(source, onDismiss = { crop = null }, onSave = { bytes ->
+        crop = null; failure = null
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { photo = ProfilePhoto.Replaced(bytes, it) }
     }) }
 }
 
+/** The web Profile page's form: the current password, and the new one twice. */
+@Composable
+fun ChangePassword(api: ManagementApi) {
+    val scope = rememberCoroutineScope()
+    var current by remember(api) { mutableStateOf("") }
+    var fresh by remember(api) { mutableStateOf("") }
+    var confirm by remember(api) { mutableStateOf("") }
+    var busy by remember(api) { mutableStateOf(false) }
+    var outcome by remember(api) { mutableStateOf<String?>(null) }
+    val canSubmit = current.isNotEmpty() && fresh.length >= 6 && confirm == fresh
+    val password = KeyboardOptions(keyboardType = KeyboardType.Password)
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        OutlinedTextField(current, { current = it }, Modifier.fillMaxWidth(), label = { Text("Current password") },
+            visualTransformation = PasswordVisualTransformation(), keyboardOptions = password, singleLine = true)
+        OutlinedTextField(fresh, { fresh = it; outcome = null }, Modifier.fillMaxWidth(), label = { Text("New password") },
+            visualTransformation = PasswordVisualTransformation(), keyboardOptions = password, singleLine = true)
+        OutlinedTextField(confirm, { confirm = it }, Modifier.fillMaxWidth(), label = { Text("Confirm new password") },
+            visualTransformation = PasswordVisualTransformation(), keyboardOptions = password, singleLine = true)
+        Text(outcome ?: if (confirm.isNotEmpty() && confirm != fresh) "Passwords do not match" else "At least 6 characters",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Button(onClick = { scope.launch {
+            busy = true
+            try {
+                api.post("auth/change-password", buildJsonObject { put("currentPassword", current); put("newPassword", fresh) })
+                current = ""; fresh = ""; confirm = ""; outcome = "Password changed"
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                outcome = (e as? ApiError)?.messages?.joinToString("; ")?.ifBlank { null } ?: "Couldn't change password."
+            } finally { busy = false }
+        } }, enabled = canSubmit && !busy) { Text("Change password") }
+    }
+}
+
+/** The account's two switches (the web page's, in its words) and the alerts neither of them governs. */
 @Composable
 fun NotificationsPreferences(api: ManagementApi, revision: Long) {
     val record = remember(api) { PersonalRecord { api.get("users/me") } }
@@ -277,19 +366,27 @@ fun NotificationsPreferences(api: ManagementApi, revision: Long) {
     val preferences = (record.value as? JsonObject)?.get("preferences") as? JsonObject
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Sent to all your devices", style = MaterialTheme.typography.titleMedium)
-        PersonalRecordStatus(record)
-        listOf("notifySessionFinished" to "When a session finishes", "notifyAgentMessage" to "When an agent asks for you").forEach { (key, title) ->
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (record.busy || record.stale || record.error != null) PersonalRecordStatus(record)
+        listOf(Triple("notifySessionFinished", "When a session finishes", "Alert your devices when a run finishes on its own or fails for good."),
+            Triple("notifyAgentMessage", "When an agent asks for you", "Let a running agent alert your devices itself — to ask something only you can answer, or to report what you were waiting for. At most one per session per minute.")
+        ).forEach { (key, title, hint) ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(title, Modifier.weight(1f))
+                // Absent means on: only the switch that moved is written.
                 Switch(modifier = Modifier.semantics { contentDescription = title },
                     checked = (preferences?.get(key) as? JsonPrimitive)?.booleanOrNull != false, enabled = record.ready,
                     onCheckedChange = { checked -> scope.launch { record.mutate {
                         api.patch("users/me/preferences", buildJsonObject { put(key, checked) })
                     } } })
-                Text(title)
             }
+            Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text("Always sent: Tool approvals · Projects waiting on you · Engine sign-outs · Watch matches")
-        Text("Account preferences do not enable device notifications. Device delivery needs an authorized, registered device.")
+        Text("Always sent", style = MaterialTheme.typography.titleMedium)
+        listOf("Tool approvals", "Projects waiting on you", "Engine sign-outs", "Watch matches").forEach { kind ->
+            Row { Text(kind, Modifier.weight(1f)); Text("Always", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        Text("Each one waits on you, or is a watch you set up.", style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -300,13 +397,18 @@ internal fun personalDecodePhoto(resolver: ContentResolver, uri: Uri): Bitmap =
         decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
     }
 
-/** Small decoded source, oriented by ImageDecoder; the sliders address only valid square crops. */
+/** orbitAvatarJPEG: the square the sliders address, at most 512 pixels, drawn on white. */
 internal fun personalCropPhoto(source: Bitmap, zoom: Float, horizontal: Float, vertical: Float): Bitmap {
     val side = maxOf(1, (minOf(source.width, source.height) / zoom.coerceIn(1f, 5f)).toInt())
     val left = ((source.width - side) * horizontal.coerceIn(0f, 1f)).toInt()
     val top = ((source.height - side) * vertical.coerceIn(0f, 1f)).toInt()
-    val square = Bitmap.createBitmap(source, left, top, side, side)
-    return Bitmap.createScaledBitmap(square, 512, 512, true)
+    val out = minOf(side, 512)
+    return Bitmap.createBitmap(out, out, Bitmap.Config.ARGB_8888).also { square ->
+        Canvas(square).apply {
+            drawColor(android.graphics.Color.WHITE)
+            drawBitmap(source, Rect(left, top, left + side, top + side), Rect(0, 0, out, out), Paint(Paint.FILTER_BITMAP_FLAG))
+        }
+    }
 }
 
 @Composable
@@ -324,7 +426,7 @@ private fun PersonalPhotoDialog(source: Bitmap, onDismiss: () -> Unit, onSave: (
         }
     }, confirmButton = { TextButton(onClick = {
         val out = ByteArrayOutputStream(); cropped.compress(Bitmap.CompressFormat.JPEG, 85, out); onSave(out.toByteArray())
-    }) { Text("Save photo") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    }) { Text("Save") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
 internal suspend fun personalUploadAvatar(api: ManagementApi, jpeg: ByteArray) {

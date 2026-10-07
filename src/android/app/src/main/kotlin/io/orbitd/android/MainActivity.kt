@@ -193,8 +193,10 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.SEARCH -> SearchScreen(api, ::open)
                                 Destination.SESSION -> SessionReader(app, signedIn.handle, route, api, data, ::open)
                                 Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open)
-                                Destination.SETTINGS -> SettingsScreen(management, route, revision, ::open, auth::logout,
-                                    changed = { app.realtime.refreshDirectory() }, notifications = { NotificationSettings(app.push) })
+                                Destination.SETTINGS -> SettingsScreen(management, route, revision, ::open, { navigation = navigation.back() }, auth::logout,
+                                    changed = { app.realtime.refreshDirectory() },
+                                    deviceAlerts = { if (app.push.configured) app.push.notifications.allowed() else null },
+                                    notifications = { NotificationSettings(app.push) })
                                 Destination.RUNNER -> RunnerManagement(management, route.id, revision,
                                     onChanged = { app.realtime.refreshDirectory() },
                                     onWorkspace = { open(OrbitRoute(Destination.SETTINGS, id = "workspace", workspaceId = it)) })
@@ -217,11 +219,7 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.SEARCH -> "Search sessions"
     Destination.DRAFT -> "New session"
     Destination.WIKI_ENTRY -> "Wiki"
-    Destination.SETTINGS -> when (route.id) {
-        "profile" -> "Profile & preferences"; "providers" -> "Providers"; "skills" -> "Skills"
-        "workspace" -> "Workspace settings"; "runners" -> "Runners"; "sharing" -> "Shared links"
-        "admin" -> "Admin"; "notifications" -> "Notifications"; else -> "Settings"
-    }
+    Destination.SETTINGS -> settingsTitle(route.id)
     else -> route.destination.name.lowercase().replaceFirstChar(Char::uppercase)
 }
 
