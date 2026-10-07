@@ -537,7 +537,87 @@ object StartProjectCopy {
     const val rowOwn = "Start…"
     const val rowNotAsked = "not asked yet"
     const val notRecorded = "That start was not recorded"
+    const val action = "Start the project"
+    const val viewTasks = "View tasks ›"
+    const val askedByCoordinator = "asked by the coordinator"
+    const val showLess = "Show less"
+    fun readAll(count: Int) = "Read all $count in full"
+    /** `AcceptanceConfirmations.staleExplanation(nil)`: the seal could not be read, so no press is offered. */
+    const val unreadSeal = "This card could not be re-read just now, so the version it would confirm cannot be named — and a confirmation " +
+        "that names no version is not one. The criteria themselves are untouched by this."
     const val maxConcurrentTasks = 100
+    /** `CriteriaDecisions.shortSeal`: enough to tell two seals apart. */
+    fun shortSeal(seal: String) = if (seal.isEmpty()) "(unreadable)" else seal.take(12)
+    fun meta(projectTitle: String, askedAgo: String?, seal: String) = "$projectTitle${askedAgo?.let { " · $askedByCoordinator · $it" }.orEmpty()} · seal $seal"
+    /** The project branch as the first option names it, without `refs/heads/`. */
+    fun branch(projectBranchName: String?, projectId: String) = (projectBranchName ?: "refs/heads/project/$projectId").removePrefix("refs/heads/")
+    /** What the order line calls a task: the marker its title opens with, else the title, cut short. */
+    fun planTaskLabel(title: String): String {
+        val text = title.trim()
+        val points = text.codePoints().toArray()
+        points.firstOrNull()?.let { first -> if (first in 0x2460..0x2473 || first in 0x2776..0x277F) return String(Character.toChars(first)) }
+        leadingMarker(points)?.let { return it }
+        if (points.size <= 24) return text
+        return String(points, 0, 23) + "…"
+    }
+    private fun leadingMarker(s: IntArray): String? {
+        val first = s.firstOrNull() ?: return null
+        val digit = { c: Int -> c in '0'.code..'9'.code }
+        val lengths = when {
+            first < 128 && Character.isLetter(first) -> listOf(1)
+            digit(first) -> if (s.size > 1 && digit(s[1])) listOf(2, 1) else listOf(1)
+            else -> return null
+        }
+        fun separatorFollows(p: Int): Boolean {
+            if (p >= s.size) return false
+            if (s[p] in ".):：".codePoints().toArray()) return true
+            var q = p
+            while (q < s.size && Character.isWhitespace(s[q])) q++
+            if (q <= p || q >= s.size || s[q] !in "·-–—:：|".codePoints().toArray()) return false
+            return q + 1 == s.size || Character.isWhitespace(s[q + 1])
+        }
+        return lengths.firstOrNull { separatorFollows(it) }?.let { String(s, 0, it) }
+    }
+    fun joinAnd(words: List<String>) = if (words.size <= 1) words.firstOrNull().orEmpty() else "${words.dropLast(1).joinToString(", ")} and ${words.last()}"
+    data class PlanTask(val id: String, val title: String, val after: List<String>)
+    /** "A starts now · B, C after A · D after B": tasks waiting on the same prerequisites said together. */
+    fun planOrderLine(tasks: List<PlanTask>): String {
+        val index = tasks.withIndex().associate { it.value.id to it.index }
+        val label = tasks.associate { it.id to planTaskLabel(it.title) }
+        val prerequisites = tasks.associate { task -> task.id to task.after.distinct().filter { index[it] != null && it != task.id }.sortedBy { index.getValue(it) } }
+        val level = mutableMapOf<String, Int>()
+        fun depth(id: String, seen: MutableSet<String>): Int {
+            level[id]?.let { return it }
+            if (!seen.add(id)) return 0
+            val at = prerequisites[id].orEmpty().maxOfOrNull { 1 + depth(it, seen) } ?: 0
+            level[id] = at
+            return at
+        }
+        data class Group(val level: Int, val order: Int, val members: MutableList<String>, val after: List<String>)
+        val groups = linkedMapOf<String, Group>()
+        tasks.forEachIndexed { order, task ->
+            val after = prerequisites[task.id].orEmpty()
+            val key = after.joinToString(",")
+            groups[key]?.members?.add(task.id) ?: run { groups[key] = Group(depth(task.id, mutableSetOf()), order, mutableListOf(task.id), after) }
+        }
+        return groups.values.sortedWith(compareBy({ it.level }, { it.order })).joinToString(" · ") { group ->
+            val who = group.members.joinToString(", ") { label[it] ?: it }
+            if (group.after.isEmpty()) "$who ${if (group.members.size == 1) "starts" else "start"} now"
+            else "$who after ${joinAnd(group.after.map { label[it] ?: it })}"
+        }
+    }
+    data class PlanView(val count: Int, val order: String?)
+    /** The plan off the project's graph; a folded or cut graph says only how many tasks it holds. The owner's own start carries no warnings. */
+    fun planView(graph: DependencyGraph?, fallbackCount: Int): PlanView {
+        if (graph == null || graph.truncated || graph.marks.any { it.kind != MarkKind.TASK }) return PlanView(graph?.taskCount ?: fallbackCount, null)
+        val tasks = graph.marks.filter { it.status != "CANCELLED" }
+        val planned = tasks.filter { it.status != "DONE" }.map { mark -> PlanTask(mark.id, mark.title, graph.edges.filter { it.target == mark.id }.map { it.source }) }
+        return PlanView(tasks.size, if (planned.isEmpty()) null else planOrderLine(planned))
+    }
+    fun doneWhenHead(count: Int) = "Done when · $count ${if (count == 1) "criterion" else "criteria"}"
+    fun planHead(count: Int) = "Plan · $count ${if (count == 1) "task" else "tasks"}"
+    fun explanation(count: Int) = "Orbit derives done from these $count criteria and nothing else. If they change later, it " +
+        "asks you to confirm the new version — the project keeps running."
     fun requestSummary(settings: JsonObject) = listOf(rowAsked, RunSettings.lineInSentence(settings.text("line")),
         "${RunSettings.automatic} ${if (settings.flag("automatic")) "on" else "off"}", "at most ${settings.number("maxConcurrentTasks") ?: 1} at a time").joinToString(" · ")
     /** The plan has dependencies when a run is filed or a live edge joins two live marks. */

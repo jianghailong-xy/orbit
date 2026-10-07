@@ -34,7 +34,7 @@ object ProjectAttention {
     private const val HOUR = 3_600.0
     private const val DAY = 86_400.0
     private val ownerItemOrder = listOf("PROMOTION_APPROVAL", "COORDINATOR_QUESTION", "ESCALATED", "FUSE_PAUSED")
-    const val readyToStartSays = "Needs you · Ready to start"
+    const val readyToStartSays = "Needs you · ${StartProjectCopy.readyToStart}"
 
     private fun at(iso: String?): Double = ProjectTime.parse(iso)?.let { it.toEpochMilli() / 1000.0 } ?: Double.NEGATIVE_INFINITY
     private fun seconds(now: Instant) = now.toEpochMilli() / 1000.0
