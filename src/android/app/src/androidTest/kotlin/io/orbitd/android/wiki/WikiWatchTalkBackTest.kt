@@ -373,7 +373,13 @@ class WikiWatchTalkBackTest {
         val at = place(tag)
         val since = System.currentTimeMillis()
         tap(at.exactCenterX(), at.exactCenterY())
-        val focus = settle(at)
+        var focus = settle(at)
+        // Now and then TalkBack lets a touch go by (it said nothing and its focus stayed): touched again, as a person would.
+        if (!landed(focus, at)) {
+            report.appendLine("touch $tag: TalkBack's focus stayed on ${focus?.let(::describe) ?: "nothing"}; touched again")
+            tap(at.exactCenterX(), at.exactCenterY())
+            focus = settle(at)
+        }
         val spoken = focus?.let(::spoken).orEmpty()
         val said = heard(since)
         report.appendLine("touch $tag -> ${focus?.let(::describe) ?: "(no focus)"}${line(said)}")
