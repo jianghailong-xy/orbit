@@ -68,7 +68,7 @@ grep -F 'OK (4 tests)' "$output/instrumentation.txt"
 grep -F 'OK (1 test)' "$output/instrumentation-talkback.txt"
 if grep -E 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed|INSTRUMENTATION_STATUS_CODE: -[234]' "$output/instrumentation.txt" "$output/instrumentation-talkback.txt"; then exit 1; fi
 for screenshot in settings-home settings-home-dark edit-profile change-password notifications shared-links permission-revoked sign-out-confirm \
-  admin-users admin-user admin-demoted settings-home-font200 session-share workspace-settings runners-list runner-offline runner-online \
+  admin-users admin-user admin-demoted settings-home-font200 session-share workspace-settings runners-list runner-offline runner-online runner-update-failed \
   runner-engine runner-deep-link providers codex-pool \
   dark-session-share dark-workspace-settings dark-settings-home dark-edit-profile dark-notifications dark-shared-links dark-admin-users \
   dark-runners-list dark-runner dark-runner-engine dark-providers dark-codex-pool \

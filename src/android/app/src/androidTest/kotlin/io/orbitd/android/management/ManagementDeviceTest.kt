@@ -61,6 +61,8 @@ class ManagementDeviceTest {
     @Volatile private var permission = "auto"
     @Volatile private var forbidden = false
     @Volatile private var runnerOnline = false
+    /** The runner's selfUpdate report (JSON); null is a runner too old to report one. */
+    @Volatile private var runnerSelfUpdate: String? = null
     /** Runners served instead of the one controlled remote, for the Edit case; DELETE and reorder change it. */
     @Volatile private var fleet: List<String>? = null
     @Volatile private var workspaceName = "Fixture workspace"
@@ -207,6 +209,16 @@ class ManagementDeviceTest {
                 capture("runner-online")
                 click(hasText("Refresh Model Lists") and hasClickAction())
                 compose.waitUntil(10_000) { calls.contains("POST /api/runners/$runnerId/refresh-models") }
+                // A runner that reports its updates: a failed one says so in its own words and offers Update Runner Now.
+                runnerSelfUpdate = """{"state":"failed","reason":"installing 0.1.200: sha256 mismatch for orbit-linux-amd64.gz",""" +
+                    """"lastUpdatedAt":"2026-09-20T08:00:00Z","lastUpdatedFrom":"0.1.198","lastUpdatedTo":"0.1.199"}"""
+                compose.activityRule.scenario.recreate()
+                await("Runner update failed")
+                await("Installing 0.1.200: sha256 mismatch")
+                capture("runner-update-failed")
+                click(hasText("Update Runner Now") and hasClickAction())
+                compose.waitUntil(10_000) { calls.contains("POST /api/runners/$runnerId/self-update") }
+                await("Checking for a runner release now")
                 click(hasText("Claude Code") and hasClickAction())
                 await("Add Account")
                 capture("runner-engine")
@@ -679,7 +691,7 @@ class ManagementDeviceTest {
     }
     private fun runner() = """{"id":"$runnerId","name":"controlled-remote","displayName":"Controlled remote","hostname":"ci-runner-01","version":"0.1.199",
         "online":$runnerOnline,"status":"${if (runnerOnline) "ONLINE" else "OFFLINE"}","lastHeartbeatAt":"${heartbeat()}","maxConcurrent":4,"activeSessions":1,
-        "runsAsRoot":false,"minFreeDiskMb":null,"reposRoot":"/home/ci/orbit-repos","enrolledAt":"2026-09-01T10:00:00Z","capabilities":["claude-account-remove/v1"],
+        "runsAsRoot":false,"selfUpdate":${runnerSelfUpdate ?: "null"},"minFreeDiskMb":null,"reposRoot":"/home/ci/orbit-repos","enrolledAt":"2026-09-01T10:00:00Z","capabilities":["claude-account-remove/v1"],
         "engines":[{"engine":"claude","installed":true,"version":"2.1.284 (Claude Code)","auth":"yes","update":{"status":"checked","at":"${now.minusSeconds(360)}","okAt":"${now.minusSeconds(360)}","latest":"2.1.284"},
           "accounts":[{"id":"default","home":"/home/ci/.claude","auth":"yes"},{"id":"1fda3f43","home":"/home/ci/.orbit/claude-accounts/1fda3f43","auth":"no","name":"Work"}]},
           {"engine":"codex","installed":true,"version":"codex-cli 0.158.0","auth":"yes"},{"engine":"kimi","installed":false}],
