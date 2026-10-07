@@ -189,7 +189,7 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 
 ## main 漂移参考层
 
-**位置**：[reference/registry.json](reference/registry.json) 和 `reference/screenshots/{project}/{name}.png`，共 137 张。
+**位置**：[reference/registry.json](reference/registry.json) 和 `reference/screenshots/{project}/{name}.png`，共 164 张。
 
 | 组 | 截图 | 张数 | mainCommits | 生成树（generatedFrom） |
 | --- | --- | ---: | --- | --- |
@@ -199,6 +199,9 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 | Wiki 961px 暗色 | breakpoint-961-wiki（chromium-dark-desktop） | 1 | `e64d0c72…` | `e64d0c72a`（m5-e64d0c72a） |
 | 资料页（第 2 批，A6） | profile（8 项目），profile-validation（WebKit 桌面 2 个项目） | 10 | `d233a6cd…` | `d233a6cd0`（full-maint-d233a6cd0） |
 | 资料页，第 7 条例外（第 2 批，A6） | profile-validation（Chromium 4 个项目，WebKit 手机 2 个项目） | 6 | `d233a6cd…` | `d233a6cd0` 加 B1 修复 `3ec9cf83d`，即 `dcb5fd1bd`（full-maint-xfix-d233a6cd0），见 `migrationFix` |
+| Wiki 首页窄屏与 959px（第 2 批，A7、A8） | wiki-home、wiki-new-entry（手机 4 个项目），breakpoint-959-wiki（桌面 4 个项目） | 12 | `6c4e0ac0…`、`2f9cc095…` | `2f9cc095f`（full-maint-2f9cc095f） |
+| Wiki 目录抽屉（第 2 批，A8） | wiki-contents（手机 4 个项目） | 4 | `2f9cc095…` | `2f9cc095f`（full-maint-2f9cc095f） |
+| Wiki 首页桌面与 961px（第 2 批，A7、A8、A9） | wiki-home、wiki-new-entry（桌面 4 个项目），breakpoint-961-wiki（桌面 3 个项目，chromium-dark-desktop 见上面「Wiki 961px 暗色」） | 11 | `6c4e0ac0…`、`2f9cc095…`、`a884fda3…` | `a884fda36`（full-maint-a884fda36） |
 
 **每条登记的字段**：
 
@@ -221,7 +224,7 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 - 会话组的生成树 `f5bdd7fd3` 含 P1.1/P1.2 的晋升，项目页的 `93d3ec580` 含 P2.1 的晋升。这些晋升提交本身经过同样的运行，确认没有改变对应截图。
 - 第 2 批的生成树都在 P2.3 晋升之后，含 B1。B1 只改变设置页、资料页的成功提示胶囊。所以 profile-validation 中受 B1 影响的 6 张按第 7 条，在 X 加 B1 修复的树上生成，其余截图在 X 的树上生成，不受 B1 影响（见 [p0-drift-2](../p0-drift-2/README.md)）。
 
-**未登记**：其余 115 张仍然对照 P0.2。
+**未登记**：其余 88 张仍然对照 P0.2。
 
 **第 2 批**：归因、同环境证明和登记经过见 [p0-drift-2](../p0-drift-2/README.md)。
 
