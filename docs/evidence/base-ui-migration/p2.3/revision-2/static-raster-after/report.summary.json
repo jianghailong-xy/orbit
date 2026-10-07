@@ -1,0 +1,3551 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/toasts.config.mjs",
+   "--grep",
+   "unchanged appearance|pixels stay intact"
+  ],
+  "configFile": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 14377 --strictPort",
+   "cwd": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/",
+   "url": "http://127.0.0.1:14377",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "toasts-lifecycle.browser.mjs",
+   "file": "toasts-lifecycle.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "notification pixels stay intact through Dialog opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2365,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:18.982Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-550154aad865140bdc4d",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Drawer opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2006,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:21.418Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-a2efea4f8701325da774",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Bottom drawer opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2011,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:23.431Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-26f819be311678268685",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Confirmation opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1691,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:25.447Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-ba33b421bc3627175f86",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Dialog opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1898,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:31.118Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-2a98779112b3ba945191",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Drawer opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2055,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:33.068Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-e72734a17a7e8b3f539b",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Bottom drawer opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1962,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:35.129Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-82503036abe7a00fbfd3",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Confirmation opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1578,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:37.096Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-98678f6371206d1ab3fa",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Dialog opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1931,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:42.618Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-ff90a62bf5fb061ae039",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Drawer opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1958,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:44.599Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-7b59aebd11f7a0e40ad1",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Bottom drawer opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1961,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:46.563Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-f1ea4c60f92d6d295d8e",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Confirmation opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1692,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:48.528Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-0490638b9eb03bc39f3c",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Dialog opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2465,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:54.260Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-e22afca6778a0eb05138",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Drawer opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2005,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:56.784Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-242ef73604ad9ccf2306",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Bottom drawer opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2001,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:58.796Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-0afd837a0c6cec8e334d",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Confirmation opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1565,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:00.804Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-910c1096c6c2a3b69c43",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Dialog opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1463,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:06.429Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-2c1391b33fea7094b830",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Drawer opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1445,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:07.966Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-ca907467cc0b9209fd73",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Bottom drawer opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1450,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:09.418Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-3b1318b918c816020f76",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Confirmation opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1407,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:10.874Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-e22d2766670fae7d1b13",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Dialog opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1366,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:15.990Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-93a7eb05dd98a9736b0f",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Drawer opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1374,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:17.437Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-f1eca0528f0aa3b62528",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Bottom drawer opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1375,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:18.817Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-ac03d668634827f0d0cd",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Confirmation opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1317,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:20.197Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-3750a94e4e5442435100",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Dialog opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1449,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:25.010Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-dd36a236db93d9941e16",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Drawer opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1430,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:26.528Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-aea18409d64a28c9cf1f",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Bottom drawer opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1428,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:27.964Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-7acae96c72dc99ed5d8f",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Confirmation opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1377,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:29.397Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-34a9ed5ed6184a630c43",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Dialog opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1390,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:34.515Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-0c35e48ef56b93295bc5",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Drawer opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1346,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:35.980Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-edb5b9f6d3b726e9f925",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Bottom drawer opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1373,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:37.331Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-8dfd3949aae1a01ca7d4",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Confirmation opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1294,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:38.708Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-b2373017759953b4a58a",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 190,
+     "column": 3
+    }
+   ]
+  },
+  {
+   "title": "toasts.browser.mjs",
+   "file": "toasts.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "existing notifications remain accessible in Dialog with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1282,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:27.164Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-db7e842be124a87d6f90",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1222,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:28.451Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-93099fa8924816978aca",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Bottom drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1187,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:29.678Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-e97e4142af6504d3659b",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Dialog with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1266,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:38.698Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-e087ad3341622a46bfaf",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1227,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:39.969Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-aa60dbd52575d7e16ed9",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Bottom drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1163,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:41.201Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-c8958552eda666086a17",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Dialog with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1276,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:50.248Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-79d04946fa167dea185e",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1288,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:51.529Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-155ed2c2496ddee6221b",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Bottom drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1177,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:22:52.822Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-cc8cd3837f963fae41b7",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Dialog with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1336,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:02.402Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-deaa02bd1deaaa8ae3da",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1268,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:03.743Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-1373dd28082177aed02c",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Bottom drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1166,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:05.015Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-f7ae2e1c1c188c9b513b",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Dialog with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1133,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:12.302Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-5f94c4d50f3afb158842",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1130,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:13.439Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-36fd808ca99114f099f7",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Bottom drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1127,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:14.573Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-f0cce22f02b8c5d8a346",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Dialog with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1147,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:21.538Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-7182d56ef8f97e777af0",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1047,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:22.690Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-dd0aae858edd43af8ffd",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Bottom drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1010,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:23.742Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-9265c3afa764e3741022",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Dialog with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1176,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:30.801Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-56db889e90ae29f92783",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1134,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:31.984Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-e01b7b13e395458c35f9",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Bottom drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1111,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:33.123Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-6153679d8c0eca327bad",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Dialog with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1079,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:40.031Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-e62c9baec909c11c65f4",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1164,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:41.114Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-68f11b073576c92aa9ae",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Bottom drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1138,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:23:42.283Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-9667f9e0b8394e61706e",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T08:22:18.130Z",
+  "duration": 85401.26000000001,
+  "expected": 56,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

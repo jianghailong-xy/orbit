@@ -1,0 +1,4917 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/var/tmp/p22-r8-accepted/node_modules/@playwright/test/cli.js",
+   "test",
+   "--config",
+   "docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.config.mjs",
+   "--project",
+   "chromium-dark-desktop"
+  ],
+  "configFile": "/var/tmp/p22-r8-accepted/docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.config.mjs",
+  "rootDir": "/var/tmp/p22-r8-accepted/docs/evidence/base-ui-migration/p2.2/revision-8",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/var/tmp/p22-r8-accepted/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/var/tmp/p22-r8-accepted/src/web/.choices-results/r8-select-keys-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/var/tmp/p22-r8-accepted/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "select-keys-repeat.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p22-r8-accepted/src/web/.choices-results/r8-select-keys-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/var/tmp/p22-r8-accepted/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "select-keys-repeat.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p22-r8-accepted/src/web/.choices-results/r8-select-keys-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/var/tmp/p22-r8-accepted/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "select-keys-repeat.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p22-r8-accepted/src/web/.choices-results/r8-select-keys-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/var/tmp/p22-r8-accepted/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "select-keys-repeat.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p22-r8-accepted/src/web/.choices-results/r8-select-keys-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/var/tmp/p22-r8-accepted/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "select-keys-repeat.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p22-r8-accepted/src/web/.choices-results/r8-select-keys-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/var/tmp/p22-r8-accepted/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "select-keys-repeat.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p22-r8-accepted/src/web/.choices-results/r8-select-keys-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/var/tmp/p22-r8-accepted/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "select-keys-repeat.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p22-r8-accepted/src/web/.choices-results/r8-select-keys-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/var/tmp/p22-r8-accepted/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "select-keys-repeat.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/var/tmp/p22-r8-accepted/src/web/.choices-results/r8-select-keys-repeat/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+   "cwd": "/var/tmp/p22-r8-accepted/src/web/",
+   "url": "http://127.0.0.1:4177",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "select-keys-repeat.browser.mjs",
+   "file": "select-keys-repeat.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 0",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1733,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:20:45.897Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-b066fec984bcdf23cee9",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 1",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1346,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:20:47.721Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-bfbfa9fb9c37baef604b",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 2",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1321,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:20:49.073Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-0ba6888f0c7c7f6be5e3",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 3",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1391,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:20:50.400Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-959c2b4e9a395755f600",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 4",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1455,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:20:51.795Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-acb101df759f661a7cfd",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 5",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1371,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:20:53.255Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-bd610fb48c96a459a53a",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 6",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1473,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:20:54.633Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-063e84b18e377cf8c88a",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 7",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1323,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:20:56.110Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-ab9c1f9a8b432c4b8f34",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 8",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1443,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:20:57.437Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-828b9c93b835373cf111",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 9",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1489,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:20:58.884Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-d806d51fbfc5eb8d4017",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 10",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1479,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:00.379Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-2a604707f638b5495b8c",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 11",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1506,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:01.865Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-08e58c22d300ff2fd2a8",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 12",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1411,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:03.376Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-015f08e8ef7c7fb502c5",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 13",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1393,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:04.790Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-0ead5fe50ce190b5dcc3",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 14",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1472,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:06.187Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-ce3a5ed6bdec8e8732aa",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 15",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1364,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:07.663Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-a8378dfefc562fc3e64f",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 16",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1466,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:09.031Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-80a364f2f3996a9eab56",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 17",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1560,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:10.500Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-e73c1c3e81ee50ae412b",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 18",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1514,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:12.063Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-2b1a4a386d1fa60882d8",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 19",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1495,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:13.581Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-5ccac0371909cfb9f517",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 20",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1496,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:15.080Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-106dd9fe608c4a80ea2c",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 21",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1488,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:16.579Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-302b21724cbb2349e788",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 22",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1339,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:18.071Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-2858faca66a3c7050f54",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 23",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1454,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:19.413Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-e42065642da398ef0f0c",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 24",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1376,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:20.871Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-a29281f862484e34dccb",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 25",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1413,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:22.251Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-1e72e260fe52bd106e61",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 26",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1516,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:23.667Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-d996ef08d31132787d0e",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 27",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1485,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:25.187Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-d5486fac22666342c9e4",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 28",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1464,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:26.676Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-e3eaca4d136f6e7ab2b3",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 29",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1509,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:28.143Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-4c45964d613bd4932f6f",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 30",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1475,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:29.656Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-ca15815a2ba48ccabc1b",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 31",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1537,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:31.134Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-6eb26f9b9eeb848d9230",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 32",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1463,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:32.675Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-09d2905015bfae24755d",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 33",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1482,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:34.141Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-6de83f86e5b6fe360040",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 34",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1485,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:35.627Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-b5e0a8d32c60b863bc54",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 35",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1376,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:37.116Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-f7a914802c86aeb034e7",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 36",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1386,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:38.496Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-fb79169f1bb502fc638f",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 37",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1418,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:39.885Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-2c14ede654a793c29984",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 38",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1500,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:41.307Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-804e84b3a820295e9d05",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-field ArrowDown ArrowDown Enter sample 39",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1465,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:42.811Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-920ad56121c23e35e4a5",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 0",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1416,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:44.280Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-a7ed8c5863768cb903e1",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 1",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1374,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:45.699Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-ddc77555d8c25449f4cb",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 2",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1367,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:47.077Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-23eb08a5c7816a5f94ac",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 3",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1385,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:48.448Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-9af5617353c5bf53c550",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 4",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1363,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:49.836Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-3d5b9c9004b813427eb5",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 5",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1271,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:51.203Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-c340cf5ffde3e8662556",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 6",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1392,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:52.478Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-66187f3d32d165ec546a",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 7",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1358,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:53.874Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-bc2f2a7b3910c0858265",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 8",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1399,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:55.235Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-02f7ddfb4040b1e04ec3",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 9",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1399,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:56.638Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-c9a27d63dee01739f824",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 10",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1425,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:58.040Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-f28699814009c9f11dec",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 11",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1411,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:21:59.469Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-2a874fb600fc32d523e8",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 12",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1342,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:00.883Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-b5f390670cc64bd05d5b",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 13",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1439,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:02.229Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-57f6dc48bbe81c1956c5",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 14",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1344,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:03.672Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-4953d868bd7f238b159f",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 15",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1360,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:05.019Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-b0c3bf49405d321fedc3",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 16",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1454,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:06.383Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-e1f2d543ba0a1b9e2a15",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 17",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1427,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:07.841Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-93d402c98ea2a01bbf8d",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 18",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1362,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:09.271Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-df7f75c27d6e44933862",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 19",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1386,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:10.636Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-4a7d9f005dd5112b2ea3",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 20",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1502,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:12.026Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-e4e3a6fe6a4a23fc12ad",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 21",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1426,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:13.532Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-a2d4484bc97ce69cbfdd",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 22",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1389,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:14.962Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-e039a828df8a2fabf66f",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 23",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1327,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:16.354Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-edd1d3a354e779f44590",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 24",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1479,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:17.685Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-f6ce723b85cd32d0243c",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 25",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1425,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:19.168Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-d7112882635a5de50efb",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 26",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1473,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:20.597Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-fc61a7e72f073558c35c",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 27",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1433,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:22.074Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-0aff718624ba40508ca0",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 28",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1274,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:23.511Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-a5289b5da18ca2b629e0",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 29",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 15075,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('theme')\nExpected: \u001b[32m\"dark\"\u001b[39m\nTimeout: 15000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" getByTestId('theme') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('theme')\u001b[22m\n",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('theme')\nExpected: \u001b[32m\"dark\"\u001b[39m\nTimeout: 15000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" getByTestId('theme') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('theme')\u001b[22m\n\n    at /var/tmp/p22-r8-accepted/docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:37:45",
+          "location": {
+           "file": "/var/tmp/p22-r8-accepted/docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs",
+           "column": 45,
+           "line": 37
+          },
+          "snippet": "  35 |     test.skip(info.project.use.browserName !== 'chromium', 'paired with the Chromium-only throttled probe');\n  36 |     await page.goto(target.url);\n> 37 |     await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);\n     |                                             ^\n  38 |     await page.evaluate(() => document.fonts.ready);\n  39 |     const before = (await target.read(page)).trim();\n  40 |     await page.evaluate(observeKeys);"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/var/tmp/p22-r8-accepted/docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs",
+            "column": 45,
+            "line": 37
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('theme')\nExpected: \u001b[32m\"dark\"\u001b[39m\nTimeout: 15000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" getByTestId('theme') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('theme')\u001b[22m\n\n\n  35 |     test.skip(info.project.use.browserName !== 'chromium', 'paired with the Chromium-only throttled probe');\n  36 |     await page.goto(target.url);\n> 37 |     await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);\n     |                                             ^\n  38 |     await page.evaluate(() => document.fonts.ready);\n  39 |     const before = (await target.read(page)).trim();\n  40 |     await page.evaluate(observeKeys);\n    at /var/tmp/p22-r8-accepted/docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:37:45"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:24.788Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/var/tmp/p22-r8-accepted/src/web/.choices-results/r8-select-keys-repeat/select-keys-repeat.browser-3e6bb-n-ArrowDown-Enter-sample-29-chromium-dark-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/var/tmp/p22-r8-accepted/src/web/.choices-results/r8-select-keys-repeat/select-keys-repeat.browser-3e6bb-n-ArrowDown-Enter-sample-29-chromium-dark-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/var/tmp/p22-r8-accepted/docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs",
+          "column": 45,
+          "line": 37
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-02bcd5cedc158e862af1",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 30",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1396,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:40.135Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-c35b8ef1e919317dd848",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 31",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1281,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:41.585Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-d982d10ac890bfa8bc3e",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 32",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1322,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:42.871Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-a3582d651f389a012b77",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 33",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1360,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:44.198Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-67a22ed9aa3e142e5a63",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 34",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1275,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:45.562Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-4422e674c0d1151e5ad9",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 35",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1348,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:46.840Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-2881d6b3331f59bdf4a0",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 36",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1288,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:48.192Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-aeba89c71dc05ebfcceb",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 37",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1345,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:49.485Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-11768113d10ee8ce8212",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 38",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1394,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:50.834Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-52e07b947a849e0e3c9d",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "orbit-sample ArrowDown ArrowDown Enter sample 39",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1367,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:52.232Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-49a8e4da8361b7b50bfb",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 0",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1370,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:53.602Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-5fde297cf4042ca173b3",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 1",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1388,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:54.976Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-9e4c26a68f36e07301e0",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 2",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1442,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:56.368Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-ab2ca7aa63d811d7e925",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 3",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1394,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:57.814Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-8be9b9a56c368bab3a3d",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 4",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1317,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:22:59.212Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-08eb27a8cd2902e8aa64",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 5",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1428,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:00.533Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-ae1fb30bd9acd8b6e274",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 6",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1289,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:01.964Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-ddee3b13ee214b45d8a4",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 7",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1274,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:03.256Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-6ac97413873cabb3018b",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 8",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1311,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:04.533Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-0d259df94bba7d22d8d1",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 9",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1361,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:05.848Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-87531e40e1dc9a42af42",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 10",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1325,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:07.212Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-5a49114e6fa5c565d0fe",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 11",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1284,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:08.541Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-09579cefb7c0203d7342",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 12",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1374,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:09.828Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-c1a9cf95e01faf025ec4",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 13",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1355,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:11.206Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-2f57c3e4f41512102b89",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 14",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1288,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:12.564Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-540de9f11b13d013ff28",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 15",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1291,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:13.855Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-021fe0b1c2b2ce89afe7",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 16",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1397,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:15.150Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-b028d1e5bd39e6b3229f",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 17",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1429,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:16.551Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-910efaaba12921f4865a",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 18",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1370,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:17.983Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-35e581cd77851839d5b9",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 19",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1337,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:19.356Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-781bffb3c91849c4bf9a",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 20",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1282,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:20.696Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-ad94448c29e127978fd4",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 21",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1342,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:21.981Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-9db44f902574aee9596a",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 22",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1361,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:23.327Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-ebbd409b7c82be0a43c8",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 23",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1493,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:24.691Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-abe1053b7776a9af61ee",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 24",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1350,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:26.188Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-2d037b200eba001cf508",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 25",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1396,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:27.542Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-e70837f722b2e71206d2",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 26",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1287,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:28.941Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-55ca727799cb414625e2",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 27",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1315,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:30.232Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-3612b349cd9344620e65",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 28",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1396,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:31.551Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-701864cfe693edfa469a",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 29",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1440,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:32.951Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-0844c52011b82d8aebe6",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 30",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1481,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:34.395Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-d078013a6fdd044ebe84",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 31",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1346,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:35.880Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-953743ce4b8b6fa5f930",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 32",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1452,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:37.230Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-757e828509673b0729c0",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 33",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1347,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:38.686Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-931ddd72182897656f8f",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 34",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1446,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:40.036Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-d33895d573e5e6014a8b",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 35",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1451,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:41.486Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-d1f71cf863cb2f37811a",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 36",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1427,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:42.941Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-e5807cb09dc0fa053da8",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 37",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1443,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:44.371Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-504e80b9a4c616ac106a",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 38",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1525,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:45.817Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-6c4fb41481de8409cb0b",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    },
+    {
+     "title": "antd-sample ArrowDown ArrowDown Enter sample 39",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1515,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:23:47.346Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select-keys",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "185c44c1f00792067c9f-2867058c09b89122ae01",
+     "file": "select-keys-repeat.browser.mjs",
+     "line": 34,
+     "column": 3
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-06T06:20:45.104Z",
+  "duration": 183974.744,
+  "expected": 119,
+  "skipped": 0,
+  "unexpected": 1,
+  "flaky": 0
+ }
+}
