@@ -47439,6 +47439,180 @@
    }
   }
  },
+ "dataset:fix-select-after": {
+  "scope": "fix-select-after-down + fix-select-after-down-enter",
+  "playwright": {
+   "expected": 240,
+   "unexpected": 0,
+   "skipped": 0,
+   "flaky": 0
+  },
+  "targets": {
+   "antd-sample select-down": {
+    "keys": [
+     "ArrowDown"
+    ],
+    "from": "Never",
+    "control": null,
+    "paced": {
+     "Never | list open": 20
+    },
+    "burst": {
+     "Never | list open": 20
+    },
+    "windowHits": 0,
+    "handedOver": 0,
+    "reference": "Never | list open",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "antd-sample select-down-enter": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": null,
+    "paced": {
+     "Never | list closed": 20
+    },
+    "burst": {
+     "Never | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 0,
+    "reference": "Never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-field select-down": {
+    "keys": [
+     "ArrowDown"
+    ],
+    "from": "Never",
+    "control": null,
+    "paced": {
+     "never | list open": 20
+    },
+    "burst": {
+     "never | list open": 20
+    },
+    "windowHits": 0,
+    "handedOver": 0,
+    "reference": "never | list open",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-field select-down-enter": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": null,
+    "paced": {
+     "never | list closed": 20
+    },
+    "burst": {
+     "never | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-sample select-down": {
+    "keys": [
+     "ArrowDown"
+    ],
+    "from": "Never",
+    "control": null,
+    "paced": {
+     "Never | list open": 20
+    },
+    "burst": {
+     "Never | list open": 20
+    },
+    "windowHits": 0,
+    "handedOver": 0,
+    "reference": "Never | list open",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   },
+   "orbit-sample select-down-enter": {
+    "keys": [
+     "ArrowDown",
+     "Enter"
+    ],
+    "from": "Never",
+    "control": null,
+    "paced": {
+     "Never | list closed": 20
+    },
+    "burst": {
+     "Never | list closed": 20
+    },
+    "windowHits": 20,
+    "handedOver": 20,
+    "reference": "Never | list closed",
+    "pacedUnanimous": true,
+    "burstWrong": 0,
+    "wrong": []
+   }
+  },
+  "sequences": {
+   "select-down": {
+    "orbitBurstWrong": {
+     "orbit-field": "0/20",
+     "orbit-sample": "0/20"
+    },
+    "orbitPaced": {
+     "orbit-field": "never | list open",
+     "orbit-sample": "Never | list open"
+    },
+    "orbitWindowHits": {
+     "orbit-field": 0,
+     "orbit-sample": 0
+    },
+    "orbitHandedOver": {
+     "orbit-field": 0,
+     "orbit-sample": 0
+    },
+    "antdPaced": "Never | list open",
+    "antdBurstWrong": "0/20",
+    "antdWindowHits": 0,
+    "decision": "control"
+   },
+   "select-down-enter": {
+    "orbitBurstWrong": {
+     "orbit-field": "0/20",
+     "orbit-sample": "0/20"
+    },
+    "orbitPaced": {
+     "orbit-field": "never | list closed",
+     "orbit-sample": "Never | list closed"
+    },
+    "orbitWindowHits": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "orbitHandedOver": {
+     "orbit-field": 20,
+     "orbit-sample": 20
+    },
+    "antdPaced": "Never | list closed",
+    "antdBurstWrong": "0/20",
+    "antdWindowHits": 20,
+    "decision": "control"
+   }
+  }
+ },
  "regression-select-keys-burst": {
   "scope": "baseline tree, the unchanged ../p2-select-keys/select-keys-burst.browser.mjs (20 burst + 3 paced per combination)",
   "playwright": {
@@ -47888,6 +48062,462 @@
     "reference": "Never",
     "results": {
      "Never": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   }
+  },
+  "sequences": {}
+ },
+ "fix-select-keys-burst-before": {
+  "scope": "before-fix tree 46a418fba (A/B), the unchanged ../p2-select-keys/select-keys-burst.browser.mjs (20 burst + 3 paced per combination): fix-select-keys-burst-before-antd + fix-select-keys-burst-before-field + fix-select-keys-burst-before-menu + fix-select-keys-burst-before-sample + fix-select-keys-burst-before-search-multiple",
+  "playwright": {
+   "expected": 276,
+   "unexpected": 0,
+   "skipped": 0,
+   "flaky": 0
+  },
+  "targets": {
+   "antd-sample down-down-enter burst": {
+    "samples": 20,
+    "reference": "7 days",
+    "results": {
+     "7 days | 7 days": 20
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "antd-sample down-down-enter paced": {
+    "samples": 3,
+    "reference": "7 days",
+    "results": {
+     "7 days | 7 days": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "antd-sample down-up-enter burst": {
+    "samples": 20,
+    "reference": "Never",
+    "results": {
+     "Never | Never": 20
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "antd-sample down-up-enter paced": {
+    "samples": 3,
+    "reference": "Never",
+    "results": {
+     "Never | Never": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-field down-down-enter burst": {
+    "samples": 20,
+    "reference": "7",
+    "results": {
+     "7": 20
+    },
+    "differ": 0,
+    "handedOver": 20
+   },
+   "orbit-field down-down-enter paced": {
+    "samples": 3,
+    "reference": "7",
+    "results": {
+     "7": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-field down-enter burst": {
+    "samples": 20,
+    "reference": "never",
+    "results": {
+     "never": 20
+    },
+    "differ": 0,
+    "handedOver": 20
+   },
+   "orbit-field down-enter paced": {
+    "samples": 3,
+    "reference": "never",
+    "results": {
+     "never": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-field down-up-enter burst": {
+    "samples": 20,
+    "reference": "never",
+    "results": {
+     "never": 20
+    },
+    "differ": 0,
+    "handedOver": 20
+   },
+   "orbit-field down-up-enter paced": {
+    "samples": 3,
+    "reference": "never",
+    "results": {
+     "never": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-menu down-down-enter burst": {
+    "samples": 20,
+    "reference": "image",
+    "results": {
+     "none": 20
+    },
+    "differ": 20,
+    "handedOver": 0
+   },
+   "orbit-menu down-down-enter paced": {
+    "samples": 3,
+    "reference": "image",
+    "results": {
+     "image": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-sample down-down-enter burst": {
+    "samples": 20,
+    "reference": "7 days",
+    "results": {
+     "7 days": 20
+    },
+    "differ": 0,
+    "handedOver": 20
+   },
+   "orbit-sample down-down-enter paced": {
+    "samples": 3,
+    "reference": "7 days",
+    "results": {
+     "7 days": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-sample down-up-enter burst": {
+    "samples": 20,
+    "reference": "Never",
+    "results": {
+     "Never": 20
+    },
+    "differ": 0,
+    "handedOver": 20
+   },
+   "orbit-sample down-up-enter paced": {
+    "samples": 3,
+    "reference": "Never",
+    "results": {
+     "Never": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "antd-multiple down-down-enter burst": {
+    "samples": 20,
+    "reference": "Bug | Ops",
+    "results": {
+     "Bug | Ops": 20
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "antd-multiple down-down-enter paced": {
+    "samples": 3,
+    "reference": "Bug | Ops",
+    "results": {
+     "Bug | Ops": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "antd-search down-down-enter burst": {
+    "samples": 20,
+    "reference": "7 days | 7 days",
+    "results": {
+     "7 days | 7 days": 20
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "antd-search down-down-enter paced": {
+    "samples": 3,
+    "reference": "7 days | 7 days",
+    "results": {
+     "7 days | 7 days": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-combobox down-down-enter burst": {
+    "samples": 20,
+    "reference": "7 days",
+    "results": {
+     "7 days": 20
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-combobox down-down-enter paced": {
+    "samples": 3,
+    "reference": "7 days",
+    "results": {
+     "7 days": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-multiselect down-down-enter burst": {
+    "samples": 20,
+    "reference": "Bug | Ops",
+    "results": {
+     "Bug | Ops": 20
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-multiselect down-down-enter paced": {
+    "samples": 3,
+    "reference": "Bug | Ops",
+    "results": {
+     "Bug | Ops": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   }
+  },
+  "sequences": {}
+ },
+ "fix-select-keys-burst-after": {
+  "scope": "fixed tree (A/B), the unchanged ../p2-select-keys/select-keys-burst.browser.mjs (20 burst + 3 paced per combination): fix-select-keys-burst-after-antd + fix-select-keys-burst-after-field + fix-select-keys-burst-after-menu + fix-select-keys-burst-after-sample + fix-select-keys-burst-after-search-multiple",
+  "playwright": {
+   "expected": 276,
+   "unexpected": 0,
+   "skipped": 0,
+   "flaky": 0
+  },
+  "targets": {
+   "antd-sample down-down-enter burst": {
+    "samples": 20,
+    "reference": "7 days",
+    "results": {
+     "7 days | 7 days": 20
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "antd-sample down-down-enter paced": {
+    "samples": 3,
+    "reference": "7 days",
+    "results": {
+     "7 days | 7 days": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "antd-sample down-up-enter burst": {
+    "samples": 20,
+    "reference": "Never",
+    "results": {
+     "Never | Never": 20
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "antd-sample down-up-enter paced": {
+    "samples": 3,
+    "reference": "Never",
+    "results": {
+     "Never | Never": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-field down-down-enter burst": {
+    "samples": 20,
+    "reference": "7",
+    "results": {
+     "7": 20
+    },
+    "differ": 0,
+    "handedOver": 20
+   },
+   "orbit-field down-down-enter paced": {
+    "samples": 3,
+    "reference": "7",
+    "results": {
+     "7": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-field down-enter burst": {
+    "samples": 20,
+    "reference": "never",
+    "results": {
+     "never": 20
+    },
+    "differ": 0,
+    "handedOver": 20
+   },
+   "orbit-field down-enter paced": {
+    "samples": 3,
+    "reference": "never",
+    "results": {
+     "never": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-field down-up-enter burst": {
+    "samples": 20,
+    "reference": "never",
+    "results": {
+     "never": 20
+    },
+    "differ": 0,
+    "handedOver": 20
+   },
+   "orbit-field down-up-enter paced": {
+    "samples": 3,
+    "reference": "never",
+    "results": {
+     "never": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-menu down-down-enter burst": {
+    "samples": 20,
+    "reference": "image",
+    "results": {
+     "image": 20
+    },
+    "differ": 0,
+    "handedOver": 20
+   },
+   "orbit-menu down-down-enter paced": {
+    "samples": 3,
+    "reference": "image",
+    "results": {
+     "image": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-sample down-down-enter burst": {
+    "samples": 20,
+    "reference": "7 days",
+    "results": {
+     "7 days": 20
+    },
+    "differ": 0,
+    "handedOver": 20
+   },
+   "orbit-sample down-down-enter paced": {
+    "samples": 3,
+    "reference": "7 days",
+    "results": {
+     "7 days": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-sample down-up-enter burst": {
+    "samples": 20,
+    "reference": "Never",
+    "results": {
+     "Never": 20
+    },
+    "differ": 0,
+    "handedOver": 19
+   },
+   "orbit-sample down-up-enter paced": {
+    "samples": 3,
+    "reference": "Never",
+    "results": {
+     "Never": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "antd-multiple down-down-enter burst": {
+    "samples": 20,
+    "reference": "Bug | Ops",
+    "results": {
+     "Bug | Ops": 20
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "antd-multiple down-down-enter paced": {
+    "samples": 3,
+    "reference": "Bug | Ops",
+    "results": {
+     "Bug | Ops": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "antd-search down-down-enter burst": {
+    "samples": 20,
+    "reference": "7 days | 7 days",
+    "results": {
+     "7 days | 7 days": 20
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "antd-search down-down-enter paced": {
+    "samples": 3,
+    "reference": "7 days | 7 days",
+    "results": {
+     "7 days | 7 days": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-combobox down-down-enter burst": {
+    "samples": 20,
+    "reference": "7 days",
+    "results": {
+     "7 days": 20
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-combobox down-down-enter paced": {
+    "samples": 3,
+    "reference": "7 days",
+    "results": {
+     "7 days": 3
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-multiselect down-down-enter burst": {
+    "samples": 20,
+    "reference": "Bug | Ops",
+    "results": {
+     "Bug | Ops": 20
+    },
+    "differ": 0,
+    "handedOver": 0
+   },
+   "orbit-multiselect down-down-enter paced": {
+    "samples": 3,
+    "reference": "Bug | Ops",
+    "results": {
+     "Bug | Ops": 3
     },
     "differ": 0,
     "handedOver": 0
