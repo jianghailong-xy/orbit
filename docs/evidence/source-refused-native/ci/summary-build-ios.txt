@@ -1,0 +1,6 @@
+Test Case '-[RunStartProbeUITests.RunStartShotTests testIPhoneShowsWhyTheRunNeverStarted]' started.
+Test Case '-[RunStartProbeUITests.RunStartShotTests testIPhoneShowsWhyTheRunNeverStarted]' passed (113.876 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 113.876 (113.879) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 113.876 (113.880) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 113.876 (113.882) seconds
+** TEST SUCCEEDED **

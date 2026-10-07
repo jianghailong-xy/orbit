@@ -47,7 +47,7 @@ renderer — the app's existing repair-card shell, so this is a new reason rathe
 |---|---|
 | `swift test`, OrbitKit, `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` (the task's own acceptance command) | **exit 0**, 3312 tests, 0 failures (main's 3291 + the 21 new ones in `SessionRunStartTests` and `SessionRunStartCopyParityTests`, and the blocker case added to `ProjectPageSectionsTests`). Run on this host, macOS 27/Xcode 27 |
 | the iPhone probe (`run.sh`'s iOS pass, real `CompactShell` against `stub.py`) | every assertion in `ios/…-notes.txt` passed: the card, the ref, git's own words, `BASE_REF_NOT_FOUND`, `Start it again`, `Chat about this`, `Send it again`, the project page's code+ref and task row. The press sent `POST /api/tasks/T1/execute {"triggerId":"7JFpFKW3xNQWmibqz8pFpe"}` → 201 (`ios/ios-requests.txt`), which is SR34's recovery: a NEW run on the task |
-| the Mac probe | **NOT TAKEN on this host** — see below |
+| the Mac probe, on CI — `client.yml` dispatch run [37633043197](https://github.com/jianghailong-xy/orbit/actions/runs/37633043197), `macos-26`, branch `probe/source-refused-mac-shots` at `3441f5840` | both passes `** TEST SUCCEEDED **`, 0 failures (Mac 125 s, iPhone 114 s); `capture=success` (`ci/`). Every assertion in `mac/…-notes.txt` passed: the card, the ref, git's own words, `BASE_REF_NOT_FOUND`, `Start it again`, `Chat about this`, the project page's code+ref and task row. The press the phone pass makes on `Start it again` went through on the Mac too — `POST /api/tasks/T1/execute {"triggerId":"6MAFR8WY6DQUuRoUU0nm9C"}` → 201 (`mac/writes.txt`), SR34's recovery |
 
 ## Pictures (real app UI against `stub.py`)
 
@@ -57,13 +57,29 @@ of which produced nothing: S1 a task session whose SOURCE was refused (the proje
 line was never created), S2 an ordinary session the reaper ended, S3 an engine this machine does not
 have. All data is made up.
 
-| Step | iPhone (`ios/`) |
-|---|---|
-| the refused run: the card, with the code, the ref and git's own words | `ios-1-refused.png` |
-| `Start it again` pressed — a NEW run on the task | `ios-2-start-it-again.png` |
-| the runner went offline: the same card, `Send it again` | `ios-3-offline.png` |
-| an engine this machine does not have, in the runner's words | `ios-4-not-installed.png` |
-| the project page's `SOURCE_UNRESOLVED` blocker | `ios-5-project-blocker.png` |
+| Step | iPhone (`ios/`) | Mac (`mac/`) |
+|---|---|---|
+| the refused run: the card, with the code, the ref and git's own words | `ios-1-refused.png` | `mac-window-S1.png` |
+| `Start it again` pressed — a NEW run on the task | `ios-2-start-it-again.png` | the request log (`mac/writes.txt`); `mac-window-S1.png` is written after the press |
+| the runner went offline: the same card, `Send it again` | `ios-3-offline.png` | — the Mac window had not drawn it before that launch ended |
+| an engine this machine does not have, in the runner's words | `ios-4-not-installed.png` | `mac-window-S3.png` |
+| the project page's `SOURCE_UNRESOLVED` blocker | `ios-5-project-blocker.png` | `mac-window-project.png` |
+
+The Mac pictures are the run's artifact — `source-refused-shots`, republished to
+`probe/source-refused-mac-shots-results` because artifacts need a token to download — and they came out
+of the app's own window rather than off the screen, for a reason worth writing down. The CI Mac's screen
+is 1024×768 (visible frame 1024×677): the session page lays its console out ~1564 points tall — the
+"this run never started" card starts at y≈900, below the window, and it is the transcript's sibling
+rather than something inside a scroll view, so nothing brings it back — and a TITLED window cannot be
+taller than the screen (`NSWindow.constrainFrameRect`: 1700 asked for, 677 granted, every second of run
+37625558501's `mac/sr-window-S1.txt`). So the probe's window goes borderless, which that constraint does
+not apply to, and `-probe.shot` writes the window's own bitmap (`CGWindowListCreateImage`, no screen
+capture and no chrome): `mac/sr-window-*.txt` has the frames it went through, 1010×677 → 1024×1700, and
+the size of every picture written. Two consequences are in these files rather than hidden: the UI-test
+runner cannot see a borderless window (`mac/…-notes.txt`: "no window to photograph"), so the XCUITest
+pictures are absent from this run — the presses and the walks are still its, and the request log is
+theirs; and the offline launch's window never drew before it ended, which is why that step has no Mac
+picture while the phone's five cover all three tiers.
 
 `ios-1-refused.png` is the whole answer to the report this card came from: the page that used to
 say `Starting…` forever now says `Failed`, and under the message it says why — the code, the ref
@@ -72,6 +88,15 @@ that could not be resolved and git's own sentence, then the one press that goes 
 `probe-harness/` is what ran. It is kept here rather than built by this repository;
 `project.yml`'s `../src` paths are relative to the repository root, so the harness is copied to a
 directory at the root before it runs, as the crossings probe's was under `.xcross-probe/`.
+
+The Mac half runs on CI: `client.yml`'s `source-refused-shots` job (dispatch-only, behind its
+`source_refused_probe` input) stages this directory at `.sr-probe/`, runs `run.sh` on a `macos-26`
+runner, and uploads `.sr-probe/shots` as the `source-refused-shots` artifact; the job beside it
+republishes that artifact to `probe/source-refused-mac-shots-results`. The Mac that holds the branch
+has no display and no automation grant, and no token to dispatch with, so the push to
+`probe/source-refused-mac-shots` is turned into the dispatch by
+`.github/workflows/probe-dispatch.yml` (temporary, like the job it starts: this is the one trigger that
+host has). Re-running it means pushing to that branch with the wiring changed.
 
 ## Limits
 
@@ -85,14 +110,14 @@ directory at the root before it runs, as the crossings probe's was under `.xcros
   summary selects them), so against a real server today the card's refused tier has nothing to
   read and the machine tier falls back to what `error` says. Widening that read is the one piece
   this task's family still needs on the server side.
-- **The Mac pictures are missing, and it is the host, not the code.** This machine has no display:
-  `screencapture` answers `could not create image from display`, and the UI-test runner never gets
-  automation mode (`Timed out while enabling automation mode`) — both are TCC/display grants only
-  the owner can give. The Mac app itself runs and renders against the stub (its own logs show the
-  session read, `S1`'s console polling, and SwiftUI laying out), and the harness is ready to take
-  the Mac half two ways: `run.sh` drives it on CI exactly as the crossings probe did on
-  `macos-26` runners, and `mac-shot.sh` takes it here the moment the display works. Until then the
-  Mac half of the evidence is unproven; the shared view is why the iPhone's five are still
-  evidence for both (the iOS target compiles `OrbitApp`'s own sources, `ConsoleView` and
-  `SessionRunStartCardView` included).
+- **The Mac pictures are of the window, at a size the screen does not have.** `mac-window-*.png` are
+  the window's own pixels written by the app, 1024×1700 on a 1024×768 screen, so no window chrome or
+  menu bar is in them and no `screencapture` was involved — a screen capture there could only ever
+  show the top 677 of those 1700 points, which is why the picture is taken this way. The window it
+  photographs is borderless (`WindowFit`, for the reason above), so a real user's window would look
+  different around the edges; the session page inside it is the same one. This host still cannot take
+  the Mac pictures itself — no display for `screencapture` (`could not create image from display`),
+  no automation grant for the UI-test runner (`Timed out while enabling automation mode`), both TCC
+  grants only the owner can give — so they come from the CI run named above, and `mac-shot.sh` takes
+  them here the moment a display works.
 
