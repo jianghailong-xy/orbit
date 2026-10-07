@@ -34,6 +34,25 @@ The unit-level side of the same change is in the specs, not here: the apiserver'
 the ciphertext is answered), `google-sign-in-config.pg.spec.ts` rotates the key on a real row and enters the
 secret again, and the web tests cover both states of the page and the Add-user text.
 
+## The runs on the final tree
+
+`checks/` holds the two runs the task's acceptance asks for, both on `94c40abb6` — the branch tip after it
+absorbed `origin/main` (82 commits) and after a comment-only correction of the Add-user hint's design
+citation (`§5.6` → `§5.2`, the authoritative-email rule) — and before this record commit:
+
+| Run | Record | Result |
+| --- | --- | --- |
+| The project's merge check, verbatim: `npm run test:compose-topology && npm run prisma:generate && npm run build && npm test -w @orbit/shared && npm test -w @orbit/apiserver && npm test -w @orbit/web` | `checks/merge-check-final/` | exit 0 — compose-topology 9/9; shared 24 files / 398 tests; apiserver 4691 pass, 0 fail, 0 skipped; web 344 files / 4380 tests |
+| `bash scripts/run-pg-spec.sh src/apiserver/src/auth/google-sign-in-config.pg.spec.ts` | `checks/pg-spec-google-sign-in-config/` | exit 0 — 7 pass, 0 fail, 0 skipped against PostgreSQL 16.15 (392 migrations), no skips |
+
+Each directory keeps `exit.txt`, the stages and summaries in `output-filtered.txt`, and every line in
+`output-full.txt.gz`. The rotation case — a row still holding the ciphertext the previous
+`PROVIDER_SECRET_KEY` wrote — is asserted inside the pg spec's subtest (3).
+
+The screenshots above were driven on the isolated stack from the task's code commit `c2c9303de`. Between
+that commit and `94c40abb6`, this change's files differ only in those two comment lines: nothing the
+walkthrough rendered changed.
+
 ## Rerunning
 
 `kit/` is what ran, from `/var/tmp/google-sign-in-admin-hints`: `S=$PWD bash kit/setup.sh build` and

@@ -1,0 +1,60 @@
+# tree /root/.orbit/worktrees/d7cea808-8de1-5a4c-95f8-a005b1014ee1
+# commit 94c40abb6b0d05b5293ebdaac4376228f533a4fa
+# branch orbit/s1b-add-user-google-sign-in-only-4ae978
+# argv: npm run test:compose-topology && npm run prisma:generate && npm run build && npm test -w @orbit/shared && npm test -w @orbit/apiserver && npm test -w @orbit/web
+# started 2026-10-07T11:06:16Z
+# filtered: the stages, their summaries and anything red; output-full.txt.gz carries every line.
+> orbit@0.1.221 test:compose-topology
+> node --test --test-reporter=tap test/compose-topology.test.mjs
+ok 1 - the baseline commit really is the nine-service stack this change removes from
+ok 2 - the approved configuration commits still have exactly the five surviving services
+ok 3 - (a) Compose declares exactly the five surviving services
+ok 4 - (b) no removed sidecar is named anywhere in Compose
+ok 5 - (c) nothing was added back: no new service, no new always-on process, no init job
+ok 6 - (i) the postgres service definition matches the approved configuration, byte for byte
+ok 7 - (j) the gateway service definition is unchanged and still mounts ./gateway/nginx.conf
+ok 8 - nothing beyond the approved configuration was added to pgbackup, apiserver or web
+ok 9 - (k) removing the sidecars is subtraction: Compose lost more lines than it gained
+# tests 9
+# suites 0
+# pass 9
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+> orbit@0.1.221 prisma:generate
+> npm run prisma:generate -w @orbit/apiserver
+> @orbit/apiserver@0.1.0 prisma:generate
+> prisma generate
+✔ Generated Prisma Client (v7.10.0) to ./node_modules/@prisma/client in 956ms
+> orbit@0.1.221 build
+> npm run build -w @orbit/shared && npm run build -w @orbit/apiserver && npm run build -w @orbit/web
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+> @orbit/apiserver@0.1.0 build
+> rm -rf dist && tsc -p tsconfig.json
+> @orbit/web@0.1.0 build
+> tsc -b && vite build
+> @orbit/shared@0.1.0 test
+> vitest run
+ Test Files  24 passed (24)
+      Tests  398 passed (398)
+   Start at  19:06:25
+   Duration  552ms (transform 76%, import 13%, tests 8%, worker 2%)
+> @orbit/apiserver@0.1.0 test
+> tsc -p tsconfig.test.json && SPECS=$(ls build/*/*.spec.js | grep -v '\.pg\.spec\.js$') && node --test $SPECS
+ℹ tests 4691
+ℹ suites 0
+ℹ pass 4691
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2
+ Test Files  344 passed (344)
+      Tests  4380 passed (4380)
+   Start at  19:07:47
+   Duration  318.24s (tests 44%, import 40%, environment 12%, transform 4%)
+MERGE_CHECK_EXIT=0
+# finished 2026-10-07T11:13:05Z exit 0
