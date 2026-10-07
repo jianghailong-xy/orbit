@@ -1,4 +1,4 @@
--- 0398 — the System model's state, in one row (docs/wiki-server-execution-design.md §5.3; contract
+-- 0400 — the System model's state, in one row (docs/wiki-server-execution-design.md §5.3; contract
 -- `systemModel.status`).
 --
 -- WHAT IT ADDS
@@ -21,10 +21,13 @@
 -- apiserver learns the model's name and state from this row and from nothing else. That is also why no
 -- column here can hold the address or the key.
 --
--- 0398: the next number free on main, on every branch of origin and in every worktree on this host
--- (2026-10-07). Every statement can run twice — IF NOT EXISTS, and the CHECKs inside `duplicate_object`
--- guards. Nothing that exists is altered, no function, trigger or type is created, and no row is written:
--- the worker inserts the row on its first probe.
+-- 0400: written as 0398, the next number free on main, on every branch of origin and in every worktree on
+-- this host (2026-10-07), and renumbered before landing (2026-10-08): main had taken 0399 (managed_runner,
+-- renumbered from 0394) in the meantime, and the ledger only appends, so this goes after main's highest.
+-- Only the number changed, not a statement below, and no database applied it as 0398: the project line it
+-- was written for had not been deployed. Every statement can run twice — IF NOT EXISTS, and the CHECKs inside
+-- `duplicate_object` guards. Nothing that exists is altered, no function, trigger or type is created, and no
+-- row is written: the worker inserts the row on its first probe.
 
 CREATE TABLE IF NOT EXISTS "wiki_model_status" (
   "id"             SMALLINT NOT NULL DEFAULT 1,

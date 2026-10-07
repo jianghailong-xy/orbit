@@ -2011,7 +2011,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // preserved relation, and no `task`, `project` or `project_acceptance_*` object is named. No
       // INSERT, UPDATE or DELETE: no stored row is read, locked, backfilled or rewritten.
       '0397_runner_login_region',
-      // The System model's state (0398): one new table, `wiki_model_status`, of exactly one row,
+      // The System model's state (0400): one new table, `wiki_model_status`, of exactly one row,
       // with its primary key and four CHECKs (the single row, the closed set of states, a model
       // named whenever one is configured, a reason exactly when the state is not up). Pure
       // addition: no column, constraint, index, function, trigger or type of any table that
@@ -2019,7 +2019,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // names none of the six preserved objects, neither 0177 relation, no `task`, `session` or
       // `project` object and no `project_acceptance_*` one. No INSERT, UPDATE or DELETE: the
       // wiki-worker writes the row on its first probe.
-      '0398_wiki_model_status'],
+      '0400_wiki_model_status'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

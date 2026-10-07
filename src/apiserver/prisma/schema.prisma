@@ -7176,7 +7176,7 @@ model WikiDocFootnote {
   @@map("wiki_doc_footnote")
 }
 
-/// The System model as the wiki-worker last found it, and the worker's heartbeat (migration 0398, contract
+/// The System model as the wiki-worker last found it, and the worker's heartbeat (migration 0400, contract
 /// `systemModel.status`; docs/wiki-server-execution-design.md §5.3). Exactly one row, id 1: the worker writes
 /// it, the apiserver only reads it. No column holds the endpoint's address or its key.
 model WikiModelStatus {

@@ -15,7 +15,7 @@ export interface WikiModelObservation {
 }
 
 /**
- * Writes the one row of `wiki_model_status` (migration 0398, contract `systemModel.status`): the state and its
+ * Writes the one row of `wiki_model_status` (migration 0400, contract `systemModel.status`): the state and its
  * reason, the probe's time, and the worker's heartbeat, in one statement. `since` moves only when the state or the
  * model changes, so it says when the current state began however many probes have confirmed it since.
  */

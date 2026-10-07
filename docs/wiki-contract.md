@@ -42,7 +42,7 @@ JSON 里是 `plan` 一节。
 `wiki-worker`（与 apiserver 同一镜像，换入口），System model 的地址和 key 只配给它；worker 每 10 秒探测 `{base}/health`，把模型状态
 和自己的心跳写进单行表 `wiki_model_status`；apiserver 经 `GET /api/wiki/system-model` 只给出模型名和状态，心跳过期时是
 `worker_not_running`。流式客户端（`/v1/messages`、SSE、单次超时、空闲断开、取消、错误分三类）也在这一期；作业表、请求队列和执行器开关在
-P1b。见新增的 §23，迁移 `0398_wiki_model_status`，JSON 里是 `systemModel` 一节。
+P1b。见新增的 §23，迁移 `0400_wiki_model_status`，JSON 里是 `systemModel` 一节。
 
 **权威来源**
 
@@ -1739,7 +1739,7 @@ orbit wiki docs build --space <id> [--doc <slug>] [--section <key>] [--repo <pat
 
 ## 23. System model 与 wiki-worker（服务端执行 P1a）
 
-JSON 里是 `systemModel`；设计见 `docs/wiki-server-execution-design.md` §2.1、§4.1、§4.5、§5.3、§6。迁移 `0398_wiki_model_status`；
+JSON 里是 `systemModel`；设计见 `docs/wiki-server-execution-design.md` §2.1、§4.1、§4.5、§5.3、§6。迁移 `0400_wiki_model_status`；
 worker 在 `src/apiserver/src/wiki-worker/`（入口 `main.ts`、配置 `wiki-system-model.ts`、客户端 `wiki-model-client.ts`、状态与心跳
 `wiki-model-status.ts`），读接口在 `src/apiserver/src/wiki/wiki-system-model.ts` 与 `wiki-system-model.controller.ts`，metrics 在
 `wiki/wiki-model-metrics.ts`；共享常量在 `src/shared/src/wikiSystemModel.ts`。本阶段 worker 只探测模型、写状态和心跳；作业表、请求队列

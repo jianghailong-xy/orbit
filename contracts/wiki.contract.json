@@ -1808,7 +1808,7 @@
     },
     "status": {
       "table": "wiki_model_status",
-      "migration": "src/apiserver/prisma/migrations/0398_wiki_model_status/migration.sql",
+      "migration": "src/apiserver/prisma/migrations/0400_wiki_model_status/migration.sql",
       "row": "Exactly one, id 1, written by the worker alone with INSERT ... ON CONFLICT (id) DO UPDATE. The apiserver only reads it.",
       "columns": ["state", "model", "since", "last_error", "checked_at", "worker_seen_at"],
       "states": ["up", "down", "auth_failed", "unconfigured"],

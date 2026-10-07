@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 /**
  * The System model as the wiki settings page and the health line read it (contract `systemModel.read`): the model's
- * name and its state, from the one row the wiki-worker writes (migration 0398).
+ * name and its state, from the one row the wiki-worker writes (migration 0400).
  *
  * The apiserver never has the model's address or key — they are in the worker's environment alone — and this read
  * passes on nothing else of the row either: `last_error` is left for whoever reads the table. A worker that has not
