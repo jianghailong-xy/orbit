@@ -6,8 +6,8 @@
 -- tokens; its access tokens are refused 401. Nothing it owns is deleted, so enabling it again — the
 -- column back to NULL — lets it back in.
 --
--- 0396: free on main and on every branch of origin (2026-10-07); 0394 and 0395 are held by branches
--- not yet on main (the managed runner, the project rollup index). A nullable column with no default
+-- 0396: free on main and on every branch of origin (2026-10-07); 0394 is held by a branch not yet on
+-- main (the managed runner), 0395 is the project rollup index's. A nullable column with no default
 -- is added to the catalog only: no row is rewritten, and every existing account reads NULL — enabled.
 
 ALTER TABLE "user" ADD COLUMN "disabled_at" TIMESTAMP(3);
