@@ -28,10 +28,49 @@ printf 'lock_acquired_utc=%s\n' "$(date -u +%FT%TZ)" > "$output/lock.txt"
 fixture_pid=''
 old_font=''
 emulator_pid=''
+# A12_TALKBACK=1: TalkBack on for the run (WikiWatchTalkBackTest), with the test APK's silent speech engine recording
+# what it says; both accessibility settings, the speech engine and TalkBack's notification permission are put back.
+talkback_package=com.google.android.marvin.talkback
+talkback_service="$talkback_package/com.google.android.marvin.talkback.TalkBackService"
+talkback_before=''
+old_a11y_services=''
+old_a11y_enabled=''
+old_tts=''
+old_notify=''
+console_args=()
+secure() { "$adb" -s "$serial" shell settings get secure "$1" | tr -d '\r'; }
+restore_secure() {
+  if [[ "$2" == null ]]; then "$adb" -s "$serial" shell settings delete secure "$1" >/dev/null
+  else "$adb" -s "$serial" shell settings put secure "$1" "$2" >/dev/null; fi
+}
+notify_state() {
+  local dump
+  dump="$("$adb" -s "$serial" shell dumpsys package "$talkback_package")"
+  awk -F'granted=' '/POST_NOTIFICATIONS: granted=/ && !seen { split($2, value, ","); print value[1]; seen = 1 }' <<< "$dump" | tr -d '\r'
+}
+talkback_state() {
+  printf 'enabled_accessibility_services=%s accessibility_enabled=%s tts_default_synth=%s touch_exploration_enabled=%s post_notifications_granted=%s\n' \
+    "$(secure enabled_accessibility_services)" "$(secure accessibility_enabled)" "$(secure tts_default_synth)" \
+    "$(secure touch_exploration_enabled)" "$(notify_state)"
+}
 cleanup() {
   local result=$?
   trap - EXIT
   "$adb" -s "$serial" shell am force-stop "$package" >/dev/null 2>&1 || true
+  if [[ -n "$talkback_before" ]]; then
+    # Whatever the run did: TalkBack off, then the speech engine and the permission as they were.
+    restore_secure enabled_accessibility_services "$old_a11y_services" || result=1
+    restore_secure accessibility_enabled "$old_a11y_enabled" || result=1
+    restore_secure tts_default_synth "$old_tts" || result=1
+    if [[ "$old_notify" != true ]]; then
+      "$adb" -s "$serial" shell pm revoke "$talkback_package" android.permission.POST_NOTIFICATIONS >/dev/null 2>&1 || result=1
+    fi
+    "$adb" -s "$serial" shell am force-stop "$package.test" >/dev/null 2>&1 || true
+    for attempt in {1..60}; do [[ "$(secure touch_exploration_enabled)" == 1 ]] || break; sleep 0.5; done
+    talkback_after="$(talkback_state)"
+    printf 'after  %s\n' "$talkback_after" >> "$output/talkback-settings.txt"
+    [[ "$talkback_after" == "$talkback_before" ]] || { echo 'TalkBack settings were not restored' >&2; result=1; }
+  fi
   "$adb" -s "$serial" reverse --remove tcp:18770 >/dev/null 2>&1 || true
   if [[ -n "$fixture_pid" ]]; then kill "$fixture_pid" 2>/dev/null || true; wait "$fixture_pid" 2>/dev/null || true; fi
   if [[ -n "$old_font" ]]; then
@@ -103,8 +142,30 @@ for attempt in {1..30}; do
   sleep 0.1
 done
 "$adb" -s "$serial" reverse tcp:18770 tcp:18770
+if [[ "${A12_TALKBACK:-}" == 1 ]]; then
+  "$adb" -s "$serial" shell pm path "$talkback_package" > /dev/null || { echo 'TalkBack is not installed on this device' >&2; exit 2; }
+  old_a11y_services="$(secure enabled_accessibility_services)"
+  old_a11y_enabled="$(secure accessibility_enabled)"
+  old_tts="$(secure tts_default_synth)"
+  old_notify="$(notify_state)"
+  [[ -n "$old_a11y_services" && -n "$old_a11y_enabled" && -n "$old_tts" && -n "$old_notify" ]] ||
+    { echo "TalkBack's settings could not be read; nothing was changed" >&2; exit 1; }
+  talkback_before="$(talkback_state)"
+  printf 'before %s\n' "$talkback_before" > "$output/talkback-settings.txt"
+  # TalkBack asks for notifications on its first start, in a dialog over the app: granted for the run only.
+  if [[ "$old_notify" != true ]]; then "$adb" -s "$serial" shell pm grant "$talkback_package" android.permission.POST_NOTIFICATIONS; fi
+  "$adb" -s "$serial" shell settings put secure tts_default_synth "$package.test"
+  "$adb" -s "$serial" shell settings put secure enabled_accessibility_services "$talkback_service"
+  "$adb" -s "$serial" shell settings put secure accessibility_enabled 1
+  for attempt in {1..60}; do [[ "$(secure touch_exploration_enabled)" == 1 ]] && break; sleep 0.5; done
+  printf 'during %s\n' "$(talkback_state)" >> "$output/talkback-settings.txt"
+  [[ "$(secure touch_exploration_enabled)" == 1 ]] || { echo 'TalkBack did not start' >&2; exit 1; }
+  # TalkBack takes touches from the screen only: the test drives the emulator console's touchscreen, with its port and
+  # token. Neither is written to the evidence (checked below).
+  console_args=(-e a12ConsolePort "${serial#emulator-}" -e a12ConsoleToken "$(cat "$HOME/.emulator_console_auth_token")")
+fi
 start="$("$adb" -s "$serial" shell date +%s | tr -d '\r').000"
-"$adb" -s "$serial" shell am instrument -w -r -e class "${A12_TEST:-io.orbitd.android.wiki.WikiWatchDeviceTest}" "$runner" > "$output/instrumentation.txt" 2>&1
+"$adb" -s "$serial" shell am instrument -w -r -e class "${A12_TEST:-io.orbitd.android.wiki.WikiWatchDeviceTest}" "${console_args[@]}" "$runner" > "$output/instrumentation.txt" 2>&1
 curl --fail --silent http://127.0.0.1:18770/__stats > "$output/server-stats.json"
 for pid in $(sed -n 's/.*a12_pid=\([0-9]*\).*/\1/p' "$output/instrumentation.txt" | sort -u); do
   "$adb" -s "$serial" logcat -d -v threadtime --pid="$pid" -T "$start" > "$output/logcat-$pid.txt"
@@ -113,6 +174,11 @@ done
 "$adb" -s "$serial" exec-out run-as "$package" cat files/a12-captures.tar > "$output/captures.tar"
 tar --no-same-owner -xf "$output/captures.tar" -C "$output"
 chmod -R a+rX "$output/a12-wiki-watch"
+if [[ -n "$talkback_before" ]]; then
+  # What TalkBack gave the speech engine during the run, as the recorder wrote it down.
+  "$adb" -s "$serial" logcat -d -v threadtime -s A12Speech:I -T "$start" > "$output/talkback-speech.txt"
+  if command grep -arlF -- "$(cat "$HOME/.emulator_console_auth_token")" "$output"; then echo 'The console token reached the evidence' >&2; exit 1; fi
+fi
 # A capture the device was too busy to screenshot keeps its semantics tree; the run says how many lack the image.
 printf 'screenshots=%s\nscreenshots_missing=%s\n' "$(find "$output/a12-wiki-watch" -name '*.png' | wc -l)" \
   "$(find "$output/a12-wiki-watch" -name '*-screenshot-missing.txt' | wc -l)" >> "$output/result.txt"
