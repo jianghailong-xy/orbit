@@ -474,6 +474,12 @@ class TasksProjectsDeviceTest {
         login(case = "x1"); drawer("Tasks")
         awaitTag("tasks-list"); awaitText("A11 task checklist"); capture("tour-1-tasks-list")
         open("orbit-task:$projectTaskId"); awaitTag("task-detail"); awaitText("A11 project delivery"); capture("tour-2-task-detail")
+        // At any font size Run now scrolls clear of the comment box under the page (decision 5dshHuxUn20vj22RYT968k, point 4).
+        scrollTo("task-detail", hasTestTag("task-run"))
+        val run = compose.onNodeWithTag("task-run").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val comment = compose.onNodeWithTag("task-comment").fetchSemanticsNode().boundsInRoot
+        assertTrue("Run now ($run) ends above the comment box ($comment)", run.bottom <= comment.top)
+        capture("tour-2b-task-run-clear-of-comment")
         scrollTo("task-detail", hasTestTag("task-dependencies-section")); capture("tour-3-task-dependencies")
         tap("task-edit-acceptance", "task-detail"); awaitTag("task-acceptance-sheet"); capture("tour-4-task-edit")
         instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK); awaitGone("task-acceptance-sheet")

@@ -355,7 +355,9 @@ class RealStackDeviceTest {
         awaitScrollTo("project-detail", hasTestTag("open-item:$item")); capture("stack-exception-item")
         compose.onNodeWithTag("open-item:$item").performClick()
         awaitTag("interaction-cards")
-        record("coordinator", get("/projects/$id/coordinator/status").jsonObject.obj("coordination")?.text("sessionId"))
+        val coordinator = record("coordinator session (server)", get("/projects/$id/coordinator/status").jsonObject.obj("coordination")?.text("sessionId"))
+        compose.waitUntil(30_000) { io.orbitd.android.navigation.ObjectId.same(app.realtime.state.value.session?.id, coordinator) }
+        record("conversation the app opened", app.realtime.state.value.session?.id)
         compose.waitUntil(30_000) { runCatching { compose.onNodeWithTag("item:$item").assertIsDisplayed() }.isSuccess }
         capture("stack-exception-card")
         val note = "Checked on the stack: the smoke run's failure is understood ($stamp)"
