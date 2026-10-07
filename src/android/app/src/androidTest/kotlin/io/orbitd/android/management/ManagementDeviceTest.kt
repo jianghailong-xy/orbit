@@ -2,8 +2,13 @@ package io.orbitd.android.management
 
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Rect
 import android.net.Uri
+import android.os.SystemClock
 import android.view.KeyEvent
+import android.view.accessibility.AccessibilityManager
+import android.view.accessibility.AccessibilityNodeInfo
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -215,6 +220,162 @@ class ManagementDeviceTest {
                 File(app.filesDir, "a13-management").apply { mkdirs() }.resolve("runner-requests.txt").writeText(calls.joinToString("\n"))
             }
         }
+    }
+
+    /** The module's main pages in the account's dark appearance, then at twice the font size. */
+    @Test fun mainPagesInDarkAndAtTwiceTheFontSize() {
+        start()
+        MockWebServer().use { server ->
+            server.dispatcher = dispatcher()
+            val fontScale = shell("settings get system font_scale").trim().ifEmpty { "1.0" }
+            try {
+                role = "ADMIN"; runnerOnline = true
+                for (pass in listOf("dark", "font200")) {
+                    theme = if (pass == "dark") "dark" else "light"
+                    if (pass == "font200") shell("settings put system font_scale 2.0")
+                    signIn(server)
+                    if (pass == "font200") { compose.activityRule.scenario.recreate(); compose.waitUntil(15_000) { app.realtime.state.value.directoryFresh } }
+                    tour(pass)
+                    runBlocking { app.session.logout() }
+                    compose.waitUntil(10_000) { app.session.state.value is AuthState.SignedOut }
+                }
+            } finally {
+                shell("settings put system font_scale $fontScale")
+                theme = "system"
+                if (app.session.state.value is AuthState.SignedIn) runBlocking { app.session.logout() }
+            }
+        }
+    }
+
+    private fun tour(pass: String) {
+        compose.onNodeWithTag("workspace:$workspaceId").performClick()
+        await("Fixture session")
+        compose.onNodeWithContentDescription("Options for Fixture session").performClick()
+        click(hasText("Share…") and hasClickAction())
+        await("Tool calls and output"); capture("$pass-session-share")
+        compose.onNode(hasText("Close") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
+        compose.onNodeWithContentDescription("Workspace settings").performClick()
+        await("Smart model selection for tasks"); capture("$pass-workspace-settings")
+        click(hasText("Cancel") and hasClickAction(), scroll = false)
+        settings(); capture("$pass-settings-home")
+        compose.onNodeWithContentDescription("Edit profile").performScrollTo().performClick(); await("Save profile"); capture("$pass-edit-profile"); back()
+        click(hasText("Notifications") and hasClickAction()); await("When a session finishes"); capture("$pass-notifications"); back()
+        click(hasText("Shared links") and hasClickAction()); await("Fixture shared session"); capture("$pass-shared-links"); back()
+        click(hasText("Admin") and hasClickAction()); await("Second user"); capture("$pass-admin-users"); back()
+        click(hasText("Runners") and hasClickAction()); await("Controlled remote"); capture("$pass-runners-list")
+        click(hasText("Controlled remote") and hasClickAction()); await("Max Concurrent"); capture("$pass-runner")
+        click(hasText("Claude Code") and hasClickAction()); await("Add Account"); capture("$pass-runner-engine")
+        back(); back(); back()
+        click(hasText("Providers") and hasClickAction()); await("Team Codex"); capture("$pass-providers")
+        click(hasText("Team Codex") and hasClickAction()); await("Who can use it"); capture("$pass-codex-pool")
+        back(); back()
+    }
+
+    /**
+     * TalkBack itself running (not a lint of the source): on each main page every control TalkBack can reach is read
+     * off the accessibility tree it reads, a press without words fails, TalkBack's focus is put on the page's key
+     * control and photographed, and that control is activated the way a double tap does (ACTION_CLICK on the
+     * accessibility node), with its effect checked. TalkBack's settings are put back after.
+     */
+    @Test fun talkBackReachesReadsAndActivatesTheMainPages() {
+        start()
+        MockWebServer().use { server ->
+            server.dispatcher = dispatcher()
+            val savedServices = shell("settings get secure enabled_accessibility_services").trim()
+            val savedEnabled = shell("settings get secure accessibility_enabled").trim()
+            val report = StringBuilder(); val problems = mutableListOf<String>()
+            try {
+                role = "ADMIN"; runnerOnline = true
+                signIn(server)
+                shell("settings put secure enabled_accessibility_services $talkBack")
+                shell("settings put secure accessibility_enabled 1")
+                val manager = app.getSystemService(AccessibilityManager::class.java)
+                val deadline = SystemClock.uptimeMillis() + 15_000
+                while (!manager.isTouchExplorationEnabled && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(250)
+                report.appendLine("talkback_enabled=${manager.isEnabled} touch_exploration=${manager.isTouchExplorationEnabled}")
+                assertTrue("TalkBack must be running for this check", manager.isTouchExplorationEnabled)
+                // With TalkBack on, an injected touch explores rather than presses: navigation is by semantics actions.
+                compose.onAllNodesWithContentDescription("Open navigation").onFirst().performSemanticsAction(SemanticsActions.OnClick)
+                compose.onNode(hasText("Settings") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+                await("Default permission")
+                audit("settings-home", report, problems)
+                doubleTap("Runners", "talkback-settings-runners", report, problems); await("Add Runner")
+                audit("runners-list", report, problems)
+                doubleTap("Controlled remote", "talkback-runners-row", report, problems); await("Max Concurrent")
+                audit("runner", report, problems)
+                doubleTap("Increase Max Concurrent", "talkback-runner-capacity", report, problems)
+                compose.waitUntil(10_000) { calls.any { it == "PATCH /api/runners/$runnerId" } }
+                report.appendLine("double tap Increase Max Concurrent -> PATCH /api/runners/$runnerId sent")
+                back(); back(); await("Default permission")
+                doubleTap("Providers", "talkback-settings-providers", report, problems); await("Team Codex")
+                audit("providers", report, problems)
+                doubleTap("Team Codex", "talkback-providers-pool", report, problems); await("Who can use it")
+                audit("codex-pool", report, problems)
+                back(); back(); await("Default permission")
+                doubleTap("Shared links", "talkback-settings-shared-links", report, problems); await("Fixture shared session")
+                audit("shared-links", report, problems)
+                doubleTap("Turn off", "talkback-shared-links-turn-off", report, problems); await("Turn off this link")
+                report.appendLine("double tap Turn off -> the confirmation opened")
+                compose.onNode(hasText("Cancel") and hasClickAction() and hasAnyAncestor(isDialog())).performSemanticsAction(SemanticsActions.OnClick)
+                back(); await("Default permission")
+                doubleTap("Edit profile", "talkback-settings-profile", report, problems); await("Save profile")
+                audit("edit-profile", report, problems)
+                doubleTap("Choose photo", "talkback-profile-photo", report, problems); await("Photo library")
+                report.appendLine("double tap Choose photo -> the photo menu opened")
+                back(); back(); await("Default permission")
+                doubleTap("Admin", "talkback-settings-admin", report, problems); await("Second user")
+                audit("admin-users", report, problems)
+                File(app.filesDir, "a13-management").apply { mkdirs() }.resolve("talkback-problems.txt").writeText(problems.joinToString("\n"))
+                assertTrue("TalkBack problems: $problems", problems.isEmpty())
+            } finally {
+                if (savedServices == "null" || savedServices.isBlank()) shell("settings delete secure enabled_accessibility_services")
+                else shell("settings put secure enabled_accessibility_services $savedServices")
+                if (savedEnabled == "null" || savedEnabled.isBlank()) shell("settings delete secure accessibility_enabled")
+                else shell("settings put secure accessibility_enabled $savedEnabled")
+                report.appendLine("restored services=${shell("settings get secure enabled_accessibility_services").trim()} enabled=${shell("settings get secure accessibility_enabled").trim()}")
+                File(app.filesDir, "a13-management").apply { mkdirs() }.resolve("talkback-report.txt").writeText(report.toString())
+                runBlocking { app.session.logout() }
+            }
+        }
+    }
+
+    private val talkBack = "com.google.android.marvin.talkback/com.google.android.marvin.talkback.TalkBackService"
+
+    /** What TalkBack can reach on the active window, in its order, with the words it speaks for each. */
+    private fun audit(page: String, report: StringBuilder, problems: MutableList<String>) {
+        compose.waitForIdle(); SystemClock.sleep(600)
+        val root = instrumentation.uiAutomation.rootInActiveWindow ?: run { problems += "$page: no active window"; return }
+        report.appendLine("## $page")
+        fun words(node: AccessibilityNodeInfo) = listOfNotNull(node.contentDescription, node.text, node.stateDescription)
+            .map { it.toString().trim() }.filter { it.isNotEmpty() }
+        fun walk(node: AccessibilityNodeInfo, depth: Int) {
+            val reachable = node.isVisibleToUser && (node.isClickable || node.isFocusable || node.isCheckable)
+            val said = words(node)
+            if (reachable || said.isNotEmpty()) {
+                val actions = node.actionList.mapNotNull { it.label?.toString() }.joinToString(",")
+                report.appendLine("${"  ".repeat(depth)}${node.className?.toString()?.substringAfterLast('.')} clickable=${node.isClickable} " +
+                    "enabled=${node.isEnabled} words=\"${said.joinToString(" | ")}\"" + if (actions.isNotEmpty()) " actions=[$actions]" else "")
+                if (reachable && node.isClickable && said.isEmpty()) problems += "$page: a press without words (${node.className}) at ${Rect().also(node::getBoundsInScreen)}"
+            }
+            for (i in 0 until node.childCount) node.getChild(i)?.let { walk(it, depth + 1) }
+        }
+        walk(root, 0)
+    }
+
+    /** TalkBack's focus on the control named [words], photographed, then a double tap (ACTION_CLICK on its node). */
+    private fun doubleTap(words: String, shot: String, report: StringBuilder, problems: MutableList<String>) {
+        compose.waitForIdle(); SystemClock.sleep(400)
+        val root = instrumentation.uiAutomation.rootInActiveWindow
+        val target = root?.findAccessibilityNodeInfosByText(words)?.firstOrNull { it.isVisibleToUser }
+        if (target == null) { problems += "$shot: TalkBack found nothing named \"$words\""; return }
+        var press: AccessibilityNodeInfo? = target
+        while (press != null && !press.isClickable) press = press.parent
+        target.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
+        SystemClock.sleep(500)
+        report.appendLine("focus \"$words\" -> accessibilityFocused=${target.refresh() && target.isAccessibilityFocused}")
+        capture(shot)
+        report.appendLine("double tap \"$words\" -> ${press?.performAction(AccessibilityNodeInfo.ACTION_CLICK)}")
+        if (press == null) problems += "$shot: \"$words\" cannot be activated"
     }
 
     private fun start() {
