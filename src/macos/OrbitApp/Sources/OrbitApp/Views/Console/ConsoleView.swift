@@ -624,6 +624,27 @@ struct TranscriptView: View {
         #endif
     }
 
+    /// The viewport changed size under a pinned transcript — the keyboard rising, the composer
+    /// growing a line, the chrome folding away — and the tail is asked for, the way a tap on the
+    /// jump-to-latest disc asks for it (`heldScroll`: this arrives off a layout report, so the rows
+    /// it names are the ones the next update has, not whatever this frame holds).
+    private func repinAfterResize() {
+        // A window opened at a record ends at a gap, and a preview's place is held while its sheet
+        // is up: neither follows the tail, so neither follows a resize to it.
+        guard !console.detached, !reviewingCard else { return }
+        #if os(iOS)
+        // A lazy List's `contentSize` is an estimate until it lays out again, and a programmatic
+        // scroll is CLAMPED to it: asked in the same update that grew the composer, the scroll
+        // stops wherever the estimate ended, one line short of the tail. Settle the layout first.
+        DispatchQueue.main.async {
+            transcriptScroll.view?.layoutIfNeeded()
+            holdScroll(to: bottomID, anchor: .bottom, animated: false)
+        }
+        #else
+        holdScroll(to: bottomID, anchor: .bottom, animated: false)
+        #endif
+    }
+
     /// What `stranded` is re-decided on: the tail leaving or entering the view, the pin, and every
     /// publish — whose follow may yet close the gap.
     private var strandKey: String { "\(tailOutOfView)|\(atBottom)|\(console.stateRevision)" }
@@ -702,6 +723,7 @@ struct TranscriptView: View {
         .scrollDismissesKeyboard(.interactively)   // iOS: swipe the transcript to lower the keyboard
         .defaultScrollAnchor(.bottom)
         .modifier(tracker(ruler: ruler))
+        .modifier(ViewportResize(atBottom: atBottom, onResize: repinAfterResize))
         // The transcript viewport's top edge in global space — the line `AnchorRow` tests each row
         // against to find the one under the top. Stable during a scroll (only shifts on layout, e.g.
         // the keyboard), so reading it here doesn't churn.
@@ -830,10 +852,12 @@ struct TranscriptView: View {
                 // interrupted by the sheet and leave its row off-screen on return.
                 proxy.scrollTo(held.rowID, anchor: held.anchor)
                 openReview(for: row)
-            } else {
+            } else if held.animated {
                 withAnimation(.easeOut(duration: 0.2)) {
                     proxy.scrollTo(held.rowID, anchor: held.anchor)
                 }
+            } else {
+                proxy.scrollTo(held.rowID, anchor: held.anchor)
             }
         }
         .onAppear { proxy.scrollTo(bottomID, anchor: .bottom); recomputeStuck() }
@@ -1016,9 +1040,9 @@ struct TranscriptView: View {
 
     /// Carry a scroll into the next update rather than making it from here (see `heldScroll`). A new
     /// tick each time, so asking twice for the same row scrolls twice.
-    private func holdScroll(to rowID: String, anchor: UnitPoint, opensReview: Bool = false) {
+    private func holdScroll(to rowID: String, anchor: UnitPoint, opensReview: Bool = false, animated: Bool = true) {
         heldScroll = HeldScroll(rowID: rowID, anchor: anchor, tick: (heldScroll?.tick ?? 0) &+ 1,
-                                sessionID: console.sessionID, opensReview: opensReview)
+                                sessionID: console.sessionID, opensReview: opensReview, animated: animated)
     }
 
     /// The bar opens the same review as tapping a preview. Inline cards remain scroll-only.
@@ -1283,6 +1307,10 @@ private struct HeldScroll: Equatable {
     let tick: Int
     let sessionID: String
     let opensReview: Bool
+    /// Glide to the row or land on it at once. A tap gets the glide; a re-pin for a viewport that is
+    /// still moving does not — an animated scroll is aimed at the layout of the frame it starts in,
+    /// and a composer growing under it left the tail a line short of the bottom.
+    var animated = true
 }
 
 #if os(iOS)
@@ -1423,6 +1451,30 @@ private struct ScrollTouchConfigurator: UIViewRepresentable {
     }
 }
 #endif
+
+/// The transcript's viewport changing size — the keyboard rising, the composer growing a line, a
+/// phone's chrome folding away. `ScrollTracker` cannot answer this one: `onScrollGeometryChange`
+/// reports the scroll view scrolling (and the insets a keyboard moves), and the List's frame
+/// changing for any other reason is no sample of it — measured here, the composer growing a line
+/// reported nothing at all while the last message slid under it. A pinned transcript follows the
+/// resize anyway (see `TailPinning.followsResize`, web's ResizeObserver); the ask crosses to the
+/// transcript, which owns the scroll.
+private struct ViewportResize: ViewModifier {
+    /// The pin as of the last update — the rule's `wasPinned`. A reader away from the tail keeps
+    /// their place through a resize, however the viewport moved.
+    let atBottom: Bool
+    let onResize: () -> Void
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18, macOS 15, *) {
+            content.onGeometryChange(for: Double.self) { Double($0.size.height) } action: { was, now in
+                if TailPinning.followsResize(wasPinned: atBottom, from: was, to: now) { onResize() }
+            }
+        } else {
+            content
+        }
+    }
+}
 
 /// The single scroll observer: drives the jump-to-latest button's `atBottom` and `tailOutOfView`,
 /// AND feeds the sticky header by stashing the live content offset into `ruler` and asking for a
