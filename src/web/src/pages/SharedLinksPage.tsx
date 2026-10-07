@@ -10,6 +10,7 @@ import { copyText } from '../lib/clipboard';
 import { shareLinksQuery } from '../lib/queries';
 import { includeChips, publicLinkUrl, shortDate, staleSessionLinks } from '../lib/shareLinks';
 import { sessionLifecycleLabel, sessionLifecycleStateOf } from '../lib/sessionState';
+import { wikiSpacePath } from '../lib/wiki';
 import { useToast } from '../lib/toast';
 import { ago } from '../lib/watches';
 
@@ -33,8 +34,8 @@ const TABS: readonly { key: Tab; state: ShareLinkState; label: string; empty: st
 
 const isTab = (value: string | null): value is Tab => TABS.some((tab) => tab.key === value);
 
-const KIND_WORD: Record<ShareLink['kind'], string> = { SESSION: 'Session', TASK: 'Task', PROJECT: 'Project' };
-const KIND_LETTER: Record<ShareLink['kind'], string> = { SESSION: 'S', TASK: 'T', PROJECT: 'P' };
+const KIND_WORD: Record<ShareLink['kind'], string> = { SESSION: 'Session', TASK: 'Task', PROJECT: 'Project', WIKI: 'Wiki' };
+const KIND_LETTER: Record<ShareLink['kind'], string> = { SESSION: 'S', TASK: 'T', PROJECT: 'P', WIKI: 'W' };
 /** A project's status in the words the projects pages use (ProjectsPage STATUS_LABEL). */
 const PROJECT_WORD: Record<string, string> = { OPEN: 'Open', DONE: 'Completed', CANCELLED: 'Cancelled' };
 
@@ -42,11 +43,14 @@ const PROJECT_WORD: Record<string, string> = { OPEN: 'Open', DONE: 'Completed', 
 const TURN_OFF_TITLE = 'Turn off this link?';
 const TURN_OFF_DETAIL = 'Anyone who has it loses access right away.';
 
-/** Where the root stands, after what it is: "Session · Completed Sep 22", "Task · Done". */
+/** Where the root stands, after what it is: "Session · Completed Sep 22", "Task · Done". A wiki has
+ *  no status: "Wiki". */
 function rootWhere(link: ShareLink): string {
   const kind = KIND_WORD[link.kind];
-  if (link.kind === 'TASK') return `${kind} · ${taskStatusLabel(link.root.status)}`;
-  if (link.kind === 'PROJECT') return `${kind} · ${PROJECT_WORD[link.root.status] ?? link.root.status}`;
+  if (link.kind === 'WIKI') return kind;
+  const status = link.root.status ?? '';
+  if (link.kind === 'TASK') return `${kind} · ${taskStatusLabel(status)}`;
+  if (link.kind === 'PROJECT') return `${kind} · ${PROJECT_WORD[status] ?? status}`;
   const lifecycle = sessionLifecycleStateOf(link.root);
   const label = sessionLifecycleLabel(lifecycle);
   return lifecycle === 'COMPLETED' && link.root.completedAt
@@ -269,6 +273,7 @@ export function SharedLinksPage() {
           onClose={() => setSettingsFor(null)}
           kind={settingsFor.kind}
           rootId={settingsFor.root.id}
+          appPath={settingsFor.root.slug ? wikiSpacePath(settingsFor.root.slug) : undefined}
         />
       )}
     </div>

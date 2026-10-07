@@ -75,7 +75,8 @@ final class SharePanelWiringTests: XCTestCase {
     }
 
     private static let appFiles = ["Views/Console/ConsoleView.swift", "Views/TasksView.swift",
-                                   "Views/ProjectsView.swift", "Views/AgentsView.swift", "Views/ShareSheet.swift"]
+                                   "Views/ProjectsView.swift", "Views/AgentsView.swift", "Views/WikiScreens.swift",
+                                   "Views/ShareSheet.swift"]
 
     // MARK: one panel
 
@@ -92,6 +93,9 @@ final class SharePanelWiringTests: XCTestCase {
              "ShareSheet(kind: .task, rootID: taskID, baseURL: baseURL, tokenStore: model.tokenStore)", []),
             ("Views/ProjectsView.swift", ".sheet(isPresented: $sharing)",
              "ShareSheet(kind: .project, rootID: projectID, baseURL: baseURL, tokenStore: model.tokenStore)", []),
+            // A wiki's opens from its home's bar (share-links §10).
+            ("Views/WikiScreens.swift", ".sheet(isPresented: $sharing)",
+             "ShareSheet(kind: .wiki, rootID: space.id, baseURL: baseURL, tokenStore: model.tokenStore)", []),
         ]
         var built = 0
         for file in Self.appFiles {
