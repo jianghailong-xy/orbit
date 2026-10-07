@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """What merging main into the delivery touched: usage merge-scope.py BASE BATCH MAIN MERGED (README "第 2 轮").
 
-BASE is the project tip the batch started from, BATCH the delivered tip, MAIN the main commit merged in,
-MERGED the commit under test. Reads git only, prints JSON and checks, exits 1 if a check fails:
+BASE is the project tip the batch started from, BATCH the delivered tip, MAIN the main commit merged in
+(once the project line has moved as well: the merge of its tip and main, without this batch), MERGED the
+commit under test. Reads git only, prints JSON and checks, exits 1 if a check fails:
 - every file both sides changed carries exactly both sides' changed lines (BASE→BATCH equals MAIN→MERGED,
   BASE→MAIN equals BATCH→MERGED, as multisets of +/- lines);
 - every other file the batch changed is the batch's blob, every other file main changed is main's, apart
@@ -69,8 +70,11 @@ main_moved = [p for p in main_only if blob(MERGED, p) != blob(MAIN, p)]
 check(f'the batch\'s other {len(batch_only)} files (its evidence aside) are its own blobs, but for {sorted(ROUND2 & set(batch_only))}',
       set(batch_moved) <= ROUND2)
 check(f'main\'s other {len(main_only)} files are main\'s own blobs, but for {sorted(ROUND2 & set(main_only))}', set(main_moved) <= ROUND2)
-check('main changed nothing under src/web/src/components/ui or src/web/ui-migration',
-      not changed(BASE, MAIN, 'src/web/src/components/ui', 'src/web/ui-migration'))
+check('main changed nothing under src/web/src/components/ui', not changed(BASE, MAIN, 'src/web/src/components/ui'))
+harness = sorted(changed(BASE, MAIN, 'src/web/ui-migration'))
+matrices = re.compile(r'src/web/ui-migration/(foundation|controls|overlays|choices|composer|toasts|reviews)[^/]*$')
+check(f'under src/web/ui-migration main changed no component-matrix file (it changed {[p.rsplit("/", 1)[1] for p in harness]})',
+      not any(matrices.match(p) for p in harness))
 
 
 def selectors(a, b):

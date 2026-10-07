@@ -205,6 +205,12 @@ case "${1:?group}" in
     # round (r2, ...).
     check ${2:?round}-merge-check bash -c "npm run build -w @orbit/web && npm run test -w @orbit/web"
     ;;
+  merged-scope)
+    # Round 2: merge-scope.py on the commit under test against $3 (main, or the project tip merged with
+    # main), recorded. $2 names the round.
+    n=${2:?round}
+    check $n-merge-scope bash -c "python3 $here/merge-scope.py da13423d3 b24209077 ${3:?base} HEAD --round2 src/web/ui-migration/pilot.browser.mjs src/web/ui-migration/pilot-fixtures.mjs src/web/src/pages/RunnerDetailPage.antigravityAccount.test.tsx > $here/$n-merge-scope.json"
+    ;;
   merged-pilot)
     # Round 2: every pilot case on both trees again. REF is then main as merged (the tree the merge would
     # be without this batch) with the pilot specs copied in; both are built afresh. $2 names the round.
