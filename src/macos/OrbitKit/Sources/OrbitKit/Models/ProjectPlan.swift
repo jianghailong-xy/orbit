@@ -350,6 +350,11 @@ public struct ProjectGraphMark: Codable, Equatable, Sendable, Identifiable {
     public let queued: Bool
     public let workState: String?
     public let verificationState: String?
+    /// How the task is settled (`EXECUTABLE`, `EVIDENCE_JUDGMENT`, `OWNER_CONFIRMED`, …) and whether
+    /// Orbit starts it once it is ready: what the start card reads to say which of the plan comes to
+    /// the owner and which starts with the project. Absent from an older server.
+    public let completionCriterion: String?
+    public let autoRunWhenReady: Bool?
     // A fold.
     public let taskCount: Int
     /// How many of its tasks are in each status (`DONE`, `IN_PROGRESS`, `FAILED`, `CANCELLED`, `OPEN`).
@@ -364,7 +369,8 @@ public struct ProjectGraphMark: Codable, Equatable, Sendable, Identifiable {
 
     public init(kind: Kind, id: String, title: String, parentTaskId: String? = nil, taskId: String? = nil,
                 status: String? = nil, running: Bool = false, queued: Bool = false,
-                workState: String? = nil, verificationState: String? = nil, taskCount: Int = 1,
+                workState: String? = nil, verificationState: String? = nil,
+                completionCriterion: String? = nil, autoRunWhenReady: Bool? = nil, taskCount: Int = 1,
                 statusCounts: [String: Int] = [:], members: [Member] = [], samples: [Member] = [],
                 instanceCount: Int? = nil, expandable: Bool = false) {
         self.kind = kind
@@ -377,6 +383,8 @@ public struct ProjectGraphMark: Codable, Equatable, Sendable, Identifiable {
         self.queued = queued
         self.workState = workState
         self.verificationState = verificationState
+        self.completionCriterion = completionCriterion
+        self.autoRunWhenReady = autoRunWhenReady
         self.taskCount = taskCount
         self.statusCounts = statusCounts
         self.members = members
@@ -388,10 +396,12 @@ public struct ProjectGraphMark: Codable, Equatable, Sendable, Identifiable {
     /// A task drawn as itself.
     public static func task(id: String, title: String, status: String, workState: String? = nil,
                             running: Bool = false, queued: Bool = false, parentTaskId: String? = nil,
-                            verificationState: String? = nil) -> ProjectGraphMark {
+                            verificationState: String? = nil, completionCriterion: String? = nil,
+                            autoRunWhenReady: Bool? = nil) -> ProjectGraphMark {
         ProjectGraphMark(kind: .task, id: id, title: title, parentTaskId: parentTaskId, taskId: id,
                          status: status, running: running, queued: queued, workState: workState,
-                         verificationState: verificationState)
+                         verificationState: verificationState, completionCriterion: completionCriterion,
+                         autoRunWhenReady: autoRunWhenReady)
     }
 
     public init(from decoder: Decoder) throws {
@@ -406,6 +416,8 @@ public struct ProjectGraphMark: Codable, Equatable, Sendable, Identifiable {
         queued = try c.decodeIfPresent(Bool.self, forKey: .queued) ?? false
         workState = try c.decodeIfPresent(String.self, forKey: .workState)
         verificationState = try c.decodeIfPresent(String.self, forKey: .verificationState)
+        completionCriterion = try c.decodeIfPresent(String.self, forKey: .completionCriterion)
+        autoRunWhenReady = try c.decodeIfPresent(Bool.self, forKey: .autoRunWhenReady)
         taskCount = try c.decodeIfPresent(Int.self, forKey: .taskCount) ?? 1
         statusCounts = (try? c.decodeIfPresent([String: Int].self, forKey: .statusCounts)) ?? [:]
         members = (try? c.decodeIfPresent([Member].self, forKey: .members)) ?? []

@@ -2354,8 +2354,9 @@ private struct StartProjectCardView: View {
                 askedAt: row.waitingSince,
                 request: request,
                 criteria: console.projectCriteria.sorted { $0.ordinal < $1.ordinal },
-                plan: StartProject.planView(graph: console.projectGraph, request: request,
+                plan: StartProject.planView(graph: console.projectGraph,
                                             fallbackCount: console.projectTaskCount),
+                escalationSeconds: console.projectEscalationSeconds,
                 draft: console.startDraft(for: row),
                 standing: standing,
                 onDraft: { console.setStartDraft($0, for: itemID) },
@@ -2442,15 +2443,16 @@ private struct ProjectNotDoneCardView: View {
 /// project nobody has asked about — web's `StartProjectCard`, shared the same way by
 /// `SessionStartProjectCard` and `OwnerStartProjectCard`.
 ///
-/// A card no coordinator asked for (`askedAt` nil) carries the default rule's settings rather than
-/// a suggestion, and no ready check ran on its plan, so it claims neither: no "asked by", no
-/// "suggested by the coordinator", no "Orbit checked the plan" — and no Chat about this, which has no
-/// conversation to hand a reply to there.
+/// It answers three questions, in order (mocks: docs/mocks/start-card-redesign, v2): what done is —
+/// the criteria a press confirms, open; how much is delegated and what still comes to the owner —
+/// Automatic, on by default, with the list of what it leaves the owner under it; and the plan, by
+/// level. Start sits in the review's bottom bar with the line saying what pressing it does. The ready
+/// check's warnings are the coordinator's and are not drawn (the owner, 2026-10-07).
 ///
-/// The look is the confirmation card's — the same blue surface, header and full-width capsules —
-/// with two sections of its own, Plan and How it runs, in white grouped panels. Every word is
-/// OrbitKit's `StartProject` / `RunSettings`, held to the browser's `lib/projectStart.ts` by
-/// `StartProjectCardCopyParityTests`.
+/// A card no coordinator asked for (`askedAt` nil) carries the default rule's settings rather than a
+/// suggestion, quotes nobody, and has no Chat about this, which has no conversation to hand a reply
+/// to there. Every word is OrbitKit's `StartProject` / `RunSettings`, held to the browser's
+/// `lib/projectStart.ts` by `StartProjectCardCopyParityTests`.
 struct StartProjectCard: View {
     let projectID: String
     let projectTitle: String
@@ -2460,6 +2462,11 @@ struct StartProjectCard: View {
     /// The criteria a press confirms, in order.
     let criteria: [ProjectCriteriaDocument.Item]
     let plan: StartPlanView
+    /// Whether the project has a coordinator to run it — always, once one asked. A start with
+    /// Automatic on opens the first one, and the card says so.
+    var hasCoordinator: Bool = true
+    /// How long a problem waits on the coordinator before it reaches the owner.
+    var escalationSeconds: Int = 7_200
     /// The settings as the owner has left them.
     let draft: StartSettingsDraft
     let standing: StartProject.Standing
@@ -2474,9 +2481,13 @@ struct StartProjectCard: View {
     @Environment(\.dismissApprovalReview) private var dismissReview
     @State private var starting = false
     @State private var criteriaOpen = false
+    @State private var whyOpen = false
+    @State private var mergeCheckOpen = false
 
     /// Whether a coordinator asked for this card.
     private var asked: Bool { askedAt != nil }
+    /// A start that turns Automatic on for a project nobody coordinates opens its first coordinator.
+    private var opensCoordinator: Bool { draft.automatic && !hasCoordinator }
 
     var body: some View {
         ApprovalReviewLayout(title: StartProject.title, symbol: "play.fill", tone: .blue,
@@ -2488,17 +2499,19 @@ struct StartProjectCard: View {
                 startButton
                 if let onChatAbout { chatButton(onChatAbout) }
             }
+            Text(StartProject.barCaption(opensCoordinator: opensCoordinator, startsNow: plan.startsNow,
+                                         criteria: criteria.count,
+                                         seal: CriteriaDecisions.shortSeal(request.criteriaDigest)))
+                .font(.orbitMeta).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
         }
     }
 
     @ViewBuilder
     private var content: some View {
         let editable = standing == .live && !starting
-        Text(StartProject.meta(projectTitle: projectTitle,
-                               askedAgo: askedAt.flatMap { RelativeTime.format($0) },
-                               seal: CriteriaDecisions.shortSeal(request.criteriaDigest)))
-            .font(.orbitLabel).foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        header
         if let stale = StartProject.staleExplanation(standing) {
             Text(stale)
                 .font(.orbitLabel).foregroundStyle(.secondary)
@@ -2510,20 +2523,11 @@ struct StartProjectCard: View {
 
         StartSectionHead(title: StartProject.doneWhenHead(criteria.count))
         criteriaList
-        planSection
-        howItRunsSection(editable: editable)
-        if asked {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.green)
-                Text(StartProject.checkedLine(repository: request.repository))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .font(.orbitLabel)
-        }
         Text(StartProject.explanation(criteria.count))
-            .font(.orbitProse)
+            .font(.orbitLabel).foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
+        howItRunsSection(editable: editable)
+        planSection
         if let error {
             Text(error)
                 .font(.orbitLabel).foregroundStyle(Color.red)
@@ -2531,54 +2535,34 @@ struct StartProjectCard: View {
         }
     }
 
-    /// The plan: its order in one line, the way to the tasks it names, and what the ready check
-    /// warned about in amber.
+    /// Who is asking, and in their own words: the card is the coordinator asking to begin.
     @ViewBuilder
-    private var planSection: some View {
-        StartSectionHead(title: StartProject.planHead(plan.count))
-        StartPanel {
-            VStack(alignment: .leading, spacing: 6) {
-                if let order = plan.order {
-                    Text(order).font(.orbitSubtext).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                Button {
-                    PlatformHaptics.tap()
-                    dismissReview()
-                    onViewTasks()
-                } label: {
-                    Text(StartProject.viewTasks).font(.orbitSubtext).foregroundStyle(Color.blue)
-                }
-                .buttonStyle(.plain)
-                ForEach(plan.warnings, id: \.self) { warning in
-                    Text("⚠ \(warning)").font(.orbitSubtext).foregroundStyle(Color.orange)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            .startRow()
-        }
-    }
-
-    /// How it runs: the integration settings, prefilled with the coordinator's suggestion — or the
-    /// default rule's, on a card nobody asked for — and the owner's to change before the press; and
-    /// the coordinator's reason for suggesting them.
-    @ViewBuilder
-    private func howItRunsSection(editable: Bool) -> some View {
-        StartSectionHead(title: StartProject.howItRuns,
-                         aside: asked ? StartProject.suggestedByCoordinator : nil)
-        StartPanel {
-            lineRow(editable: editable)
-            Divider()
-            automaticRow(editable: editable)
-            Divider()
-            atMostRow(editable: editable)
-            Divider()
-            mergeCheckRow(editable: editable)
-        }
-        if !request.why.isEmpty {
-            Text(StartProject.coordinatorSays(request.why))
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(projectTitle).font(.orbitProse.weight(.semibold))
+            Text(asked ? StartProject.askedLine(askedAt.flatMap { RelativeTime.format($0) })
+                       : StartProject.nobodyAskedLine(hasCoordinator: hasCoordinator))
                 .font(.orbitLabel).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        if asked, !request.why.isEmpty {
+            StartPanel {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label(StartProject.coordinator, systemImage: "bubble.left.fill")
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                    Text(request.why).font(.orbitSubtext).lineLimit(whyOpen ? nil : 3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button {
+                        PlatformHaptics.tap()
+                        whyOpen.toggle()
+                    } label: {
+                        Text(whyOpen ? StartProject.less : StartProject.more)
+                            .font(.orbitLabel).foregroundStyle(Color.blue)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .startRow()
+            }
         }
     }
 
@@ -2610,7 +2594,27 @@ struct StartProjectCard: View {
         }
     }
 
-    // MARK: How it runs — the four settings, prefilled with the coordinator's suggestion
+    // MARK: How it runs — Automatic and what still comes to the owner, then the rest
+
+    /// Automatic first, with what it leaves the owner listed under it — the switch's consequence,
+    /// not a description of it — then the three settings that can change later, one row each, and
+    /// whose settings these are.
+    @ViewBuilder
+    private func howItRunsSection(editable: Bool) -> some View {
+        StartSectionHead(title: StartProject.howItRuns)
+        StartPanel {
+            automaticRow(editable: editable)
+            Divider()
+            lineRow(editable: editable)
+            Divider()
+            mergeCheckRow(editable: editable)
+            Divider()
+            atMostRow(editable: editable)
+        }
+        Text(StartProject.howItRunsNote(asked: asked, suggestedOff: asked && !request.settings.automatic))
+            .font(.orbitLabel).foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
     private func update(_ change: (inout StartSettingsDraft) -> Void) {
         var next = draft
@@ -2618,50 +2622,98 @@ struct StartProjectCard: View {
         onDraft(next)
     }
 
-    /// Where finished tasks land, picked from the platform's own menu: each option with the sentence
-    /// that says what choosing it means, and the one chosen ticked.
-    private func lineRow(editable: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+    /// Automatic, the sentence for the line and merge check chosen, the coordinator a start opens
+    /// when the project has none, and the list of what still comes to the owner.
+    private func automaticRow(editable: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // The label is its own Text and the switch trails it, on both platforms: macOS draws a
+            // bare Toggle as a checkbox in front of its label.
             HStack(spacing: 8) {
-                Text(RunSettings.tasksLandOn).font(.orbitProse)
+                Text(RunSettings.automatic).font(.orbitProse)
                 Spacer(minLength: 8)
-                Menu {
-                    // A Toggle rather than a Button: a menu item's second Text is its subtitle only
-                    // in this shape, and the tick is drawn for the one that is on.
-                    Toggle(isOn: lineBinding(.projectBranch, draft)) {
-                        Text(RunSettings.lineProjectBranch)
-                        Text(RunSettings.lineProjectBranchHint)
-                    }
-                    Toggle(isOn: lineBinding(.main, draft)) {
-                        Text(RunSettings.lineMain)
-                        Text(RunSettings.lineMainHint)
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(draft.line == .main ? RunSettings.lineMain : RunSettings.lineProjectBranch)
-                            .lineLimit(1)
-                        // macOS draws its own disclosure mark beside a borderless menu's title.
-                        #if os(iOS)
-                        Image(systemName: "chevron.up.chevron.down").font(.orbitMeta)
-                        #endif
-                    }
-                    .font(.orbitProse)
-                    .foregroundStyle(Color.blue)
+                Toggle(RunSettings.automatic,
+                       isOn: Binding(get: { draft.automatic },
+                                     set: { on in update { $0.automatic = on } }))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .disabled(!editable)
+            }
+            Text(RunSettings.automaticSays(automatic: draft.automatic, line: draft.line,
+                                           hasMergeCheck: draft.hasMergeCheck))
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if opensCoordinator {
+                Label(StartProject.opensCoordinator, systemImage: "sparkle")
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            comesToYou
+        }
+        .startRow()
+    }
+
+    /// What still comes to the owner once the project starts with these settings.
+    private var comesToYou: some View {
+        let items = StartProject.comesToYou(automatic: draft.automatic, line: draft.line,
+                                            ownerConfirmed: plan.ownerConfirmed,
+                                            evidenceJudged: plan.evidenceJudged,
+                                            escalationSeconds: escalationSeconds)
+        return VStack(alignment: .leading, spacing: 5) {
+            Text(StartProject.comesToYou)
+                .font(.orbitMeta.weight(.semibold)).foregroundStyle(Color.blue)
+                .textCase(.uppercase)
+            ForEach(items) { item in
+                HStack(alignment: .firstTextBaseline, spacing: 7) {
+                    Image(systemName: "person.fill").font(.orbitMeta).foregroundStyle(Color.blue)
+                    (Text(item.text)
+                        + Text(item.detail.map { " · \($0)" } ?? "").foregroundStyle(.secondary))
+                        .font(.orbitSubtext)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .borderlessMenuStyle()
-                // Held to its label's size on macOS, as the window probe drew it; on iOS the row
-                // lays it out beside the Spacer. (On iOS 26 the options' second lines arrive a moment
-                // after the menu opens: a screenshot taken too soon shows them empty.)
-                #if os(macOS)
-                .fixedSize()
-                #endif
-                .disabled(!editable)
             }
-            if draft.line == .projectBranch {
-                Text(StartProject.branch(request, projectID: projectID))
-                    .font(.orbitMono).foregroundStyle(.secondary)
-                    .lineLimit(1).truncationMode(.middle)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.blue.opacity(0.10), in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+    }
+
+    /// Where finished tasks land, picked from the platform's own menu: each option with the sentence
+    /// that says what choosing it means, and the one chosen ticked. The branch's own name is in the
+    /// menu, under its option.
+    private func lineRow(editable: Bool) -> some View {
+        HStack(spacing: 8) {
+            Text(RunSettings.tasksLandOn).font(.orbitProse)
+            Spacer(minLength: 8)
+            Menu {
+                // A Toggle rather than a Button: a menu item's second Text is its subtitle only in
+                // this shape, and the tick is drawn for the one that is on.
+                Toggle(isOn: lineBinding(.projectBranch, draft)) {
+                    Text(RunSettings.lineProjectBranch)
+                    Text("\(StartProject.branch(request, projectID: projectID)) — \(RunSettings.lineProjectBranchHint)")
+                }
+                Toggle(isOn: lineBinding(.main, draft)) {
+                    Text(RunSettings.lineMain)
+                    Text(RunSettings.lineMainHint)
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(draft.line == .main ? RunSettings.lineMain : RunSettings.lineProjectBranch)
+                        .lineLimit(1)
+                    // macOS draws its own disclosure mark beside a borderless menu's title.
+                    #if os(iOS)
+                    Image(systemName: "chevron.up.chevron.down").font(.orbitMeta)
+                    #endif
+                }
+                .font(.orbitProse)
+                .foregroundStyle(Color.blue)
             }
+            .borderlessMenuStyle()
+            // Held to its label's size on macOS, as the window probe drew it; on iOS the row lays it
+            // out beside the Spacer.
+            #if os(macOS)
+            .fixedSize()
+            #endif
+            .disabled(!editable)
         }
         .startRow()
     }
@@ -2675,24 +2727,45 @@ struct StartProjectCard: View {
                 })
     }
 
-    /// Automatic, with the sentence for the line chosen: the merge half follows the line.
-    private func automaticRow(editable: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            // The label is its own Text and the switch trails it, on both platforms: macOS draws a
-            // bare Toggle as a checkbox in front of its label.
-            HStack(spacing: 8) {
-                Text(RunSettings.automatic).font(.orbitProse)
-                Spacer(minLength: 8)
-                Toggle(RunSettings.automatic,
-                       isOn: Binding(get: { draft.automatic },
-                                     set: { on in update { $0.automatic = on } }))
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .disabled(!editable)
+    /// The check run on the combined tree before anything lands, folded to its value — Set, or None
+    /// with what that means — and opened to its command. An empty one is a setting like any other.
+    private func mergeCheckRow(editable: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                PlatformHaptics.tap()
+                mergeCheckOpen.toggle()
+            } label: {
+                HStack(spacing: 8) {
+                    Text(RunSettings.mergeCheck).font(.orbitProse).foregroundStyle(.primary)
+                    Spacer(minLength: 8)
+                    Text(draft.hasMergeCheck ? RunSettings.mergeCheckSet : RunSettings.mergeCheckNone)
+                        .font(.orbitProse).foregroundStyle(.secondary)
+                    Image(systemName: mergeCheckOpen ? "chevron.up" : "chevron.right")
+                        .font(.orbitMeta).foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
             }
-            Text(RunSettings.automaticHint(draft.line))
-                .font(.orbitLabel).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            .buttonStyle(.plain)
+            if mergeCheckOpen {
+                TextField(RunSettings.mergeCheckPlaceholder,
+                          text: Binding(get: { draft.mergeCheckCommand },
+                                        set: { command in update { $0.mergeCheckCommand = command } }),
+                          axis: .vertical)
+                    .font(.orbitMono)
+                    .textFieldStyle(.plain)
+                    .autocorrectionDisabled()
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    #endif
+                    .disabled(!editable)
+                Text(RunSettings.mergeCheckHint)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if !draft.hasMergeCheck {
+                Text(RunSettings.mergeCheckNoneSays)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .startRow()
     }
@@ -2716,34 +2789,53 @@ struct StartProjectCard: View {
         .startRow()
     }
 
-    /// The check run on the combined tree before anything lands — amber, with the ready check's own
-    /// warning under it, while Automatic would merge the branch into main with nothing run.
-    private func mergeCheckRow(editable: Bool) -> some View {
-        let missing = draft.mergeCheckMissing
-        return VStack(alignment: .leading, spacing: 4) {
-            Text(RunSettings.mergeCheck).font(.orbitProse)
-                .foregroundStyle(missing ? Color.orange : Color.primary)
-            TextField(RunSettings.mergeCheckPlaceholder,
-                      text: Binding(get: { draft.mergeCheckCommand },
-                                    set: { command in update { $0.mergeCheckCommand = command } }),
-                      axis: .vertical)
-                .font(.orbitMono)
-                .textFieldStyle(.plain)
-                .autocorrectionDisabled()
-                #if os(iOS)
-                .textInputAutocapitalization(.never)
-                #endif
-                .disabled(!editable)
-            Text(RunSettings.mergeCheckHint)
-                .font(.orbitLabel).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if missing {
-                Text("⚠ \(RunSettings.noMergeCheckWarning)")
-                    .font(.orbitLabel).foregroundStyle(Color.orange)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+    // MARK: the plan, by level
+
+    /// The plan by level — what starts now, what runs side by side, and the task that needs the
+    /// owner — the batch-create review's rule; the tasks themselves are one press away.
+    @ViewBuilder
+    private var planSection: some View {
+        StartSectionHead(title: StartProject.planHead(plan.count, levels: plan.levels?.count ?? 1))
+        StartPanel {
+            VStack(alignment: .leading, spacing: 8) {
+                if let levels = plan.levels {
+                    ForEach(Array(levels.enumerated()), id: \.offset) { at, level in
+                        planLevel(at + 1, level)
+                    }
+                }
+                Button {
+                    PlatformHaptics.tap()
+                    dismissReview()
+                    onViewTasks()
+                } label: {
+                    Text(StartProject.viewTasks).font(.orbitSubtext).foregroundStyle(Color.blue)
+                }
+                .buttonStyle(.plain)
+            }
+            .startRow()
+        }
+    }
+
+    private func planLevel(_ number: Int, _ level: [StartPlanLevelTask]) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("\(number)")
+                .font(.orbitMeta.weight(.semibold)).foregroundStyle(.secondary)
+                .frame(width: 18, height: 18)
+                .overlay(Circle().strokeBorder(Color.secondary.opacity(0.4)))
+            if let only = level.first, level.count == 1 {
+                Text(only.label).font(.orbitSubtext.weight(.semibold))
+                Text(StartProject.planTaskRest(only.title, label: only.label))
+                    .font(.orbitSubtext).lineLimit(1)
+                Spacer(minLength: 4)
+                if only.now { StartPlanPill(text: StartProject.now, tint: .green) }
+                if only.you { StartPlanPill(text: StartProject.you, tint: .blue) }
+            } else {
+                Text(level.map(\.label).joined(separator: " · ")).font(.orbitSubtext.weight(.semibold))
+                Spacer(minLength: 4)
+                Text(StartProject.inParallel(level.count)).font(.orbitLabel).foregroundStyle(.secondary)
             }
         }
-        .startRow()
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: the two answers
@@ -2778,6 +2870,20 @@ struct StartProjectCard: View {
         }
         .buttonStyle(.bordered)
         .disabled(criteria.isEmpty)
+    }
+}
+
+/// "Now" and "You" beside a task of the plan.
+private struct StartPlanPill: View {
+    let text: String
+    let tint: Color
+
+    var body: some View {
+        Text(text)
+            .font(.orbitMeta.weight(.semibold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 7).padding(.vertical, 1)
+            .background(tint.opacity(0.16), in: Capsule())
     }
 }
 
