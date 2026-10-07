@@ -16,7 +16,9 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import io.orbitd.android.core.auth.AuthState
+import io.orbitd.android.taskprojects.SharePanel
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
@@ -142,6 +144,24 @@ class ManagementPanelTest {
         compose.onNodeWithText("share read failed", substring = true).assertExists()
         compose.onNode(hasText("Retry") and hasClickAction()).assertExists()
         compose.onAllNodes(hasText("Only you") and isSelectable() and isEnabled()).assertCountEquals(0)
+    }
+
+    /** A page that hosts the panel (a task's or a project's ⋯ → Share…) hears the server's answer to each read and change,
+     * in the shape its menu reads: what the menu then says is what the server last said. */
+    @Test fun theSharePanelReportsEachAnswerInTheShapeTheMenuReads() {
+        val api = api()
+        val answers = mutableListOf<JsonObject>()
+        compose.setContent { ShareResourcePanel(api, revision, "SESSION", fixture.SESSION) { answers += it } }
+        await("Tool calls and output")
+        compose.onNode(hasText("Only you") and isSelectable()).performClick()
+        compose.onNode(hasText("Turn off") and hasClickAction()).performClick()
+        compose.waitUntil(10_000) { answers.size >= 2 }
+        compose.onNode(hasText("Anyone with the link") and isSelectable()).performClick()
+        compose.waitUntil(10_000) { answers.size >= 3 }
+        compose.waitForIdle()
+        assertEquals(listOf("GET", "DELETE", "PUT"), fixture.calls.filter { it.endsWith("sessions/${fixture.SESSION}/share") }.map { it.substringBefore(' ') })
+        assertEquals(listOf("Live link", "Only you", "Live link"), answers.map(SharePanel::menuStatus))
+        assertEquals("The read's counts stay with every answer", 3, answers.count { it["counts"] is JsonObject })
     }
 
     /**

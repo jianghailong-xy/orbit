@@ -267,13 +267,22 @@ fun SessionSharePanel(sessionId: String) {
     val app = LocalContext.current.applicationContext as OrbitApplication
     val handle = (app.session.state.collectAsState().value as? AuthState.SignedIn)?.handle ?: return
     val api = remember(handle) { ManagementApi(app.session, handle, app.processScope) }
-    val (revision, fresh) = rememberLiveFor(api)
-    ShareResourcePanel(api, revision, "SESSION", sessionId, fresh)
+    LiveSharePanel(api, "SESSION", sessionId)
 }
 
-/** SharePanel: access, the link, what it includes, when it stops, and how often it was opened. */
+/** The panel on the account's live connection, for a page's own Share dialog: a task's or a project's ⋯ → Share…. */
 @Composable
-fun ShareResourcePanel(api: ManagementApi, revision: Long, kind: String, id: String, fresh: Boolean = true) {
+fun LiveSharePanel(api: ManagementApi, kind: String, id: String, changed: (JsonObject) -> Unit = {}) {
+    val (revision, fresh) = rememberLiveFor(api)
+    ShareResourcePanel(api, revision, kind, id, fresh, changed)
+}
+
+/**
+ * SharePanel: access, the link, what it includes, when it stops, and how often it was opened. [changed] hears the
+ * server's answer to every read and change, as `{link, counts}`, so a page that says whether its link is live says what the server does.
+ */
+@Composable
+fun ShareResourcePanel(api: ManagementApi, revision: Long, kind: String, id: String, fresh: Boolean = true, changed: (JsonObject) -> Unit = {}) {
     val path = remember(kind, id) { sharingPath(kind, id) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -290,17 +299,23 @@ fun ShareResourcePanel(api: ManagementApi, revision: Long, kind: String, id: Str
     var busy by remember(path) { mutableStateOf(false) }
     // Writes need a read that held and a live connection, as the directory's own Share did (fresh && !busy).
     val writable = fresh && !busy
+    val report by rememberUpdatedState(changed)
+    fun answered() = report(buildJsonObject { put("link", link ?: JsonNull); counts?.let { put("counts", it) } })
     fun open(value: JsonObject?) = value?.takeIf { it.text("state") != "ENDED" }
     suspend fun load() {
         try {
             val read = sharingRead(api.get(path), kind, id)
             link = open(read["link"] as? JsonObject); counts = read["counts"] as? JsonObject; loaded = true; loadFailure = null
+            answered()
         } catch (e: CancellationException) { throw e } catch (e: Exception) { loadFailure = personalFailure(e) }
     }
     fun save(body: JsonObject, rollback: () -> Unit = {}) {
         busy = true; failure = null
         scope.launch {
-            try { link = open(api.put(path, body).jsonObject.let { (it["link"] as? JsonObject) ?: it.takeIf { o -> "token" in o } }); pending = emptyMap() }
+            try {
+                link = open(api.put(path, body).jsonObject.let { (it["link"] as? JsonObject) ?: it.takeIf { o -> "token" in o } }); pending = emptyMap()
+                answered()
+            }
             catch (e: CancellationException) { throw e } catch (e: Exception) { pending = emptyMap(); rollback(); failure = personalFailure(e) }
             finally { busy = false }
         }
@@ -378,7 +393,7 @@ fun ShareResourcePanel(api: ManagementApi, revision: Long, kind: String, id: Str
         confirmButton = { TextButton(enabled = writable, onClick = {
             confirmingOff = false; busy = true; failure = null
             scope.launch {
-                try { api.delete(path); link = null; expiryChoice = null; pending = emptyMap() }
+                try { api.delete(path); link = null; expiryChoice = null; pending = emptyMap(); answered() }
                 catch (e: CancellationException) { throw e } catch (e: Exception) { failure = personalFailure(e) }
                 finally { busy = false }
             }
