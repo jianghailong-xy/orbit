@@ -1,14 +1,13 @@
 package io.orbitd.android.management
 
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.UiAutomation
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.net.Uri
 import android.os.SystemClock
-import android.view.InputDevice
 import android.view.KeyEvent
-import android.view.MotionEvent
 import android.view.accessibility.AccessibilityManager
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.semantics.SemanticsActions
@@ -309,10 +308,11 @@ class ManagementDeviceTest {
      * TalkBack itself, driven by its own gestures. The instrumentation's UiAutomation is taken with
      * FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES: the default one turns every accessibility service off while it is
      * connected, which kept TalkBack from ever starting. On each main page TalkBack's swipe-right order is walked from
-     * the title and what it stops on is recorded with the words it reads, besides the whole tree it can reach; a press
-     * without words fails. The page's key control then gets TalkBack's focus by touch (explore by touch), is
-     * photographed with TalkBack's focus box, and is activated by a double tap, whose effect is checked: nothing else
-     * presses it. TalkBack's settings are put back after.
+     * the page's first item, recording what it stops on and the words it reads (a row's words are on its children, as
+     * TalkBack reads them), besides the whole tree it can reach; a press without words fails. The page's key control then
+     * gets TalkBack's focus by a touch on it (explore by touch), is photographed with TalkBack's focus box, and is
+     * activated by TalkBack's double tap, whose effect is checked: nothing else presses it. The touches come from the
+     * emulator's touchscreen (its console), so they reach TalkBack as a finger's do. TalkBack's settings are put back after.
      */
     @Test fun talkBackReachesReadsAndActivatesTheMainPages() {
         start()
@@ -339,10 +339,10 @@ class ManagementDeviceTest {
                     "services=${manager.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK).map { it.id }}")
                 assertTrue("TalkBack must be running for this check", manager.isTouchExplorationEnabled)
                 val front = SystemClock.uptimeMillis() + 10_000
-                while (automation.rootInActiveWindow?.packageName != app.packageName && SystemClock.uptimeMillis() < front) SystemClock.sleep(250)
+                while (automation.rootInActiveWindow?.packageName?.toString() != app.packageName && SystemClock.uptimeMillis() < front) SystemClock.sleep(250)
                 val active = automation.rootInActiveWindow
                 report.appendLine("active window: ${active?.packageName}")
-                if (active?.packageName != app.packageName) {
+                if (active?.packageName?.toString() != app.packageName) {
                     capture("talkback-covered")
                     fun texts(node: AccessibilityNodeInfo): List<String> = words(node) + (0 until node.childCount).mapNotNull(node::getChild).flatMap(::texts)
                     fail("TalkBack's start left ${active?.packageName} over the app: ${active?.let(::texts)}")
@@ -352,7 +352,7 @@ class ManagementDeviceTest {
                 compose.onNode(hasText("Settings") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
                 await("Default permission")
                 page("settings-home", report, problems)
-                activate("Runners", "talkback-settings-runners", report, problems); await("Add Runner")
+                activate("Runners", "talkback-settings-runners", report, problems); await("Controlled remote")
                 report.appendLine("double tap Runners -> the runners list opened")
                 page("runners-list", report, problems)
                 activate("Controlled remote", "talkback-runners-row", report, problems); await("Max Concurrent")
@@ -375,6 +375,8 @@ class ManagementDeviceTest {
                 activate("Turn off", "talkback-shared-links-turn-off", report, problems); await("Turn off this link")
                 report.appendLine("double tap Turn off -> the confirmation opened")
                 compose.onNode(hasText("Cancel") and hasClickAction() and hasAnyAncestor(isDialog())).performSemanticsAction(SemanticsActions.OnClick)
+                // The key goes to the window in front: let the dialog go first.
+                compose.waitUntil(5_000) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
                 back(); await("Default permission")
                 activate("Edit profile", "talkback-settings-profile", report, problems); await("Save profile")
                 report.appendLine("double tap Edit profile -> the profile card opened")
@@ -388,6 +390,7 @@ class ManagementDeviceTest {
                 File(app.filesDir, "a13-management").apply { mkdirs() }.resolve("talkback-problems.txt").writeText(problems.joinToString("\n"))
                 assertTrue("TalkBack problems: $problems", problems.isEmpty())
             } finally {
+                console?.close(); console = null
                 if (!notifying) shell("pm revoke $talkBackPackage android.permission.POST_NOTIFICATIONS")
                 if (savedServices == "null" || savedServices.isBlank()) shell("settings delete secure enabled_accessibility_services")
                 else shell("settings put secure enabled_accessibility_services $savedServices")
@@ -407,10 +410,38 @@ class ManagementDeviceTest {
     private val talkBack = "com.google.android.marvin.talkback/com.google.android.marvin.talkback.TalkBackService"
 
     /** The UiAutomation every call here uses: the default one would switch TalkBack off while it is connected. */
-    private val automation: UiAutomation get() = instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
+    private val automation: UiAutomation get() = instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES).also {
+        val info = it.serviceInfo
+        if (info.flags and AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS == 0)
+            it.serviceInfo = info.apply { flags = flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS }
+    }
+    /**
+     * The app's top window (a dialog over the page, else the page), read afresh: TalkBack's focus can be in another
+     * window, and a page that changed under a cached tree would be read as it was.
+     */
+    private fun appRoot(): AccessibilityNodeInfo? {
+        automation.clearCache()
+        return automation.windows.mapNotNull { it.root }.firstOrNull { it.packageName?.toString() == app.packageName } ?: automation.rootInActiveWindow
+    }
 
     private fun words(node: AccessibilityNodeInfo) = listOfNotNull(node.contentDescription, node.text, node.stateDescription)
         .map { it.toString().trim() }.filter { it.isNotEmpty() }
+    /**
+     * What TalkBack says on a node it stops on, part by part: its content description in place of its text when it has
+     * one, its state, then the words of the children it does not stop on itself.
+     */
+    private fun spokenParts(node: AccessibilityNodeInfo): List<String> {
+        val label = node.contentDescription?.toString()?.trim().orEmpty()
+        val own = listOf(label.ifEmpty { node.text?.toString()?.trim().orEmpty() }, node.stateDescription?.toString()?.trim().orEmpty())
+        val children = if (label.isNotEmpty()) emptyList()
+            else (0 until node.childCount).mapNotNull(node::getChild).filterNot { it.isClickable || it.isCheckable }.flatMap(::spokenParts)
+        return (own + children).filter { it.isNotEmpty() }
+    }
+    private fun spoken(node: AccessibilityNodeInfo) = spokenParts(node).joinToString(", ")
+    /** A part TalkBack would read out as a bare symbol ("single right-pointing angle quotation mark"). */
+    private fun symbols(node: AccessibilityNodeInfo) = spokenParts(node).filter { part -> part.none(Char::isLetterOrDigit) }
+    private fun nodes(root: AccessibilityNodeInfo): Sequence<AccessibilityNodeInfo> =
+        sequenceOf(root) + (0 until root.childCount).asSequence().mapNotNull(root::getChild).flatMap(::nodes)
 
     /** One page: the whole tree TalkBack can reach, then the order its swipes walk. */
     private fun page(page: String, report: StringBuilder, problems: MutableList<String>) {
@@ -421,86 +452,137 @@ class ManagementDeviceTest {
     /** What TalkBack can reach on the active window, with the words it speaks for each. */
     private fun audit(page: String, report: StringBuilder, problems: MutableList<String>) {
         compose.waitForIdle(); SystemClock.sleep(600)
-        val root = automation.rootInActiveWindow ?: run { problems += "$page: no active window"; return }
+        val root = appRoot() ?: run { problems += "$page: no window of the app"; return }
+        val window = Rect().also(root::getBoundsInScreen)
         report.appendLine("## $page — the tree")
         fun walk(node: AccessibilityNodeInfo, depth: Int) {
             val reachable = node.isVisibleToUser && (node.isClickable || node.isFocusable || node.isCheckable)
-            val said = words(node)
+            // A row the window's edge cuts has its words below the edge, out of the tree until TalkBack scrolls to it.
+            val cut = Rect().also(node::getBoundsInScreen).let { it.bottom >= window.bottom || it.top <= window.top }
+            val said = if (node.isClickable || node.isCheckable) spoken(node) else words(node).joinToString(" | ")
             if (reachable || said.isNotEmpty()) {
                 val actions = node.actionList.mapNotNull { it.label?.toString() }.joinToString(",")
                 report.appendLine("${"  ".repeat(depth)}${node.className?.toString()?.substringAfterLast('.')} clickable=${node.isClickable} " +
-                    "enabled=${node.isEnabled} words=\"${said.joinToString(" | ")}\"" + if (actions.isNotEmpty()) " actions=[$actions]" else "")
-                if (reachable && node.isClickable && said.isEmpty()) problems += "$page: a press without words (${node.className}) at ${Rect().also(node::getBoundsInScreen)}"
+                    "enabled=${node.isEnabled} says=\"$said\"" + (if (node.isClickable) " (description=\"${node.contentDescription}\" text=\"${node.text}\")" else "") +
+                    if (actions.isNotEmpty()) " actions=[$actions]" else "")
+                if (reachable && node.isClickable && said.isEmpty() && !cut)
+                    problem(report, problems, "$page: a press without words (${node.className}) at ${Rect().also(node::getBoundsInScreen)}")
+                if (reachable && (node.isClickable || node.isCheckable)) symbols(node).forEach { problem(report, problems, "$page: TalkBack reads the bare symbol \"$it\" in \"$said\"") }
             }
             for (i in 0 until node.childCount) node.getChild(i)?.let { walk(it, depth + 1) }
         }
         walk(root, 0)
     }
 
-    /** TalkBack's own order: a finger on the title, then swipe right after swipe right, with what it reads at each stop. */
+    /**
+     * TalkBack's own order: a finger on the page's first item (below the top bar, which TalkBack reaches after the
+     * page), then swipe right after swipe right, with what it reads at each stop.
+     */
     private fun traverse(page: String, report: StringBuilder, problems: MutableList<String>) {
-        val root = automation.rootInActiveWindow ?: return
+        val root = appRoot() ?: return
         val screen = Rect().also(root::getBoundsInScreen)
-        val title = generateSequence(listOf(root)) { level -> level.flatMap { n -> (0 until n.childCount).mapNotNull(n::getChild) }.ifEmpty { null } }
-            .flatten().firstOrNull { it.isVisibleToUser && it.text?.isNotBlank() == true && Rect().also(it::getBoundsInScreen).top < screen.height() / 8 }
-        report.appendLine("## $page — TalkBack, swipe right from \"${title?.text}\"")
-        title?.let { val at = Rect().also(it::getBoundsInScreen); tap(at.exactCenterX(), at.exactCenterY()); SystemClock.sleep(1_000) }
+        val first = nodes(root).firstOrNull {
+            it.isVisibleToUser && (it.isClickable || words(it).isNotEmpty()) && Rect().also(it::getBoundsInScreen).top > screen.height() / 10
+        }
+        report.appendLine("## $page — TalkBack, swipe right from \"${first?.let(::spoken)}\"")
+        first?.let { val at = Rect().also(it::getBoundsInScreen); tap(at.exactCenterX(), at.exactCenterY()); SystemClock.sleep(1_000) }
+        focused()?.let { report.appendLine("  ${it.className?.toString()?.substringAfterLast('.')} \"${spoken(it)}\" (touched)") }
+        val photograph = page == "settings-home"
+        if (photograph) capture("talkback-walk-$page-0")
         val stops = mutableListOf<String>()
         var unmoved = 0
-        for (step in 1..30) {
-            swipeRight(screen); SystemClock.sleep(800)
-            val node = focused() ?: run { report.appendLine("  (TalkBack's focus left this window)"); null } ?: break
-            val said = words(node).joinToString(" | ")
+        for (step in 1..20) {
+            swipeRight(screen); SystemClock.sleep(1_000)
+            if (photograph && step <= 8) capture("talkback-walk-$page-$step")
+            val node = focused()?.takeIf { it.packageName?.toString() == app.packageName } ?: run { report.appendLine("  (TalkBack's focus left the app)"); null } ?: break
+            val said = spoken(node)
             val stop = "${Rect().also(node::getBoundsInScreen)} $said"
             if (stop == stops.lastOrNull()) { if (++unmoved >= 2) { report.appendLine("  (the last item)"); break } else continue }
             if (stop in stops) { report.appendLine("  (back to an earlier item)"); break }
             stops += stop; unmoved = 0
             report.appendLine("  ${node.className?.toString()?.substringAfterLast('.')} \"$said\"" + if (node.isClickable) " — double tap to activate" else "")
-            if (node.isClickable && said.isEmpty()) problems += "$page: TalkBack stops on a press it has no words for"
+            if (node.isClickable && said.isEmpty()) problem(report, problems, "$page: TalkBack stops on a press it has no words for")
+            if (!node.isClickable && !node.isCheckable) symbols(node).forEach { problem(report, problems, "$page: TalkBack stops on the bare symbol \"$it\"") }
         }
-        if (stops.size < 3) problems += "$page: TalkBack's swipes reached ${stops.size} item(s)"
+        if (stops.size < 3) problem(report, problems, "$page: TalkBack's swipes reached ${stops.size} item(s)")
     }
 
     /**
      * The control named [words]: on screen (scrolled to by its semantics, as a finger would scroll), TalkBack's focus put
-     * on it by touch and photographed, then TalkBack's double tap. The caller checks what the press did.
+     * on it by a touch and photographed, then TalkBack's double tap. The caller checks what the press did.
      */
     private fun activate(words: String, shot: String, report: StringBuilder, problems: MutableList<String>) {
-        try { compose.onAllNodes(hasText(words, substring = true) or hasContentDescription(words, substring = true)).onFirst().performScrollTo() }
-        catch (_: AssertionError) { }
+        val named = hasText(words, substring = true) or hasContentDescription(words, substring = true)
+        try { compose.onAllNodes(named).onFirst().performScrollTo() } catch (_: AssertionError) { }
+        // On screen is not enough: near the bottom the system's gesture bar takes the touch. Bring it to the middle.
+        try {
+            val y = compose.onAllNodes(named).onFirst().fetchSemanticsNode().boundsInRoot.center.y
+            val middle = (appRoot()?.let { Rect().also(it::getBoundsInScreen).height() } ?: 0) / 2f
+            compose.onAllNodes(hasScrollAction() and hasAnyDescendant(named)).onFirst()
+                .performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, y - middle) }
+        } catch (_: AssertionError) { } catch (_: IllegalStateException) { }
         compose.waitForIdle(); SystemClock.sleep(500)
-        val target = automation.rootInActiveWindow?.findAccessibilityNodeInfosByText(words)?.firstOrNull { it.isVisibleToUser }
-        if (target == null) { problems += "$shot: nothing on screen is named \"$words\""; return }
+        // The words as drawn, and the control a finger on them presses (Compose keeps a row's words on its children).
+        val label = appRoot()?.let(::nodes)?.firstOrNull { node -> node.isVisibleToUser && words(node).any { it.contains(words) } }
+        var target = label
+        while (target != null && !target.isClickable) target = target.parent
+        target = target ?: label
+        if (target == null) { capture("$shot-missing"); problem(report, problems, "$shot: nothing on screen is named \"$words\""); return }
         val at = Rect().also(target::getBoundsInScreen)
+        report.appendLine("touch \"$words\" at $at")
         tap(at.exactCenterX(), at.exactCenterY()); SystemClock.sleep(1_000)
         val focus = focused()
-        val said = focus?.let(::words).orEmpty().joinToString(" | ")
+        val said = focus?.let(::spoken).orEmpty()
         report.appendLine("touch \"$words\" -> TalkBack's focus on ${focus?.className?.toString()?.substringAfterLast('.')} \"$said\"")
-        if (focus == null || !said.contains(words, ignoreCase = true)) problems += "$shot: touching \"$words\" put TalkBack's focus on \"$said\""
+        if (focus == null || !said.contains(words, ignoreCase = true)) problem(report, problems, "$shot: TalkBack's focus is on \"$said\", not \"$words\"")
         capture(shot)
         val on = Rect().also { (focus ?: target).getBoundsInScreen(it) }
         doubleTap(on.exactCenterX(), on.exactCenterY())
     }
 
-    private fun focused(): AccessibilityNodeInfo? = automation.rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY)
+    /** Where TalkBack's focus is, in whichever window. */
+    private fun focused(): AccessibilityNodeInfo? = automation.findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY)
+    private fun problem(report: StringBuilder, problems: MutableList<String>, what: String) { problems += what; report.appendLine("PROBLEM $what") }
 
-    private fun touch(action: Int, x: Float, y: Float, down: Long) {
-        val event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, x, y, 0).apply { source = InputDevice.SOURCE_TOUCHSCREEN }
-        try { automation.injectInputEvent(event, true) } finally { event.recycle() }
+    /**
+     * Fingers come from the emulator's console (`event mouse <x> <y> 0 <buttons>` is the emulated touchscreen itself; from
+     * inside the emulator the host's loopback is 10.0.2.2), so TalkBack takes them as a finger's. Events injected by
+     * UiAutomation or by `input` skip the accessibility input filter and press what is under them, and the shell may not
+     * write to the touchscreen's device node. The host script passes the console's port and token for this check only.
+     */
+    private class Console(port: Int, token: String) {
+        private val socket = java.net.Socket("10.0.2.2", port).apply { soTimeout = 5_000; tcpNoDelay = true }
+        private val reader = socket.getInputStream().bufferedReader()
+        private val writer = socket.getOutputStream().bufferedWriter()
+        init { answer(); send("auth $token") }
+        fun send(command: String) { writer.write("$command\n"); writer.flush(); answer() }
+        private fun answer() {
+            while (true) {
+                val line = reader.readLine() ?: error("the emulator console closed")
+                if (line.startsWith("OK")) return
+                if (line.startsWith("KO")) error("the emulator console refused: $line")
+            }
+        }
+        fun close() { runCatching { writer.write("quit\n"); writer.flush() }; runCatching { socket.close() } }
     }
-    private fun tap(x: Float, y: Float) {
-        val down = SystemClock.uptimeMillis()
-        touch(MotionEvent.ACTION_DOWN, x, y, down); SystemClock.sleep(30); touch(MotionEvent.ACTION_UP, x, y, down)
+    private var console: Console? = null
+    private fun finger(x: Int, y: Int, down: Boolean) {
+        val open = console ?: InstrumentationRegistry.getArguments().let { args ->
+            Console(args.getString("a13ConsolePort")?.toIntOrNull() ?: error("TalkBack takes touches from the screen only: needs a13ConsolePort"),
+                args.getString("a13ConsoleToken") ?: error("needs a13ConsoleToken"))
+        }.also { console = it }
+        open.send("event mouse $x $y 0 ${if (down) 1 else 0}")
     }
+    /** One finger on [x], [y] (explore by touch): TalkBack's focus goes to what is there, which it reads. */
+    private fun tap(x: Float, y: Float) { finger(x.toInt(), y.toInt(), true); SystemClock.sleep(40); finger(x.toInt(), y.toInt(), false) }
     /** Two taps inside the double-tap timeout: TalkBack activates the item its focus is on. */
-    private fun doubleTap(x: Float, y: Float) { tap(x, y); SystemClock.sleep(70); tap(x, y); SystemClock.sleep(600) }
+    private fun doubleTap(x: Float, y: Float) { tap(x, y); SystemClock.sleep(80); tap(x, y); SystemClock.sleep(600) }
     /** One quick finger across the middle of the screen: TalkBack's "next item". */
     private fun swipeRight(screen: Rect) {
-        val y = screen.exactCenterY(); val from = screen.width() * 0.2f; val to = screen.width() * 0.8f
-        val down = SystemClock.uptimeMillis()
-        touch(MotionEvent.ACTION_DOWN, from, y, down)
-        for (i in 1..8) { SystemClock.sleep(12); touch(MotionEvent.ACTION_MOVE, from + (to - from) * i / 8, y, down) }
-        touch(MotionEvent.ACTION_UP, to, y, down)
+        val y = screen.centerY(); val from = screen.width() / 5; val to = screen.width() * 4 / 5
+        finger(from, y, true)
+        for (i in 1..10) { SystemClock.sleep(15); finger(from + (to - from) * i / 10, y, true) }
+        finger(to, y, false)
     }
 
     private fun start() {

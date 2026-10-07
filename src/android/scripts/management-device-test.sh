@@ -56,8 +56,11 @@ test=io.orbitd.android.management.ManagementDeviceTest
 "$adb" -s "$serial" exec-out run-as "$package" tar -cf - -C files a13-management > "$output/captures.tar" || true
 tar --no-same-owner -xf "$output/captures.tar" -C "$output" || true
 # TalkBack last and in its own process, from a fresh installation state: whatever it leaves behind reaches no other check.
+# Its touches go through the emulator console's touchscreen (the only input TalkBack sees here), so it gets the
+# console's port and token; neither is written to the evidence.
 "$adb" -s "$serial" shell pm clear "$package" >> "$output/pm-clear.txt"
 "$adb" -s "$serial" shell am instrument -w -r -e class "$test#talkBackReachesReadsAndActivatesTheMainPages" \
+  -e a13ConsolePort "${serial#emulator-}" -e a13ConsoleToken "$(cat "$HOME/.emulator_console_auth_token")" \
   io.orbitd.android.debug.test/androidx.test.runner.AndroidJUnitRunner > "$output/instrumentation-talkback.txt" 2>&1 || true
 "$adb" -s "$serial" exec-out run-as "$package" tar -cf - -C files a13-management > "$output/captures-talkback.tar" || true
 tar --no-same-owner -xf "$output/captures-talkback.tar" -C "$output" || true
