@@ -14,6 +14,8 @@ export interface SegmentedProps<Value extends string = string> extends AriaAttri
   onValueChange: (value: Value) => void;
   options: SegmentedOption<Value>[];
   disabled?: boolean;
+  /** Middle: 28px items; small: the task panel's 20px items. */
+  size?: 'small' | 'middle';
   className?: string;
 }
 
@@ -21,11 +23,11 @@ type Span = { left: number; width: number };
 const EASE = 'cubic-bezier(0.645, 0.045, 0.355, 1)';
 
 /**
- * A row of mutually exclusive views (radiogroup). Only the compact size the task panel uses today:
- * 2px track, 20px items. A change slides the selection from the old item to the new one, as the
- * control it replaces did, unless reduced motion is asked for.
+ * A row of mutually exclusive views (radiogroup) on a 2px track: 28px items, or the task panel's
+ * compact 20px ones. A change slides the selection from the old item to the new one, as the control it
+ * replaces did, unless reduced motion is asked for.
  */
-export function Segmented<Value extends string>({ value, onValueChange, options, disabled, className, ...aria }: SegmentedProps<Value>) {
+export function Segmented<Value extends string>({ value, onValueChange, options, disabled, size = 'middle', className, ...aria }: SegmentedProps<Value>) {
   const group = useRef<HTMLDivElement>(null);
   const thumb = useRef<HTMLDivElement>(null);
   const shown = useRef(value);
@@ -53,7 +55,7 @@ export function Segmented<Value extends string>({ value, onValueChange, options,
   }, [motion]);
   return (
     <BaseRadioGroup {...aria} value={value} onValueChange={(next) => onValueChange(next as Value)} disabled={disabled}
-      className={`orbit-segmented${className ? ` ${className}` : ''}`}>
+      data-size={size} className={`orbit-segmented${className ? ` ${className}` : ''}`}>
       <div ref={group} className="orbit-segmented-group" data-motion={motion ? '' : undefined}>
         {motion && <div ref={thumb} className="orbit-segmented-thumb" aria-hidden />}
         {options.map((option) => (

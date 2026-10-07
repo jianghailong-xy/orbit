@@ -1,0 +1,26 @@
+head: b0b59fa39c4ab979c01589ec424e113dc6ed5441
+uncommitted:
+?? docs/evidence/base-ui-migration/p4.1/
+?? src/web/ui-migration/p32-reference.config.mjs
+load: 30.88 59.60 52.36 12/4828 4036740
+P0 expected screenshots: 88 P0.2 originals, 152 main drift references, 12 accepted migration differences.
+
+Running 3 tests using 1 worker
+
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-delete-confirm.png, writing actual.
+  ✓  1 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:71:3 › task detail pilot › fields, pickers and the panel header (7.8s)
+  ✓  2 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:71:3 › task detail pilot › fields, pickers and the panel header (8.3s)
+  ✓  3 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:71:3 › task detail pilot › fields, pickers and the panel header (8.7s)
+
+  3 passed (26.9s)
+exit=0
+load: 26.53 56.26 51.45 19/4823 4040095

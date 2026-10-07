@@ -1,0 +1,12 @@
+label=merge-check
+head=d6a764624659bfad274e67fce4a8b6dfd15004ad
+branch=orbit/p2-p3-select-menu-tab-3336b7
+status_begin
+  ?? docs/evidence/base-ui-migration/p2-p3-hardening/
+status_end
+command=env -u FORCE_COLOR NO_COLOR=1 npm run build -w @orbit/web && env -u FORCE_COLOR NO_COLOR=1 npm run test -w @orbit/web
+start=2026-10-07T12:14:51Z
+load_start=18.20 19.14 20.83
+end=2026-10-07T12:19:39Z
+load_end=22.32 17.87 19.55
+exit=0

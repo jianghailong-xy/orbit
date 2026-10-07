@@ -1,0 +1,165 @@
+{
+ "base": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "before": {
+  "(根目录文件)": {
+   "bytes": 741957,
+   "files": 6
+  },
+  "p0-drift-2/": {
+   "bytes": 10210245,
+   "files": 416
+  },
+  "p0-drift/": {
+   "bytes": 35937099,
+   "files": 401
+  },
+  "p0.2/": {
+   "bytes": 33702983,
+   "files": 554
+  },
+  "p1.1-integration/": {
+   "bytes": 5174593,
+   "files": 48
+  },
+  "p1.1/": {
+   "bytes": 14509105,
+   "files": 352
+  },
+  "p1.2/": {
+   "bytes": 32377641,
+   "files": 313
+  },
+  "p2-integration-cards/": {
+   "bytes": 4149386,
+   "files": 56
+  },
+  "p2-keyboard-window/": {
+   "bytes": 326352442,
+   "files": 18359
+  },
+  "p2-promotion-toast/": {
+   "bytes": 232316457,
+   "files": 2701
+  },
+  "p2-select-keys/": {
+   "bytes": 40938323,
+   "files": 3375
+  },
+  "p2.1/": {
+   "bytes": 55859078,
+   "files": 863
+  },
+  "p2.2/": {
+   "bytes": 386030874,
+   "files": 9056
+  },
+  "p2.3-b1/": {
+   "bytes": 55095812,
+   "files": 1370
+  },
+  "p2.3/": {
+   "bytes": 360401647,
+   "files": 5620
+  },
+  "p3.1/": {
+   "bytes": 25023113,
+   "files": 878
+  },
+  "p3.2-accepted/": {
+   "bytes": 13987238,
+   "files": 246
+  },
+  "p3.2/": {
+   "bytes": 204453017,
+   "files": 2233
+  }
+ },
+ "after": {
+  "(根目录文件)": {
+   "bytes": 742193,
+   "files": 7
+  },
+  "evidence-slimming/": {
+   "bytes": 1620355,
+   "files": 30
+  },
+  "p0-drift-2/": {
+   "bytes": 10210245,
+   "files": 416
+  },
+  "p0-drift/": {
+   "bytes": 35937099,
+   "files": 401
+  },
+  "p0.2/": {
+   "bytes": 33702983,
+   "files": 554
+  },
+  "p1.1-integration/": {
+   "bytes": 5174593,
+   "files": 48
+  },
+  "p1.1/": {
+   "bytes": 1748583,
+   "files": 78
+  },
+  "p1.2/": {
+   "bytes": 5177694,
+   "files": 106
+  },
+  "p2-integration-cards/": {
+   "bytes": 2530220,
+   "files": 50
+  },
+  "p2-keyboard-window/": {
+   "bytes": 77814504,
+   "files": 2087
+  },
+  "p2-promotion-toast/": {
+   "bytes": 18206389,
+   "files": 494
+  },
+  "p2-select-keys/": {
+   "bytes": 13593834,
+   "files": 501
+  },
+  "p2.1/": {
+   "bytes": 6257067,
+   "files": 270
+  },
+  "p2.2/": {
+   "bytes": 43791988,
+   "files": 1404
+  },
+  "p2.3-b1/": {
+   "bytes": 25240150,
+   "files": 799
+  },
+  "p2.3/": {
+   "bytes": 26012950,
+   "files": 825
+  },
+  "p3.1/": {
+   "bytes": 4165716,
+   "files": 338
+  },
+  "p3.2-accepted/": {
+   "bytes": 13987238,
+   "files": 246
+  },
+  "p3.2/": {
+   "bytes": 84112941,
+   "files": 1089
+  }
+ },
+ "totals": {
+  "before": {
+   "bytes": 1837261010,
+   "files": 46847
+  },
+  "after": {
+   "bytes": 410026742,
+   "files": 9743
+  }
+ }
+}

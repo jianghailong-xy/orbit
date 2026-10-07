@@ -1,0 +1,1121 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/node_modules/.bin/playwright",
+   "test",
+   "-c",
+   "ui-migration/p32-reference.config.mjs",
+   "ui-migration/pages.browser.mjs",
+   "-g",
+   "task$",
+   "--update-snapshots=all"
+  ],
+  "configFile": "/root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/ui-migration/p32-reference.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/var/tmp/p32-final/p0-del-task-6",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p32-final/p0-del-task-6",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p32-final/p0-del-task-6",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p32-final/p0-del-task-6",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p32-final/p0-del-task-6",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p32-final/p0-del-task-6",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p32-final/p0-del-task-6",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p32-final/p0-del-task-6",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/var/tmp/p32-final/p0-del-task-6/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "all",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run preview -- --host 127.0.0.1 --port 4292 --strictPort",
+   "cwd": "/root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/",
+   "url": "http://127.0.0.1:4292",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "pages.browser.mjs",
+   "file": "pages.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "task",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2601,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/chromium-light-desktop/task-detail.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/chromium-light-desktop/task-action-hover.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/chromium-light-desktop/task-action-focus.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/chromium-light-desktop/task-action-menu.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/chromium-light-desktop/task-share-dialog.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T20:53:14.004Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "task-detail-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/chromium-light-desktop/task-detail.png"
+          },
+          {
+           "name": "task-detail-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-light-desktop/task-detail-actual.png"
+          },
+          {
+           "name": "task-action-hover-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/chromium-light-desktop/task-action-hover.png"
+          },
+          {
+           "name": "task-action-hover-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-light-desktop/task-action-hover-actual.png"
+          },
+          {
+           "name": "task-action-focus-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/chromium-light-desktop/task-action-focus.png"
+          },
+          {
+           "name": "task-action-focus-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-light-desktop/task-action-focus-actual.png"
+          },
+          {
+           "name": "task-action-menu-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/chromium-light-desktop/task-action-menu.png"
+          },
+          {
+           "name": "task-action-menu-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-light-desktop/task-action-menu-actual.png"
+          },
+          {
+           "name": "task-share-dialog-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/chromium-light-desktop/task-share-dialog.png"
+          },
+          {
+           "name": "task-share-dialog-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-light-desktop/task-share-dialog-actual.png"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-light-desktop/attachments/computed-styles-and-timings-2a5c6ef6e2f7cc99f28bdf0a148da8e07736d191.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-83280aff58d25ac924a5",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "task",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2251,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/chromium-light-phone/task-detail.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/chromium-light-phone/task-action-hover.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/chromium-light-phone/task-action-focus.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/chromium-light-phone/task-action-menu.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/chromium-light-phone/task-share-dialog.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T20:53:16.867Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "task-detail-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/chromium-light-phone/task-detail.png"
+          },
+          {
+           "name": "task-detail-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-light-phone/task-detail-actual.png"
+          },
+          {
+           "name": "task-action-hover-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/chromium-light-phone/task-action-hover.png"
+          },
+          {
+           "name": "task-action-hover-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-light-phone/task-action-hover-actual.png"
+          },
+          {
+           "name": "task-action-focus-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/chromium-light-phone/task-action-focus.png"
+          },
+          {
+           "name": "task-action-focus-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-light-phone/task-action-focus-actual.png"
+          },
+          {
+           "name": "task-action-menu-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/chromium-light-phone/task-action-menu.png"
+          },
+          {
+           "name": "task-action-menu-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-light-phone/task-action-menu-actual.png"
+          },
+          {
+           "name": "task-share-dialog-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/chromium-light-phone/task-share-dialog.png"
+          },
+          {
+           "name": "task-share-dialog-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-light-phone/task-share-dialog-actual.png"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-light-phone/attachments/computed-styles-and-timings-8966ccb8e5e4484753c6bb680e55d0c0e6218927.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-d72b333ee0e52bfd484c",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "task",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2473,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/chromium-dark-desktop/task-detail.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/chromium-dark-desktop/task-action-hover.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/chromium-dark-desktop/task-action-focus.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/chromium-dark-desktop/task-action-menu.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/chromium-dark-desktop/task-share-dialog.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T20:53:19.382Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "task-detail-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/chromium-dark-desktop/task-detail.png"
+          },
+          {
+           "name": "task-detail-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-dark-desktop/task-detail-actual.png"
+          },
+          {
+           "name": "task-action-hover-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/chromium-dark-desktop/task-action-hover.png"
+          },
+          {
+           "name": "task-action-hover-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-dark-desktop/task-action-hover-actual.png"
+          },
+          {
+           "name": "task-action-focus-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/chromium-dark-desktop/task-action-focus.png"
+          },
+          {
+           "name": "task-action-focus-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-dark-desktop/task-action-focus-actual.png"
+          },
+          {
+           "name": "task-action-menu-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/chromium-dark-desktop/task-action-menu.png"
+          },
+          {
+           "name": "task-action-menu-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-dark-desktop/task-action-menu-actual.png"
+          },
+          {
+           "name": "task-share-dialog-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/chromium-dark-desktop/task-share-dialog.png"
+          },
+          {
+           "name": "task-share-dialog-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-dark-desktop/task-share-dialog-actual.png"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-dark-desktop/attachments/computed-styles-and-timings-ec6cf3b2ccadad58855ef48ab14be31beee35e8f.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-dfa74c73a5977d977265",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "task",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2320,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/chromium-dark-phone/task-detail.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/chromium-dark-phone/task-action-hover.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/chromium-dark-phone/task-action-focus.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/chromium-dark-phone/task-action-menu.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/chromium-dark-phone/task-share-dialog.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T20:53:22.116Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "task-detail-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/chromium-dark-phone/task-detail.png"
+          },
+          {
+           "name": "task-detail-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-dark-phone/task-detail-actual.png"
+          },
+          {
+           "name": "task-action-hover-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/chromium-dark-phone/task-action-hover.png"
+          },
+          {
+           "name": "task-action-hover-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-dark-phone/task-action-hover-actual.png"
+          },
+          {
+           "name": "task-action-focus-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/chromium-dark-phone/task-action-focus.png"
+          },
+          {
+           "name": "task-action-focus-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-dark-phone/task-action-focus-actual.png"
+          },
+          {
+           "name": "task-action-menu-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/chromium-dark-phone/task-action-menu.png"
+          },
+          {
+           "name": "task-action-menu-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-dark-phone/task-action-menu-actual.png"
+          },
+          {
+           "name": "task-share-dialog-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/chromium-dark-phone/task-share-dialog.png"
+          },
+          {
+           "name": "task-share-dialog-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-dark-phone/task-share-dialog-actual.png"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-chromium-dark-phone/attachments/computed-styles-and-timings-e3ea175b1bf7441d452c30844836c33f30257e24.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-9dfd25a76409c8faae4a",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "task",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3242,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/webkit-light-desktop/task-detail.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/webkit-light-desktop/task-action-hover.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/webkit-light-desktop/task-action-focus.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/webkit-light-desktop/task-action-menu.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/webkit-light-desktop/task-share-dialog.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T20:53:24.714Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "task-detail-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/webkit-light-desktop/task-detail.png"
+          },
+          {
+           "name": "task-detail-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-light-desktop/task-detail-actual.png"
+          },
+          {
+           "name": "task-action-hover-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/webkit-light-desktop/task-action-hover.png"
+          },
+          {
+           "name": "task-action-hover-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-light-desktop/task-action-hover-actual.png"
+          },
+          {
+           "name": "task-action-focus-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/webkit-light-desktop/task-action-focus.png"
+          },
+          {
+           "name": "task-action-focus-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-light-desktop/task-action-focus-actual.png"
+          },
+          {
+           "name": "task-action-menu-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/webkit-light-desktop/task-action-menu.png"
+          },
+          {
+           "name": "task-action-menu-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-light-desktop/task-action-menu-actual.png"
+          },
+          {
+           "name": "task-share-dialog-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/webkit-light-desktop/task-share-dialog.png"
+          },
+          {
+           "name": "task-share-dialog-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-light-desktop/task-share-dialog-actual.png"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-light-desktop/attachments/computed-styles-and-timings-54a6fb49c5f09f4f632604598f54d48776e181bd.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-d6b654133c79a094431a",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "task",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2722,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/webkit-light-phone/task-detail.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/webkit-light-phone/task-action-hover.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/webkit-light-phone/task-action-focus.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/webkit-light-phone/task-action-menu.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/webkit-light-phone/task-share-dialog.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T20:53:28.259Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "task-detail-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/webkit-light-phone/task-detail.png"
+          },
+          {
+           "name": "task-detail-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-light-phone/task-detail-actual.png"
+          },
+          {
+           "name": "task-action-hover-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/webkit-light-phone/task-action-hover.png"
+          },
+          {
+           "name": "task-action-hover-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-light-phone/task-action-hover-actual.png"
+          },
+          {
+           "name": "task-action-focus-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/webkit-light-phone/task-action-focus.png"
+          },
+          {
+           "name": "task-action-focus-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-light-phone/task-action-focus-actual.png"
+          },
+          {
+           "name": "task-action-menu-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/webkit-light-phone/task-action-menu.png"
+          },
+          {
+           "name": "task-action-menu-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-light-phone/task-action-menu-actual.png"
+          },
+          {
+           "name": "task-share-dialog-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/webkit-light-phone/task-share-dialog.png"
+          },
+          {
+           "name": "task-share-dialog-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-light-phone/task-share-dialog-actual.png"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-light-phone/attachments/computed-styles-and-timings-7c49c4b65bd2c9b8533e5ec52f8de4735c7cda2f.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-c5af1ff960fd09016293",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "task",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3172,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/webkit-dark-desktop/task-detail.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/webkit-dark-desktop/task-action-hover.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/webkit-dark-desktop/task-action-focus.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/webkit-dark-desktop/task-action-menu.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/webkit-dark-desktop/task-share-dialog.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T20:53:31.276Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "task-detail-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/webkit-dark-desktop/task-detail.png"
+          },
+          {
+           "name": "task-detail-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-dark-desktop/task-detail-actual.png"
+          },
+          {
+           "name": "task-action-hover-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/webkit-dark-desktop/task-action-hover.png"
+          },
+          {
+           "name": "task-action-hover-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-dark-desktop/task-action-hover-actual.png"
+          },
+          {
+           "name": "task-action-focus-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/webkit-dark-desktop/task-action-focus.png"
+          },
+          {
+           "name": "task-action-focus-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-dark-desktop/task-action-focus-actual.png"
+          },
+          {
+           "name": "task-action-menu-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/webkit-dark-desktop/task-action-menu.png"
+          },
+          {
+           "name": "task-action-menu-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-dark-desktop/task-action-menu-actual.png"
+          },
+          {
+           "name": "task-share-dialog-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/webkit-dark-desktop/task-share-dialog.png"
+          },
+          {
+           "name": "task-share-dialog-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-dark-desktop/task-share-dialog-actual.png"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-dark-desktop/attachments/computed-styles-and-timings-014e3b2cfa0115adc2d9ff0c457f7afc8f3ee286.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-d1f0c8f804c501e9e867",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "task",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2742,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/webkit-dark-phone/task-detail.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/webkit-dark-phone/task-action-hover.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/webkit-dark-phone/task-action-focus.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/webkit-dark-phone/task-action-menu.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-6/webkit-dark-phone/task-share-dialog.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T20:53:34.752Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "task-detail-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/webkit-dark-phone/task-detail.png"
+          },
+          {
+           "name": "task-detail-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-dark-phone/task-detail-actual.png"
+          },
+          {
+           "name": "task-action-hover-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/webkit-dark-phone/task-action-hover.png"
+          },
+          {
+           "name": "task-action-hover-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-dark-phone/task-action-hover-actual.png"
+          },
+          {
+           "name": "task-action-focus-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/webkit-dark-phone/task-action-focus.png"
+          },
+          {
+           "name": "task-action-focus-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-dark-phone/task-action-focus-actual.png"
+          },
+          {
+           "name": "task-action-menu-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/webkit-dark-phone/task-action-menu.png"
+          },
+          {
+           "name": "task-action-menu-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-dark-phone/task-action-menu-actual.png"
+          },
+          {
+           "name": "task-share-dialog-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-shots-6/webkit-dark-phone/task-share-dialog.png"
+          },
+          {
+           "name": "task-share-dialog-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-dark-phone/task-share-dialog-actual.png"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p32-final/p0-del-task-6/pages.browser.mjs-task-webkit-dark-phone/attachments/computed-styles-and-timings-35c214abcc0f4a13a0331e4ba470ab26bdc8026a.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-95e8bbbc05fa9f71f767",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-06T20:53:13.308Z",
+  "duration": 24317.374,
+  "expected": 8,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

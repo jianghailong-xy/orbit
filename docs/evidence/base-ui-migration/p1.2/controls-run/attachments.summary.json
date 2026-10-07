@@ -1,0 +1,247 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p1.2/controls-run/<name>",
+ "files": [
+  {
+   "name": "chromium-dark-desktop--fixed-control-states-match-AntD-geometry-typography-and-surfaces--computed-controls.json",
+   "bytes": 108932,
+   "sha256": "13853cff1f8728ce10fdb485df1f74fbae3ab0dacc43f123191fbc2b04f82245",
+   "fields": {
+    "theme": "dark",
+    "differences": [],
+    "errors": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--hover-and-keyboard-focus-preserve-visible-control-feedback--hover-focus-controls.json",
+   "bytes": 23334,
+   "sha256": "81bf9d4affdd520e9d8c272dd47fa1c322d0bbcf3e7b910a2e34dfb58f024c27"
+  },
+  {
+   "name": "chromium-dark-desktop--keyboard-labels-loading-disabled-and-native-form-values-work--behavior-controls.json",
+   "bytes": 365,
+   "sha256": "8e82c4d64e33423efeeed7be4077c0cb440da99838104f1c9f62a045cbdcc46e",
+   "fields": {
+    "activationCount": 2,
+    "radioArrowSkipsDisabled": true,
+    "checkboxLabelAndSpace": true,
+    "switchSpace": true,
+    "disabledAndLoadingBlocked": true,
+    "mixedExposed": true,
+    "values": "{\"project\":\"Updated project\",\"description\":\"First\\nUpdated second\",\"accepted\":\"yes\",\"mode\":\"two\",\"notifications\":\"enabled\"}",
+    "nativeTextReset": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--fixed-control-states-match-AntD-geometry-typography-and-surfaces--computed-controls.json",
+   "bytes": 109096,
+   "sha256": "93ef5fc2fc79ecbebd7bc612c804296a6afb1a3facb0289a2b19f2e49986243f",
+   "fields": {
+    "theme": "dark",
+    "differences": [],
+    "errors": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--hover-and-keyboard-focus-preserve-visible-control-feedback--hover-focus-controls.json",
+   "bytes": 23406,
+   "sha256": "aee9efd3b764413c25be33114a83291a74f5f898359702a0471e52ce7296c3ed"
+  },
+  {
+   "name": "chromium-dark-phone--keyboard-labels-loading-disabled-and-native-form-values-work--behavior-controls.json",
+   "bytes": 365,
+   "sha256": "8e82c4d64e33423efeeed7be4077c0cb440da99838104f1c9f62a045cbdcc46e",
+   "fields": {
+    "activationCount": 2,
+    "radioArrowSkipsDisabled": true,
+    "checkboxLabelAndSpace": true,
+    "switchSpace": true,
+    "disabledAndLoadingBlocked": true,
+    "mixedExposed": true,
+    "values": "{\"project\":\"Updated project\",\"description\":\"First\\nUpdated second\",\"accepted\":\"yes\",\"mode\":\"two\",\"notifications\":\"enabled\"}",
+    "nativeTextReset": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--fixed-control-states-match-AntD-geometry-typography-and-surfaces--computed-controls.json",
+   "bytes": 108755,
+   "sha256": "40ce8f435339e0f6871b4449e5ff3b77b6c9f2db23900aadfdccddec300849ab",
+   "fields": {
+    "theme": "light",
+    "differences": [],
+    "errors": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--hover-and-keyboard-focus-preserve-visible-control-feedback--hover-focus-controls.json",
+   "bytes": 23252,
+   "sha256": "12800340a830d05d9fcd751e112c15b29ef280cc23955297ccc0995b52528dee"
+  },
+  {
+   "name": "chromium-light-desktop--keyboard-labels-loading-disabled-and-native-form-values-work--behavior-controls.json",
+   "bytes": 365,
+   "sha256": "8e82c4d64e33423efeeed7be4077c0cb440da99838104f1c9f62a045cbdcc46e",
+   "fields": {
+    "activationCount": 2,
+    "radioArrowSkipsDisabled": true,
+    "checkboxLabelAndSpace": true,
+    "switchSpace": true,
+    "disabledAndLoadingBlocked": true,
+    "mixedExposed": true,
+    "values": "{\"project\":\"Updated project\",\"description\":\"First\\nUpdated second\",\"accepted\":\"yes\",\"mode\":\"two\",\"notifications\":\"enabled\"}",
+    "nativeTextReset": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--fixed-control-states-match-AntD-geometry-typography-and-surfaces--computed-controls.json",
+   "bytes": 108919,
+   "sha256": "2b663835e68e8d67383cca1033609ec8876127408c891ad53063843793ec7d4e",
+   "fields": {
+    "theme": "light",
+    "differences": [],
+    "errors": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--hover-and-keyboard-focus-preserve-visible-control-feedback--hover-focus-controls.json",
+   "bytes": 23324,
+   "sha256": "52898f5f5e3c30b0aec0517d2957985f69b0d64fbcbc859bf4bdfc7e74e2f497"
+  },
+  {
+   "name": "chromium-light-phone--keyboard-labels-loading-disabled-and-native-form-values-work--behavior-controls.json",
+   "bytes": 365,
+   "sha256": "8e82c4d64e33423efeeed7be4077c0cb440da99838104f1c9f62a045cbdcc46e",
+   "fields": {
+    "activationCount": 2,
+    "radioArrowSkipsDisabled": true,
+    "checkboxLabelAndSpace": true,
+    "switchSpace": true,
+    "disabledAndLoadingBlocked": true,
+    "mixedExposed": true,
+    "values": "{\"project\":\"Updated project\",\"description\":\"First\\nUpdated second\",\"accepted\":\"yes\",\"mode\":\"two\",\"notifications\":\"enabled\"}",
+    "nativeTextReset": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--fixed-control-states-match-AntD-geometry-typography-and-surfaces--computed-controls.json",
+   "bytes": 107690,
+   "sha256": "b23382dfe4ab600caa39577f896d0cbfced271581c3f2fde82ef81852cb7a235",
+   "fields": {
+    "theme": "dark",
+    "differences": [],
+    "errors": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--hover-and-keyboard-focus-preserve-visible-control-feedback--hover-focus-controls.json",
+   "bytes": 22822,
+   "sha256": "41c6ef236314fc0ce17cf608dbf0175814bebe00a665fc0809304d0b58a2620e"
+  },
+  {
+   "name": "webkit-dark-desktop--keyboard-labels-loading-disabled-and-native-form-values-work--behavior-controls.json",
+   "bytes": 365,
+   "sha256": "8e82c4d64e33423efeeed7be4077c0cb440da99838104f1c9f62a045cbdcc46e",
+   "fields": {
+    "activationCount": 2,
+    "radioArrowSkipsDisabled": true,
+    "checkboxLabelAndSpace": true,
+    "switchSpace": true,
+    "disabledAndLoadingBlocked": true,
+    "mixedExposed": true,
+    "values": "{\"project\":\"Updated project\",\"description\":\"First\\nUpdated second\",\"accepted\":\"yes\",\"mode\":\"two\",\"notifications\":\"enabled\"}",
+    "nativeTextReset": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--fixed-control-states-match-AntD-geometry-typography-and-surfaces--computed-controls.json",
+   "bytes": 107882,
+   "sha256": "778623efc427a8a1388565201cff6c3507ad80194f11c974b7dd8b37b933fcb9",
+   "fields": {
+    "theme": "dark",
+    "differences": [],
+    "errors": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--hover-and-keyboard-focus-preserve-visible-control-feedback--hover-focus-controls.json",
+   "bytes": 22906,
+   "sha256": "9977b0a18c9be3552a41e384ab45c9514631885642b729bfe29397336ba37042"
+  },
+  {
+   "name": "webkit-dark-phone--keyboard-labels-loading-disabled-and-native-form-values-work--behavior-controls.json",
+   "bytes": 365,
+   "sha256": "8e82c4d64e33423efeeed7be4077c0cb440da99838104f1c9f62a045cbdcc46e",
+   "fields": {
+    "activationCount": 2,
+    "radioArrowSkipsDisabled": true,
+    "checkboxLabelAndSpace": true,
+    "switchSpace": true,
+    "disabledAndLoadingBlocked": true,
+    "mixedExposed": true,
+    "values": "{\"project\":\"Updated project\",\"description\":\"First\\nUpdated second\",\"accepted\":\"yes\",\"mode\":\"two\",\"notifications\":\"enabled\"}",
+    "nativeTextReset": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--fixed-control-states-match-AntD-geometry-typography-and-surfaces--computed-controls.json",
+   "bytes": 107513,
+   "sha256": "72698f15e64444f75446ee1cc318b6802759694aa5db37d0ff343fc43518dcf2",
+   "fields": {
+    "theme": "light",
+    "differences": [],
+    "errors": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--hover-and-keyboard-focus-preserve-visible-control-feedback--hover-focus-controls.json",
+   "bytes": 22740,
+   "sha256": "d951e73f2f416a986fc7ac022172a528ed8c0ef4843937f70977219e49d3a598"
+  },
+  {
+   "name": "webkit-light-desktop--keyboard-labels-loading-disabled-and-native-form-values-work--behavior-controls.json",
+   "bytes": 365,
+   "sha256": "8e82c4d64e33423efeeed7be4077c0cb440da99838104f1c9f62a045cbdcc46e",
+   "fields": {
+    "activationCount": 2,
+    "radioArrowSkipsDisabled": true,
+    "checkboxLabelAndSpace": true,
+    "switchSpace": true,
+    "disabledAndLoadingBlocked": true,
+    "mixedExposed": true,
+    "values": "{\"project\":\"Updated project\",\"description\":\"First\\nUpdated second\",\"accepted\":\"yes\",\"mode\":\"two\",\"notifications\":\"enabled\"}",
+    "nativeTextReset": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--fixed-control-states-match-AntD-geometry-typography-and-surfaces--computed-controls.json",
+   "bytes": 107705,
+   "sha256": "b7ea7f7349ef3fc7fdbbc6af094198126330a1a5f6da016a3fb03f7ca5596d28",
+   "fields": {
+    "theme": "light",
+    "differences": [],
+    "errors": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--hover-and-keyboard-focus-preserve-visible-control-feedback--hover-focus-controls.json",
+   "bytes": 22824,
+   "sha256": "158e3eef41d4a70ce28120b4d86fd61098b482c466b72e10174d72ceb4e153cb"
+  },
+  {
+   "name": "webkit-light-phone--keyboard-labels-loading-disabled-and-native-form-values-work--behavior-controls.json",
+   "bytes": 365,
+   "sha256": "8e82c4d64e33423efeeed7be4077c0cb440da99838104f1c9f62a045cbdcc46e",
+   "fields": {
+    "activationCount": 2,
+    "radioArrowSkipsDisabled": true,
+    "checkboxLabelAndSpace": true,
+    "switchSpace": true,
+    "disabledAndLoadingBlocked": true,
+    "mixedExposed": true,
+    "values": "{\"project\":\"Updated project\",\"description\":\"First\\nUpdated second\",\"accepted\":\"yes\",\"mode\":\"two\",\"notifications\":\"enabled\"}",
+    "nativeTextReset": true
+   }
+  }
+ ]
+}

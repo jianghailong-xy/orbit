@@ -1,0 +1,39 @@
+/* The replaced card as measured: a 1px split border, 8px radius and the raised surface; a 56px head
+   whose 16px semibold title (a 25.14px line, one line cut with an ellipsis) is centred over a 1px split
+   line, which the body overlaps by 1px; 24px body padding. No outer margin: the page spaces its cards. */
+.orbit-card {
+  position: relative;
+  box-sizing: border-box;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--orbit-radius-popup);
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font-family: var(--orbit-font-family);
+  font-size: var(--orbit-font-size);
+  line-height: 1.5714285714285714;
+}
+.orbit-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  margin-bottom: -1px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.orbit-card-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5714285714285714;
+  color: var(--text-1);
+}
+.orbit-card-body {
+  padding: 24px;
+}

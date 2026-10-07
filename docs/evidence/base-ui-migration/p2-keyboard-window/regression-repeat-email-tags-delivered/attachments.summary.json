@@ -1,0 +1,167 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2-keyboard-window/regression-repeat-email-tags-delivered/<name>",
+ "files": [
+  {
+   "name": "chromium-dark-desktop--email-tags-support-controlled-typing-separators-composition-Enter-blur-and-deletion--email-tags.json",
+   "bytes": 211,
+   "sha256": "bca4a211111d6395b7e9300f7d3398adc7958a2f273e587b049a3cc4c7dd39ba",
+   "fields": {
+    "controlledQuery": true,
+    "commaSpace": true,
+    "enter": true,
+    "blurCommits": true,
+    "syntheticComposition": true,
+    "backspace": true,
+    "remove": true,
+    "deduplicated": true,
+    "keyboardClear": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--email-tags-support-controlled-typing-separators-composition-Enter-blur-and-deletion--repeat-1--email-tags.json",
+   "bytes": 211,
+   "sha256": "bca4a211111d6395b7e9300f7d3398adc7958a2f273e587b049a3cc4c7dd39ba",
+   "fields": {
+    "controlledQuery": true,
+    "commaSpace": true,
+    "enter": true,
+    "blurCommits": true,
+    "syntheticComposition": true,
+    "backspace": true,
+    "remove": true,
+    "deduplicated": true,
+    "keyboardClear": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--email-tags-support-controlled-typing-separators-composition-Enter-blur-and-deletion--repeat-2--email-tags.json",
+   "bytes": 211,
+   "sha256": "bca4a211111d6395b7e9300f7d3398adc7958a2f273e587b049a3cc4c7dd39ba",
+   "fields": {
+    "controlledQuery": true,
+    "commaSpace": true,
+    "enter": true,
+    "blurCommits": true,
+    "syntheticComposition": true,
+    "backspace": true,
+    "remove": true,
+    "deduplicated": true,
+    "keyboardClear": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--email-tags-support-controlled-typing-separators-composition-Enter-blur-and-deletion--repeat-3--email-tags.json",
+   "bytes": 211,
+   "sha256": "bca4a211111d6395b7e9300f7d3398adc7958a2f273e587b049a3cc4c7dd39ba",
+   "fields": {
+    "controlledQuery": true,
+    "commaSpace": true,
+    "enter": true,
+    "blurCommits": true,
+    "syntheticComposition": true,
+    "backspace": true,
+    "remove": true,
+    "deduplicated": true,
+    "keyboardClear": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--email-tags-support-controlled-typing-separators-composition-Enter-blur-and-deletion--repeat-4--email-tags.json",
+   "bytes": 211,
+   "sha256": "bca4a211111d6395b7e9300f7d3398adc7958a2f273e587b049a3cc4c7dd39ba",
+   "fields": {
+    "controlledQuery": true,
+    "commaSpace": true,
+    "enter": true,
+    "blurCommits": true,
+    "syntheticComposition": true,
+    "backspace": true,
+    "remove": true,
+    "deduplicated": true,
+    "keyboardClear": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--email-tags-support-controlled-typing-separators-composition-Enter-blur-and-deletion--repeat-5--email-tags.json",
+   "bytes": 211,
+   "sha256": "bca4a211111d6395b7e9300f7d3398adc7958a2f273e587b049a3cc4c7dd39ba",
+   "fields": {
+    "controlledQuery": true,
+    "commaSpace": true,
+    "enter": true,
+    "blurCommits": true,
+    "syntheticComposition": true,
+    "backspace": true,
+    "remove": true,
+    "deduplicated": true,
+    "keyboardClear": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--email-tags-support-controlled-typing-separators-composition-Enter-blur-and-deletion--repeat-6--email-tags.json",
+   "bytes": 211,
+   "sha256": "bca4a211111d6395b7e9300f7d3398adc7958a2f273e587b049a3cc4c7dd39ba",
+   "fields": {
+    "controlledQuery": true,
+    "commaSpace": true,
+    "enter": true,
+    "blurCommits": true,
+    "syntheticComposition": true,
+    "backspace": true,
+    "remove": true,
+    "deduplicated": true,
+    "keyboardClear": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--email-tags-support-controlled-typing-separators-composition-Enter-blur-and-deletion--repeat-7--email-tags.json",
+   "bytes": 211,
+   "sha256": "bca4a211111d6395b7e9300f7d3398adc7958a2f273e587b049a3cc4c7dd39ba",
+   "fields": {
+    "controlledQuery": true,
+    "commaSpace": true,
+    "enter": true,
+    "blurCommits": true,
+    "syntheticComposition": true,
+    "backspace": true,
+    "remove": true,
+    "deduplicated": true,
+    "keyboardClear": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--email-tags-support-controlled-typing-separators-composition-Enter-blur-and-deletion--repeat-8--email-tags.json",
+   "bytes": 211,
+   "sha256": "bca4a211111d6395b7e9300f7d3398adc7958a2f273e587b049a3cc4c7dd39ba",
+   "fields": {
+    "controlledQuery": true,
+    "commaSpace": true,
+    "enter": true,
+    "blurCommits": true,
+    "syntheticComposition": true,
+    "backspace": true,
+    "remove": true,
+    "deduplicated": true,
+    "keyboardClear": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--email-tags-support-controlled-typing-separators-composition-Enter-blur-and-deletion--repeat-9--email-tags.json",
+   "bytes": 211,
+   "sha256": "bca4a211111d6395b7e9300f7d3398adc7958a2f273e587b049a3cc4c7dd39ba",
+   "fields": {
+    "controlledQuery": true,
+    "commaSpace": true,
+    "enter": true,
+    "blurCommits": true,
+    "syntheticComposition": true,
+    "backspace": true,
+    "remove": true,
+    "deduplicated": true,
+    "keyboardClear": true
+   }
+  }
+ ]
+}
