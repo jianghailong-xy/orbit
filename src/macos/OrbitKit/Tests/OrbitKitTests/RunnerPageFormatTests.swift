@@ -305,8 +305,11 @@ final class RunnerPageFormatTests: XCTestCase {
         XCTAssertEqual(claude.map(\.percent), [98])
         XCTAssertEqual(RunnerPageFormat.accountWindows(wikova, engine: "claude", account: "default").map(\.label),
                        ["5-hour limit", "Weekly · all models"])
-        XCTAssertEqual(RunnerPageFormat.engineWindows(wikova, engine: "codex"), [],
-                       "with two accounts each one's quota is on the engine page")
+        XCTAssertNil(RunnerPageFormat.engineNextAccount(wikova, engine: "claude", now: now), "one account: none to name")
+        // With two, the row carries the window of the one a new session starts on, named: Work's 5 hours
+        // are nearly spent (91%), so Default. Each one's every window is the engine page's.
+        XCTAssertEqual(RunnerPageFormat.engineNextAccount(wikova, engine: "codex", now: now), "Default")
+        XCTAssertEqual(RunnerPageFormat.engineWindows(wikova, engine: "codex", now: now).map(\.percent), [20])
         XCTAssertEqual(RunnerPageFormat.accountWindows(wikova, engine: "codex", account: "default").map(\.percent),
                        [20])
         XCTAssertEqual(RunnerPageFormat.accountWindows(wikova, engine: "codex", account: "1fda3f43").map(\.percent),
@@ -329,6 +332,17 @@ final class RunnerPageFormatTests: XCTestCase {
                        [84, 77], "Default's are the flat payload's own windows, not an added account's")
         XCTAssertEqual(RunnerPageFormat.accountWindows(hpc, engine: "codex", account: "1e84046c"), [],
                        "a flat Claude payload is no Codex snapshot")
+    }
+
+    /// The same machine's Claude row names the account a new session starts on and carries its window:
+    /// Default's 5 hours are nearly spent (84%), and of the other two rd's week runs out first.
+    func testTheRowNamesTheAccountANewSessionStartsOn() throws {
+        let hpc = try runner(Self.hpcJSON)
+        let at = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-10-06T22:18:26Z"))
+        XCTAssertEqual(RunnerPageFormat.engineNextAccount(hpc, engine: "claude", now: at), "jianghailong.rd@gmail.com")
+        let row = try XCTUnwrap(RunnerPageFormat.engineWindows(hpc, engine: "claude", now: at).first)
+        XCTAssertEqual([row.label, "\(row.percent)"], ["Weekly · all models", "41"])
+        XCTAssertEqual(RunnerPageFormat.engineWindows(hpc, engine: "claude", now: at).count, 1)
     }
 
     func testAFailedUpdateIsTheRowsOnlyOnceItIsAProblem() throws {

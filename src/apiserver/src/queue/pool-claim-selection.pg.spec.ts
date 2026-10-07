@@ -32,6 +32,7 @@ import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { encryptSecret } from '../providers/provider-crypto';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
+import { PROVIDER_UNAVAILABLE_ERROR } from '../runner-api/runner-provider-support';
 import { QueueService } from './queue.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -238,13 +239,14 @@ suite('an account pool at claim time, on real PostgreSQL', async (t) => {
   await t.test("(4) another owner's session naming the pool gets none of its tokens", async () => {
     const stranger = await owner(db, 'pool-stranger');
     const theirs = await queuedSession(db, stranger, pool.slug);
-    const claimed = await claim(stranger.runnerId, theirs);
-    // Dispatched as a slug naming nothing this owner has: the Claude default, which signs in itself.
-    assert.equal(claimed.provider, 'claude');
-    assert.equal(token(claimed), undefined);
-    const keys = new Set(members.map((m) => m.key));
-    assert.deepEqual(Object.values(claimed.agent.env ?? {}).filter((value) => keys.has(value)), []);
+    // A slug naming nothing this owner has is not dispatched at all, not even on the Claude default: their
+    // runner is handed nothing, and the session waits, saying why.
+    assert.equal(await queue.claimSessionForRunner({ id: stranger.runnerId }, 0, false, false), null);
     assert.deepEqual(await recorded(theirs), { poolMemberProviderId: null, poolSwitchNotice: null });
+    assert.deepEqual(
+      await db.session.findUniqueOrThrow({ where: { id: theirs }, select: { status: true, error: true } }),
+      { status: RunStatus.PENDING, error: PROVIDER_UNAVAILABLE_ERROR },
+    );
   });
 
   await t.test('(5) the switch leaves its line in the transcript, on the first engine start after it', async () => {
@@ -278,17 +280,21 @@ suite('an account pool at claim time, on real PostgreSQL', async (t) => {
     assert.equal((await recorded(sessionId)).poolSwitchNotice, null, 'the line is owed once, not on every start');
   });
 
-  await t.test('a pool emptied, then deleted, under a session falls back to the Claude default instead of failing the claim', async () => {
+  await t.test('a pool emptied under a session falls back to the Claude default instead of failing the claim; deleted, it holds the session', async () => {
     await db.providerPoolMember.deleteMany({ where: { poolId: pool.id } });
     await nextTurn(sessionId);
     const emptied = await claim(me.runnerId, sessionId);
     assert.equal(emptied.provider, 'claude');
     assert.equal(token(emptied), undefined);
 
+    // Deleted, the slug names nothing of this owner's: the claim hands the runner nothing rather than run the
+    // session on the Claude default, and the session waits, saying why.
     await db.providerPool.delete({ where: { id: pool.id } });
     await nextTurn(sessionId);
-    const deleted = await claim(me.runnerId, sessionId);
-    assert.equal(deleted.provider, 'claude');
-    assert.equal(token(deleted), undefined);
+    assert.equal(await queue.claimSessionForRunner({ id: me.runnerId }, 0, false, false), null);
+    assert.deepEqual(
+      await db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { status: true, error: true } }),
+      { status: RunStatus.PENDING, error: PROVIDER_UNAVAILABLE_ERROR },
+    );
   });
 });

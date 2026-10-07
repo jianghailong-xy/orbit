@@ -226,8 +226,11 @@ func TestMergeToMainRebaseLinear(t *testing.T) {
 		t.Errorf("SourceSha = %s, want pre-rebase source tip %s", out.SourceSha, featBefore)
 	}
 	if branchExists(repo, "orbit/_rebase-s1") {
-		t.Error("temp rebase branch should be cleaned up")
+		t.Error("the replay must never stage a branch of its own")
 	}
+	// The staging worktree is kept for this repository's next merge (reuse is the point of it),
+	// and left with nothing of this replay behind.
+	assertScratchIdle(t, repo)
 }
 
 // TestMergeToMainRebaseAdaptsOverlappingPatch reproduces the false-negative that motivated the
@@ -291,7 +294,105 @@ func TestMergeToMainRebaseConflict(t *testing.T) {
 		t.Errorf("working tree should be clean after an aborted rebase, got:\n%s", st)
 	}
 	if branchExists(repo, "orbit/_rebase-s2") {
-		t.Error("temp rebase branch should be cleaned up after conflict")
+		t.Error("the replay must never stage a branch of its own")
+	}
+	// The conflict is aborted out of the scratch, not left in it: the next merge stages over this
+	// worktree, and a replay git thinks is still in progress would refuse to start.
+	assertScratchIdle(t, repo)
+}
+
+// assertScratchIdle checks the replay's staging worktree was kept — one per repository, reused by
+// the next merge, which is what makes pressing Merge cheap — and left with no replay in progress
+// and nothing staged for the next merge to trip over.
+func assertScratchIdle(t *testing.T, repo string) {
+	t.Helper()
+	tmp := rebaseScratchDir(repo)
+	if _, err := os.Stat(tmp); err != nil {
+		t.Fatalf("the staging worktree should be kept for this repository's next merge: %v", err)
+	}
+	if !worktreeRegistered(repo, tmp) {
+		t.Error("the staging worktree should stay registered with its repository")
+	}
+	if scratchMidOperation(tmp) {
+		t.Error("the staging worktree was left mid-replay")
+	}
+	if st, _ := git(tmp, "status", "--porcelain"); st != "" {
+		t.Errorf("the staging worktree was left dirty:\n%s", st)
+	}
+}
+
+// TestMergeToMainReusesRebaseScratch: the staging worktree is created once per repository and
+// reused. Every merge used to pay a full checkout of the repository just to replay a handful of
+// commits into it — on the 28k-file checkout this was measured on that was ~4s of a ~12s merge,
+// the largest single cost of pressing Merge — and the replay only ever needed the tree to exist.
+func TestMergeToMainReusesRebaseScratch(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	repo := initRepo(t)
+
+	scratch := rebaseScratchDir(repo)
+	if _, err := os.Stat(scratch); !os.IsNotExist(err) {
+		t.Fatalf("setup: nothing should be staged before the first merge (%v)", err)
+	}
+
+	landBranchForksFromMain(t, repo, "orbit/first", "first.txt")
+	first, err := os.Stat(scratch)
+	if err != nil {
+		t.Fatalf("the first merge should leave the staging worktree in place: %v", err)
+	}
+	landBranchForksFromMain(t, repo, "orbit/second", "second.txt")
+	second, err := os.Stat(scratch)
+	if err != nil {
+		t.Fatalf("the second merge should have reused the staging worktree, not removed it: %v", err)
+	}
+	if !os.SameFile(first, second) {
+		t.Error("the second merge rebuilt the staging worktree instead of restaging the kept one")
+	}
+	if _, err := git(repo, "cat-file", "-e", "main:second.txt"); err != nil {
+		t.Errorf("the second merge should have landed its work: %v", err)
+	}
+	assertScratchIdle(t, repo)
+}
+
+// TestMergeToMainRebuildsUnusableScratch: the kept staging worktree can be damaged behind the
+// runner's back, and the next merge has to rebuild rather than fail on it. It is an optimization —
+// no merge may ever depend on the state a previous one left behind.
+func TestMergeToMainRebuildsUnusableScratch(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	repo := initRepo(t)
+
+	landBranchForksFromMain(t, repo, "orbit/one", "one.txt")
+
+	// The directory is gone (a reclaim sweep, a manual rm) while git still has it registered.
+	if err := os.RemoveAll(rebaseScratchDir(repo)); err != nil {
+		t.Fatal(err)
+	}
+	landBranchForksFromMain(t, repo, "orbit/two", "two.txt")
+	assertScratchIdle(t, repo)
+
+	// A replay killed midway: git's own marker for a rebase in progress, with nothing under it for
+	// `rebase --abort` to restore — the case the abort itself cannot clear.
+	gitDir := mustGit(t, rebaseScratchDir(repo), "rev-parse", "--absolute-git-dir")
+	if err := os.MkdirAll(filepath.Join(gitDir, "rebase-merge"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !scratchMidOperation(rebaseScratchDir(repo)) {
+		t.Fatal("setup: the scratch should look mid-replay")
+	}
+	landBranchForksFromMain(t, repo, "orbit/three", "three.txt")
+	assertScratchIdle(t, repo)
+}
+
+// landBranchForksFromMain forks branch off main, commits file onto it, moves main on so the merge
+// has real replay work rather than a no-op, and merges the branch into main.
+func landBranchForksFromMain(t *testing.T, repo, branch, file string) {
+	t.Helper()
+	mustGit(t, repo, "checkout", "-b", branch, "main")
+	commitFile(t, repo, file, "work\n", "work on "+branch)
+	mustGit(t, repo, "checkout", "main")
+	commitFile(t, repo, file+"-main.txt", "main\n", "main moves on after "+branch+" forked")
+	out := mergeToMain(MergeCommand{WorkDir: repo, Branch: branch, SessionID: branch})
+	if out.Status != "merged" {
+		t.Fatalf("merge %s = %q (%s)", branch, out.Status, out.Message)
 	}
 }
 
@@ -1279,8 +1380,8 @@ func TestMergeToMainWedgedRootNamesTheCheckout(t *testing.T) {
 	if mainAfter, _ := git(repo, "rev-parse", "main"); mainAfter != mainBefore {
 		t.Errorf("main must not move: %s → %s", mainBefore, mainAfter)
 	}
-	if branchExists(repo, "orbit/_rebase-s-wedged") {
-		t.Error("must fail before staging the rebase worktree")
+	if _, err := os.Stat(rebaseScratchDir(repo)); !os.IsNotExist(err) {
+		t.Error("must fail before staging the rebase worktree (even the kept one)")
 	}
 }
 

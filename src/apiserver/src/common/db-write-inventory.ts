@@ -1736,6 +1736,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'projects/project-integration-line.ts#bind', under: 'configureProjectIntegration and startOnFirstIntegration' },
   { at: 'projects/project-integration-line.ts#configureProjectIntegration', under: "projects.configureIntegration, projects.update and projectAcceptance.start (through startProjectLine) — the account owner's integration settings, under the binding lock taken after the project row when that write holds one" },
   { at: 'projects/project-integration-line.ts#startOnFirstIntegration', under: 'the transaction that queues a project’s first integration — it takes the same binding lock and writes only that row' },
+  { at: 'realtime/runner-wake.ts#notifyRunnerWakeOnCommit', under: 'projects/project-integration-job.ts#queueLandTask and #queuePromotionJob — the transaction that writes the job row (the DONE write, an integration retry, a promotion decision) — one pg_notify on the runner-wake channel, taking no lock and writing no row, which Postgres delivers at COMMIT' },
   // Orbit Wiki (0307). Every one of these runs inside `submitChangeset`, `decide`,
   // `createSpace`, `bindOnFirstUse` or `recordAnchorChecks` above, in the order that unit states, and takes no lock its
   // caller did not already take. `applyOp` and `recomputeFlags` are the ONLY two that write
