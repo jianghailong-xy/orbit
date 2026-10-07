@@ -116,8 +116,7 @@ class WikiShellTest {
         awaitTag("wiki-contents-index")
         compose.onNodeWithTag("wiki-contents-index").performClick()
         val entry = "wiki-index-entry:${WikiShell.DOC}:s3"
-        awaitTag("wiki-index-list")
-        compose.onNodeWithTag("wiki-index-list").performScrollToNode(hasTestTag(entry))
+        scrollIndexTo(entry)
         compose.onNodeWithTag(entry).performClick()
         awaitTag("wiki-doc-section:s3")
         assertTrue("opened at its section", sectionAtTop("s3"))
@@ -126,8 +125,7 @@ class WikiShellTest {
         compose.onNodeWithTag("wiki-doc-crumb").assertIsDisplayed()
         assertFalse(sectionAtTop("s3"))
         back()
-        awaitTag("wiki-index-list")
-        compose.onNodeWithTag("wiki-index-list").performScrollToNode(hasTestTag(entry))
+        scrollIndexTo(entry)
         compose.onNodeWithTag(entry).performClick()
         awaitTag("wiki-doc-list")
         awaitThat("the document again") { compose.onAllNodesWithTag("wiki-doc-section:s3").fetchSemanticsNodes().isNotEmpty() }
@@ -246,6 +244,11 @@ class WikiShellTest {
         catch (timeout: androidx.compose.ui.test.ComposeTimeoutException) {
             throw AssertionError("waited for $what; picker='${picker()}'; last calls=${shell.calls.takeLast(12)}", timeout)
         }
+    }
+    /** The index scrolled to the row [tag]: the list is on screen before its reads answer, so the scroll is tried
+     * until the row is in it. */
+    private fun scrollIndexTo(tag: String) = awaitThat("the index row $tag") {
+        runCatching { compose.onNodeWithTag("wiki-index-list").performScrollToNode(hasTestTag(tag)) }.isSuccess
     }
     /** The section's heading at the top of the document list: where opening the document at it puts the reader. */
     private fun sectionAtTop(key: String): Boolean {
