@@ -518,6 +518,14 @@ private fun RunnerCapacity(runner: JsonObject, workspaces: List<JsonObject>, mod
         }
         pending = false
     }
+    // A press still settling is sent when the page goes (iOS saves on the stepper's release), so leaving at once loses nothing.
+    DisposableEffect(id) {
+        onDispose {
+            val value = maxConc
+            if (pending && value != (model.runner(id)?.int("maxConcurrent") ?: 1))
+                api.background.launch { try { api.patch("runners/$id", buildJsonObject { put("maxConcurrent", value) }) } catch (_: Exception) { } }
+        }
+    }
     FormSection(RunnerCopy.CAPACITY, footer = RunnerCopy.CAPACITY_FOOTER) {
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(RunnerCopy.MAX_CONCURRENT, Modifier.weight(1f))

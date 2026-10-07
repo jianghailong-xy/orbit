@@ -127,6 +127,12 @@ class ManagementLiveTest {
         node.performClick()
         compose.waitForIdle()
     }
+    private fun openWorkspace(id: String) {
+        val name = read(account("owner").also { token(it) }, "workspaces/$id").jsonObject.s("name")!!
+        compose.waitUntil(20_000) { shows(hasText(name) and hasClickAction()) || shows(hasText("unreadable directory", substring = true)) }
+        ok("the directory lists the workspace (not \"unreadable\")", shows(hasText(name) and hasClickAction()))
+        click(hasText(name) and hasClickAction())
+    }
     private fun capture(label: String) {
         compose.waitForIdle(); instrumentation.waitForIdleSync(); android.os.SystemClock.sleep(700)
         val dir = File(app.filesDir, "a13-live").apply { mkdirs() }
@@ -153,7 +159,7 @@ class ManagementLiveTest {
         pick("Appearance", "System")
         eventually("server: theme = system") { prefs(member).s("theme") == "system" }
         click(hasText("Notifications") and hasClickAction()); await("When a session finishes")
-        val finished = prefs(member).b("notifySessionFinished") ?: false
+        val finished = prefs(member).b("notifySessionFinished") ?: true   // absent = on, as the app and the push service read it
         click(hasText("When a session finishes") and isToggleable())
         eventually("server: notifySessionFinished = ${!finished}") { prefs(member).b("notifySessionFinished") == !finished }
         back(); await("Default permission")
@@ -236,6 +242,9 @@ class ManagementLiveTest {
         signIn(owner); settings()
         click(hasText("Runners") and hasClickAction())
         click(hasText("a13-box") and hasClickAction()); await("About This Runner")
+        val activity = System.identityHashCode(compose.activity)
+        compose.waitForIdle(); Thread.sleep(2_000); await("About This Runner")
+        note("runner page settled; activity ${if (System.identityHashCode(compose.activity) == activity) "kept" else "recreated"}")
         capture("live-runner")
         click(hasText("Name") and hasClickAction())
         compose.waitUntil(20_000) { shows(hasSetTextAction()) }
@@ -270,8 +279,7 @@ class ManagementLiveTest {
         val owner = account("owner")
         val workspace = accounts["workspace"]!!.jsonObject.s("id")!!
         signIn(owner)
-        compose.waitUntil(20_000) { shows(hasTestTag("workspace:$workspace")) }
-        compose.onNodeWithTag("workspace:$workspace").performClick()
+        openWorkspace(workspace)
         compose.onNodeWithContentDescription("Workspace settings").performClick()
         await("Smart model selection for tasks")
         field("Name").performTextReplacement("Stack workspace 2")
@@ -298,8 +306,7 @@ class ManagementLiveTest {
         signIn(owner)
         val title = read(owner, "sessions/$session").jsonObject.s("title") ?: "Untitled"
         fun share() = read(owner, "sessions/$session/share").jsonObject["link"]?.takeIf { it !is JsonNull }?.jsonObject
-        compose.waitUntil(20_000) { shows(hasTestTag("workspace:$workspace")) }
-        compose.onNodeWithTag("workspace:$workspace").performClick()
+        openWorkspace(workspace)
         compose.waitUntil(20_000) { shows(hasContentDescription("Options for", substring = true)) }
         compose.onAllNodes(hasContentDescription("Options for", substring = true)).onFirst().performClick()
         click(hasText("Share…") and hasClickAction(), scroll = false)

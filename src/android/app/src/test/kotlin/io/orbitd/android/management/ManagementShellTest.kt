@@ -79,6 +79,24 @@ class ManagementShellTest {
         assertEquals(listOf("PATCH runners/${fixture.RUNNER}"), fixture.writes("runners/${fixture.RUNNER}"))
     }
 
+    @Test fun maxConcurrentIsSavedOnceThePressesSettle() {
+        signIn()
+        compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
+        compose.onNode(hasText("Settings") and hasClickAction()).performScrollTo().performClick()
+        compose.onNode(hasText("Runners") and hasClickAction()).performScrollTo().performClick()
+        compose.waitUntil(10_000) { compose.onAllNodes(hasText("Old alias") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText("Old alias") and hasClickAction()).performClick()
+        await("About")
+        compose.onNodeWithContentDescription("Increase Max Concurrent").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Increase Max Concurrent").performClick()
+        compose.waitUntil(10_000) { fixture.runnerCapacity == 4 }
+        assertEquals("Two presses, one write", 1, fixture.writes("runners/${fixture.RUNNER}").size)
+        // A press followed at once by leaving the page is still sent.
+        compose.onNodeWithContentDescription("Increase Max Concurrent").performClick()
+        back()
+        compose.waitUntil(10_000) { fixture.runnerCapacity == 5 }
+    }
+
     @Test fun theSharePanelStopsWritingWhenTheDirectoryIsNoLongerCurrent() {
         signIn()
         compose.onNodeWithTag("workspace:${fixture.WORKSPACE}").performClick()

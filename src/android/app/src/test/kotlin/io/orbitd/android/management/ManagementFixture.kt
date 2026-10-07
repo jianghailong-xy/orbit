@@ -25,6 +25,7 @@ object ManagementFixture {
     val calls = CopyOnWriteArrayList<String>()
     @Volatile var workspaceName = "Alpha"
     @Volatile var runnerAlias = "Old alias"
+    @Volatile var runnerCapacity = 2
     @Volatile var theme = "system"
     @Volatile var shareFails = false
     @Volatile var accessFails = false
@@ -41,7 +42,7 @@ object ManagementFixture {
     @Volatile private var opened = 0
 
     fun reset() {
-        calls.clear(); workspaceName = "Alpha"; runnerAlias = "Old alias"; theme = "system"; shareFails = false; accessFails = false
+        calls.clear(); workspaceName = "Alpha"; runnerAlias = "Old alias"; runnerCapacity = 2; theme = "system"; shareFails = false; accessFails = false
         viewerRole = "ADMIN"; viewerCreates = true; membersCanAdd = false; membersCanAddAccounts = false; loginState = "ACTIVE"
         secondRunner = false; runnerOrder = listOf(RUNNER, RUNNER_TWO)
         drop = CompletableDeferred(); opened = 0
@@ -74,7 +75,7 @@ object ManagementFixture {
     private fun runnerTwo() = """{"id":"$RUNNER_TWO","name":"spare","displayName":"Spare box","hostname":"spare-01","version":"0.1.200","online":true,
         "status":"ONLINE","lastHeartbeatAt":"$now","maxConcurrent":1,"activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,"engines":[],"enrolledAt":"2026-09-02T00:00:00Z"}"""
     private fun runner() = """{"id":"$RUNNER","name":"box","displayName":"$runnerAlias","hostname":"box-01","version":"0.1.200","online":true,
-        "status":"ONLINE","lastHeartbeatAt":"$now","maxConcurrent":2,"activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,
+        "status":"ONLINE","lastHeartbeatAt":"$now","maxConcurrent":$runnerCapacity,"activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,
         "engines":[],"enrolledAt":"2026-09-01T00:00:00Z"}"""
     private fun sessionRow() = """{"id":"$SESSION","title":"Fixture session","status":"SUCCEEDED","lifecycleState":"OPEN","workspaceId":"$WORKSPACE",
         "agentId":"$WORKSPACE","createdAt":"${now.minusSeconds(600)}","lastTurnAt":"${now.minusSeconds(300)}","pendingApprovals":0}"""
@@ -107,7 +108,13 @@ object ManagementFixture {
             "workspaces/$WORKSPACE" -> { if (api.method == HttpMethod.PATCH) workspaceName = body()["name"]!!.jsonPrimitive.content; ok(workspace()) }
             "runners" -> ok(runners())
             "runners/reorder" -> { runnerOrder = body()["ids"]!!.jsonArray.map { it.jsonPrimitive.content }; ok(runners()) }
-            "runners/$RUNNER" -> { if (api.method == HttpMethod.PATCH) runnerAlias = body()["displayName"]!!.jsonPrimitive.content; ok(runner()) }
+            "runners/$RUNNER" -> {
+                if (api.method == HttpMethod.PATCH) body().let { patch ->
+                    patch["displayName"]?.let { runnerAlias = it.jsonPrimitive.content }
+                    patch["maxConcurrent"]?.let { runnerCapacity = it.jsonPrimitive.int }
+                }
+                ok(runner())
+            }
             "runners/$RUNNER/login" -> ok("""{"status":null}""")
             "sessions" -> ok(if (api.query.contains("view" to "open")) "[${sessionRow()}]" else "[]")
             "sessions/$SESSION/share" -> when {
