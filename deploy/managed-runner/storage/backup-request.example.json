@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "valueKind": "example",
+  "workflow": "storage-owner-quiesced-rbd-export",
+  "status": "pending",
+  "authorizationRef": "REPLACE_ME",
+  "context": "REPLACE_ME",
+  "apiServer": "https://REPLACE_ME",
+  "namespace": "REPLACE_ME",
+  "namespaceUID": "REPLACE_ME",
+  "ownerID": "REPLACE_ME",
+  "runnerID": "REPLACE_ME",
+  "pvc": { "name": "mr-data-REPLACE_ME", "uid": "REPLACE_ME" },
+  "pv": { "name": "REPLACE_ME", "uid": "REPLACE_ME" },
+  "ceph": {
+    "fsid": "REPLACE_ME",
+    "clusterID": "REPLACE_ME",
+    "pool": "REPLACE_ME",
+    "image": "REPLACE_ME",
+    "volumeHandle": "REPLACE_ME"
+  },
+  "predecessor": {
+    "podUID": "REPLACE_ME",
+    "nodeUID": "REPLACE_ME",
+    "generation": null,
+    "stopEvidenceRef": "REPLACE_ME",
+    "unmapEvidenceRef": "REPLACE_ME",
+    "applicationQuiescenceEvidenceRef": "REPLACE_ME"
+  },
+  "destination": {
+    "independentTargetRef": "REPLACE_ME",
+    "credentialRef": "REPLACE_ME",
+    "encryptionPolicyRef": "REPLACE_ME",
+    "retentionPolicyRef": "REPLACE_ME"
+  },
+  "exportEvidenceRef": "REPLACE_ME",
+  "backupSHA256": "REPLACE_ME",
+  "restoreToNewTestVolumeEvidenceRef": "REPLACE_ME"
+}
