@@ -9,6 +9,10 @@ import java.time.ZoneId
 // The reading pages' derivations, ported from OrbitKit `WikiArticleLogic` and `WikiDocLogic`.
 
 internal object WikiArticleLogic {
+    /** An article page's sections, top to bottom — the web phone's order (`WIKI_ARTICLE_SECTIONS`), and the one the
+     * native page iterates. */
+    enum class Section { CRUMB, TITLE, TAGS, UPDATED, BODY, FOOTNOTES, ENTRIES; val raw: String get() = name.lowercase() }
+
     /** The index letter bar: A to Z, then `#`. */
     val indexLetters: List<String> = ('A'..'Z').map(Char::toString) + "#"
     /** The subtopic articles Browse shows of a topic before `N more`, on the phone. */
@@ -158,6 +162,12 @@ internal object WikiArticleLogic {
 }
 
 internal object WikiDocLogic {
+    /** A document page's blocks, top to bottom — the web phone's order (`WIKI_DOC_SECTIONS`), and the one the native
+     * page iterates. */
+    enum class Section { CRUMB, TITLE, TAGS, UPDATED, REVIEW, SCOPE, BODY, FOOTNOTES, ENTRIES; val raw: String get() = name.lowercase() }
+    /** The footnote card's parts, top to bottom — the sheet's (`WIKI_FOOTNOTE_CARD_PARTS`). */
+    enum class CardPart { HEAD, QUOTE, PROBLEM, PLACE, VIA, OPEN; val raw: String get() = name.lowercase() }
+
     private fun plural(n: Int, one: String, many: String) = "${WikiArticleCopy.count(n)} ${if (n == 1) one else many}"
     private data class QuoteGroup(val kinds: Set<String>, val one: String, val many: String)
     private val quoteGroups = listOf(
@@ -431,7 +441,11 @@ internal object WikiDocLogic {
         val docs = category.docs.orEmpty()
         return "${plural(docs.size, "document", "documents")} · ${plural(sectionCount(docs), "section", "sections")}"
     }
-    enum class DocState(val text: String) { NEEDS_REVIEW(WikiDocCopy.needsReview), NOT_WRITTEN(WikiDocCopy.notWrittenShort) }
+    enum class DocState(val text: String) {
+        NEEDS_REVIEW(WikiDocCopy.needsReview), NOT_WRITTEN(WikiDocCopy.notWrittenShort);
+        /** `warn` (amber) or `muted` (grey), as the web's tones. */
+        val tone: String get() = if (this == NEEDS_REVIEW) "warn" else "muted"
+    }
     fun docLine(doc: WikiDocsDirectory.Doc): Pair<String, DocState?> {
         val sections = plural(doc.sections.orEmpty().size, "section", "sections")
         if (doc.written != true) return sections to DocState.NOT_WRITTEN
