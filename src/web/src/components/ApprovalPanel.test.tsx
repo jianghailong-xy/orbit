@@ -337,6 +337,65 @@ describe('blocker resolution approval', () => {
   });
 });
 
+describe('merge check change approval', () => {
+  const change = (over: Record<string, unknown> = {}): ApprovalInfo =>
+    ({
+      id: 'mc1',
+      toolName: 'orbit_project_update_integration',
+      input: {
+        projectId: 'p1',
+        projectTitle: 'Checkout rewrite',
+        currentMergeCheckCommand: 'npm run lint',
+        currentMergeCheckTimeoutSeconds: 600,
+        mergeCheckCommand: 'npm test',
+        ...(over.input as object),
+      },
+      ...over,
+    }) as ApprovalInfo;
+
+  it('shows the check as it stands beside the check being asked for', () => {
+    const html = render(change());
+
+    expect(html).toContain('Confirm: change the merge check of Checkout rewrite?');
+    // Both commands, because their difference is the whole decision. The CURRENT one is the fact
+    // the agent's proposal is checked against, so a card with only the new command would be asking
+    // the owner to take the agent's word for what is being replaced.
+    expect(html).toContain('npm run lint');
+    expect(html).toContain('npm test');
+    expect(html).toContain('Change the check');
+    expect(html).toContain('Chat about this');
+    expect(html).not.toContain('orbit_project_update_integration');
+  });
+
+  it('says in words when the check is being removed', () => {
+    // An empty line under "after" reads as a card that failed to load rather than as "no check".
+    const html = render(change({ input: { mergeCheckCommand: null } }));
+
+    expect(html).toContain('no check — nothing runs on the combined tree');
+    expect(html).toContain('no check configured');
+  });
+
+  it('names the budget only when the proposal named one', () => {
+    // Absent means "leave the budget as it is", which is not the same as "no budget" — a card that
+    // printed a zero would be describing a write nobody proposed.
+    expect(render(change())).not.toContain('killed after');
+    expect(render(change({
+      input: { mergeCheckCommand: 'npm test', mergeCheckTimeoutSeconds: 900 },
+    }))).toContain('killed after 900s');
+  });
+
+  it('offers no standing yes', () => {
+    // Every one of these is a different change to a different project, and "always allow" would
+    // turn the owner's answer to this one into a permission for the next.
+    expect(render(change())).not.toContain('Always allow');
+  });
+
+  it('says what is being left alone when it is declined', () => {
+    expect(decliningPrefix('orbit_project_update_integration'))
+      .toBe('Leaving the check as it is: ');
+  });
+});
+
 describe('batch create approval', () => {
   it('leads with how many actually start, not how many are written', () => {
     // Fifty tasks that wait on each other cost two runs; fifty independent ones cost fifty. The
