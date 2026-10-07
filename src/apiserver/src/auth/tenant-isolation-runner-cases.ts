@@ -1534,13 +1534,13 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
     'the device code is the credential, found by its hash; it hands over only the token the request\'s own '
     + 'approver decided — pat-device-login.service.ts:93',
   'GET /auth/google/start':
-    'starts a Google sign-in flow of its own (a new row, a browser cookie); takes no id — google-login.service.ts:260',
+    'starts a Google sign-in flow of its own (a new row, a browser cookie); takes no id — google-login.service.ts:277',
   'GET /auth/google/callback':
     'Google\'s return: the state is found by its hash and must match the browser cookie the start set — '
-    + 'google-login.service.ts:369',
+    + 'google-login.service.ts:390',
   'POST /auth/google/exchange':
     'the ticket is found by its hash and must come with the code verifier of the flow that made it — '
-    + 'google-login.service.ts:434',
+    + 'google-login.service.ts:455',
   'POST /runner/register':
     'the one-time enrollment token is the credential, found by its hash; the runner it makes or renews belongs to '
     + 'that token\'s owner — runner-api.controller.ts:802, :813',
