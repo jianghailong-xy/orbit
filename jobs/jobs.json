@@ -1,0 +1,477 @@
+{
+  "total_count": 6,
+  "jobs": [
+    {
+      "id": 112563524177,
+      "run_id": 37550183971,
+      "workflow_name": "Client CI (macOS + iOS)",
+      "head_branch": "probe/a1-google-gates",
+      "run_url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/runs/37550183971",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS60R8c8AAAAaNU8SUQ",
+      "head_sha": "d1ea88b2a0ccc463fcd7bf57dd31bc09af5b90c1",
+      "url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/jobs/112563524177",
+      "html_url": "https://github.com/jianghailong-xy/orbit/actions/runs/37550183971/job/112563524177",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-07T00:06:20Z",
+      "started_at": "2026-10-07T00:06:22Z",
+      "completed_at": "2026-10-07T00:06:48Z",
+      "name": "Navigation (one push mechanism per stack)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-07T00:06:23Z",
+          "completed_at": "2026-10-07T00:06:23Z"
+        },
+        {
+          "name": "Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-07T00:06:23Z",
+          "completed_at": "2026-10-07T00:06:47Z"
+        },
+        {
+          "name": "Gate a second push mechanism",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-07T00:06:47Z",
+          "completed_at": "2026-10-07T00:06:47Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-07T00:06:47Z",
+          "completed_at": "2026-10-07T00:06:47Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-10-07T00:06:47Z",
+          "completed_at": "2026-10-07T00:06:47Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/jianghailong-xy/orbit/check-runs/112563524177",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000021320,
+      "runner_name": "GitHub Actions 1000021320",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 112563524378,
+      "run_id": 37550183971,
+      "workflow_name": "Client CI (macOS + iOS)",
+      "head_branch": "probe/a1-google-gates",
+      "run_url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/runs/37550183971",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS60R8c8AAAAaNU8TGg",
+      "head_sha": "d1ea88b2a0ccc463fcd7bf57dd31bc09af5b90c1",
+      "url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/jobs/112563524378",
+      "html_url": "https://github.com/jianghailong-xy/orbit/actions/runs/37550183971/job/112563524378",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-07T00:06:20Z",
+      "started_at": "2026-10-07T00:06:22Z",
+      "completed_at": "2026-10-07T00:06:48Z",
+      "name": "Font tokens (bare system(size:) audit)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-07T00:06:23Z",
+          "completed_at": "2026-10-07T00:06:23Z"
+        },
+        {
+          "name": "Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-07T00:06:23Z",
+          "completed_at": "2026-10-07T00:06:45Z"
+        },
+        {
+          "name": "Audit bare system(size:) outside Typography.swift",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-07T00:06:45Z",
+          "completed_at": "2026-10-07T00:06:46Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-07T00:06:46Z",
+          "completed_at": "2026-10-07T00:06:46Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-10-07T00:06:46Z",
+          "completed_at": "2026-10-07T00:06:46Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/jianghailong-xy/orbit/check-runs/112563524378",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000021322,
+      "runner_name": "GitHub Actions 1000021322",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 112563524389,
+      "run_id": 37550183971,
+      "workflow_name": "Client CI (macOS + iOS)",
+      "head_branch": "probe/a1-google-gates",
+      "run_url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/runs/37550183971",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS60R8c8AAAAaNU8TJQ",
+      "head_sha": "d1ea88b2a0ccc463fcd7bf57dd31bc09af5b90c1",
+      "url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/jobs/112563524389",
+      "html_url": "https://github.com/jianghailong-xy/orbit/actions/runs/37550183971/job/112563524389",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-10-07T00:06:20Z",
+      "started_at": "2026-10-07T00:06:28Z",
+      "completed_at": "2026-10-07T00:08:55Z",
+      "name": "macOS (build + test)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-07T00:06:28Z",
+          "completed_at": "2026-10-07T00:06:29Z"
+        },
+        {
+          "name": "Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-07T00:06:29Z",
+          "completed_at": "2026-10-07T00:06:58Z"
+        },
+        {
+          "name": "Select latest Xcode",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-07T00:06:58Z",
+          "completed_at": "2026-10-07T00:06:58Z"
+        },
+        {
+          "name": "Toolchain",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-07T00:06:58Z",
+          "completed_at": "2026-10-07T00:07:02Z"
+        },
+        {
+          "name": "Test OrbitKit (macOS)",
+          "status": "completed",
+          "conclusion": "failure",
+          "number": 5,
+          "started_at": "2026-10-07T00:07:02Z",
+          "completed_at": "2026-10-07T00:08:52Z"
+        },
+        {
+          "name": "Build OrbitApp",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 6,
+          "started_at": "2026-10-07T00:08:52Z",
+          "completed_at": "2026-10-07T00:08:52Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-10-07T00:08:52Z",
+          "completed_at": "2026-10-07T00:08:52Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-10-07T00:08:52Z",
+          "completed_at": "2026-10-07T00:08:53Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/jianghailong-xy/orbit/check-runs/112563524389",
+      "labels": [
+        "macos-15"
+      ],
+      "runner_id": 1000021323,
+      "runner_name": "GitHub Actions 1000021323",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 112563524418,
+      "run_id": 37550183971,
+      "workflow_name": "Client CI (macOS + iOS)",
+      "head_branch": "probe/a1-google-gates",
+      "run_url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/runs/37550183971",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS60R8c8AAAAaNU8TQg",
+      "head_sha": "d1ea88b2a0ccc463fcd7bf57dd31bc09af5b90c1",
+      "url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/jobs/112563524418",
+      "html_url": "https://github.com/jianghailong-xy/orbit/actions/runs/37550183971/job/112563524418",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-07T00:06:20Z",
+      "started_at": "2026-10-07T00:06:27Z",
+      "completed_at": "2026-10-07T00:12:31Z",
+      "name": "iOS (generate + build)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-07T00:06:27Z",
+          "completed_at": "2026-10-07T00:06:28Z"
+        },
+        {
+          "name": "Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-07T00:06:29Z",
+          "completed_at": "2026-10-07T00:07:25Z"
+        },
+        {
+          "name": "Select latest Xcode",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-07T00:07:25Z",
+          "completed_at": "2026-10-07T00:07:25Z"
+        },
+        {
+          "name": "Install XcodeGen",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-07T00:07:25Z",
+          "completed_at": "2026-10-07T00:07:29Z"
+        },
+        {
+          "name": "Toolchain",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-07T00:07:29Z",
+          "completed_at": "2026-10-07T00:07:32Z"
+        },
+        {
+          "name": "Generate Xcode project",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-07T00:07:32Z",
+          "completed_at": "2026-10-07T00:07:32Z"
+        },
+        {
+          "name": "Build for iOS Simulator",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-10-07T00:07:32Z",
+          "completed_at": "2026-10-07T00:12:26Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-10-07T00:12:26Z",
+          "completed_at": "2026-10-07T00:12:27Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-10-07T00:12:27Z",
+          "completed_at": "2026-10-07T00:12:28Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/jianghailong-xy/orbit/check-runs/112563524418",
+      "labels": [
+        "macos-15"
+      ],
+      "runner_id": 1000021321,
+      "runner_name": "GitHub Actions 1000021321",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 112563524552,
+      "run_id": 37550183971,
+      "workflow_name": "Client CI (macOS + iOS)",
+      "head_branch": "probe/a1-google-gates",
+      "run_url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/runs/37550183971",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS60R8c8AAAAaNU8TyA",
+      "head_sha": "d1ea88b2a0ccc463fcd7bf57dd31bc09af5b90c1",
+      "url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/jobs/112563524552",
+      "html_url": "https://github.com/jianghailong-xy/orbit/actions/runs/37550183971/job/112563524552",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-07T00:06:20Z",
+      "started_at": "2026-10-07T00:06:31Z",
+      "completed_at": "2026-10-07T00:10:18Z",
+      "name": "macOS OrbitApp build (probe-only)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-07T00:06:31Z",
+          "completed_at": "2026-10-07T00:06:34Z"
+        },
+        {
+          "name": "Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-07T00:06:34Z",
+          "completed_at": "2026-10-07T00:07:15Z"
+        },
+        {
+          "name": "Select latest Xcode",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-07T00:07:15Z",
+          "completed_at": "2026-10-07T00:07:15Z"
+        },
+        {
+          "name": "Toolchain",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-07T00:07:15Z",
+          "completed_at": "2026-10-07T00:07:23Z"
+        },
+        {
+          "name": "Build OrbitApp",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-07T00:07:23Z",
+          "completed_at": "2026-10-07T00:10:14Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-10-07T00:10:14Z",
+          "completed_at": "2026-10-07T00:10:15Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-10-07T00:10:15Z",
+          "completed_at": "2026-10-07T00:10:17Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/jianghailong-xy/orbit/check-runs/112563524552",
+      "labels": [
+        "macos-15"
+      ],
+      "runner_id": 1000021324,
+      "runner_name": "GitHub Actions 1000021324",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 112565328120,
+      "run_id": 37550183971,
+      "workflow_name": "Client CI (macOS + iOS)",
+      "head_branch": "probe/a1-google-gates",
+      "run_url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/runs/37550183971",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS60R8c8AAAAaNWqY-A",
+      "head_sha": "d1ea88b2a0ccc463fcd7bf57dd31bc09af5b90c1",
+      "url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/jobs/112565328120",
+      "html_url": "https://github.com/jianghailong-xy/orbit/actions/runs/37550183971/job/112565328120",
+      "status": "in_progress",
+      "conclusion": null,
+      "created_at": "2026-10-07T00:12:31Z",
+      "started_at": "2026-10-07T00:12:33Z",
+      "completed_at": null,
+      "name": "Push the results where a clone can read them",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-07T00:12:34Z",
+          "completed_at": "2026-10-07T00:12:34Z"
+        },
+        {
+          "name": "Run actions/download-artifact@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-07T00:12:34Z",
+          "completed_at": "2026-10-07T00:12:35Z"
+        },
+        {
+          "name": "Every job's steps and log",
+          "status": "in_progress",
+          "conclusion": null,
+          "number": 3,
+          "started_at": "2026-10-07T00:12:35Z",
+          "completed_at": null
+        },
+        {
+          "name": "Push to probe/a1-google-gates-results",
+          "status": "pending",
+          "conclusion": null,
+          "number": 4,
+          "started_at": null,
+          "completed_at": null
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/jianghailong-xy/orbit/check-runs/112565328120",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000021335,
+      "runner_name": "GitHub Actions 1000021335",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    }
+  ]
+}

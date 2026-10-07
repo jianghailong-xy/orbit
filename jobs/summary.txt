@@ -1,0 +1,44 @@
+Navigation (one push mechanism per stack): completed / success (job 112563524177, GitHub Actions 1000021320)
+    1 Set up job: success
+    2 Run actions/checkout@v7: success
+    3 Gate a second push mechanism: success
+    6 Post Run actions/checkout@v7: success
+    7 Complete job: success
+Font tokens (bare system(size:) audit): completed / success (job 112563524378, GitHub Actions 1000021322)
+    1 Set up job: success
+    2 Run actions/checkout@v7: success
+    3 Audit bare system(size:) outside Typography.swift: success
+    6 Post Run actions/checkout@v7: success
+    7 Complete job: success
+macOS (build + test): completed / failure (job 112563524389, GitHub Actions 1000021323)
+    1 Set up job: success
+    2 Run actions/checkout@v7: success
+    3 Select latest Xcode: success
+    4 Toolchain: success
+    5 Test OrbitKit (macOS): failure
+    6 Build OrbitApp: skipped
+   12 Post Run actions/checkout@v7: success
+   13 Complete job: success
+iOS (generate + build): completed / success (job 112563524418, GitHub Actions 1000021321)
+    1 Set up job: success
+    2 Run actions/checkout@v7: success
+    3 Select latest Xcode: success
+    4 Install XcodeGen: success
+    5 Toolchain: success
+    6 Generate Xcode project: success
+    7 Build for iOS Simulator: success
+   14 Post Run actions/checkout@v7: success
+   15 Complete job: success
+macOS OrbitApp build (probe-only): completed / success (job 112563524552, GitHub Actions 1000021324)
+    1 Set up job: success
+    2 Run actions/checkout@v7: success
+    3 Select latest Xcode: success
+    4 Toolchain: success
+    5 Build OrbitApp: success
+   10 Post Run actions/checkout@v7: success
+   11 Complete job: success
+Push the results where a clone can read them: in_progress / None (job 112565328120, GitHub Actions 1000021335)
+    1 Set up job: success
+    2 Run actions/download-artifact@v4: success
+    3 Every job's steps and log: None
+    4 Push to probe/a1-google-gates-results: None
