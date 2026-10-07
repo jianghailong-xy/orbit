@@ -35,16 +35,16 @@
   - 在 `fc58e5713` 上补拍了全矩阵对照，与 after 原件相比：
     - 登记的 12 张全部逐字节相同；
     - 其余 240 张中，216 张逐字节相同，23 张是 Chromium 噪声，1 张是 after 原件那次运行的偶发（见「其他截图」）。
-- **负对照**：在已登记截图上再加 1px 改动，回归都失败了：
+- **负对照**：在已登记截图上再加 1px 改动，三组回归都以失败结束：
   - More 菜单上边距加 1px：task-action-menu 8/8 失败，其中 4 张对照已接受层，4 张对照 main 漂移参考；
   - 分享对话框 Access 文字右移 1px，只在 Close 获得焦点时生效：task-share-dialog 8/8 失败，全部对照已接受层；
   - 分享对话框 Close 焦点环外移 1px：浅色 4 张失败；深色 4 张通过。深色焦点环的这次位移只有 364 像素、36 级，P0 比较器（`maxDiffPixels: 0`、默认 threshold）看不到，与 P3.2 深色 More 按钮焦点环的差异低于阈值是同一原因。详见「负对照」。
-- **合并检查**：__MERGE_RESULT__
+- **合并检查**：`npm run build -w @orbit/web && npm run test -w @orbit/web` 在 `2f382e17c`（全部代码加本目录其余证据）上通过，退出码 0。Web 构建通过；Vitest 341 个测试文件、4353 个用例全部通过。
 
 ## 执行经过
 
 - **第一个执行会话** `7IIIZcAIxI7nb7wR89bC7`（2026-10-07 06:51–07:11 UTC）：
-  - 核对基线：项目 tip `2925958ae` 含 P3.2 的落地合并 `066d3dd30`、漂移机制（已接受层 `b45c20063`、第 2 批 `5f81d98f5`）和 B1 修复 `3ec9cf83d`；
+  - 核对基线：项目 tip `2925958ae` 含 P3.2 的落地合并 `066d3dd30`、漂移机制（已接受层 `b45c20063`）、第 2 批漂移登记（`2925958ae` 本身）和 B1 修复 `3ec9cf83d`；
   - 在 tip 上跑开工回归：[checks/tip-start](checks/tip-start/summary.json)；
   - 生成同提交原件：before `fffcdb532`、after `2925958ae`、对照 `066d3dd30`，见 [originals/](originals/)；
   - 做对照和逐张列表：[compare/](compare/)、[listing.md](listing.md)；
@@ -87,7 +87,7 @@
 | `5ba7bb2b9` | docs：取回上一会话的 49 个证据文件 |
 | 之后的证据提交 | docs：只改本目录 |
 
-**回退**：回退 `b25626673` 即撤销登记，task 场景回到对照第 1 批 A4 的 main 漂移参考。可以对合并 `8ba1913d4` 用 `git revert -m 1`。
+**回退**：回退登记提交（本分支上是 `b25626673`）即撤销登记，task 场景回到对照第 1 批 A4 的 main 漂移参考。在本分支上，也可以对合并 `8ba1913d4` 用 `git revert -m 1`。
 
 ## 开工时的 P0 回归
 
@@ -158,7 +158,7 @@ registry：[../p0-drift/accepted/registry.json](../p0-drift/accepted/registry.js
 | webkit-light-desktop/task-action-menu | `36b9d7ee7bff` | `8379a8c00aba` | 489 / 82 | 489 / 82 | 330 | M + W |
 | webkit-light-phone/task-action-menu | `2d9968586cec` | `b76ada09c938` | 586 / 82 | 586 / 82 | 426 | M + W |
 
-「Playwright 差异像素」是 P0 比较器对照被替换的期望时报告的像素数。tip-start 回归与 tip 对照截图上测得的都是这个数。
+「Playwright 差异像素」是 P0 比较器对照被替换的期望时报告的像素数，取自 tip 对照截图（[compare/exp-vs-tip.json](compare/exp-vs-tip.json)）。开工回归比到的 8 张，报告的也是这个数；浅色 task-share-dialog 在开工回归里没有比到。
 
 P3.2 证据里对应的说明（[p3.2/README.md](../p3.2/README.md)「P0 页面矩阵（同提交对照）」表和「未消除的差异」）：
 - **S，分享对话框的焦点约定**：task-share-dialog 行，「未消除的差异」第 6 条。打开后按一次 Tab：
@@ -189,7 +189,7 @@ P3.2 证据里对应的说明（[p3.2/README.md](../p3.2/README.md)「P0 页面�
 | task-action-menu：chromium-dark-desktop、chromium-dark-phone、webkit-dark-desktop、webkit-dark-phone | 466 / 627 / 489 / 655 像素，45 级 | 通过 | P3.2 的同一项焦点约定（M），WebKit 另有 W；深色焦点环与背景对比低 | 登记工具拒收（after 在比较器下与 before 相同，无可接受的差异）；仍对照 main 漂移参考并通过 |
 | webkit-dark-phone：task-detail、task-action-hover、task-action-focus | 各 66 像素，1 级 | 通过 | P3.2 记录的抗锯齿级差异（P0 表 task-detail 等三行「2 抗锯齿级」之一） | 同上 |
 | chromium-dark-phone：task-detail、task-action-hover、task-action-focus | 各 68 像素，2 级 | 通过 | 同上（另一个抗锯齿级环境）；在 Chromium 噪声范围内，但每次运行都相同，P3.2 的 r2c 也是 68 像素、2 级 | 同上 |
-| breakpoint-599/601-dialog：webkit-dark-desktop、webkit-light-desktop | 11 / 8 像素，1 级 | 通过 | 分享对话框的抗锯齿级差异 | 不是 task 场景；登记工具同样会拒收 |
+| breakpoint-599/601-dialog：webkit-dark-desktop、webkit-light-desktop | 11 / 8 像素，1 级 | 通过 | P3.2 落地带来的分享对话框抗锯齿级差异，从 `066d3dd30` 起出现 | 不是 task 场景；登记工具同样会拒收 |
 | breakpoint-599/601-dialog：chromium-dark-desktop、chromium-light-desktop | 13–14 像素，1–2 级 | 通过 | 噪声：差异在 before 一侧（before 对当时期望也是 13–14 像素），after 与当时期望逐字节相同 | 无 |
 | 其余 task 截图 18 张 | 逐字节相同 | — | — | — |
 
@@ -245,7 +245,7 @@ tip 对照截图与 after 原件的全矩阵对照，也在该文件的 `control
 - 23 张是 Chromium 噪声，最多 87 像素、4 级，都通过比较器；
 - 1 张是上节的 profile-validation 偶发。
 
-`fc58e5713` 只改了 Menu 的按键处理（`Menu.tsx`、`Menu.test.tsx`），没有改变任何 P0 截图。另见 [compare/exp-vs-tip.json](compare/exp-vs-tip.json)：tip 截图对照登记前的期望，比较器下不符的正是这 12 张，Playwright 像素数与开工回归相同。
+`fc58e5713` 在 src 里只改了 Menu 的按键处理（`Menu.tsx`、`Menu.test.tsx`）。它的全矩阵截图与 after 原件相比，除 Chromium 噪声和上面的偶发外没有变化。另见 [compare/exp-vs-tip.json](compare/exp-vs-tip.json)：tip 截图对照登记前的期望，比较器下不符的正是这 12 张，Playwright 像素数与开工回归相同。
 
 ### 负对照
 
@@ -253,6 +253,7 @@ tip 对照截图与 after 原件的全矩阵对照，也在该文件的 `control
 - 在 `5ba7bb2b9` 的独立工作树上，把补丁追加到 `src/web/src/index.css`，以临时提交固定，不交付；
 - 跑同一条 P0 原命令；
 - 驱动脚本是 [negative-control.sh](tools/negative-control.sh) 和 [negative-controls.sh](tools/negative-controls.sh)。
+- 前两组第一次启动时，后台命令写错：`&` 把 `cd … && T=… && bash …` 整串放进了子 shell，第二组拿不到变量。这次作业 `bgj_151bd4059d49` 在开始后约 20 秒被终止，结果没有使用。随后改用 negative-controls.sh 重跑。
 
 三个补丁都只在截图打开对应元素时起作用：
 - More 菜单只在 task-action-menu 中打开；
@@ -275,16 +276,24 @@ tip 对照截图与 after 原件的全矩阵对照，也在该文件的 `control
 
 ### 合并检查
 
-__MERGE_SECTION__
+项目合并检查 `npm run build -w @orbit/web && npm run test -w @orbit/web`：
+- **运行位置**：`2f382e17c`，即全部代码加本目录除合并检查记录外的证据，工作树干净；作业 `bgj_9d441eee3c8b`，2026-10-07 10:45 UTC 开始。
+- **结果**：退出码 0。
+  - `tsc -b && vite build` 通过，保留原有的大 chunk 提示；
+  - Vitest（`--maxWorkers=2`）**341 个测试文件、4353 个用例全部通过**，用时 241 秒。
+- **记录**：
+  - [checks/merge-check.txt](checks/merge-check.txt) 是 [filter-merge-check.py](tools/filter-merge-check.py) 过滤后的输出，保留完整构建输出、每个测试文件的结果行和汇总行，去掉了用例运行中打印的控制台告警；
+  - 完整输出 12972 行，留在本机，路径和 SHA-256 见 [checks/merge-check.json](checks/merge-check.json)；Orbit 也按作业保存了它的输出。
+- **之后的提交**：`2f382e17c` 之后的提交只改本目录。核对方法：`git diff --stat 2f382e17c..HEAD -- . ':!docs/evidence/base-ui-migration/p3.2-accepted'` 输出为空。
 
 ## 边界
 
-- **after 原件的提交**：after 原件取自 `2925958ae`，是登记开工时的项目 tip，不是现在的 tip `fc58e5713`。协调者交接时要求已采的原件不要重采。现在 tip 上的截图与 after 原件逐张相同：12 张登记截图逐字节相同，两轮回归全部通过。`fc58e5713` 在 `2925958ae` 之后只合入了 Menu 按键修正。
+- **after 原件的提交**：after 原件取自 `2925958ae`，是登记开工时的项目 tip，不是现在的 tip `fc58e5713`。协调者交接时要求已采的原件不要重采。`fc58e5713` 在 `2925958ae` 之后只合入了 Menu 按键修正；在它上面，12 张登记截图与 after 原件逐字节相同，两轮回归全部通过。
 - **判定引用**：registry 只能离线校验判定的格式和文档是否存在。判定是否真实存在，要由协调者在 Orbit 中核对（规则第 4 条）。本目录保存了证据列表和判定响应的原文。
 - **低于阈值的差异**：P0 回归的比较器（`maxDiffPixels: 0`、默认 threshold）看不到的 P3.2 差异，没有也不能登记，已在「未登记的截图」逐张列出。负对照显示，深色焦点环的 1px 位移同样在这个阈值以下。
 - **before 运行**：before 和对照运行没有 wiki 截图，原因见「同提交原件」。task 场景和断点截图不受影响。
 - **噪声**：噪声判定沿用 p0-drift 的分析规则：Chromium 单通道差 ≤4 且 ≤200 像素。这条规则只用于归类，回归判定仍是 P0 比较器。
-- **临时路径**：tools/ 里的脚本默认使用 `/var/tmp/p32acc`。本会话结束时删除了临时工作树，运行原件仍保留在 `/var/tmp/p32acc/runs`、`/var/tmp/p32acc/nc`。
+- **临时路径**：tools/ 里的脚本默认使用 `/var/tmp/p32acc`。提交证据前删除了临时工作树，运行原件仍保留在本机 `/var/tmp/p32acc/runs`、`/var/tmp/p32acc/nc`。证据里保存的是这些运行的记录和全部截图哈希；verify-registration.cjs 要读运行目录里的完整截图，只能在本机复跑。
 - **其余边界同 P0.2**：Linux 固定环境、合成 REST/SSE、非真机 iOS。
 
 ## 复跑
