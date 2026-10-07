@@ -22,6 +22,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -99,8 +103,9 @@ internal fun Meter(segments: List<Pair<Int, Color>>, modifier: Modifier = Modifi
 internal fun SectionHead(title: String, detail: String? = null, modifier: Modifier = Modifier, trailing: @Composable () -> Unit = {}) {
     Row(modifier.fillMaxWidth().padding(top = 18.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        detail?.let { Text(it, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-        Spacer(Modifier.weight(1f))
+        if (detail != null) Text(detail, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2, overflow = TextOverflow.Ellipsis)
+        else Spacer(Modifier.weight(1f))
         trailing()
     }
 }
@@ -567,8 +572,11 @@ private fun ItemRow(title: String, detail: String, meta: String, owner: Boolean,
             if (detail.isNotEmpty()) Text(detail, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3)
             Text(meta, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        action?.let { label -> Button(onClick = press, enabled = enabled, modifier = Modifier.testTag("$tag:action"),
-            colors = if (owner) ButtonDefaults.buttonColors() else ButtonDefaults.filledTonalButtonColors()) { Text(label) } }
+        // iOS's small capsule: a bounded press, so the item's own words keep the row under a large font.
+        action?.let { label -> Button(onClick = press, enabled = enabled, modifier = Modifier.widthIn(max = 150.dp).testTag("$tag:action"),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+            colors = if (owner) ButtonDefaults.buttonColors() else ButtonDefaults.filledTonalButtonColors()) {
+            Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 2, textAlign = TextAlign.Center) } }
     }
 }
 
@@ -587,8 +595,12 @@ private fun LazyListScope.overviewSection(state: ProjectPageState, doc: JsonObje
             state.integration?.let { view -> ProjectPage.landingLine(view, now, state.integrationReadAt, state.integrationReadFailed)?.let { LandingRow(it) } }
             cells.chunked(2).forEach { pair -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 pair.forEach { cell -> Column(Modifier.weight(1f).testTag("overview:${cell.key}")) {
-                    Text("${glyphText(cell.glyph)} ${cell.label}", style = MaterialTheme.typography.labelMedium,
-                        color = if (cell.key == "ready" || cell.key == "integrating") MaterialTheme.colorScheme.onSurface else glyphColor(cell.glyph))
+                    // The lane's shape carries its colour; the label stays the page's ink (`overviewCell`).
+                    Text(buildAnnotatedString {
+                        withStyle(SpanStyle(color = if (cell.key == "ready" || cell.key == "integrating") MaterialTheme.colorScheme.onSurfaceVariant
+                            else glyphColor(cell.glyph))) { append(glyphText(cell.glyph)) }
+                        append(" ${cell.label}")
+                    }, style = MaterialTheme.typography.labelMedium)
                     Text("${cell.value}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Text(cell.footnote, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } }

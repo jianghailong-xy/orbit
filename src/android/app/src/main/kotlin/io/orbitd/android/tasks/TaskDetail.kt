@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package io.orbitd.android.tasks
 
 import androidx.compose.foundation.background
@@ -206,9 +208,11 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                             }
                         }
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Wraps rather than squeezing a word to a letter a line under a large font.
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         TaskStatusPill(TaskListLogic.pill(task))
-                        task.obj("assignee")?.let { assignee -> Avatar(assignee.text("name")); Text(assignee.text("name") ?: TaskListCopy.unassigned, maxLines = 1, style = MaterialTheme.typography.bodySmall) }
+                        task.obj("assignee")?.let { assignee -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Avatar(assignee.text("name")); Text(assignee.text("name") ?: TaskListCopy.unassigned, maxLines = 1, style = MaterialTheme.typography.bodySmall) } }
                         task.text("createdAt")?.let(TaskTime::relative)?.let { Text("· $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                     TaskJudgment.chip(task)?.let { chip ->

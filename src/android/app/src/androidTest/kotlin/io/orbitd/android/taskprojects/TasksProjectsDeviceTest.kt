@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.os.Process
+import android.os.SystemClock
 import android.view.KeyEvent
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -65,11 +66,20 @@ class TasksProjectsDeviceTest {
     }
     private fun capture(name: String) {
         compose.waitForIdle()
+        SystemClock.sleep(700) // dialog windows fade in outside Compose's idling
+
         instrument.uiAutomation.takeScreenshot().let { bitmap ->
             File(output, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }; bitmap.recycle()
         }
     }
-    private fun open(uri: String) { compose.runOnUiThread { compose.activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)).setClass(compose.activity, MainActivity::class.java)) } }
+    /** A warm link delivered to the running activity, as A06's TranscriptDeviceTest does: a second
+     * MainActivity instance would leave the rule's own activity paused under it. */
+    private fun open(uri: String) = compose.activityRule.scenario.onActivity { activity ->
+        val original = activity.intent
+        MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java).apply { isAccessible = true }
+            .invoke(activity, Intent(Intent.ACTION_VIEW, Uri.parse(uri)).setClass(activity, MainActivity::class.java))
+        activity.intent = original
+    }
     private fun drawer(entry: String) {
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
         awaitText(entry)
@@ -175,17 +185,21 @@ class TasksProjectsDeviceTest {
 
     @Test fun anOfflineAccountWritesNothingAndAWithdrawnTaskIsNoLongerShown() = journey("task-offline-revocation") {
         login(); open("orbit-task:$taskId"); awaitTag("task-detail"); awaitText("A11 task checklist")
+        compose.onNodeWithTag("task-comment").performTextInput("Typed before the outage")
         scrollTo("task-detail", hasTestTag("task-run")); compose.onNodeWithTag("task-run").assertIsEnabled()
+        compose.onNodeWithTag("task-post-comment").assertIsEnabled()
+        val writes = journal().count { it.text("method") != "GET" }
         http("/__control", """{"streamDown":true}""")
         awaitText(OFFLINE_NOTE, 60_000)
         compose.onNodeWithTag("task-run").assertIsNotEnabled()
         compose.onNodeWithTag("task-post-comment").assertIsNotEnabled()
         capture("task-offline-gated")
-        val writes = journal().count { it.text("method") != "GET" }
         http("/__control", """{"streamDown":false}""")
         compose.waitUntil(90_000) { compose.onAllNodesWithText(OFFLINE_NOTE, substring = true).fetchSemanticsNodes().isEmpty() }
-        scrollTo("task-detail", hasTestTag("task-run")); compose.onNodeWithTag("task-run").assertIsEnabled()
         assertEquals("nothing was sent while the account stream was down", writes, journal().count { it.text("method") != "GET" })
+        // The draft survived the outage and goes out once the account is back.
+        compose.onNodeWithTag("task-post-comment").assertIsEnabled().performClick()
+        compose.waitUntil(20_000) { journal().any { it.text("method") == "POST" && it.obj("body")?.text("body") == "Typed before the outage" } }
         http("/__control", """{"denyTasks":true}""")
         awaitText(TaskDetailCopy.loadFailed); awaitText("Permission denied")
         compose.onAllNodesWithTag("task-comment").assertCountEquals(0)
@@ -265,25 +279,28 @@ class TasksProjectsDeviceTest {
         val start = journal().last { it.text("path") == "/api/projects/$projectId/start" }.obj("body")!!
         assertEquals("seal1", start.text("criteriaDigest")); assertEquals(JsonNull, start["requestId"])
         assertEquals("PROJECT_BRANCH", start.text("line")); assertEquals("refs/heads/project/a11", start.text("projectBranchName"))
-        awaitGone("project-start-sheet"); awaitTag("project-settings"); compose.onAllNodesWithTag("project-start-own").assertCountEquals(0)
-        capture("project-started")
+        awaitGone("project-start-sheet"); awaitGone("project-start-own")
+        scrollTo("project-detail", hasTestTag("project-settings")); capture("project-started")
     }
 
     @Test fun aDeliveryBlockerIsReviewedWithItsReasonRecorded() = journey("project-blocker") {
         login()
         http("/__control", """{"project":{"blockers":{"open":[{"id":"blk1","kind":"DELIVERY_REVIEW","owner":"USER","severity":"WARNING",
             "requiredAction":"Review the files this delivery changed outside its declared scope.","subjectTitle":"A11 project delivery","subjectTaskId":"$projectTaskId",
-            "firstSeenAt":"2026-10-04T22:00:00.000Z","detail":{"reason":"OUTSIDE_DECLARED_SCOPE","paths":["src/android/app/build.gradle.kts","src/android/app/src/main/AndroidManifest.xml"]}}],
-            "resolved":[],"resolvedCount":0}}}""".replace("\n", ""))
+            "firstSeenAt":"2026-10-04T22:00:00.000Z","detail":{"reason":"OUTSIDE_DECLARED_SCOPE","paths":["src/android/app/build.gradle.kts","src/android/app/src/main/AndroidManifest.xml"]}},
+            {"id":"blk2","kind":"WHO_NOT_IN_TEAM","owner":"USER","severity":"CRITICAL","requiredAction":"Add the assigned agent to this project team, or reassign the task.",
+            "subjectTitle":"A11 project prerequisite","firstSeenAt":"2026-10-03T12:00:00.000Z"}],"resolved":[],"resolvedCount":0}}}""".replace("\n", ""))
         open("orbit-project:$projectId"); awaitTag("project-detail"); awaitText("A11 Android launch")
         scrollTo("project-detail", hasTestTag("blocker:blk1")); awaitText("Changed files it didn’t declare"); capture("project-blocker")
         tap("blocker:blk1:resolve", "project-detail"); awaitTag("blocker-reason")
         compose.onNodeWithTag("blocker-reason").performTextInput("Both files belong to the declared Android shell change")
-        capture("project-blocker-review")
+        instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK); capture("project-blocker-review")
         compose.onNodeWithTag("blocker-resolve-confirm").assertTextContains("Accept these files").performClick()
         compose.waitUntil(20_000) { http("/__stats").obj("project")?.obj("blockers")?.number("resolvedCount") == 1 }
         val resolve = journal().last { it.text("path") == "/api/projects/$projectId/blockers/blk1/resolve" }
         assertEquals("Both files belong to the declared Android shell change", resolve.obj("body")?.text("reason"))
+        // The other blocker keeps the section up, with the resolved one folded under it as iOS draws it.
+        awaitGone("blocker:blk1"); scrollTo("project-detail", hasTestTag("blocker:blk2"))
         awaitText("1 resolved · latest: Resolved by you — Both files belong to the declared Android shell change")
         capture("project-blocker-resolved")
     }

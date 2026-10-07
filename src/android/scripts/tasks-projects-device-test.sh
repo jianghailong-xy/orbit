@@ -66,7 +66,7 @@ cleanup() {
     wait "$emulator_pid" 2>/dev/null || true
     timeout 20 "$adb" -s "$serial" wait-for-disconnect > "$output/disconnect.txt" 2>&1 || result=1
     local deadline=$((SECONDS + 20))
-    while "$adb" devices | rg -q "^$serial[[:space:]]"; do
+    while "$adb" devices | grep -Eq "^$serial[[:space:]]"; do
       if (( SECONDS >= deadline )); then result=1; break; fi
       sleep 0.25
     done
@@ -81,7 +81,7 @@ if [[ -z "$serial" ]]; then
     serial=emulator-5554
   else
     serial=emulator-5556
-    if "$adb" devices | rg -q "^$serial[[:space:]]"; then
+    if "$adb" devices | grep -Eq "^$serial[[:space:]]"; then
       echo 'Port 5556 in use; pass an existing serial explicitly' >&2
       exit 1
     fi
@@ -178,9 +178,9 @@ curl --fail --silent http://127.0.0.1:18771/__stats > "$output/server-stats.json
 "$adb" -s "$serial" exec-out run-as "$package" cat files/a11-captures.tar > "$output/captures.tar"
 tar --no-same-owner -xf "$output/captures.tar" -C "$output"
 chmod -R a+rX "$output/a11-tasks-projects"
-if rg 'a(08|11)-fixture-(password|access|refresh)' "$output/logcat.txt"; then
+if grep -E 'a(08|11)-fixture-(password|access|refresh)' "$output/logcat.txt"; then
   echo 'Fixture credential marker found in logcat' >&2
   exit 1
 fi
-rg 'OK \([0-9]+ tests?\)' "$output/instrumentation.txt" >/dev/null
-if rg 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed|INSTRUMENTATION_STATUS_CODE: -[234]' "$output/instrumentation.txt"; then exit 1; fi
+grep -Eq 'OK \([0-9]+ tests?\)' "$output/instrumentation.txt"
+if grep -E 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed|INSTRUMENTATION_STATUS_CODE: -[234]' "$output/instrumentation.txt"; then exit 1; fi

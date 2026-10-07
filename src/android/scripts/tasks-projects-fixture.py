@@ -308,6 +308,8 @@ class Handler(cards.Handler):
                 self.wfile.flush()
                 previous = generation
                 time.sleep(0.25)
+            # A controlled outage ends the stream: close the socket so the client sees it end.
+            self.close_connection = True
         except (BrokenPipeError, ConnectionResetError): pass
 
     def do_POST(self):
