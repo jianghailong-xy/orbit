@@ -85,6 +85,8 @@ class RealStackDeviceTest {
     private fun taskRecord(id: String) = get("/tasks/$id").jsonObject
     private fun page(query: String, who: String = "owner") = get("/tasks/page?$query&limit=200&counts=none", who).jsonObject.objects("items")
     private fun projectRecord(id: String) = get("/projects/$id").jsonObject
+    /** What the unfiltered tab pins above its rows (Happening now, `/tasks/active`): shown over any search, as in iOS. */
+    private fun pinned() = get("/tasks/active?projectId=none").jsonObject.objects("items").map { it.text("id")!! }.toSet()
     /** A task this run made for itself, so destructive checks never touch the seeded records. */
     private fun scratch(title: String, extra: JsonObjectBuilder.() -> Unit = {}) = record("POST /tasks \"$title\"", api("POST", "/tasks", buildJsonObject {
         put("title", title); put("description", "Made by the A11 device journey $stamp; it writes to this task and reads it back.")
@@ -190,7 +192,8 @@ class RealStackDeviceTest {
         compose.onNodeWithTag("task-search").performTextInput("sprint"); instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
         val matches = record("GET /tasks/page?projectId=none&q=sprint", page("projectId=none&q=sprint").map { it.text("id")!! }.toSet())
         assertTrue(matches.size in 1..4)
-        compose.waitUntil(30_000) { shownTasks() == matches }
+        val pins = record("GET /tasks/active?projectId=none (pinned over the rows)", pinned())
+        compose.waitUntil(30_000) { shownTasks() == matches + pins }
         capture("stack-tasks-search")
         compose.onNodeWithTag("task-search").performTextClearance(); instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
         // A label: the server's rows carrying it.
@@ -265,14 +268,15 @@ class RealStackDeviceTest {
         val ids = (1..2).map { scratch("A11 $word scratch $it") { put("completionCriterion", "OWNER_CONFIRMED"); put("ownerConfirmationReason", "OWNER_TRADE_OFF") } }
         signIn(); drawer("Tasks"); awaitTag("tasks-list")
         compose.onNodeWithTag("task-search").performTextInput(word); instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
-        compose.waitUntil(30_000) { shownTasks() == ids.toSet() }
+        val pins = record("GET /tasks/active?projectId=none (pinned over the rows)", pinned())
+        compose.waitUntil(30_000) { shownTasks() == ids.toSet() + pins }
         tap("tasks-options"); compose.onNodeWithText(TaskListCopy.selectTasks).performClick()
         ids.forEach { compose.onNodeWithTag("task:$it").performClick() }
         compose.onNode(hasText(TaskListCopy.delete) and hasAnyAncestor(hasTestTag("tasks-bulk-bar"))).performClick()
         awaitTag("tasks-bulk-confirm"); capture("stack-bulk-delete-confirm"); tap("tasks-bulk-confirm")
         compose.waitUntil(30_000) { ids.all { status("/tasks/$it") == 404 } }
         record("GET each after bulk Delete", ids.map { status("/tasks/$it") })
-        compose.waitUntil(30_000) { shownTasks().isEmpty() }
+        compose.waitUntil(30_000) { shownTasks() == pins }
         capture("stack-bulk-deleted")
     }
 
@@ -434,14 +438,19 @@ class RealStackDeviceTest {
         val triage = taskRecord(task("triage").text("id")!!); val dependent = taskRecord(task("dependent").text("id")!!)
         open("orbit-task:${triage.text("id")}"); awaitTag("task-detail"); awaitIn("task-detail", triage.text("title")!!); capture("stack-link-orbit-task")
         open("$server/tasks/${dependent.text("id")}"); awaitIn("task-detail", dependent.text("title")!!); capture("stack-link-https-task")
-        val sprint = list("sprint")
-        open("$server/lists/${sprint.text("id")}")
-        compose.waitUntil(30_000) { compose.onAllNodes(hasTestTag("tasks-scope") and hasText(sprint.text("title")!!, substring = true)).fetchSemanticsNodes().isNotEmpty() }
-        capture("stack-link-https-list")
+        val scheduled = taskRecord(task("scheduled").text("id")!!)
+        open("orbit://task/${scheduled.text("id")}"); awaitIn("task-detail", scheduled.text("title")!!); capture("stack-link-orbit-scheme-task")
+        val sprint = list("sprint"); val paused = list("paused")
+        fun scope(title: String) = compose.waitUntil(30_000) { compose.onAllNodes(hasTestTag("tasks-scope") and hasText(title, substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        open("$server/lists/${sprint.text("id")}"); scope(sprint.text("title")!!); capture("stack-link-https-list")
+        open("orbit://list/${paused.text("id")}"); scope(paused.text("title")!!); capture("stack-link-orbit-scheme-list")
+        // `lists/none` is not a named list: the link changes nothing.
+        open("$server/lists/none"); SystemClock.sleep(1_500); scope(paused.text("title")!!)
         val main = projectRecord(project("main").text("id")!!); val unstarted = projectRecord(project("notStarted").text("id")!!)
         open("orbit-project:${main.text("id")}"); awaitTag("project-detail"); awaitIn("project-detail", main.text("title")!!); capture("stack-link-orbit-project")
         open("$server/projects/${unstarted.text("id")}"); awaitIn("project-detail", unstarted.text("title")!!); capture("stack-link-https-project")
-        record("pages opened", listOf(triage.text("title"), dependent.text("title"), sprint.text("title"), main.text("title"), unstarted.text("title")))
+        record("pages opened", listOf(triage.text("title"), dependent.text("title"), scheduled.text("title"), sprint.text("title"), paused.text("title"),
+            main.text("title"), unstarted.text("title")))
     }
 
     @Test fun s12_anotherAccountSeesOnlyWhatTheServerGivesIt() = journey("stack-member") {

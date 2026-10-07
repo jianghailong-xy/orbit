@@ -102,6 +102,15 @@ class TalkBackCheckTest {
         else shell("settings put secure enabled_accessibility_services $savedServices")
         if (savedEnabled == "null" || savedEnabled.isBlank()) shell("settings delete secure accessibility_enabled") else shell("settings put secure accessibility_enabled $savedEnabled")
         report.appendLine("restored services=${shell("settings get secure enabled_accessibility_services")} enabled=${shell("settings get secure accessibility_enabled")}")
+        // Stopping TalkBack can put a system window over the app too; the rule can only finish the activity once it is back.
+        val until = SystemClock.uptimeMillis() + 15_000
+        while (SystemClock.uptimeMillis() < until) {
+            val front = automation.rootInActiveWindow?.packageName?.toString()
+            if (front == app.packageName) break
+            report.appendLine("over the app after TalkBack stopped: $front")
+            app.startActivity(Intent(app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+            SystemClock.sleep(1_000)
+        }
         File(output, "talkback-report.txt").writeText(report.toString())
         File(output, "talkback-problems.txt").writeText(problems.joinToString("\n"))
         runBlocking { app.session.logout() }
@@ -149,7 +158,10 @@ class TalkBackCheckTest {
             val said = label(node).joinToString(", ")
             val bounds = Rect().also(node::getBoundsInScreen)
             report.appendLine("${node.className?.toString()?.substringAfterLast('.')} clickable=${node.isClickable} enabled=${node.isEnabled} at $bounds says=\"$said\"")
-            if (said.isEmpty()) problems += "$page: TalkBack has nothing to say for a ${node.className} at $bounds"
+            // A press TalkBack would land on with nothing to say. A non-pressable container whose words sit in a focusable
+            // child is read through that child, and a row scrolled almost out of view has its words clipped out of the tree.
+            val press = node.isClickable || node.isLongClickable || node.isCheckable
+            if (said.isEmpty() && press && bounds.height() >= 48) problems += "$page: TalkBack has nothing to say for a ${node.className} at $bounds"
         }
     }
 
