@@ -1,5 +1,6 @@
 package io.orbitd.android.taskprojects
 
+import android.accessibilityservice.AccessibilityService
 import android.app.UiAutomation
 import android.content.Context
 import android.content.Intent
@@ -52,6 +53,9 @@ class TalkBackCheckTest {
     private val talkBack = "com.google.android.marvin.talkback/com.google.android.marvin.talkback.TalkBackService"
     private var savedServices = "null"
     private var savedEnabled = "0"
+    private val notificationPermission get() = shell("dumpsys package com.google.android.marvin.talkback").lines()
+        .firstOrNull { it.contains("android.permission.POST_NOTIFICATIONS:") }?.trim().orEmpty()
+    private var savedNotificationPermission = ""
     private val report = StringBuilder()
     private val problems = mutableListOf<String>()
     private val manager get() = app.getSystemService(AccessibilityManager::class.java)
@@ -78,23 +82,17 @@ class TalkBackCheckTest {
     @Before fun talkBackOn() {
         savedServices = shell("settings get secure enabled_accessibility_services")
         savedEnabled = shell("settings get secure accessibility_enabled")
+        savedNotificationPermission = notificationPermission
         shell("settings put secure enabled_accessibility_services $talkBack")
         shell("settings put secure accessibility_enabled 1")
         val deadline = SystemClock.uptimeMillis() + 20_000
         while (!manager.isTouchExplorationEnabled && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(250)
         report.appendLine("talkback_enabled=${manager.isEnabled} touch_exploration=${manager.isTouchExplorationEnabled} services=${shell("settings get secure enabled_accessibility_services")}")
         assertTrue("TalkBack did not start (touch exploration stayed off)", manager.isTouchExplorationEnabled)
-        // Starting TalkBack can open TalkBack's own screen over the app; this is a check of the app, so bring it back.
+        // Starting TalkBack makes it ask for notifications (Android's permission prompt over the app). This is a check
+        // of the app: the prompt is dismissed with Back, unanswered, and any flag that leaves is cleared after.
         SystemClock.sleep(3_000)
-        val until = SystemClock.uptimeMillis() + 20_000
-        while (SystemClock.uptimeMillis() < until) {
-            val front = automation.rootInActiveWindow?.packageName?.toString()
-            if (front == app.packageName) break
-            report.appendLine("over the app after TalkBack started: $front")
-            if (front != null) capture("talkback-started-over-app")
-            app.startActivity(Intent(app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
-            SystemClock.sleep(1_500)
-        }
+        backToTheApp("after TalkBack started")
     }
 
     @After fun talkBackBack() {
@@ -102,15 +100,12 @@ class TalkBackCheckTest {
         else shell("settings put secure enabled_accessibility_services $savedServices")
         if (savedEnabled == "null" || savedEnabled.isBlank()) shell("settings delete secure accessibility_enabled") else shell("settings put secure accessibility_enabled $savedEnabled")
         report.appendLine("restored services=${shell("settings get secure enabled_accessibility_services")} enabled=${shell("settings get secure accessibility_enabled")}")
-        // Stopping TalkBack can put a system window over the app too; the rule can only finish the activity once it is back.
-        val until = SystemClock.uptimeMillis() + 15_000
-        while (SystemClock.uptimeMillis() < until) {
-            val front = automation.rootInActiveWindow?.packageName?.toString()
-            if (front == app.packageName) break
-            report.appendLine("over the app after TalkBack stopped: $front")
-            app.startActivity(Intent(app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
-            SystemClock.sleep(1_000)
-        }
+        backToTheApp("after TalkBack stopped")
+        val permission = notificationPermission
+        if (permission != savedNotificationPermission) {
+            shell("pm clear-permission-flags com.google.android.marvin.talkback android.permission.POST_NOTIFICATIONS user-set user-fixed")
+            report.appendLine("TalkBack's notification permission was \"$savedNotificationPermission\", became \"$permission\"; flags cleared: now \"$notificationPermission\"")
+        } else report.appendLine("TalkBack's notification permission unchanged: \"$permission\"")
         File(output, "talkback-report.txt").writeText(report.toString())
         File(output, "talkback-problems.txt").writeText(problems.joinToString("\n"))
         runBlocking { app.session.logout() }
@@ -136,6 +131,19 @@ class TalkBackCheckTest {
         automation.takeScreenshot().let { bitmap ->
             File(output, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }; bitmap.recycle()
         }
+    }
+
+    /** Whatever is over the app (TalkBack's permission prompt) is dismissed with Back, unanswered, and photographed first. */
+    private fun backToTheApp(moment: String) {
+        val until = SystemClock.uptimeMillis() + 20_000
+        while (SystemClock.uptimeMillis() < until) {
+            val front = automation.rootInActiveWindow?.packageName?.toString()
+            if (front == app.packageName) return
+            report.appendLine("over the app $moment: $front")
+            if (front != null) { capture("talkback-over-app-${moment.replace(' ', '-')}"); automation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK) }
+            SystemClock.sleep(1_500)
+        }
+        report.appendLine("the app was not back in front $moment")
     }
 
     private fun own(node: AccessibilityNodeInfo) = listOfNotNull(node.contentDescription, node.text, node.hintText,

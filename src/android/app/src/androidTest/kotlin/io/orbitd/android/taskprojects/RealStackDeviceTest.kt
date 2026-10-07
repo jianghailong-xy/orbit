@@ -271,7 +271,8 @@ class RealStackDeviceTest {
         val pins = record("GET /tasks/active?projectId=none (pinned over the rows)", pinned())
         compose.waitUntil(30_000) { shownTasks() == ids.toSet() + pins }
         tap("tasks-options"); compose.onNodeWithText(TaskListCopy.selectTasks).performClick()
-        ids.forEach { compose.onNodeWithTag("task:$it").performClick() }
+        // The bulk bar takes the bottom of the screen while selecting: each row is scrolled to before it is pressed.
+        ids.forEach { tap("task:$it", "tasks-list") }
         compose.onNode(hasText(TaskListCopy.delete) and hasAnyAncestor(hasTestTag("tasks-bulk-bar"))).performClick()
         awaitTag("tasks-bulk-confirm"); capture("stack-bulk-delete-confirm"); tap("tasks-bulk-confirm")
         compose.waitUntil(30_000) { ids.all { status("/tasks/$it") == 404 } }
@@ -380,7 +381,9 @@ class RealStackDeviceTest {
         val note = "Checked on the stack: the smoke run's failure is understood ($stamp)"
         compose.onNodeWithTag("item:$item:MARK_HANDLED").performScrollTo().performClick()
         compose.onNodeWithText("Why is it no longer open?").performScrollTo().performTextInput(note)
-        instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        compose.activityRule.scenario.onActivity { activity ->
+            androidx.core.view.WindowCompat.getInsetsController(activity.window, activity.window.decorView).hide(androidx.core.view.WindowInsetsCompat.Type.ime())
+        }
         compose.onNodeWithTag("item:$item:MARK_HANDLED").performScrollTo().performClick()
         compose.waitUntil(30_000) { get("/projects/$id/open-items").jsonObject.objects("needsYou").none { it.text("itemId") == item } }
         val settled = get("/projects/$id/open-items").jsonObject.objects("settled").firstOrNull { it.text("itemId") == item }

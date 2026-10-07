@@ -60,9 +60,11 @@ class TasksProjectsDeviceTest {
     }
     private fun awaitTag(tag: String, timeout: Long = 20_000) { compose.waitUntil(timeout) { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() } }
     private fun awaitGone(tag: String, timeout: Long = 20_000) { compose.waitUntil(timeout) { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isEmpty() } }
-    /** Words inside one page: not the same words elsewhere on screen, nor the page's loading placeholder (it carries the tag). */
+    /** The page itself loaded (its list, not the loading placeholder that carries the same tag), with these words in it —
+     * scrolled to, since a page returned to keeps where it was scrolled. Not the same words elsewhere (the drawer lists projects). */
     private fun awaitIn(page: String, text: String, timeout: Long = 20_000) {
-        compose.waitUntil(timeout) { compose.onAllNodes(hasText(text, substring = true) and hasAnyAncestor(hasTestTag(page))).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(timeout) { compose.onAllNodes(hasTestTag(page) and hasScrollAction()).fetchSemanticsNodes().isNotEmpty() }
+        awaitScrollTo(page, hasText(text, substring = true), timeout)
     }
     private fun scrollTo(list: String, matcher: SemanticsMatcher) = compose.onNodeWithTag(list).performScrollToNode(matcher)
     /** Scrolls to a row that arrives with a later read (a card once its conversation is fresh). */
@@ -116,6 +118,10 @@ class TasksProjectsDeviceTest {
         compose.onAllNodesWithText(entry).onFirst().performClick()
     }
     private fun back() = compose.onNodeWithContentDescription("Back").performClick()
+    /** Closes the keyboard without a Back key: on API 29 an injected Back reaches the page, not the keyboard. */
+    private fun hideKeyboard() = compose.activityRule.scenario.onActivity { activity ->
+        androidx.core.view.WindowCompat.getInsetsController(activity.window, activity.window.decorView).hide(androidx.core.view.WindowInsetsCompat.Type.ime())
+    }
     private fun login(case: String = "normal", mode: String = "") {
         instrument.sendStatus(0, Bundle().apply { putString("a11_pid", Process.myPid().toString()) })
         File(output, "identity.txt").writeText("sha=${BuildConfig.SOURCE_SHA}\ndirty=${BuildConfig.SOURCE_DIRTY}\nscope=controlled HTTP fixture; no real deployed account\n")
@@ -289,7 +295,7 @@ class TasksProjectsDeviceTest {
         awaitScrollTo("transcript-list", hasTestTag("item:x1")); capture("exception-existing-card")
         compose.onNodeWithTag("item:x1:MARK_HANDLED").performScrollTo().performClick()
         compose.onNodeWithText("Why is it no longer open?").performScrollTo().performTextInput("Checked the fixed source and current server record")
-        instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        hideKeyboard()
         compose.onNodeWithTag("item:x1:MARK_HANDLED").performScrollTo().performClick()
         compose.waitUntil(20_000) { journal().any { row ->
             row.text("method") == "POST" && row.text("path") == "/api/projects/$projectId/open-items/x1/resolve" &&
