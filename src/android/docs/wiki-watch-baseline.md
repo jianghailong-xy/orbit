@@ -1,4 +1,4 @@
-# A12 Wiki / Watch fixed-source baseline
+# A12 Wiki / Watch fixed-source baseline and Android implementation
 
 This document records the development input at the ordinary merge below. It is a source inventory, not a frozen iOS installation or proof of a cross-platform business run. The approved product scope remains Kotlin + Compose, Android 10–16 / minSdk 29 / GMS phones. S1 and D09 physical-device requirements are unchanged.
 
@@ -52,6 +52,50 @@ The paths below are relative to the repository root, read at the merge above.
 
 The fixed iOS entry toolbar presents Edit/Supersede/Retire and lets the server reject invalid status/kind/revision combinations. A decision is never amended by contract; it is superseded. A principle is owner-written. Owner-only user mutations must not inherit an acting-session header. A live unreviewed/tainted entry must not be presented as already sent to agents. Rejected/retired/superseded entries and source history are still readable audit records when the server permits them.
 
+## Android implementation (A12 code)
+
+Every Wiki route goes through `wiki/WikiDestination.kt` to a typed screen over the account's one `WikiStore` (`wiki/WikiStore.kt`, the port of iOS `WikiModel`), which reads and writes through `WikiClient` on A03's authenticated handle. Wire types, copy and derivations are ports of OrbitKit (`WikiWire.kt`, `WikiPlanWire.kt`, `WikiCopy.kt`, `WikiLogic.kt`, `WikiReadingLogic.kt`, `WikiPlanLogic.kt`) held to OrbitKit's own test cases over the same shared fixtures. Watch is `watch/` over one `WatchStore` (iOS `WatchesModel`) and the OrbitKit ports `WatchWire.kt`, `WatchLogic.kt`, `WatchProjection.kt`. A page binds its iOS toolbar title/actions into the shell's TopAppBar through `PageBar`; iOS sheets are `ModalBottomSheet`, alerts `AlertDialog`, the app toast `WikiToast`. No new drawer row or top-level page was added: the drawer keeps A05's Wiki row (now with iOS's amber count) and Following stays off the drawer.
+
+| iOS (Swift) | Android (Kotlin) | Route / entry |
+| --- | --- | --- |
+| `CompactShell.wikiRow` (drawer row, amber proposals count) | `MainActivity` drawer item badge → `WikiDrawerCount` | drawer |
+| `WikiHomeView`, `WikiHomePage`, `WikiHomePlaceholder` | `WikiHome.kt` `WikiHomeScreen` | `WIKI`; `orbit://wiki/<spaceId>` selects that space |
+| `WikiContentsScreen`, `WikiContentsSheet` | `WikiChrome.kt` `WikiContentsSheet`, `wikiGo` | sheet |
+| `WikiEntryView`, `WikiEntryPage`, `WikiEntryForm` | `WikiEntry.kt` `WikiEntryScreen` | `WIKI_ENTRY`; `orbit-wiki:<id>` |
+| `WikiReviewView`, `WikiReviewPage`, `WikiReviewCard`, `WikiChallengeAmendForm`, `WikiProposalForm` | `WikiReview.kt` | `WIKI_REVIEW` |
+| `WikiRunView`, `WikiRunPage` | `WikiRun.kt` | `WIKI_RUN` |
+| `WikiArticleScreen`, `WikiTopicEntriesPage`, `WikiArticlePage`, `WikiFootnoteCard`, `WikiTagFlow` | `WikiArticles.kt`, `WikiArticlePage.kt` | `WIKI_ARTICLE` |
+| `WikiBrowseScreen`, `WikiIndexScreen`, `WikiBrowsePage`, `WikiIndexPage`, `WikiDocsBrowsePage`, `WikiDocsIndexPage` | `WikiArticles.kt`, `WikiArticlePage.kt`, `WikiDocPage.kt` | `WIKI_BROWSE`, `WIKI_INDEX` |
+| `WikiDocScreen`, `WikiDocPage`, `WikiDocMarkLabel`, `WikiDocMarkBubble`, `WikiDocFootnoteSheet` | `WikiDocs.kt`, `WikiDocPage.kt` | `WIKI_DOC` (section address scrolls once) |
+| `WikiPlanScreen`, `WikiPlanPage`, `WikiPlanJobCardView`, `WikiPlanGateView`, `WikiPlanChangeCard`, `WikiPlanDocPage`, `WikiPlanSectionPage`, Redraft/Edit/Section-edit sheets | `WikiPlanScreens.kt`, `WikiPlanPage.kt`, `WikiPlanDocPages.kt`, `WikiPlanSheets.kt` | `WIKI_PLAN`, `WIKI_PLAN_DOC`, `WIKI_PLAN_SECTION` |
+| `WikiSettingsView`, `WikiSettingsPage`, `WikiMaintenanceForm` | `WikiSettingsScreen.kt` | `WIKI_SETTINGS` |
+| `FollowingListView`, `FollowingRow`, `FollowingPlaceholder` | `watch/FollowingView.kt` | `WATCH` (no id) |
+| `WatchDetailView`, `WatchDetailContent`, `WatchTargetRow` | `watch/WatchDetail.kt` | `WATCH` (id); `orbit://watch/<id>` |
+| `WatchingCardStack`, `TargetStanding` | `watch/WatchingStrip.kt` `SessionWatches` (above the composer in `SessionReader`) | session |
+
+Where a press goes (`WikiNav`): a page a Wiki page opens is pushed on the stack the Wiki page is on, so Back returns to it. A document footnote's source opens the session at the quoted record (`OrbitRoute(SESSION, id, recordId)`, what `orbit://session/<id>?at=<record>` opens; the session alone when the record cannot be named, as iOS falls back); an entry's turn source opens the session and a task source the task, as iOS's entry page does. Contents' Home returns to the Wiki home under the page (iOS `popToRoot`); a plan version picked replaces the page on top (iOS `replaceTop`). A watch record not opened from Following gets Following under it on the same stack (iOS's `.watch(id)` opens the Following section with the record on top), so Back from a linked watch lands on Following and then on the link's source.
+
+Refresh: the account stream reaches pages only as A04's `invalidationRevision`, so any account event (and every reconnect) nudges the Wiki/Watch re-read while one of their pages is up, debounced; iOS nudges the Wiki only on `wiki.changed` and watches only on session/approval/task events. Pull-to-refresh is where iOS has `.refreshable`.
+
+### Deliberate platform differences
+
+- Top-bar actions and titles live in the shell's TopAppBar; iOS principal title blocks (Review's count line) are a second title line.
+- Sheets are Material bottom sheets (the article footnote card can be dragged to full height); confirmation dialogs are `AlertDialog`s; iOS Menus/Pickers are `DropdownMenu`s; steppers are −/+ buttons; list reordering in the plan's Edit sheet is ↑/↓/remove buttons with TalkBack labels instead of drag handles.
+- iOS's trailing swipe (a run's Reject) is a swipe that snaps back and asks for the reason, also reachable as a TalkBack custom action.
+- The A–Z section index is a letter strip beside the list (letters jump; drag scrubs); each letter is a button for TalkBack.
+- Touch targets are at least 48dp; the strip's letters are the one knowing exception (20dp tall so A–Z fits).
+- A document opened at a section scrolls there once (no 300 ms delay) and keeps the reader's place on Back.
+- The Wiki toast expires by elapsed time, so a toast posted by a popped page never reappears on the next page.
+- Watch lists are decoded leniently (a row missing a field reads it empty; a row without an id is skipped), overlapping reads keep the newest, and a control's answer survives an older list read — iOS fails the whole list on one bad row and has that race.
+- The Set up form's options are read with `GET /workspaces`, `/runners`, `/providers` when Settings opens (iOS uses its app-wide agents model), falling back to A05's directory data.
+
+### Differences that belong to other modules (reported, not changed here)
+
+- A08: `cards/SessionCards.kt` shows Pause/Resume/Stop cards for every watch whose observer is the session, beside A12's read-only Watching strip; iOS's session shows only the strip. The A08 watch-wake transcript card has no iOS "View watch" button (iOS routes it to `.watch(id)`; A12's WATCH route accepts it).
+- A11: the task "Follow task" sheet and "Followed by" rows (iOS `TaskFollowSheet`) are implemented by A11 in `tasks/` and open `OrbitRoute(WATCH, id)`; A12 provides the WATCH destination, not a second subscription component.
+- A05: `DirectoryRunner` does not decode `displayName`, so the maintenance "where" label uses the runner's `name` (iOS `displayName ?? name`).
+- A04: event types are not exposed to pages (see Refresh above).
+
 ## Wiki API map
 
 All paths are below `/api`; IDs must use the existing public-ID conversion, encoding and authenticated transport.
@@ -102,7 +146,7 @@ Entry-source legacy shape can name the session in `ref` and the turn in `locator
 | PAUSED detail | Resume, Stop | Pausing does not extend expiry; terminal states have no live controls |
 | Terminal detail | Read audit record | MATCHED/EXPIRED/CANCELLED/REVOKED/UNRESOLVABLE never regain editable controls |
 | WatchEditSheet source type | No actual iOS screen presents it; editing is parked pending agent notification semantics | Do not expose an Edit button just because PATCH and `WatchEditing` exist |
-| Task → Followed by → Follow task | Single TASK condition + deadline + NOTIFY_USER | Entrance belongs to A11 task UI with A12 API/module integration; no general Watch-create screen; iOS does not expose RESUME_SESSION creation |
+| Task → Followed by → Follow task | Single TASK condition + deadline + NOTIFY_USER | Implemented by A11 in its task detail (`tasks/TaskEditor.kt`), which opens A12's WATCH route; no general Watch-create screen; iOS does not expose RESUME_SESSION creation |
 | Delivered/queued watch wake card | Structured reason/changed targets, View watch, folded original text | Reuse inherited A08 card; queued-only Withdraw wake uses its existing confirmation/queue mutation; no generic Wake now button |
 
 Watch reads/mutations: `GET watches[?state=ACTIVE|PAUSED]`, `GET watches?needsAttention=true`, `GET watches/:id`, `POST watches`, `POST watches/:id/pause|resume|cancel`. `PATCH watches/:id` exists for condition/deadline only but has no presented iOS editor. Delivery redrive endpoints exist in the server contract, but these fixed iOS detail views have no redrive UI; do not add one under “wake operations.”
