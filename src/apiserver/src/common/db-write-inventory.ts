@@ -599,6 +599,18 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: "None.",
     answer: "A conflict reaches the global boundary — a typed 503 for a transient one, a 500 otherwise — with nothing written; the unlink can simply be asked again.",
   },
+  // Disabling an account, and enabling it again (docs/google-sign-in-design.md §5.5).
+  {
+    at: 'users/admin.controller.ts#setDisabled',
+    shape: 'TX_BARE',
+    locks: "One `user` row UPDATEd by its primary key, guarded on the state it changes: a FOR NO KEY UPDATE row lock, since disabled_at is in no key, so it waits on a transaction holding that row FOR UPDATE (the owner graph mutex, rank 10) and never on a FOR KEY SHARE. Then, only when that UPDATE took the row, the account's refresh_token rows — every live one UPDATEd to revoked when disabling, every one DELETEd when enabling; neither re-checks or locks the `user` row through the foreign key, which neither statement changes — and one `activity` row, which has no foreign key and no trigger. None of the three tables has a trigger. The `user` row comes first, and nothing locks a refresh_token row before a `user` row.",
+    identity: "The account's id and the state asked for: the UPDATE matches only an account not in that state yet, so of two requests for the same change one takes the row and writes the rest, and the other writes nothing.",
+    isolation: '',
+    attempts: 1,
+    replay: "Not retried, and nothing to retry: the UPDATE is conditional on the state it changes, so asking again does nothing and records nothing. The refusals before the transaction — the administrator's own account, the last administrator not disabled — are reads, not locks: two administrators disabling each other at the same instant can both pass them, as two demotions or deletions of the last administrators can.",
+    effects: "After commit: DisabledAccounts.reload reads the disabled accounts again for this server's JwtAuthGuard. It writes nothing; every other server reads them within 30 seconds.",
+    answer: "A conflict reaches the global boundary — a typed 503 for a transient one, a 500 otherwise — with nothing written; the administrator can simply ask again.",
+  },
   {
     at: 'providers/pool-login-gateway.service.ts#rotate',
     shape: 'TX_BARE',

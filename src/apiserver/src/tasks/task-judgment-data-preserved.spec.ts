@@ -1986,7 +1986,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `task`, `session`, `project`, `session_merge_receipt` or `project_acceptance_*` object is
       // named. No INSERT, UPDATE or DELETE: no stored row is read, locked, backfilled or rewritten —
       // the columns are catalog-only, and every existing row keeps the flag false.
-      '0393_integration_job_skip_merge_check'],
+      '0393_integration_job_skip_merge_check',
+      // Disabled accounts (0396): one ADD COLUMN of a nullable TIMESTAMP(3) `disabled_at` on `user`,
+      // with no default, so the ALTER is catalog-only, and nothing else — no index, constraint,
+      // function, trigger or type. `user` is not a preserved relation; no task, project, acceptance
+      // or DONE fence object is named, and no row is written or backfilled: every account reads NULL,
+      // enabled. 0394 and 0395 were held by branches not yet on main when it was numbered.
+      '0396_user_disabled_at'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

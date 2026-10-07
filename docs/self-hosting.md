@@ -229,10 +229,13 @@ open it:
   and add them: their sessions reach the key through the control plane's pool gateway, and it never reaches
   their runners. No other kind of key can be shared with members.
 - Nothing limits how many accounts sign up, or what each one stores or runs.
-- An administrator cannot suspend an account or keep one person out. Deleting an account fails while it owns
-  runners, workspaces or tasks, and its owner can sign up again. Unlinking its Google account or resetting its
-  password does not stop someone with a Gmail or Workspace address either: their next Google sign-in links the
-  account again.
+- To keep someone out, disable their account: **Admin → Users → Disable**. They are signed out everywhere and
+  can no longer sign in, with their password or with Google, and their personal access tokens, runners and service
+  tokens are refused, all within 30 seconds. Their Google account cannot sign up again: it stays linked to the
+  disabled account. Nothing they own is deleted. **Enable** lets them back in: they sign in again, and their
+  personal access tokens and runners work as before. You cannot disable your own account or the last
+  administrator. Disable rather than delete: deleting an account still fails while it owns runners, workspaces or
+  tasks.
 - **Admin → Users** shows how each account signs in and when it was created, so unexpected sign-ups stand out.
 
 ### Testing and publishing the Google app
@@ -275,6 +278,7 @@ other review.
 | "Orbit couldn't confirm your sign-in with Google" | The apiserver log says why (below): most often a wrong client secret. |
 | "That Google sign-in expired or was finished in a different browser" | The sign-in started at an address other than `PUBLIC_ORIGIN`, took more than ten minutes, or the browser blocked its cookie. |
 | "Google sign-in is turned off on this Orbit server" | The switch is off, or the client ID or the secret is not saved. |
+| "This Orbit account is disabled. Ask an administrator to enable it again." | An administrator disabled the account. **Admin → Users → Enable** lets it back in. |
 
 The apiserver logs why a sign-in failed after Google sent the browser back, under `GoogleSignIn`
 (`docker compose logs apiserver | grep GoogleSignIn`). The lines carry Google's error code at most, nothing else

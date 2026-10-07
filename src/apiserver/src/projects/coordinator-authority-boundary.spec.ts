@@ -100,7 +100,7 @@ async function runnerFromAgentCredential(): Promise<Runner> {
     runner: {
       findFirst: async ({ where }: { where: { tokenHash: string } }) => {
         assert.equal(where.tokenHash, expectedHash);
-        return { id: RUN, ownerId: OWNER };
+        return { id: RUN, ownerId: OWNER, owner: { disabledAt: null } };
       },
     },
   } as never);
