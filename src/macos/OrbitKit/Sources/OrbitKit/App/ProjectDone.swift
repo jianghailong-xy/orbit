@@ -359,14 +359,10 @@ public struct ProjectDoneSubject: Equatable, Sendable {
     public let doneBy: ProjectDoneBy?
     public let doneAt: String?
     public let acceptedGaps: [AcceptedGap]
-    /// How many tasks hold each status (`tasksByStatus`) — what "no task is IN_PROGRESS" is read
-    /// off. Nil from a read that did not carry it.
-    public let tasksByStatus: [String: Int]?
 
     public init(title: String, status: String?, criteria: [Criterion] = [],
                 derivedDone: ProjectDerivedDone? = nil, doneBy: ProjectDoneBy? = nil,
-                doneAt: String? = nil, acceptedGaps: [AcceptedGap] = [],
-                tasksByStatus: [String: Int]? = nil) {
+                doneAt: String? = nil, acceptedGaps: [AcceptedGap] = []) {
         self.title = title
         self.status = status
         self.criteria = criteria
@@ -374,7 +370,6 @@ public struct ProjectDoneSubject: Equatable, Sendable {
         self.doneBy = doneBy
         self.doneAt = doneAt
         self.acceptedGaps = acceptedGaps
-        self.tasksByStatus = tasksByStatus
     }
 
     /// The counts, which is what a current server's read carries and an older one's does not: no
@@ -865,45 +860,49 @@ public enum ProjectDone {
 
     // MARK: which card a coordinator conversation draws
 
-    /// The one settlement card a coordinator conversation draws for its project — web's
+    /// The one closing card a coordinator conversation draws for its project — web's
     /// `SessionProjectSettlementCard`, read off the same reads.
     public enum Slot: Equatable, Sendable {
         /// Nothing: not this project's coordinator, a read that has not answered, a server whose
-        /// projection carries no counts — or a project that does not look finished.
+        /// projection carries no counts — or a project nobody has asked about and nothing has
+        /// recorded.
         case none
-        /// "Why is this project not done?" — an OPEN, started project that LOOKS finished (every
-        /// stated criterion met by its work, no task IN_PROGRESS) and that the projection does not
-        /// call done, which nobody has asked to record (`asksWhyNotDone`) — or, once Orbit has
-        /// recorded it DONE itself, that card's terminal state, "This project is done".
+        /// The old question's TERMINAL state, "This project is done · recorded by Orbit" — drawn
+        /// once Orbit has recorded the project DONE itself, and in no other state.
         case notDone
         /// "Is this project done?" — asked by the request named (nil when the owner is reminded
         /// without one) — or, once it is recorded, its receipt.
         case done(requestID: String?)
     }
 
+    /// THE CONVERSATION DRAWS ONE QUESTION, AND IT IS THE OWNER'S
+    /// ----------------------------------------------------------
+    /// Until 2026-10-07 this answered `.notDone` for a project that LOOKS finished as well — OPEN
+    /// and started, every stated criterion met by its work, no task IN_PROGRESS, and a projection
+    /// that does not call it done. The owner's ruling of 2026-10-07 04:20Z took "Why is this
+    /// project not done?" out of the conversation altogether: closing a project is driven by the
+    /// coordinator's request, and a project nobody has asked about and nothing has recorded draws
+    /// NOTHING here — no card, no press, no fallback. The gaps that card listed, and the entry
+    /// points that acted on them, are the project page's Open items row and the Needs you hint.
+    /// The browser draws nothing in the same state, and draws nothing for a read without counts
+    /// either — what this guard has always answered for both.
+    ///
+    /// `ProjectNotDoneCard` keeps the card's whole body, as the browser keeps
+    /// `ProjectWhyNotDoneCard`'s: only its settled branch (the terminal state above) is drawn.
     public static func slot(subject: ProjectDoneSubject?, request: ProjectOpenItemRow?,
-                            waitingKind: SessionWaitingKind?, record: ProjectDoneRecord?,
-                            started: Bool?) -> Slot {
+                            waitingKind: SessionWaitingKind?, record: ProjectDoneRecord?) -> Slot {
         guard let subject, subject.counts != nil else { return .none }
         // Asked, reminded, or just recorded here: the owner's card, or the receipt it turned into.
         if request != nil || waitingKind == .recordAsDone || record != nil {
             return .done(requestID: request?.itemId)
         }
         // DONE, read off the document so that it survives a reload: the owner's record keeps its
-        // receipt; a DONE Orbit recorded itself is the Why-not-done card's terminal state — "This
+        // receipt; a DONE Orbit recorded itself is the old question's terminal state — "This
         // project is done", recorded by Orbit (the browser's SessionProjectSettlementCard).
         if subject.status == "DONE" {
             return subject.doneBy == .owner ? .done(requestID: nil) : .notDone
         }
-        // Asked why it is not done only of a project that LOOKS finished and that the projection
-        // does not call done (`settlementHeldOnProject`, `asksWhyNotDone`): OPEN and started, every
-        // stated criterion met by its work, and no task IN_PROGRESS. "The work is not done yet" is
-        // not news — a card saying it under every unfinished project is what this is shaped to avoid.
-        let criteria = subject.derivedDone?.criteria ?? []
-        guard subject.status == "OPEN", started == true, subject.derivedDone?.done != true,
-              !criteria.isEmpty, criteria.allSatisfy(\.satisfied),
-              (subject.tasksByStatus?["IN_PROGRESS"] ?? 0) == 0 else { return .none }
-        return .notDone
+        return .none
     }
 
     // MARK: the Why-not-done card

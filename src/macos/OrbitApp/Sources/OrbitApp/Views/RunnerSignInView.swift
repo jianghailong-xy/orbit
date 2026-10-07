@@ -127,9 +127,11 @@ struct RunnerSignInView: View {
     /// can do is show both halves and wait for the CLI to finish approving itself.
     @ViewBuilder
     private func deviceFlow(_ model: RunnerSignInModel) -> some View {
+        // Kimi's page belongs to one of its two sites, named so the user knows which account it wants.
+        let site = model.site
         VStack(alignment: .leading, spacing: 6) {
-            if let url = model.url { openPageButton(url) }
-            Text("Sign in there, then enter this one-time code:")
+            if let url = model.url { openPageButton(url, label: site?.openPage ?? "Open the sign-in page") }
+            Text(site?.enterCode ?? "Sign in there, then enter this one-time code:")
                 .font(.orbitLabel).foregroundStyle(.secondary)
             if let code = model.userCode {
                 // Tap to copy: on a phone the page is a browser switch away, and retyping a
@@ -149,7 +151,17 @@ struct RunnerSignInView: View {
                 ProgressView().controlSize(.small)
                 Text("Waiting for you to approve it…").font(.orbitLabel)
             }
-            cancelButton(model)
+            // The wrong site is the one mistake the user can't see until they are on its page: their
+            // account isn't there. Starting over on the other one is a single press.
+            HStack(spacing: 16) {
+                cancelButton(model)
+                if let site {
+                    Button(site.other.useInstead) { Task { await model.begin(site: KimiSite.named(site.other, on: model.runner)) } }
+                        .buttonStyle(.borderless)
+                        .font(.orbitLabel)
+                        .disabled(model.busy)
+                }
+            }
         }
     }
 
@@ -158,6 +170,55 @@ struct RunnerSignInView: View {
     /// configured from the web's Providers page), so this is the whole choice.
     @ViewBuilder
     private func idle(_ model: RunnerSignInModel) -> some View {
+        if engine == .kimi {
+            kimiSites(model)
+        } else {
+            signInButton(model)
+        }
+    }
+
+    /// Kimi's sign-in is itself a choice: kimi.com and kimi.ai keep separate accounts, and left to
+    /// itself the CLI goes to the site its installer came from. So the press that starts it picks the
+    /// site, and nothing is picked for the user (web RunnerSignIn).
+    @ViewBuilder
+    private func kimiSites(_ model: RunnerSignInModel) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if model.status == .failed, let m = model.relayMessage {
+                Text(m).font(.orbitLabel).foregroundStyle(.orange)
+            }
+            Text(KimiSite.question).font(.orbitLabel)
+            ForEach(KimiSite.allCases) { site in
+                Button {
+                    Task { await model.begin(site: KimiSite.named(site, on: model.runner)) }
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(site.domain).font(.headline)
+                            Text(site.place).font(.orbitLabel).foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 8)
+                        if model.currentSite == site {
+                            Text(KimiSite.currentMark)
+                                .font(.orbitLabel.weight(.semibold))
+                                .foregroundStyle(Color.accentColor)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(Color.accentColor.opacity(0.14), in: Capsule())
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.bordered)
+                .disabled(model.busy || !model.runnerRead)
+            }
+            Text(KimiSite.separateAccounts)
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func signInButton(_ model: RunnerSignInModel) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             if engine == .antigravity { GoogleSignInTermsView() }
             if model.status == .failed, let m = model.relayMessage {
@@ -187,11 +248,11 @@ struct RunnerSignInView: View {
 
     /// The sign-in page opens in the browser — Safari on iOS, the default browser on macOS — since
     /// that is where the user's session with the vendor already lives.
-    private func openPageButton(_ url: URL) -> some View {
+    private func openPageButton(_ url: URL, label: String) -> some View {
         Button {
             openURL(url)
         } label: {
-            Label("Open the sign-in page", systemImage: "arrow.up.forward.square")
+            Label(label, systemImage: "arrow.up.forward.square")
         }
         .buttonStyle(.borderedProminent)
     }

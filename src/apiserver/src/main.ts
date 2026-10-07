@@ -7,6 +7,7 @@ import { AppModule } from './app.module';
 import { PublicIdExceptionFilter } from './common/public-id.filter';
 import { publicIdHeaders } from './common/public-id-headers';
 import { PublicIdInterceptor } from './common/public-id.interceptor';
+import { SlowRequestInterceptor } from './common/slow-request.interceptor';
 import { TransientDbConflictFilter } from './common/transient-db-conflict.filter';
 import { WorkspaceAliasInterceptor } from './common/workspace-alias.interceptor';
 import { outsideThePoolGateway } from './providers/pool-gateway.controller';
@@ -46,7 +47,13 @@ async function bootstrap() {
   // the pre-rename name. Temporary — see the interceptor.
   // Alongside it, every public id also goes out in both spellings (`sessionId` +
   // `sessionPublicId`) so clients can move to the short form without a flag day.
-  app.useGlobalInterceptors(new WorkspaceAliasInterceptor(), new PublicIdInterceptor());
+  // The slow-request line is FIRST so its clock covers what the two mappers beside it do — the
+  // time a request is worth reporting is the time the client waited, not the handler's own.
+  app.useGlobalInterceptors(
+    new SlowRequestInterceptor(),
+    new WorkspaceAliasInterceptor(),
+    new PublicIdInterceptor(),
+  );
   // A response body leaves by one of two doors, and both spell ids the same way. The interceptor
   // above maps what a handler returns; this maps what it throws, which used to leave raw UUIDs in
   // refusal bodies on endpoints whose success bodies were base62.

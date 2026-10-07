@@ -195,7 +195,7 @@
       <div class="nav">
         <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
         <span class="titles"><span class="t">帮我看看今天的抓取日志</span>
-          <span class="s"><span class="chiprun refused">✕ Not started</span>Open · 12m</span></span>
+          <span class="s"><span class="chiprun refused">✕ Queued</span>Open · 12m</span></span>
         <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M8 8l4-4 4 4M5 20h14"/></svg></span>
       </div>
       <div class="thread">
@@ -204,7 +204,7 @@
           <div class="head"><div class="icon">⚠</div><div class="title">This run never started</div></div>
           <div class="prov">FROM ORBIT</div>
           <div class="why">Waiting for a newer runner</div>
-          <div class="body2">longdeMac-mini.local runs Orbit runner 0.1.120; OpenCode needs 0.1.82 or newer.
+          <div class="body2">OpenCode requires Orbit runner 0.1.82 or newer; update this runner first.
             The runner updates itself when no session is running on it, and this run starts then.</div>
           <div class="btn tinted">Open the runner</div>
           <div class="foot">No engine ran · your message is still here</div>
@@ -214,14 +214,16 @@
           <div class="mh"><span class="mi">⚠</span>OpenCode isn’t installed on longdeMac-mini.local</div>
           <div class="md">Install it from Providers, then send your message again.</div>
           <div class="mb">Install</div>
+          <div class="mb">Open the runner</div>
         </div>
       </div>
       <div class="tail"><div class="composer">＋ Message…<span class="send">↑</span></div></div>
     </div>
     <figcaption><b>② 卡片标题与 01 一致，原因和动作换机器侧</b>
       「This run never started」是同一个事实，所以是同一张卡；<b>why / body / 按钮</b>来自原因。
-      三句正文全部照抄仓库现成的字：升级句在 <code>runner-provider-support.ts</code>
-      （<code>OPENCODE_RUNNER_UPGRADE_ERROR</code> 等），未安装/未登录两句在
+      正文就是服务端落在 <code>session.error</code> 上的那句话本身（升级句来自
+      <code>runner-provider-support.ts</code>），后面接的仍是仓库现成的那半句
+      （<code>AntigravityRepairCard</code> 的“runner 空闲时自更新”）；未安装/未登录两句在
       <code>Transcript.tsx</code> 的 repair 卡里（<code>Install</code> / <code>Sign in</code> 也是现成动作）。
       <br><br>今天这些卡只画在<b>引擎说过话</b>的 transcript 里；这里要求的是同一条句子能落在
       <b>没有 transcript 的会话</b>上 —— 文案一个字不新写，只是换个位置。</figcaption>
@@ -238,7 +240,7 @@
       <div class="nav">
         <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
         <span class="titles"><span class="t">帮我看看今天的抓取日志</span>
-          <span class="s"><span class="chiprun refused">✕ Not started</span>Open · 12m</span></span>
+          <span class="s"><span class="chiprun refused">✕ Disconnected</span>Open · 12m</span></span>
         <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M8 8l4-4 4 4M5 20h14"/></svg></span>
       </div>
       <div class="thread">
@@ -258,6 +260,7 @@
           <div class="md">The CLI exited on startup with no output. Retrying on this runner rarely helps;
             the runner's own report says what it has.</div>
           <div class="mb">Send it again</div>
+          <div class="mb">Open the runner</div>
         </div>
       </div>
       <div class="tail"><div class="composer">＋ Message…<span class="send">↑</span></div></div>

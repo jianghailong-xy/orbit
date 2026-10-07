@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { uuidToBase62 } from '@orbit/shared';
+
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import {
   findMergeCheckApproval,
@@ -29,8 +31,21 @@ import { ProjectsService } from './projects.service';
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
 const OTHER_USER_ID = '00000000-0000-7000-8000-000000000002';
 const PROJECT_ID = '00000000-0000-7000-8000-0000000000a1';
+const OTHER_PROJECT_ID = '00000000-0000-7000-8000-0000000000a2';
 const SESSION_ID = '00000000-0000-7000-8000-0000000000c1';
 const APPROVAL_ID = '00000000-0000-7000-8000-0000000000d1';
+
+/**
+ * The same projects, spelled the way the CALLER spells them.
+ *
+ * This is not a decoration: it is the spelling that reaches the card in production. `project_update`
+ * tells the agent its `projectId` is "the project as shown in its web UI URL (/projects/<id>)", the
+ * runner puts that string on the card unchanged, and the route that performs the write has already
+ * decoded it to the uuid (`PublicIdPipe`) — so a comparison over the two as-written strings can
+ * never match, which is a card the owner answered that authorises nothing.
+ */
+const PUBLIC_PROJECT_ID = uuidToBase62(PROJECT_ID);
+const OTHER_PUBLIC_PROJECT_ID = uuidToBase62(OTHER_PROJECT_ID);
 
 /** One ALLOWED card a person answered, as `findMany` returns it. */
 function card(input: unknown, over: Record<string, unknown> = {}) {
@@ -41,10 +56,12 @@ function card(input: unknown, over: Record<string, unknown> = {}) {
   };
 }
 
-/** The card the runner files for "make this project's merge check `npm test`". */
-function filedCard(proposal: Record<string, unknown>) {
+/** The card the runner files for "make this project's merge check `npm test`". `projectId` is what
+ *  the caller wrote — the uuid by default, and the public id a real `project_update` carries in
+ *  every case that is about that spelling. */
+function filedCard(proposal: Record<string, unknown>, projectId: string = PROJECT_ID) {
   return card({
-    projectId: PROJECT_ID,
+    projectId,
     projectTitle: 'Checkout rewrite',
     currentMergeCheckCommand: null,
     ...proposal,
@@ -77,9 +94,45 @@ test('a card covers the exact proposal it was filed for, and nothing else', () =
     key,
   );
   // And another project's card is another project's card.
+  assert.notEqual(mergeCheckRequestKey(OTHER_PROJECT_ID, command), key);
+});
+
+test('the project is compared as a project, not as a spelling of its id', () => {
+  const command = { mergeCheckCommand: 'npm test' };
+
+  // THE REAL PATH, and the one that was broken. The card carries the id the CALLER wrote — the
+  // runner files it with the string the agent passed to `project_update`, which the tool tells the
+  // agent is the id in the project's web UI URL — while the request carries the uuid the route
+  // decoded that id to. Same project, same change, one spelling on each side, and it has to match:
+  // otherwise every card the runner files is a question the owner answers that authorises nothing.
+  assert.equal(
+    mergeCheckProposalKey({ projectId: PUBLIC_PROJECT_ID, ...command }),
+    mergeCheckRequestKey(PROJECT_ID, command),
+  );
+  // Either side may be handed either spelling — no caller has to know which one the other used.
+  assert.equal(
+    mergeCheckRequestKey(PUBLIC_PROJECT_ID, command),
+    mergeCheckRequestKey(PROJECT_ID, command),
+  );
+  assert.equal(
+    mergeCheckProposalKey({ projectId: PROJECT_ID, ...command }),
+    mergeCheckProposalKey({ projectId: PUBLIC_PROJECT_ID, ...command }),
+  );
+  // Resolving the id does not make the key blind to WHICH project it names: another project, in
+  // either spelling, is still another project.
   assert.notEqual(
-    mergeCheckRequestKey('00000000-0000-7000-8000-0000000000a2', command),
-    key,
+    mergeCheckProposalKey({ projectId: OTHER_PUBLIC_PROJECT_ID, ...command }),
+    mergeCheckRequestKey(PROJECT_ID, command),
+  );
+  assert.notEqual(
+    mergeCheckProposalKey({ projectId: OTHER_PROJECT_ID, ...command }),
+    mergeCheckRequestKey(PUBLIC_PROJECT_ID, command),
+  );
+  // And an id that resolves to neither spelling is kept as written rather than quietly dropped,
+  // so a card naming something undecodable covers nothing — fail-closed, not lenient.
+  assert.notEqual(
+    mergeCheckProposalKey({ projectId: 'not-an-id', ...command }),
+    mergeCheckRequestKey(PROJECT_ID, command),
   );
 });
 
@@ -164,8 +217,11 @@ test('a card for another change, another project, another session or another ans
       ['auto-allowed', [card(proposal, { decidedById: null })]],
       // Filed from another conversation, about another project, or for a different command.
       ['another session', [card(proposal, { sessionId: '00000000-0000-7000-8000-0000000000c2' })]],
-      ['another project', [card({
-        projectId: '00000000-0000-7000-8000-0000000000a2', mergeCheckCommand: 'npm test',
+      ['another project', [card({ projectId: OTHER_PROJECT_ID, mergeCheckCommand: 'npm test' })]],
+      // Another project again, spelled the way a caller spells it. Resolving the id must not turn
+      // "this card is about a different project" into a match.
+      ['another project, as a public id', [card({
+        projectId: OTHER_PUBLIC_PROJECT_ID, mergeCheckCommand: 'npm test',
       })]],
       ['a different change', [filedCard({ mergeCheckCommand: 'npm run e2e' })]],
     ];
@@ -178,6 +234,24 @@ test('a card for another change, another project, another session or another ans
       }), null, what);
     }
   });
+
+test('the card the RUNNER files — projectId as the public id the caller wrote — is found', async () => {
+  // A real card is filed by `runner-go/mcp.go`'s `projectMergeCheckCard`, which writes the string
+  // the agent passed straight through — and the agent was told, by the tool's own description, to
+  // pass the id in the project's web UI URL. So this is the spelling the owner's card actually
+  // carries, and the one the gate was blind to while every case spelled the project the internal
+  // way on both sides.
+  const { prisma } = approvalReader([filedCard({ mergeCheckCommand: 'npm test' }, PUBLIC_PROJECT_ID)]);
+
+  assert.deepEqual(
+    await findMergeCheckApproval(prisma, {
+      projectId: PROJECT_ID,
+      sessionId: SESSION_ID,
+      settings: { mergeCheckCommand: 'npm test' },
+    }),
+    { approvalId: APPROVAL_ID, decidedById: OWNER_ID },
+  );
+});
 
 // ── What the write records ───────────────────────────────────────────────────────────────────
 
@@ -312,6 +386,33 @@ test('a session with the owner’s card on this exact change writes the merge ch
   });
 });
 
+test('the card the runner files — the caller’s public id on it — writes the merge check', async () => {
+  // The same write as above, through the card a REAL call files. `project_update` tells the agent
+  // its `projectId` is the id in the project's web UI URL; `runner-go/mcp.go` puts that string on
+  // the card unchanged; the route performing the write has already decoded it to the uuid. Before
+  // the key resolved the id, this — the only card any real call ever files — covered nothing, so
+  // the owner could answer the question and the change was still refused.
+  const f = fakePrisma({ cards: [filedCard({ mergeCheckCommand: 'npm test' }, PUBLIC_PROJECT_ID)] });
+
+  await new ProjectsService(f.prisma, {} as never).update(
+    OWNER_ID, PROJECT_ID, { integration: { mergeCheckCommand: 'npm test' } } as never, SESSION_ID,
+  );
+
+  assert.deepEqual(mergeCheckOf(f.codebaseWrites),
+    [{ mergeCheckCommand: 'npm test', mergeCheckTimeoutSeconds: undefined }],
+    'the merge check the card authorised is the merge check that was written');
+  assert.equal(f.activity.length, 1, 'the write records which card let it through');
+  // The provenance records the project the write is about, in the spelling the rest of the ledger
+  // uses — the resolved uuid — not the spelling the card happened to carry.
+  assert.deepEqual((f.activity[0] as { payload: Record<string, unknown> }).payload, {
+    projectId: PROJECT_ID,
+    approvalId: APPROVAL_ID,
+    approvedByUserId: OWNER_ID,
+    requestedBySessionId: SESSION_ID,
+    mergeCheckCommand: 'npm test',
+  });
+});
+
 test('no card, or a card for something else, is still INTEGRATION_SETTINGS_OWNER_ONLY', async () => {
   const cases: Array<[string, Array<Record<string, unknown>>]> = [
     ['no card at all', []],
@@ -320,12 +421,23 @@ test('no card, or a card for something else, is still INTEGRATION_SETTINGS_OWNER
     ['a card nobody has answered', [card({ projectId: PROJECT_ID, mergeCheckCommand: 'npm test' },
       { status: 'PENDING' })]],
     ['a card for another change', [filedCard({ mergeCheckCommand: 'npm run e2e' })]],
-    ['a card for another project', [card({
-      projectId: '00000000-0000-7000-8000-0000000000a2', mergeCheckCommand: 'npm test',
-    })]],
+    ['a card for another project', [card({ projectId: OTHER_PROJECT_ID, mergeCheckCommand: 'npm test' })]],
     ['a card nobody answered', [card(
       { projectId: PROJECT_ID, mergeCheckCommand: 'npm test' }, { decidedById: null },
     )]],
+    // The same refusals again through the spelling a real card carries, so the fix that lets the
+    // runner's card through cannot also let these through: resolving the id makes the comparison
+    // land on WHICH project a card is about, and these are about a different one, a different
+    // change, or nobody's answer.
+    ['another change, card filed as a public id', [
+      filedCard({ mergeCheckCommand: 'npm run e2e' }, PUBLIC_PROJECT_ID)]],
+    ['another project, card filed as a public id', [card({
+      projectId: OTHER_PUBLIC_PROJECT_ID, mergeCheckCommand: 'npm test',
+    })]],
+    ['declined, card filed as a public id', [card(
+      { projectId: PUBLIC_PROJECT_ID, mergeCheckCommand: 'npm test' }, { status: 'DENIED' })]],
+    ['unanswered, card filed as a public id', [card(
+      { projectId: PUBLIC_PROJECT_ID, mergeCheckCommand: 'npm test' }, { status: 'PENDING' })]],
   ];
   for (const [what, cards] of cases) {
     const f = fakePrisma({ cards });
@@ -348,26 +460,35 @@ test('an old card is not a licence to write a different value later', async () =
   // The card exists, is ALLOWED and was answered by the owner — and it is about `npm test`, so the
   // second change this session tries to slip through on it is refused. This is the case the whole
   // proposal comparison exists for.
-  const f = fakePrisma({ cards: [filedCard({ mergeCheckCommand: 'npm test' })] });
-  const service = new ProjectsService(f.prisma, {} as never);
+  //
+  // Asserted for both spellings of the project, and the public-id one is the load-bearing half:
+  // letting the runner's card through is only correct while it stays a yes to THAT change and not
+  // a standing permission, and the runner's card is the one written with a public id.
+  for (const projectId of [PROJECT_ID, PUBLIC_PROJECT_ID]) {
+    const f = fakePrisma({ cards: [filedCard({ mergeCheckCommand: 'npm test' }, projectId)] });
+    const service = new ProjectsService(f.prisma, {} as never);
 
-  await service.update(
-    OWNER_ID, PROJECT_ID, { integration: { mergeCheckCommand: 'npm test' } } as never, SESSION_ID,
-  );
-  await assert.rejects(
-    () => service.update(
-      OWNER_ID, PROJECT_ID, { integration: { mergeCheckCommand: 'rm -rf /' } } as never, SESSION_ID,
-    ),
-    isRefusedByTheOwnerRule,
-  );
-  assert.deepEqual(mergeCheckOf(f.codebaseWrites),
-    [{ mergeCheckCommand: 'npm test', mergeCheckTimeoutSeconds: undefined }],
-    'the second write never reached the binding');
-  assert.equal(f.activity.length, 1, 'and recorded no provenance for a write that did not happen');
+    await service.update(
+      OWNER_ID, PROJECT_ID, { integration: { mergeCheckCommand: 'npm test' } } as never, SESSION_ID,
+    );
+    await assert.rejects(
+      () => service.update(
+        OWNER_ID, PROJECT_ID, { integration: { mergeCheckCommand: 'rm -rf /' } } as never, SESSION_ID,
+      ),
+      isRefusedByTheOwnerRule,
+      projectId,
+    );
+    assert.deepEqual(mergeCheckOf(f.codebaseWrites),
+      [{ mergeCheckCommand: 'npm test', mergeCheckTimeoutSeconds: undefined }],
+      `the second write never reached the binding (card filed as ${projectId})`);
+    assert.equal(f.activity.length, 1, 'and recorded no provenance for a write that did not happen');
+  }
 });
 
 test('the line is refused whether or not a card covers the request', async () => {
-  const cards = [filedCard({ mergeCheckCommand: 'npm test' })];
+  // The card a real call files, spelled as the runner writes it: so what this proves is that the
+  // card a session actually holds is not a way in for the line either.
+  const cards = [filedCard({ mergeCheckCommand: 'npm test' }, PUBLIC_PROJECT_ID)];
   for (const integration of [
     { line: 'MAIN' },
     { projectBranchName: 'refs/heads/project/next' },

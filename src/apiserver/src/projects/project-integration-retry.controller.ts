@@ -52,6 +52,22 @@ export class ProjectIntegrationRetryController {
     return this.openItems.skipIntegrationMergeCheckAsOwner(user.userId, projectId, taskId, dto);
   }
 
+  /**
+   * Retry a job the integration view calls timed out — the Retry on the landing row's job list
+   * (§2.2 J-T9). No body: the job's own facts are the reason, and the server writes it. Answers with
+   * the integration view, read after the retry.
+   */
+  @PatScope('projects:write', { workspaceConfinable: false })
+  @Post(':id/integration/jobs/:jobId/retry')
+  @HttpCode(200)
+  retryTimedOutJob(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) projectId: string,
+    @Param('jobId', PublicIdPipe) jobId: string,
+  ) {
+    return this.openItems.retryTimedOutJobAsOwner(user.userId, projectId, jobId);
+  }
+
   /** Rerun a blocked candidate's failed check, leaving its merge decision untouched. */
   @PatScope('projects:write', { workspaceConfinable: false })
   @Post(':id/promotions/:promotionId/integration/retry')

@@ -12,7 +12,7 @@ import { sharedPoolAsProviderPool, type SharedPool } from '../lib/sharedPools';
 import { AccountPauseActions } from './AccountPause';
 import { PoolMembers } from './AccountPools';
 import { RunnerEngines } from './RunnerEngines';
-import { clickRunnerMenuItem } from './RunnerEngines.test-helpers';
+import { clickRunnerMenuItem, openRunnerCards } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 vi.mock('../api', () => ({ api: vi.fn() }));
@@ -174,7 +174,7 @@ describe('account pause on real account rows', () => {
       ] }],
       planUsage: { provider: 'codex', primary: { utilization: 60, windowDurationMins: 10080 } },
     };
-    localStorage.setItem('orbit:providers-expanded-runners', JSON.stringify([runner.id]));
+    openRunnerCards([runner]);
     qc.setQueryData(['runners'], [runner]);
     apiMock.mockImplementation(async (path) => path === '/runners' ? [runner] : {});
     render(<RunnerEngines />);

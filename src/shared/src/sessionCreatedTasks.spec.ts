@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 // Through the package's own entry: what the clients import is the thing under test.
-import { createdTasksCountLine, SESSION_CREATED_TASKS_COPY } from './index';
+import { createdTasksCountLine, SESSION_CREATED_TASKS_COPY, sessionTaskCard } from './index';
 
 /**
  * `session-created-tasks.fixture.json` is the contract the web and the native client are both
@@ -16,9 +16,27 @@ interface CountLineCase {
   text: string;
 }
 
+interface CardCase {
+  name: string;
+  created: {
+    running: number;
+    failed: number;
+    done: number;
+    total: number;
+    items: { id: string; status: string; running: boolean; queued: boolean; replaces: string | null }[];
+  } | null;
+  watched: { id: string; status: string | null; running: boolean; queued: boolean; stale: boolean }[];
+  card: {
+    rows: { id: string; watched: boolean; stale: boolean; elsewhere: boolean }[];
+    counts: { running: number; failed: number; done: number; total: number };
+    watching: number;
+    stale: boolean;
+  } | null;
+}
+
 const fixture = JSON.parse(
   readFileSync(path.join(__dirname, 'session-created-tasks.fixture.json'), 'utf8'),
-) as { copy: Record<string, string>; singleNamesTheTask: boolean; countLine: CountLineCase[] };
+) as { copy: Record<string, string>; singleNamesTheTask: boolean; countLine: CountLineCase[]; card: CardCase[] };
 
 describe('session-created-tasks.fixture.json', () => {
   it('every countLine case is exactly what createdTasksCountLine writes', () => {
@@ -58,15 +76,55 @@ describe('session-created-tasks.fixture.json', () => {
   it('has one set of words: the copy the web renders is the copy in the fixture', () => {
     expect(fixture.copy).toEqual(SESSION_CREATED_TASKS_COPY);
     expect(fixture.copy).toEqual({
-      title: 'Tasks created here',
+      title: 'Tasks',
       viewAll: 'View all in Tasks ›',
       openProject: 'Open project ›',
       replacesPrefix: 'Replaces ',
       createdInChip: 'Created in ',
+      elsewhere: 'elsewhere',
     });
   });
 
   it('a single row names its task instead of counting it', () => {
     expect(fixture.singleNamesTheTask).toBe(true);
+  });
+
+  it('every card case is exactly what sessionTaskCard draws', () => {
+    expect(fixture.card.length).toBeGreaterThan(0);
+    for (const c of fixture.card) {
+      const created = c.created && {
+        ...c.created,
+        projects: [],
+        items: c.created.items.map((item) => ({
+          ...item,
+          status: item.status as 'OPEN',
+          title: `Task ${item.id}`,
+          createdAt: '2026-10-07T00:00:00.000Z',
+          projectId: null,
+          replaces: item.replaces ? { id: item.replaces, title: `Task ${item.replaces}` } : null,
+        })),
+      };
+      const watched = c.watched.map(({ id, status, running, queued, stale }) => ({
+        id,
+        title: `Task ${id}`,
+        standing: status === null ? null : { status, running, queued },
+        stale,
+      }));
+      const card = sessionTaskCard(created, watched);
+      expect(
+        card && {
+          rows: card.rows.map((row) => ({
+            id: row.id,
+            watched: row.watched,
+            stale: row.stale,
+            elsewhere: row.createdAt === null,
+          })),
+          counts: card.counts,
+          watching: card.watching,
+          stale: card.stale,
+        },
+        c.name,
+      ).toEqual(c.card);
+    }
   });
 });

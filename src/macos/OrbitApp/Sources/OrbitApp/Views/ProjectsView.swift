@@ -525,6 +525,21 @@ struct ProjectDetailView: View {
                         MergeCheckEditor(store: store, view: view,
                                          automatic: store.document?.coordinatorEnabled ?? false)
                     }
+                case .landingJobs:
+                    // The page's own integration read, which its refreshes keep current; a task
+                    // opens over the page, as its rows' tasks do, once the sheet is down.
+                    ProjectLandingJobsSheet(
+                        lines: { now in
+                            store.integration.map {
+                                ProjectPage.landingJobLines($0, now: now, updatedAt: store.integrationReadAt,
+                                                            refreshFailed: store.integrationReadFailed)
+                            } ?? []
+                        },
+                        retry: { jobID in try await store.retryIntegrationJob(jobID) },
+                        openTask: { taskID in
+                            pageSheet = nil
+                            openTask(taskID)
+                        })
                 }
             }
         }
@@ -947,6 +962,10 @@ struct ProjectDetailView: View {
     /// `TimelineView`, not a timer of our own: the clock counts in SECONDS while the read behind it
     /// is as slow as it is, because a number that stepped a whole poll at a time would read as the
     /// stalled page this row exists to disprove.
+    ///
+    /// On a server that lists its jobs, a press opens them (docs/mocks/landing-jobs-sheet) — hosted
+    /// by the page's list, not by this row, so the row's clock cannot take the sheet down. An older
+    /// server has no list to show, and the row stays a row.
     @ViewBuilder
     private func landingRow(_ store: ProjectDetailModel) -> some View {
         if let integration = store.integration, integration.inFlight != nil {
@@ -954,7 +973,20 @@ struct ProjectDetailView: View {
                 if let line = ProjectPage.landingLine(integration, now: context.date,
                                                      updatedAt: store.integrationReadAt,
                                                      refreshFailed: store.integrationReadFailed) {
-                    ProjectLandingRow(line: line)
+                    if integration.inFlightJobs != nil {
+                        Button { pageSheet = .landingJobs } label: {
+                            HStack(spacing: 8) {
+                                ProjectLandingRow(line: line)
+                                Image(systemName: "chevron.forward")
+                                    .font(.orbitMeta.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        ProjectLandingRow(line: line)
+                    }
                 }
             }
         }
@@ -1491,6 +1523,15 @@ struct ProjectDetailView: View {
                         .fixedSize(horizontal: false, vertical: true)
                     if let paths = ProjectPage.blockerPathsLine(blocker.detail.paths) {
                         Text(paths).font(.orbitMeta.monospaced()).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    // A refused SOURCE names the code and the ref that could not be resolved, then
+                    // one line per task whose runs are refused while it stands — the tasks the
+                    // page already holds, named by title.
+                    ForEach(ProjectPage.blockerSourceLines(blocker, titleFor: { id in
+                        store.tasks.first { $0.id == id }?.title
+                    }), id: \.self) { line in
+                        Text(line).font(.orbitMeta).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 Spacer(minLength: 6)
@@ -2104,6 +2145,8 @@ private enum ProjectPageSheet: String, Identifiable {
     case done
     /// How it runs' merge check, where a command has room.
     case mergeCheck
+    /// The jobs the Work overview's landing row counts, from a press on that row.
+    case landingJobs
 
     var id: String { rawValue }
 }

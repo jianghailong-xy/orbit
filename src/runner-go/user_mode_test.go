@@ -205,6 +205,10 @@ var userModeRoutes = []struct {
 		method: "POST", path: "/api/projects/P1/blockers/B1/resolve", body: `{"reason":"landed"}`},
 	{command: "project merge-evidence", args: []string{"P1", "--requirement-id", "R1", "--target-branch", "main", "--content-hash", contentSHA, "--json"},
 		method: "POST", path: "/api/projects/P1/acceptance/merge-evidence", body: `{"requirementId":"R1","targetBranch":"main","contentHash":"` + contentSHA + `"}`},
+	// The person IS the approver the card would ask, so their own door queues the landing with no
+	// card and no acting session — the reason is the whole of what they send.
+	{command: "project skip-merge-check", args: []string{"P1", "T1", "--reason", "the check cannot pass here", "--json"},
+		method: "POST", path: "/api/projects/P1/tasks/T1/integration/skip-merge-check", body: `{"reason":"the check cannot pass here"}`},
 	{command: "project create", args: []string{"--title", "Next", "--goal", "ship it", "--workspace-id", "W1", "--json"},
 		method: "POST", path: "/api/projects", body: `{"title":"Next","goal":"ship it","workspaceId":"W1"}`},
 	{command: "project update", args: []string{"P1", "--title", "Renamed", "--json"}, method: "PATCH", path: "/api/projects/P1", body: `{"title":"Renamed"}`},
