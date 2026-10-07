@@ -8,7 +8,6 @@ import android.os.Bundle
 import android.os.Process
 import android.os.SystemClock
 import android.util.Base64
-import android.view.KeyEvent
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
@@ -139,6 +138,10 @@ class RealStackDeviceTest {
         awaitText(entry); compose.onAllNodesWithText(entry).onFirst().performClick()
     }
     private fun back() = compose.onNodeWithContentDescription("Back").performClick()
+    /** Closes the keyboard without a Back key, which would leave the page when the keyboard is already down. */
+    private fun hideKeyboard() = compose.activityRule.scenario.onActivity { activity ->
+        androidx.core.view.WindowCompat.getInsetsController(activity.window, activity.window.decorView).hide(androidx.core.view.WindowInsetsCompat.Type.ime())
+    }
     private fun trees(name: String) = runCatching {
         File(output, "$name-tree.txt").writeText(buildString {
             for (unmerged in listOf(false, true)) {
@@ -189,13 +192,13 @@ class RealStackDeviceTest {
         capture("stack-tasks-failed")
         // Search: the server's matches for the same words.
         compose.onNodeWithTag("task-filter:ALL").performScrollTo().performClick()
-        compose.onNodeWithTag("task-search").performTextInput("sprint"); instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        compose.onNodeWithTag("task-search").performTextInput("sprint"); hideKeyboard()
         val matches = record("GET /tasks/page?projectId=none&q=sprint", page("projectId=none&q=sprint").map { it.text("id")!! }.toSet())
         assertTrue(matches.size in 1..4)
         val pins = record("GET /tasks/active?projectId=none (pinned over the rows)", pinned())
         compose.waitUntil(30_000) { shownTasks() == matches + pins }
         capture("stack-tasks-search")
-        compose.onNodeWithTag("task-search").performTextClearance(); instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        compose.onNodeWithTag("task-search").performTextClearance(); hideKeyboard()
         // A label: the server's rows carrying it.
         val labelled = record("GET /tasks/page?projectId=none&labels=android", page("projectId=none&labels=android").map { it.text("id")!! }.toSet())
         tap("tasks-options"); compose.onNodeWithText(TaskListCopy.filterByLabel).performClick()
@@ -267,7 +270,7 @@ class RealStackDeviceTest {
         val word = "a11bulk$stamp"
         val ids = (1..2).map { scratch("A11 $word scratch $it") { put("completionCriterion", "OWNER_CONFIRMED"); put("ownerConfirmationReason", "OWNER_TRADE_OFF") } }
         signIn(); drawer("Tasks"); awaitTag("tasks-list")
-        compose.onNodeWithTag("task-search").performTextInput(word); instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        compose.onNodeWithTag("task-search").performTextInput(word); hideKeyboard()
         val pins = record("GET /tasks/active?projectId=none (pinned over the rows)", pinned())
         compose.waitUntil(30_000) { shownTasks() == ids.toSet() + pins }
         tap("tasks-options"); compose.onNodeWithText(TaskListCopy.selectTasks).performClick()
@@ -381,9 +384,7 @@ class RealStackDeviceTest {
         val note = "Checked on the stack: the smoke run's failure is understood ($stamp)"
         compose.onNodeWithTag("item:$item:MARK_HANDLED").performScrollTo().performClick()
         compose.onNodeWithText("Why is it no longer open?").performScrollTo().performTextInput(note)
-        compose.activityRule.scenario.onActivity { activity ->
-            androidx.core.view.WindowCompat.getInsetsController(activity.window, activity.window.decorView).hide(androidx.core.view.WindowInsetsCompat.Type.ime())
-        }
+        hideKeyboard()
         compose.onNodeWithTag("item:$item:MARK_HANDLED").performScrollTo().performClick()
         compose.waitUntil(30_000) { get("/projects/$id/open-items").jsonObject.objects("needsYou").none { it.text("itemId") == item } }
         val settled = get("/projects/$id/open-items").jsonObject.objects("settled").firstOrNull { it.text("itemId") == item }
@@ -424,7 +425,7 @@ class RealStackDeviceTest {
         val reason = "The exemption's argument holds for this release ($stamp)"
         tap("blocker:$blocker:resolve", "project-detail"); awaitTag("blocker-reason")
         compose.onNodeWithTag("blocker-reason").performTextInput(reason)
-        instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK); capture("stack-blocker-review")
+        hideKeyboard(); capture("stack-blocker-review")
         compose.onNodeWithTag("blocker-resolve-confirm").performClick()
         compose.waitUntil(30_000) { projectRecord(id).obj("blockers")?.objects("open")?.none { it.text("id") == blocker } == true }
         val resolved = projectRecord(id).obj("blockers")?.objects("resolved")?.firstOrNull { it.text("id") == blocker }

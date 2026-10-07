@@ -1,62 +1,92 @@
 # A11 · A01 matrix rows → Android Tasks / Projects
 
-Each row of the A01 iOS matrix (comment 34ZdN1qmQAkbScDXLMSTW on task A01) that A11 owns, mapped to the Android page that
-carries it, the tests that exercise it, and what they established. Three kinds of evidence, never mixed up:
+Each row of the A01 iOS matrix (comment 34ZdN1qmQAkbScDXLMSTW on task A01) that A11 carries, mapped to the Android page
+that carries it, the tests that exercise it, and what they established. Three kinds of evidence, never mixed up:
 
-- **Unit** — JVM tests over the ported OrbitKit rules and the HTTP wire (no device).
-- **Fixture** — `TasksProjectsDeviceTest` on the API 36 emulator against `scripts/tasks-projects-fixture.py`, a controlled
-  server whose final records the test reads back; not a deployed server.
-- **Stack** — `RealStackDeviceTest` on the emulator against the isolated Orbit stack (`/var/tmp/a11-stack`: the apiserver at the
-  fixed server SHA's trees, its own PostgreSQL, the repo's Go runner with a stand-in engine), real accounts, every write read
-  back from the server's API. Not production, not a physical phone.
+- **Unit** — JVM tests over the ported OrbitKit rules, copy parity read from the Swift sources, and the HTTP wire.
+- **Fixture** — `TasksProjectsDeviceTest` on the API 36 emulator (and API 29) against `scripts/tasks-projects-fixture.py`,
+  a controlled server whose final records each journey reads back. Not a deployed server.
+- **Stack** — `RealStackDeviceTest` on the API 36 emulator against the isolated Orbit stack (`/var/tmp/a11-stack`: the
+  apiserver built from the fixed server SHA's trees — d621e29aa, the same `src/apiserver` and `src/shared` trees as 51bbcc303 —
+  its own PostgreSQL, the repo's Go runner with a stand-in engine), seeded only through the real API, signed in through the
+  product's sign-in screen with the stack's test accounts (owner and member). Every write is read back from the API as the
+  same account and every list is compared with what the API answers; the reads are kept beside the screenshots
+  (`<journey>-readback.txt`). Not production, not a physical phone.
 
-Run identities and results are recorded in the task's evidence envelope (v2) and in the run directories it names.
+App code is unchanged since 0705c23ad (`git diff 0705c23ad.. -- src/android/app/src/main src/android/core/src/main` is
+empty); later commits change only device tests, scripts and docs.
 
-## UI-F04 · Tasks: list and task page
+## Runs
 
-| A01 entry / field group | Android page | Tests | Result |
-| --- | --- | --- | --- |
-| Drawer Tasks | `TaskBrowser` (Tasks branch of `MainActivity`) | Fixture `taskSearchAndLabelsKeepScopeThroughRecreation`, `screensTour`; Stack `s01_theTaskListIsTheServersList` | see evidence |
-| `orbit-task:` link from a conversation, back to it | `TaskDetail` over the session; A05 stack | Fixture `sourceConversationTaskAndProjectReturnKeepDraft`; Stack `s11_linksOpenTheirPages` | see evidence |
-| created-task row → task | A08 created-tasks card row (minimal hook) → `TaskDetail` | Fixture `regressionCreatedTaskRow_opensTheTask` (red on d621e29aa, green on the fix) | see evidence |
-| scope All / No list / list; search; filter; sort/order; Tasks/Batches; labels | `TaskBrowser` bar, chips, options menu, label sheet | Unit `TaskApiTest`, `TaskLogicTest`; Fixture `taskSearchAndLabelsKeepScopeThroughRecreation`, `regressionP21_…` (a write landing after the filter changed); Stack `s01_theTaskListIsTheServersList` | see evidence |
-| multi-select bulk run / stop / assign / delete | bulk bar + iOS confirmations | Unit `TaskApiTest` (batch bodies, partial refusals); Stack `s04_bulkDeleteLeavesNothingOnTheServer` | see evidence |
-| detail: title, description, status, assignee/provider/model/list, schedule, acceptance + command + exit code, prerequisites/graph/auto-run, inputs, attribution, watch, runs, comments | `TaskDetail` sections, sheets (`TaskEditor.kt`), `TaskInputUpload` | Fixture `taskDetailWritesGoThroughTheServersOwnRecord`, `regressionP23_…`, `regressionP24_aRunPressed…`; Stack `s02_taskPageWritesAreTheServersRecord`, `s03_aRunOnTheStackRunnerThenDelete` | see evidence |
-| run / retry / open run / confirm done / reopen / delete / share | action row, ⋯ menu, `SharePanel.kt` | Unit `TaskApiTest` (run name + resends, reopen body, panel confirm re-read); Fixture `taskDetailWrites…`; Stack `s02_taskPageWritesAreTheServersRecord`, `s03_aRunOnTheStackRunnerThenDelete` | see evidence |
-| loading / failed / empty / paging; words | placeholders and banners in `TaskBrowser`/`TaskDetail` | Unit `TaskCopyParityTest` (words byte-for-byte from the Swift sources); Fixture `anOfflineAccountWritesNothingAndAWithdrawnTaskIsNoLongerShown` | see evidence |
+| Label | Job | Build | What | Result |
+| --- | --- | --- | --- | --- |
+| J-red / J-green | bgj_e9a15ad3d241 / bgj_6b78ba4d5e96 | c86cfb185 tests / 0705c23ad | `ReviewRegressionTest` (the two smaller defects: wording; fence key) | red 2/2 for the intended reasons → green |
+| RG1 | bgj_b5e51ded7fae | test APK 0705c23ad on app c86cfb185 (= d621e29aa app code), then on 0705c23ad | P2-2, P2-3, P2-4 ×3 | red at the asserted defect → green |
+| RG2 | bgj_c8deab71a1ef | test APK dcd4fe0cf on app c86cfb185, then on dcd4fe0cf | P2-1, P2-5, P2-6, card focus hook, created-task hook | red 5/5 at the asserted defect → green 5/5 |
+| S1 | bgj_8e6f0a4c032f | 54e7da53a | stack s03, s06, s08–s13 | PASS (8) |
+| S2 | bgj_653eb9b2a024 | 6e8f3435a | stack s02, s05, s07 | PASS (3) |
+| S3 | bgj_8d93d1598e05 | eef116e19 | stack s11 with `orbit://` forms | PASS |
+| S4 | bgj_5a87dbe3206a | 9ae822323 | stack s01, s04 | RESULT_S4 |
+| F36 | bgj_5a87dbe3206a | 9ae822323 | fixture suite, API 36 light (20 journeys) | RESULT_F36 |
+| D200 | bgj_5a87dbe3206a | 9ae822323 | screens tour, dark + 200 % font | RESULT_D200 |
+| F29 | bgj_5a87dbe3206a | 9ae822323 | fixture suite on API 29 (Android 10, emulator-5556 started and stopped by the runner) | RESULT_F29 |
+| TB | bgj_5a87dbe3206a | 9ae822323 | `TalkBackCheckTest`, TalkBack running | RESULT_TB |
 
-## UI-F05 · Task lists directory and `orbit-list:`
-
-| A01 entry / field group | Android page | Tests | Result |
-| --- | --- | --- | --- |
-| Task options → Task lists; choose a list → Tasks in its scope | `TaskListsDirectory` dialog in `TaskBrowser` | Stack `s05_taskListsDirectoryAndListLinks` | see evidence |
-| `orbit-list:<id>` → list scope; `lists/none` is not a named list | Tasks branch `Destination.LIST` | Unit `TaskApiTest` (scope rules); Stack `s05_taskListsDirectoryAndListLinks` | see evidence |
-| labels sheet | `LabelPicker` | Fixture `taskSearchAndLabelsKeepScopeThroughRecreation` | see evidence |
-
-## UI-F06 · Projects: list and project page
-
-| A01 entry / field group | Android page | Tests | Result |
-| --- | --- | --- | --- |
-| Drawer Projects / project row / `orbit-project:` | `ProjectsScreen` index → `ProjectDetail` | Fixture `projectIndexProgressHowItRunsAndGraph`, `sourceConversation…`; Stack `s06_projectIndexAndPageAreTheServersRecord`, `s11_linksOpenTheirPages` | see evidence |
-| name, goal, criteria, progress, owner items, coordinator, tasks/DAG | page sections | Unit `ProjectPageTest`, `ProjectGraphLayoutTest`, `ProjectCopyParityTest`; Fixture `projectIndexProgressHowItRunsAndGraph` | see evidence |
-| run settings: Automatic, concurrency, line/merge strategy, check command, escalation, pause | How it runs (`ProjectSettings.kt`) | Unit `ProjectDataTest` (bodies, revision fence); Fixture `projectIndex…`, `aStaleSettingIsRefused…`, `regressionP24_aSettingPressed…`; Stack `s06_projectIndexAndPageAreTheServersRecord` | see evidence |
-| start | owner Start… sheet (owner-approved platform difference) | Fixture `theOwnerStartsAProjectNobodyAskedAbout`, `regressionP24_theOwnersStart…`; Stack `s07_theOwnerStartsAProjectNobodyAskedAbout` | see evidence |
-| blockers / fuse | Blockers section, Resume | Unit `ProjectPageTest`; Fixture `aDeliveryBlockerIsReviewedWithItsReasonRecorded`, `regressionP22_…` | see evidence |
-| open coordinator / replace coordinator | Coordinator section | Fixture `anExceptionIsReviewedOnTheCoordinatorsCard…`, `regressionFocus_…`; Stack `s08_anExceptionIsHandledOnItsCardInTheCoordinatorConversation` | see evidence |
-| record done / cancelled / reopen / delete / share | ⋯ menu; done door `ProjectDoneSheet` | Unit `ProjectDoneTest`; Fixture `regressionP26_…`; Stack `s06_projectIndexAndPageAreTheServersRecord` | see evidence |
-| loading / empty / search / failed / gone; words | placeholders | Unit `ProjectCopyParityTest`; Fixture `aStaleSettingIsRefusedAndAWithdrawnProjectIsNoLongerShown` | see evidence |
-
-## UI-C08 · decision cards the project flows deliver to the coordinator conversation
+## UI-F04 · Drawer Tasks / `orbit-task` / created-task row → list and task page
 
 | A01 entry / field group | Android page | Tests | Result |
 | --- | --- | --- | --- |
-| exception (failed task) → conversation → the item's card | Open items row → coordinator conversation opened onto `item:<itemId>` (minimal A08 hook) → A08 card | Fixture `anExceptionIsReviewedOnTheCoordinatorsCard…`, `regressionFocus_…`; Stack `s08_anExceptionIsHandledOnItsCardInTheCoordinatorConversation` | see evidence |
-| coordinator-asked start → start card | start row Review → conversation onto `start:<itemId>` | Unit `ProjectDoneTest`/`CardFocus` matching | see evidence |
-| merge to main review | open item → conversation onto `promotion:<id>` | Unit (focus address) | see evidence |
+| Drawer Tasks | `TaskBrowser` (Tasks branch of `MainActivity`) | Fixture `taskSearchAndLabelsKeepScopeThroughRecreation`, `screensTour`; Stack `s01_theTaskListIsTheServersList` | S4: every row of `GET /tasks/page?projectId=none` is shown |
+| `orbit-task:` from a conversation, back to it with the draft kept | `TaskDetail` over the conversation (A05 stack) | Fixture `sourceConversationTaskAndProjectReturnKeepDraft` | F36, F29 |
+| created-task row → task | A08 created-tasks card row (minimal hook) → `TaskDetail` | Fixture `regressionCreatedTaskRow_opensTheTask` | RG2: red on the reviewed build (no entry), green on the fix |
+| scope All / list; search; filter; sort/order; Tasks/Batches; labels | `TaskBrowser` bar, chips, options menu, label sheet | Unit `TaskApiTest`, `TaskLogicTest`; Fixture `taskSearchAndLabels…`, `regressionP21_…`; Stack `s01_…` | S4: the Failed chip shows the server's failed rows; a search shows the server's matches plus the rows `/tasks/active` pins over them (Happening now, as iOS `TasksView`); the `android` label shows the server's labelled rows. RG2: a write finishing under an earlier filter no longer refills the new one (P2-1) |
+| multi-select bulk run / stop / assign / delete | bulk bar + iOS confirmations | Unit `TaskApiTest`; Stack `s04_bulkDeleteLeavesNothingOnTheServer` | S4: both rows answer `GET /tasks/:id` → 404 after Delete |
+| detail: comments, acceptance, schedule, prerequisites, watch | `TaskDetail` sections and sheets (`TaskEditor.kt`) | Fixture `taskDetailWritesGoThroughTheServersOwnRecord`, `regressionP23_…`; Stack `s02_taskPageWritesAreTheServersRecord` | S2: comment, acceptance criteria, runAt set then cleared, prerequisite, watch — each read back from `GET /tasks/:id` or `GET /watches`. RG1: a refused acceptance edit keeps its sheet and draft (P2-3) |
+| run / delete | action row, ⋯ menu | Fixture `taskDetailWrites…`, `regressionP24_aRunPressedJustBeforeLeavingStillStarts`; Stack `s03_aRunOnTheStackRunnerThenDelete` | S1: Run on the stack's runner → task DONE; Delete → 404. RG1: a Run pressed just before leaving still starts, under one name |
+| loading / failed / empty / gone; words | placeholders and banners | Unit `TaskCopyParityTest`; Fixture `anOfflineAccountWritesNothingAndAWithdrawnTaskIsNoLongerShown`; Stack `s12_anotherAccountSeesOnlyWhatTheServerGivesIt` | S1: the member sees only its own task; the owner's task (404 for the member) shows "This task is no longer available." |
+| share | ⋯ → Share… (`SharePanel.kt`) | Unit `TaskCopyParityTest.shareWords` (the panel's words, read from `SharePanel.swift`) | words only; the panel is not exercised on a device (gap) |
 
-## Deep links (§3)
+## UI-F05 · Task options → Task lists; `orbit-list` → scope
+
+| A01 entry / field group | Android page | Tests | Result |
+| --- | --- | --- | --- |
+| Task lists directory; choose a list → Tasks in its scope | `TaskListsDirectory` from the scope title | Stack `s05_taskListsDirectoryAndListLinks` | S2: the directory lists the server's lists; choosing "A11 Sprint" shows every row of `GET /tasks/page?listId=…` |
+| `orbit-list:<id>`; `lists/none` is not a named list | Tasks branch `Destination.LIST` | Unit `TaskApiTest`; Stack `s05_…`, `s11_linksOpenTheirPages` | S2, S3: `orbit-list:` and `orbit://list/` open the list scope with the server's rows; `/lists/none` changes nothing |
+| labels sheet | `LabelPicker` | Fixture `taskSearchAndLabels…`; Stack `s01_…` | F36; S4 |
+
+## UI-F06 · Drawer Projects / project row / `orbit-project` → list and project page
+
+| A01 entry / field group | Android page | Tests | Result |
+| --- | --- | --- | --- |
+| index → project | `ProjectsScreen` index → `ProjectDetail` | Fixture `projectIndexProgressHowItRunsAndGraph`; Stack `s06_projectIndexAndPageAreTheServersRecord` | S1: every project of `GET /projects` is listed; the page shows the server's criteria and every open item of `GET /projects/:id/open-items` |
+| run settings: At most, pause | How it runs (`ProjectSettings.kt`) | Unit `ProjectDataTest`; Fixture `projectIndex…`, `aStaleSettingIsRefused…`, `regressionP24_aSettingPressed…`; Stack `s06_…` | S1: At most 2→3 (configRevision 2) → 2 (3); pausedAt set then cleared. RG1: a setting pressed just before leaving is still written (P2-4) |
+| start | owner Start… sheet (owner-approved platform difference) | Fixture `theOwnerStartsAProjectNobodyAskedAbout`, `regressionP24_theOwnersStart…`; Stack `s07_theOwnerStartsAProjectNobodyAskedAbout` | S2: the server refused a project branch for a project with no repository; the sheet kept the owner's choices and showed the server's words; on main (as the refusal says) the start was recorded (`startedAt`). RG1: Cancel is disabled while the start is sent |
+| blockers | Blockers section | Unit `ProjectPageTest`; Fixture `aDeliveryBlockerIsReviewedWithItsReasonRecorded`, `regressionP22_…`; Stack `s10_aServerRaisedBlockerIsResolvedWithItsReason` | S1: a server-raised HUMAN_DECISION_REQUIRED blocker resolved; the server's record carries the owner's reason. RG1: an abandoned reason does not prefill the next dialog (P2-2) |
+| open coordinator | Open items → coordinator conversation | Fixture `anExceptionIsReviewed…`, `regressionFocus_…`; Stack `s08_…` | S1: the conversation the app opened is the server's coordinator session |
+| record done / reopen | ⋯ menu; done door `ProjectDoneSheet` | Unit `ProjectDoneTest`; Fixture `regressionP26_…`; Stack `s13_recordAsDoneThroughTheDoneDoorThenReopen` | S1: DONE, doneBy OWNER, 2 accepted gaps; Reopen → OPEN. RG2: Record as done is `POST /projects/:id/done`, never a status PATCH (P2-6) |
+| loading / gone; words | placeholders | Unit `ProjectCopyParityTest`; Fixture `aStaleSettingIsRefusedAndAWithdrawnProjectIsNoLongerShown`; Stack `s12_…` | S1: the owner's project (404 for the member) shows "This project is gone" |
+| live refresh | page and list re-read on account events | Fixture `regressionP25_…` | RG2: a stream of events still lets the list read what changed (P2-5) |
+| share | ⋯ → Share… (`SharePanel.kt`) | Unit `ProjectDataTest` (reads `/projects/:id/share`), `TaskCopyParityTest.shareWords` | words and the read only; the panel is not exercised on a device (gap) |
+
+## UI-C08 · decisions the project flows deliver to the coordinator conversation
+
+| A01 entry / field group | Android page | Tests | Result |
+| --- | --- | --- | --- |
+| exception (failed task) | open item → coordinator conversation onto `item:<itemId>` (minimal A08 hook) → A08 card | Fixture `anExceptionIsReviewed…`, `regressionFocus_…`; Stack `s08_anExceptionIsHandledOnItsCardInTheCoordinatorConversation` | S1: a real TASK_FAILED item handled with a note on its card; no longer open on the server. RG2: the card is brought into view |
+| merge to main | open item → conversation onto `promotion:<id>` → A08 card | Stack `s09_theMergeToMainIsReviewedOnItsCard` | S1: READY → Merge → CONFIRMED → MERGED by the stack's runner |
+| coordinator-asked start; coordinator question | start row → `start:<itemId>`; question card | Unit (`CardFocus` matching) | not exercised on the stack: the seed has no coordinator start request, and the question card is A08's (gap) |
+
+## Deep links (A01 §3)
 
 | Form | Android | Tests | Result |
 | --- | --- | --- | --- |
-| `orbit-task:` / `orbit-project:` / `orbit-list:` | A05 routing into the Tasks/Projects branches | Fixture (task, project); Stack `s11_linksOpenTheirPages` | see evidence |
-| same-instance `http(s)://host/tasks/<id>`, `/projects/<id>`, `/lists/<id>` | A05/A06 in-app link capture | Stack `s11_linksOpenTheirPages` | see evidence |
+| `orbit-task:` / `orbit-project:` / `orbit-list:` | A05 routing into the Tasks/Projects branches | Fixture (task, project); Stack `s11_linksOpenTheirPages`, `s05_…` | S3, S2 |
+| `orbit://task/<id>`, `orbit://list/<id>` | A05 native deep links | Stack `s11_…` | S3 |
+| same-instance `http(s)://host/tasks/<id>`, `/projects/<id>`, `/lists/<id>`; `lists/none` | A05/A06 in-app link capture | Stack `s11_…` | S3 |
+
+## Accessibility and sizes
+
+| Check | Tests | Result |
+| --- | --- | --- |
+| TalkBack running on the main pages | `TalkBackCheckTest` (labels as TalkBack composes them; TalkBack's focus put on the icon-only presses) | TB |
+| 200 % font: Run now scrolls clear of the comment box | `screensTour` asserts Run now's bounds end above the comment box | D200 |
