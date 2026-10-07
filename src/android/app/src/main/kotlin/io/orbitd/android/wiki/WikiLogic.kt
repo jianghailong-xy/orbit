@@ -144,7 +144,7 @@ internal object WikiLogic {
         "recipe" to listOf("steps", "verify"),
         "concept" to listOf("definition", "boundaries", "notToConfuseWith"),
     )
-    private val nestedFields = mapOf("trigger" to listOf("paths", "commands", "errorSignature"),
+    internal val nestedFields = mapOf("trigger" to listOf("paths", "commands", "errorSignature"),
         "verify" to listOf("command", "expectedExit"), "alternatives" to listOf("option", "whyRejected"))
     private val fieldLabels = mapOf("whyRejected" to "Rejected", "alternatives" to "Rejected", "decidedAt" to "Decided",
         "notToConfuseWith" to "Not to be confused with", "expectedExit" to "Expected exit code", "errorSignature" to "Error signature")
