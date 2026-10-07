@@ -235,7 +235,8 @@ test('Android signing is protected, read-only, and scoped to the build step', ()
   assert.match(signing, /trap 'rm -f "\$ORBIT_ANDROID_KEYSTORE_PATH"' EXIT/);
   assert.match(android, /- name: Remove signing material\n        if: always\(\)/);
   assert.doesNotMatch(signingJob, /contents: write|gh release/);
-  assert.doesNotMatch(android, /set -x|set -o xtrace|ACTIONS_STEP_DEBUG|--debug|--info|--scan|--test-signature/,
+  // Any option cluster with x (set -x, set -eux, set -euxo pipefail) traces commands and their expanded values.
+  assert.doesNotMatch(android, /\bset\s+-[A-Za-z]*x|set -o xtrace|bash -[A-Za-z]*x|ACTIONS_STEP_DEBUG|--debug|--info|--scan|--test-signature/,
     'no tracing, Gradle debug logs, build scans or rehearsal signatures in the release workflow');
   assert.doesNotMatch(android, appleTooling);
   assert.match(android, /path: \$\{\{ runner.temp \}\}\/android-internal-apk/);
