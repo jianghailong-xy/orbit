@@ -1,0 +1,771 @@
+{
+ "note": "Two full P0 runs on the P0.2 delivery commit 3e1d1ca08 itself, in the pinned P0.2 environment: each compared with the committed P0.2 originals and with each other. Every difference is Chromium-only, at most 89 pixels and a channel delta of 4, and passes the P0 comparator; WebKit is byte-identical.",
+ "controlA_vs_P02": {
+  "summary": {
+   "total": 252,
+   "missing": 0,
+   "bytesEqual": 231,
+   "differ": 21,
+   "pixelEqualButBytesDiffer": 0,
+   "p0ComparatorFails": 0
+  },
+  "differing": [
+   {
+    "file": "chromium-dark-desktop/breakpoint-639-projects.png",
+    "differentPixels": 7,
+    "maxChannelDelta": 4,
+    "box": {
+     "x": 18,
+     "y": 192,
+     "width": 4,
+     "height": 32
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-desktop/breakpoint-961-wiki.png",
+    "differentPixels": 32,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 701,
+     "y": 24,
+     "width": 228,
+     "height": 158
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-desktop/project-graph.png",
+    "differentPixels": 3,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 312,
+     "y": 815,
+     "width": 2,
+     "height": 3
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-desktop/project-overview.png",
+    "differentPixels": 53,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 312,
+     "y": 148,
+     "width": 936,
+     "height": 711
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-phone/profile-validation.png",
+    "differentPixels": 9,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 43,
+     "y": 282,
+     "width": 306,
+     "height": 29
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-phone/settings-saved.png",
+    "differentPixels": 9,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 305,
+     "y": 640,
+     "width": 5,
+     "height": 18
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-phone/wiki-contents.png",
+    "differentPixels": 12,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 329,
+     "y": 64,
+     "width": 45,
+     "height": 130
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-phone/wiki-home.png",
+    "differentPixels": 56,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 16,
+     "y": 64,
+     "width": 358,
+     "height": 130
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-phone/wiki-new-entry.png",
+    "differentPixels": 5,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 73,
+     "y": 65,
+     "width": 57,
+     "height": 2
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-desktop/breakpoint-641-projects.png",
+    "differentPixels": 7,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 16,
+     "y": 138,
+     "width": 3,
+     "height": 4
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-desktop/breakpoint-961-wiki.png",
+    "differentPixels": 59,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 367,
+     "y": 24,
+     "width": 562,
+     "height": 158
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-desktop/profile-validation.png",
+    "differentPixels": 89,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 500,
+     "y": 242,
+     "width": 560,
+     "height": 556
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-desktop/project-graph.png",
+    "differentPixels": 4,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 312,
+     "y": 815,
+     "width": 2,
+     "height": 3
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-desktop/project-overview.png",
+    "differentPixels": 76,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 312,
+     "y": 148,
+     "width": 936,
+     "height": 711
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-desktop/wiki-home.png",
+    "differentPixels": 14,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 367,
+     "y": 25,
+     "width": 60,
+     "height": 3
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-desktop/wiki-new-entry.png",
+    "differentPixels": 10,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 367,
+     "y": 25,
+     "width": 59,
+     "height": 2
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-phone/profile-validation.png",
+    "differentPixels": 5,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 21,
+     "y": 446,
+     "width": 3,
+     "height": 2
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-phone/task-action-focus.png",
+    "differentPixels": 2,
+    "maxChannelDelta": 3,
+    "box": {
+     "x": 286,
+     "y": 23,
+     "width": 4,
+     "height": 1
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-phone/wiki-contents.png",
+    "differentPixels": 22,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 328,
+     "y": 64,
+     "width": 46,
+     "height": 179
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-phone/wiki-home.png",
+    "differentPixels": 42,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 71,
+     "y": 64,
+     "width": 261,
+     "height": 4
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-phone/wiki-new-entry.png",
+    "differentPixels": 10,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 71,
+     "y": 65,
+     "width": 59,
+     "height": 2
+    },
+    "p0Comparator": "match"
+   }
+  ]
+ },
+ "controlB_vs_P02": {
+  "summary": {
+   "total": 252,
+   "missing": 0,
+   "bytesEqual": 230,
+   "differ": 22,
+   "pixelEqualButBytesDiffer": 0,
+   "p0ComparatorFails": 0
+  },
+  "differing": [
+   {
+    "file": "chromium-dark-desktop/breakpoint-959-wiki.png",
+    "differentPixels": 11,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 71,
+     "y": 65,
+     "width": 60,
+     "height": 3
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-desktop/breakpoint-961-wiki.png",
+    "differentPixels": 43,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 367,
+     "y": 24,
+     "width": 562,
+     "height": 158
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-desktop/profile-validation.png",
+    "differentPixels": 14,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 527,
+     "y": 242,
+     "width": 533,
+     "height": 169
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-desktop/project-graph.png",
+    "differentPixels": 3,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 312,
+     "y": 815,
+     "width": 2,
+     "height": 3
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-desktop/project-overview.png",
+    "differentPixels": 53,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 312,
+     "y": 148,
+     "width": 936,
+     "height": 711
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-phone/profile-validation.png",
+    "differentPixels": 3,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 347,
+     "y": 308,
+     "width": 2,
+     "height": 3
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-phone/projects-list.png",
+    "differentPixels": 7,
+    "maxChannelDelta": 4,
+    "box": {
+     "x": 18,
+     "y": 192,
+     "width": 4,
+     "height": 32
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-phone/task-action-focus.png",
+    "differentPixels": 1,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 286,
+     "y": 23,
+     "width": 1,
+     "height": 1
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-phone/wiki-contents.png",
+    "differentPixels": 12,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 329,
+     "y": 64,
+     "width": 45,
+     "height": 130
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-phone/wiki-home.png",
+    "differentPixels": 56,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 16,
+     "y": 64,
+     "width": 358,
+     "height": 130
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-phone/wiki-new-entry.png",
+    "differentPixels": 5,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 73,
+     "y": 65,
+     "width": 57,
+     "height": 2
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-desktop/breakpoint-639-projects.png",
+    "differentPixels": 7,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 18,
+     "y": 149,
+     "width": 4,
+     "height": 75
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-desktop/breakpoint-641-projects.png",
+    "differentPixels": 7,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 16,
+     "y": 138,
+     "width": 3,
+     "height": 4
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-desktop/breakpoint-959-wiki.png",
+    "differentPixels": 14,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 71,
+     "y": 65,
+     "width": 60,
+     "height": 3
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-desktop/profile-validation.png",
+    "differentPixels": 9,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 1058,
+     "y": 379,
+     "width": 2,
+     "height": 32
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-desktop/project-overview.png",
+    "differentPixels": 28,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 312,
+     "y": 154,
+     "width": 917,
+     "height": 705
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-desktop/wiki-home.png",
+    "differentPixels": 14,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 367,
+     "y": 25,
+     "width": 60,
+     "height": 3
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-desktop/wiki-new-entry.png",
+    "differentPixels": 10,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 367,
+     "y": 25,
+     "width": 59,
+     "height": 2
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-phone/profile-validation.png",
+    "differentPixels": 5,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 21,
+     "y": 446,
+     "width": 3,
+     "height": 2
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-phone/settings-saved.png",
+    "differentPixels": 8,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 305,
+     "y": 640,
+     "width": 4,
+     "height": 18
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-phone/task-action-focus.png",
+    "differentPixels": 2,
+    "maxChannelDelta": 3,
+    "box": {
+     "x": 286,
+     "y": 23,
+     "width": 4,
+     "height": 1
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-phone/wiki-home.png",
+    "differentPixels": 46,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 16,
+     "y": 158,
+     "width": 358,
+     "height": 87
+    },
+    "p0Comparator": "match"
+   }
+  ]
+ },
+ "controlB_vs_controlA": {
+  "summary": {
+   "total": 252,
+   "missing": 0,
+   "bytesEqual": 234,
+   "differ": 18,
+   "pixelEqualButBytesDiffer": 0,
+   "p0ComparatorFails": 0
+  },
+  "differing": [
+   {
+    "file": "chromium-dark-desktop/breakpoint-639-projects.png",
+    "differentPixels": 7,
+    "maxChannelDelta": 4,
+    "box": {
+     "x": 18,
+     "y": 192,
+     "width": 4,
+     "height": 32
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-desktop/breakpoint-959-wiki.png",
+    "differentPixels": 11,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 71,
+     "y": 65,
+     "width": 60,
+     "height": 3
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-desktop/breakpoint-961-wiki.png",
+    "differentPixels": 11,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 367,
+     "y": 25,
+     "width": 60,
+     "height": 3
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-desktop/profile-validation.png",
+    "differentPixels": 14,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 527,
+     "y": 242,
+     "width": 533,
+     "height": 169
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-phone/profile-validation.png",
+    "differentPixels": 6,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 43,
+     "y": 282,
+     "width": 4,
+     "height": 3
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-phone/projects-list.png",
+    "differentPixels": 7,
+    "maxChannelDelta": 4,
+    "box": {
+     "x": 18,
+     "y": 192,
+     "width": 4,
+     "height": 32
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-phone/settings-saved.png",
+    "differentPixels": 9,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 305,
+     "y": 640,
+     "width": 5,
+     "height": 18
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-dark-phone/task-action-focus.png",
+    "differentPixels": 1,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 286,
+     "y": 23,
+     "width": 1,
+     "height": 1
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-desktop/breakpoint-639-projects.png",
+    "differentPixels": 7,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 18,
+     "y": 149,
+     "width": 4,
+     "height": 75
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-desktop/breakpoint-959-wiki.png",
+    "differentPixels": 14,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 71,
+     "y": 65,
+     "width": 60,
+     "height": 3
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-desktop/breakpoint-961-wiki.png",
+    "differentPixels": 59,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 367,
+     "y": 24,
+     "width": 562,
+     "height": 158
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-desktop/profile-validation.png",
+    "differentPixels": 88,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 500,
+     "y": 242,
+     "width": 560,
+     "height": 556
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-desktop/project-graph.png",
+    "differentPixels": 4,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 312,
+     "y": 815,
+     "width": 2,
+     "height": 3
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-desktop/project-overview.png",
+    "differentPixels": 48,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 312,
+     "y": 148,
+     "width": 936,
+     "height": 543
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-phone/settings-saved.png",
+    "differentPixels": 8,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 305,
+     "y": 640,
+     "width": 4,
+     "height": 18
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-phone/wiki-contents.png",
+    "differentPixels": 22,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 328,
+     "y": 64,
+     "width": 46,
+     "height": 179
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-phone/wiki-home.png",
+    "differentPixels": 88,
+    "maxChannelDelta": 2,
+    "box": {
+     "x": 16,
+     "y": 64,
+     "width": 358,
+     "height": 181
+    },
+    "p0Comparator": "match"
+   },
+   {
+    "file": "chromium-light-phone/wiki-new-entry.png",
+    "differentPixels": 10,
+    "maxChannelDelta": 1,
+    "box": {
+     "x": 71,
+     "y": 65,
+     "width": 59,
+     "height": 2
+    },
+    "p0Comparator": "match"
+   }
+  ]
+ }
+}

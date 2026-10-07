@@ -1,0 +1,5807 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/choices.config.mjs",
+   "--grep",
+   "matches (expiry|search)$|(expiry|account|search) matches the current surface|empty, disabled|dims the current value"
+  ],
+  "configFile": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+   "cwd": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/",
+   "url": "http://127.0.0.1:4177",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "choices-motion.browser.mjs",
+   "file": "choices-motion.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "normal bottom entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2898,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:42:39.132Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-4347ad39b4c2b08c290e",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2584,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:42:42.080Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-8dbd19063a75748baa6f",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2461,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:42:44.673Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-0d0aa1f44cd267cf7a0d",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2397,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:42:47.144Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-390da89f6468a0fa70e1",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2587,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:42:49.547Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-b77ed532ca9f04b52a75",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2511,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:42:52.140Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-db268d1fce91c4cd1929",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2155,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:43:23.064Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-c0ed7dd6af8b5cf4c7ed",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2382,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:43:25.269Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-797a03629f0c4407a82e",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2376,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:43:27.659Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-315df5337a6b9de0b2d0",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2360,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:43:30.041Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-0c8ce6202717392b4e5d",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3053,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:43:32.407Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-c005faaada5407731cf2",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2863,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:43:35.466Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-997ed7c81b503bf2f192",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2206,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:44:12.551Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-8bb2b14596599df383ef",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2500,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:44:14.806Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-971676492e3fa8216573",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2450,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:44:17.315Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-0349b3a108cab043a462",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2430,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:44:19.775Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-9406f9e8ddcde221bd54",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2586,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:44:22.210Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-c6c762b468b408760d7d",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2416,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:44:24.803Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-cdb27e51c65c4cc28536",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2889,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:44:58.305Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-95dc1d9e23cfd60e11f5",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2823,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:45:01.265Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-afdfa4495133bff4dfac",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3064,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:45:04.104Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-0aac5d02c5fa6d3cdeeb",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2531,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:45:07.177Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-aff151ff4a18151cfdb3",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2623,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:45:09.716Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-2b3fbdd7bd2ff9e03dec",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2853,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:45:12.346Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-c5d87a56561f74db530b",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2169,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:45:49.188Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-d2b1e4b68a049062573b",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2157,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:45:51.499Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-08cab9abb4895e2539d9",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1987,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:45:53.660Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-dac088058a48229dcd0c",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1631,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:45:55.652Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-59967abde69a8bb0b2a4",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1963,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:45:57.288Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-214c045a8ecae72f86ca",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2114,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:45:59.255Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-11bdbe4b0ee0c110074a",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1599,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:22.832Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-e8de47c09063cea36262",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2006,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:24.498Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-d038c6b0d7587581329b",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1976,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:26.509Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-7b364804b64f739a0e67",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1593,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:28.489Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-4304acec32080e28b043",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2019,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:30.087Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-aace03f830acd5b30d0f",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2155,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:32.110Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-f1b23f80f364aeb8ea69",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1710,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:56.302Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-65aa400faaf3714b7d4c",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2042,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:58.080Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-099dea248b4c5bf0510a",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2030,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:00.126Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-e27cfbf95ba3bdb318b1",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1642,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:02.161Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-4dadae493a8b5d67a14f",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2071,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:03.808Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-a39fe952421a29119706",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2049,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:05.884Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-56a0de2b276f8593a2a2",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1592,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:30.950Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-14601e4fa8ebc3a0fa51",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1924,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:32.609Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-d66e900e0a62816007d7",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1924,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:34.538Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-0518fa1a81bf059bf0ce",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1611,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:36.468Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-40dad19ccadef8f5bc0f",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2172,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:38.083Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-8515f2ec0f64889e3669",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2121,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:40.260Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-f018bdb649cfacfcc045",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    }
+   ]
+  },
+  {
+   "title": "choices-open-value.browser.mjs",
+   "file": "choices-open-value.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "expiry dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1578,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:42:54.663Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-a0cffd93333a46ab6fd4",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "account dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1572,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:42:56.246Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-574c9785ee3995397957",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "search dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1554,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:42:57.822Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-62d578103cff27b500a1",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "expiry dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3865,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:43:38.350Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-ae976077037247bc46b1",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "account dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4088,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:43:42.221Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-c6aae84a8e1174ef338a",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "search dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3281,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:43:46.317Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-ed1c117b4e32a89c2a2a",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "expiry dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2084,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:44:27.230Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-8d41a14f65a591d76821",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "account dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1785,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:44:29.319Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-d4a58db1e25a0b09249b",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "search dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1645,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:44:31.109Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-38a2d0b472fd02fb41de",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "expiry dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1926,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:45:15.209Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-887a979040cffc80f6c6",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "account dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1975,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:45:17.140Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-1675ed524645a50501d2",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "search dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1789,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:45:19.121Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-70380152b7903f99a453",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "expiry dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1115,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:01.379Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-5aaf25a25d032acc7587",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "account dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1227,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:02.499Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-212a0505b5803f180006",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "search dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1203,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:03.732Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-4291536fe9c87087abb3",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "expiry dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1354,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:34.275Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-eb898f8949c0620952db",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "account dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1308,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:35.634Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-f7f74ac2c9dcab165914",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "search dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1185,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:36.949Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-cd661039ad34fc282f6e",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "expiry dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1241,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:07.942Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-5df12e6d631ff138a926",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "account dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1221,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:09.188Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-98654d134f11f670f8b1",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "search dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1338,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:10.415Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-5fa7403a814bbeefadb1",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "expiry dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1293,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:42.390Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-26fa0b33900579ccf847",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "account dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1321,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:43.687Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-9cc6b9b713b35bdd9e1c",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    },
+    {
+     "title": "search dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1439,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:45.015Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-ae1af9d0b1e9bd869012",
+     "file": "choices-open-value.browser.mjs",
+     "line": 24,
+     "column": 53
+    }
+   ]
+  },
+  {
+   "title": "choices.browser.mjs",
+   "file": "choices.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "expiry matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3302,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:42:59.393Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-c17f532220ed72002f0b",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "account matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3093,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:43:02.702Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-2f7d6b87ff5359d73785",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "search matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3176,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:43:05.800Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-1422f13feed85edc2b03",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "empty, disabled, hover and focus choice surfaces match the existing states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 12732,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:43:08.982Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "choice-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-140e3f8ac8f6859e8d0a",
+     "file": "choices.browser.mjs",
+     "line": 158,
+     "column": 1
+    },
+    {
+     "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1080,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:43:21.719Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-2fead9e29b857515e968",
+     "file": "choices.browser.mjs",
+     "line": 263,
+     "column": 1
+    },
+    {
+     "title": "expiry matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3239,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:43:49.620Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-9a3263fbf237021830c0",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "account matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2960,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:43:52.865Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-b31241fdba9200fe1daa",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "search matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2929,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:43:55.830Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-e223c0bc26cdcfe9866f",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "empty, disabled, hover and focus choice surfaces match the existing states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 12515,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:43:58.764Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "choice-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-c437d251e28bd7479239",
+     "file": "choices.browser.mjs",
+     "line": 158,
+     "column": 1
+    },
+    {
+     "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1019,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:44:11.284Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-4b1b83c0479a500fa974",
+     "file": "choices.browser.mjs",
+     "line": 263,
+     "column": 1
+    },
+    {
+     "title": "expiry matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3439,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:44:32.769Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-c09afad80441a6f584c6",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "account matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3360,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:44:36.214Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-92b743408ce7721e9e13",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "search matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3296,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:44:39.579Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-bf3e51293dfcebf57530",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "empty, disabled, hover and focus choice surfaces match the existing states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 13860,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:44:42.880Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "choice-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-dba8cb108dc47347c77f",
+     "file": "choices.browser.mjs",
+     "line": 158,
+     "column": 1
+    },
+    {
+     "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1261,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:44:56.747Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-5f65011f05628faf3ad2",
+     "file": "choices.browser.mjs",
+     "line": 263,
+     "column": 1
+    },
+    {
+     "title": "expiry matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3794,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:45:20.929Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-3b2129efb0841a208fa3",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "account matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3744,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:45:24.729Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-4dad87fdbec9fb30118a",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "search matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3661,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:45:28.478Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-4cf4176af6ab1fca70ae",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "empty, disabled, hover and focus choice surfaces match the existing states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 15191,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:45:32.145Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "choice-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-c37eb3842d93ed597494",
+     "file": "choices.browser.mjs",
+     "line": 158,
+     "column": 1
+    },
+    {
+     "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1466,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:45:47.347Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-47e99144c63bee5fa732",
+     "file": "choices.browser.mjs",
+     "line": 263,
+     "column": 1
+    },
+    {
+     "title": "expiry matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2360,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:04.951Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-1e973b34dd92cb4bd990",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "account matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2319,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:07.316Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-95fe63f19b810b2b8b6e",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "search matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2424,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:09.644Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-ef2e868e0fc50a9aadc4",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "empty, disabled, hover and focus choice surfaces match the existing states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 9407,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:12.073Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "choice-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-a0341996a2ca1a980b6e",
+     "file": "choices.browser.mjs",
+     "line": 158,
+     "column": 1
+    },
+    {
+     "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1095,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:21.484Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-ba977aab5e3016522f72",
+     "file": "choices.browser.mjs",
+     "line": 263,
+     "column": 1
+    },
+    {
+     "title": "expiry matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2763,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:38.154Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-06741497847dca3f7183",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "account matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2467,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:40.922Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-2b6cbff9c8fed58ec9ed",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "search matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2308,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:43.398Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-7922f5facae71ffb6cee",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "empty, disabled, hover and focus choice surfaces match the existing states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 9271,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:45.711Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "choice-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-bc29b86d7f68238548e5",
+     "file": "choices.browser.mjs",
+     "line": 158,
+     "column": 1
+    },
+    {
+     "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1035,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:46:54.986Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-d032c91cccd421ff3053",
+     "file": "choices.browser.mjs",
+     "line": 263,
+     "column": 1
+    },
+    {
+     "title": "expiry matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2532,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:11.768Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-d0037d157b869285ee02",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "account matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2499,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:14.306Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-cf86c943f88148d03474",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "search matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2601,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:16.810Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-d4b0b5144aa14599aed1",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "empty, disabled, hover and focus choice surfaces match the existing states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 10233,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:19.415Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "choice-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-527b8a0afe8b72c100b5",
+     "file": "choices.browser.mjs",
+     "line": 158,
+     "column": 1
+    },
+    {
+     "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1015,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:29.652Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-a1d13c261ec7b1f7f8b8",
+     "file": "choices.browser.mjs",
+     "line": 263,
+     "column": 1
+    },
+    {
+     "title": "expiry matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2773,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:46.478Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-e5e551824aa066a8a33a",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "account matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2732,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:49.256Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-fd339be45f4fa26fdd62",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "search matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2677,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:51.998Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-de7da333fce61004551c",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "empty, disabled, hover and focus choice surfaces match the existing states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 10677,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:47:54.680Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "choice-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-42de458cc0e9016a2318",
+     "file": "choices.browser.mjs",
+     "line": 158,
+     "column": 1
+    },
+    {
+     "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1179,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:48:05.362Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-8d3d25cd9bfe2c19ab90",
+     "file": "choices.browser.mjs",
+     "line": 263,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T09:42:38.431Z",
+  "duration": 328245.045,
+  "expected": 112,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

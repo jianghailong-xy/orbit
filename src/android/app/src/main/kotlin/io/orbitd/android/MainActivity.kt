@@ -1,5 +1,6 @@
 package io.orbitd.android
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -30,23 +31,34 @@ import androidx.navigation.compose.rememberNavController
 import androidx.lifecycle.ViewModelProvider
 import io.orbitd.android.auth.AuthScreen
 import io.orbitd.android.auth.AuthViewModel
+import io.orbitd.android.auth.openInSignInBrowser
 import io.orbitd.android.core.BuildIdentity
 
 class MainActivity : ComponentActivity() {
+    private lateinit var auth: AuthViewModel
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val auth = ViewModelProvider(this, ViewModelProvider.AndroidViewModelFactory(application))[AuthViewModel::class.java]
+        auth = ViewModelProvider(this, ViewModelProvider.AndroidViewModelFactory(application))[AuthViewModel::class.java]
+        // A recreated activity's intent was handled when it first arrived.
+        if (savedInstanceState == null) intent.data?.let { auth.handleGoogleCallback(it.toString()) }
         setContent {
             MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
-                OrbitShell(auth)
+                OrbitShell(auth) { address -> auth.continueWithGoogle(address) { url -> openInSignInBrowser(this@MainActivity, url) } }
             }
         }
+    }
+
+    /** `orbit://auth/google`, from GoogleSignInRedirectActivity, while this activity already exists. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        intent.data?.let { auth.handleGoogleCallback(it.toString()) }
     }
 }
 
 @Composable
-private fun OrbitShell(auth: AuthViewModel) {
+private fun OrbitShell(auth: AuthViewModel, continueWithGoogle: (String) -> Unit) {
     val navController = rememberNavController()
     val authState by auth.state.collectAsState()
     val authMessage by auth.message.collectAsState()
@@ -62,7 +74,7 @@ private fun OrbitShell(auth: AuthViewModel) {
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineLarge)
-                    AuthScreen(authState, authMessage, auth::login, auth::logout)
+                    AuthScreen(authState, authMessage, auth::login, auth::logout, auth::signInMethods, continueWithGoogle)
                     Button(onClick = { navController.navigate("build") }) {
                         Text(stringResource(R.string.build_information))
                     }

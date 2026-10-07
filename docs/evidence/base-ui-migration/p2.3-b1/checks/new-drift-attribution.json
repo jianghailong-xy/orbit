@@ -1,0 +1,674 @@
+[
+ {
+  "run": "runs/p0-tip-v2-round-1/report.json",
+  "project": "chromium-light-desktop",
+  "test": "both sides of existing 600, 640 and 960px rules",
+  "screenshot": "breakpoint-959-wiki.png",
+  "failure": "screenshot",
+  "differentPixels": 8872,
+  "attribution": {
+   "mainCommit": [
+    "6c4e0ac0e",
+    "2f9cc095f"
+   ],
+   "subject": [
+    "feat(wiki): Activity page, the head's Activity badge, one number waiting, space names and defaults",
+    "refactor(wiki): list topic articles on the Wiki home, drop status cards"
+   ],
+   "mainMerge": [
+    "dcfb5adf6",
+    "be0f8c22a"
+   ],
+   "evidence": "attribution/runs/attr-breakpoints-*: equal to P0.2 through 0982d8ed8 (WebKit 0 px), changed at dcfb5adf6 (the comparator already fails), unchanged at 51f0cdfee, changed again at be0f8c22a, unchanged through f86211ec3 (= the project tip build, WebKit 0 px)",
+   "change": "Wiki head gains the Activity button (6c4e0ac0e); the home lists topic articles instead of status cards (2f9cc095f)"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-1/report.json",
+  "project": "chromium-dark-desktop",
+  "test": "both sides of existing 600, 640 and 960px rules",
+  "screenshot": "breakpoint-959-wiki.png",
+  "failure": "screenshot",
+  "differentPixels": 8787,
+  "attribution": {
+   "mainCommit": [
+    "6c4e0ac0e",
+    "2f9cc095f"
+   ],
+   "subject": [
+    "feat(wiki): Activity page, the head's Activity badge, one number waiting, space names and defaults",
+    "refactor(wiki): list topic articles on the Wiki home, drop status cards"
+   ],
+   "mainMerge": [
+    "dcfb5adf6",
+    "be0f8c22a"
+   ],
+   "evidence": "attribution/runs/attr-breakpoints-*: equal to P0.2 through 0982d8ed8 (WebKit 0 px), changed at dcfb5adf6 (the comparator already fails), unchanged at 51f0cdfee, changed again at be0f8c22a, unchanged through f86211ec3 (= the project tip build, WebKit 0 px)",
+   "change": "Wiki head gains the Activity button (6c4e0ac0e); the home lists topic articles instead of status cards (2f9cc095f)"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-1/report.json",
+  "project": "webkit-light-desktop",
+  "test": "both sides of existing 600, 640 and 960px rules",
+  "screenshot": "breakpoint-959-wiki.png",
+  "failure": "screenshot",
+  "differentPixels": 9047,
+  "attribution": {
+   "mainCommit": [
+    "6c4e0ac0e",
+    "2f9cc095f"
+   ],
+   "subject": [
+    "feat(wiki): Activity page, the head's Activity badge, one number waiting, space names and defaults",
+    "refactor(wiki): list topic articles on the Wiki home, drop status cards"
+   ],
+   "mainMerge": [
+    "dcfb5adf6",
+    "be0f8c22a"
+   ],
+   "evidence": "attribution/runs/attr-breakpoints-*: equal to P0.2 through 0982d8ed8 (WebKit 0 px), changed at dcfb5adf6 (the comparator already fails), unchanged at 51f0cdfee, changed again at be0f8c22a, unchanged through f86211ec3 (= the project tip build, WebKit 0 px)",
+   "change": "Wiki head gains the Activity button (6c4e0ac0e); the home lists topic articles instead of status cards (2f9cc095f)"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-1/report.json",
+  "project": "webkit-dark-desktop",
+  "test": "both sides of existing 600, 640 and 960px rules",
+  "screenshot": "breakpoint-959-wiki.png",
+  "failure": "screenshot",
+  "differentPixels": 8840,
+  "attribution": {
+   "mainCommit": [
+    "6c4e0ac0e",
+    "2f9cc095f"
+   ],
+   "subject": [
+    "feat(wiki): Activity page, the head's Activity badge, one number waiting, space names and defaults",
+    "refactor(wiki): list topic articles on the Wiki home, drop status cards"
+   ],
+   "mainMerge": [
+    "dcfb5adf6",
+    "be0f8c22a"
+   ],
+   "evidence": "attribution/runs/attr-breakpoints-*: equal to P0.2 through 0982d8ed8 (WebKit 0 px), changed at dcfb5adf6 (the comparator already fails), unchanged at 51f0cdfee, changed again at be0f8c22a, unchanged through f86211ec3 (= the project tip build, WebKit 0 px)",
+   "change": "Wiki head gains the Activity button (6c4e0ac0e); the home lists topic articles instead of status cards (2f9cc095f)"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-1/report.json",
+  "project": "chromium-light-desktop",
+  "test": "wiki",
+  "screenshot": null,
+  "failure": "locator .wk-card",
+  "differentPixels": null,
+  "attribution": {
+   "mainCommit": "2f9cc095f",
+   "subject": "refactor(wiki): list topic articles on the Wiki home, drop status cards",
+   "mainMerge": "be0f8c22a",
+   "evidence": "attribution/runs/attr-wiki-51f0cdfee (wiki scenario passes in 8/8) -> attribution/runs/attr-wiki-be0f8c22a (the same .wk-card locator failure in 8/8); 2f9cc095f adds WikiHomeContent.test.tsx asserting no .wk-card on the home",
+   "change": "Wiki home no longer renders .wk-card status cards, which the P0 wiki scenario waits for before its wiki-home screenshot"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-1/report.json",
+  "project": "chromium-light-desktop",
+  "test": "profile",
+  "screenshot": "profile.png",
+  "failure": "screenshot",
+  "differentPixels": 9144,
+  "attribution": {
+   "mainCommit": "d233a6cd0",
+   "subject": "feat(auth): add access token management and /pat/self introspection",
+   "mainMerge": "86c6d2d4d",
+   "evidence": "attribution/runs/attr-profile-85b18b646 (profile.png equal to P0.2, 0 px) -> attribution/runs/attr-profile-86c6d2d4d (the comparator reports the same pixel count as on the tip)",
+   "change": "Profile page gains the \"Also revoke all my access tokens\" checkbox and its description"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-1/report.json",
+  "project": "chromium-light-phone",
+  "test": "wiki",
+  "screenshot": null,
+  "failure": "locator .wk-card",
+  "differentPixels": null,
+  "attribution": {
+   "mainCommit": "2f9cc095f",
+   "subject": "refactor(wiki): list topic articles on the Wiki home, drop status cards",
+   "mainMerge": "be0f8c22a",
+   "evidence": "attribution/runs/attr-wiki-51f0cdfee (wiki scenario passes in 8/8) -> attribution/runs/attr-wiki-be0f8c22a (the same .wk-card locator failure in 8/8); 2f9cc095f adds WikiHomeContent.test.tsx asserting no .wk-card on the home",
+   "change": "Wiki home no longer renders .wk-card status cards, which the P0 wiki scenario waits for before its wiki-home screenshot"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-1/report.json",
+  "project": "chromium-light-phone",
+  "test": "profile",
+  "screenshot": "profile.png",
+  "failure": "screenshot",
+  "differentPixels": 4721,
+  "attribution": {
+   "mainCommit": "d233a6cd0",
+   "subject": "feat(auth): add access token management and /pat/self introspection",
+   "mainMerge": "86c6d2d4d",
+   "evidence": "attribution/runs/attr-profile-85b18b646 (profile.png equal to P0.2, 0 px) -> attribution/runs/attr-profile-86c6d2d4d (the comparator reports the same pixel count as on the tip)",
+   "change": "Profile page gains the \"Also revoke all my access tokens\" checkbox and its description"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-1/report.json",
+  "project": "chromium-dark-desktop",
+  "test": "wiki",
+  "screenshot": null,
+  "failure": "locator .wk-card",
+  "differentPixels": null,
+  "attribution": {
+   "mainCommit": "2f9cc095f",
+   "subject": "refactor(wiki): list topic articles on the Wiki home, drop status cards",
+   "mainMerge": "be0f8c22a",
+   "evidence": "attribution/runs/attr-wiki-51f0cdfee (wiki scenario passes in 8/8) -> attribution/runs/attr-wiki-be0f8c22a (the same .wk-card locator failure in 8/8); 2f9cc095f adds WikiHomeContent.test.tsx asserting no .wk-card on the home",
+   "change": "Wiki home no longer renders .wk-card status cards, which the P0 wiki scenario waits for before its wiki-home screenshot"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-1/report.json",
+  "project": "chromium-dark-desktop",
+  "test": "profile",
+  "screenshot": "profile.png",
+  "failure": "screenshot",
+  "differentPixels": 9400,
+  "attribution": {
+   "mainCommit": "d233a6cd0",
+   "subject": "feat(auth): add access token management and /pat/self introspection",
+   "mainMerge": "86c6d2d4d",
+   "evidence": "attribution/runs/attr-profile-85b18b646 (profile.png equal to P0.2, 0 px) -> attribution/runs/attr-profile-86c6d2d4d (the comparator reports the same pixel count as on the tip)",
+   "change": "Profile page gains the \"Also revoke all my access tokens\" checkbox and its description"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-1/report.json",
+  "project": "chromium-dark-phone",
+  "test": "wiki",
+  "screenshot": null,
+  "failure": "locator .wk-card",
+  "differentPixels": null,
+  "attribution": {
+   "mainCommit": "2f9cc095f",
+   "subject": "refactor(wiki): list topic articles on the Wiki home, drop status cards",
+   "mainMerge": "be0f8c22a",
+   "evidence": "attribution/runs/attr-wiki-51f0cdfee (wiki scenario passes in 8/8) -> attribution/runs/attr-wiki-be0f8c22a (the same .wk-card locator failure in 8/8); 2f9cc095f adds WikiHomeContent.test.tsx asserting no .wk-card on the home",
+   "change": "Wiki home no longer renders .wk-card status cards, which the P0 wiki scenario waits for before its wiki-home screenshot"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-1/report.json",
+  "project": "chromium-dark-phone",
+  "test": "profile",
+  "screenshot": "profile.png",
+  "failure": "screenshot",
+  "differentPixels": 4795,
+  "attribution": {
+   "mainCommit": "d233a6cd0",
+   "subject": "feat(auth): add access token management and /pat/self introspection",
+   "mainMerge": "86c6d2d4d",
+   "evidence": "attribution/runs/attr-profile-85b18b646 (profile.png equal to P0.2, 0 px) -> attribution/runs/attr-profile-86c6d2d4d (the comparator reports the same pixel count as on the tip)",
+   "change": "Profile page gains the \"Also revoke all my access tokens\" checkbox and its description"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-1/report.json",
+  "project": "webkit-light-desktop",
+  "test": "wiki",
+  "screenshot": null,
+  "failure": "locator .wk-card",
+  "differentPixels": null,
+  "attribution": {
+   "mainCommit": "2f9cc095f",
+   "subject": "refactor(wiki): list topic articles on the Wiki home, drop status cards",
+   "mainMerge": "be0f8c22a",
+   "evidence": "attribution/runs/attr-wiki-51f0cdfee (wiki scenario passes in 8/8) -> attribution/runs/attr-wiki-be0f8c22a (the same .wk-card locator failure in 8/8); 2f9cc095f adds WikiHomeContent.test.tsx asserting no .wk-card on the home",
+   "change": "Wiki home no longer renders .wk-card status cards, which the P0 wiki scenario waits for before its wiki-home screenshot"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-1/report.json",
+  "project": "webkit-light-desktop",
+  "test": "profile",
+  "screenshot": "profile.png",
+  "failure": "screenshot",
+  "differentPixels": 13970,
+  "attribution": {
+   "mainCommit": "d233a6cd0",
+   "subject": "feat(auth): add access token management and /pat/self introspection",
+   "mainMerge": "86c6d2d4d",
+   "evidence": "attribution/runs/attr-profile-85b18b646 (profile.png equal to P0.2, 0 px) -> attribution/runs/attr-profile-86c6d2d4d (the comparator reports the same pixel count as on the tip)",
+   "change": "Profile page gains the \"Also revoke all my access tokens\" checkbox and its description"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-1/report.json",
+  "project": "webkit-light-phone",
+  "test": "wiki",
+  "screenshot": null,
+  "failure": "locator .wk-card",
+  "differentPixels": null,
+  "attribution": {
+   "mainCommit": "2f9cc095f",
+   "subject": "refactor(wiki): list topic articles on the Wiki home, drop status cards",
+   "mainMerge": "be0f8c22a",
+   "evidence": "attribution/runs/attr-wiki-51f0cdfee (wiki scenario passes in 8/8) -> attribution/runs/attr-wiki-be0f8c22a (the same .wk-card locator failure in 8/8); 2f9cc095f adds WikiHomeContent.test.tsx asserting no .wk-card on the home",
+   "change": "Wiki home no longer renders .wk-card status cards, which the P0 wiki scenario waits for before its wiki-home screenshot"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-1/report.json",
+  "project": "webkit-light-phone",
+  "test": "profile",
+  "screenshot": "profile.png",
+  "failure": "screenshot",
+  "differentPixels": 4626,
+  "attribution": {
+   "mainCommit": "d233a6cd0",
+   "subject": "feat(auth): add access token management and /pat/self introspection",
+   "mainMerge": "86c6d2d4d",
+   "evidence": "attribution/runs/attr-profile-85b18b646 (profile.png equal to P0.2, 0 px) -> attribution/runs/attr-profile-86c6d2d4d (the comparator reports the same pixel count as on the tip)",
+   "change": "Profile page gains the \"Also revoke all my access tokens\" checkbox and its description"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-1/report.json",
+  "project": "webkit-dark-desktop",
+  "test": "wiki",
+  "screenshot": null,
+  "failure": "locator .wk-card",
+  "differentPixels": null,
+  "attribution": {
+   "mainCommit": "2f9cc095f",
+   "subject": "refactor(wiki): list topic articles on the Wiki home, drop status cards",
+   "mainMerge": "be0f8c22a",
+   "evidence": "attribution/runs/attr-wiki-51f0cdfee (wiki scenario passes in 8/8) -> attribution/runs/attr-wiki-be0f8c22a (the same .wk-card locator failure in 8/8); 2f9cc095f adds WikiHomeContent.test.tsx asserting no .wk-card on the home",
+   "change": "Wiki home no longer renders .wk-card status cards, which the P0 wiki scenario waits for before its wiki-home screenshot"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-1/report.json",
+  "project": "webkit-dark-desktop",
+  "test": "profile",
+  "screenshot": "profile.png",
+  "failure": "screenshot",
+  "differentPixels": 13762,
+  "attribution": {
+   "mainCommit": "d233a6cd0",
+   "subject": "feat(auth): add access token management and /pat/self introspection",
+   "mainMerge": "86c6d2d4d",
+   "evidence": "attribution/runs/attr-profile-85b18b646 (profile.png equal to P0.2, 0 px) -> attribution/runs/attr-profile-86c6d2d4d (the comparator reports the same pixel count as on the tip)",
+   "change": "Profile page gains the \"Also revoke all my access tokens\" checkbox and its description"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-1/report.json",
+  "project": "webkit-dark-phone",
+  "test": "wiki",
+  "screenshot": null,
+  "failure": "locator .wk-card",
+  "differentPixels": null,
+  "attribution": {
+   "mainCommit": "2f9cc095f",
+   "subject": "refactor(wiki): list topic articles on the Wiki home, drop status cards",
+   "mainMerge": "be0f8c22a",
+   "evidence": "attribution/runs/attr-wiki-51f0cdfee (wiki scenario passes in 8/8) -> attribution/runs/attr-wiki-be0f8c22a (the same .wk-card locator failure in 8/8); 2f9cc095f adds WikiHomeContent.test.tsx asserting no .wk-card on the home",
+   "change": "Wiki home no longer renders .wk-card status cards, which the P0 wiki scenario waits for before its wiki-home screenshot"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-1/report.json",
+  "project": "webkit-dark-phone",
+  "test": "profile",
+  "screenshot": "profile.png",
+  "failure": "screenshot",
+  "differentPixels": 4702,
+  "attribution": {
+   "mainCommit": "d233a6cd0",
+   "subject": "feat(auth): add access token management and /pat/self introspection",
+   "mainMerge": "86c6d2d4d",
+   "evidence": "attribution/runs/attr-profile-85b18b646 (profile.png equal to P0.2, 0 px) -> attribution/runs/attr-profile-86c6d2d4d (the comparator reports the same pixel count as on the tip)",
+   "change": "Profile page gains the \"Also revoke all my access tokens\" checkbox and its description"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-2/report.json",
+  "project": "chromium-light-desktop",
+  "test": "both sides of existing 600, 640 and 960px rules",
+  "screenshot": "breakpoint-959-wiki.png",
+  "failure": "screenshot",
+  "differentPixels": 8872,
+  "attribution": {
+   "mainCommit": [
+    "6c4e0ac0e",
+    "2f9cc095f"
+   ],
+   "subject": [
+    "feat(wiki): Activity page, the head's Activity badge, one number waiting, space names and defaults",
+    "refactor(wiki): list topic articles on the Wiki home, drop status cards"
+   ],
+   "mainMerge": [
+    "dcfb5adf6",
+    "be0f8c22a"
+   ],
+   "evidence": "attribution/runs/attr-breakpoints-*: equal to P0.2 through 0982d8ed8 (WebKit 0 px), changed at dcfb5adf6 (the comparator already fails), unchanged at 51f0cdfee, changed again at be0f8c22a, unchanged through f86211ec3 (= the project tip build, WebKit 0 px)",
+   "change": "Wiki head gains the Activity button (6c4e0ac0e); the home lists topic articles instead of status cards (2f9cc095f)"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-2/report.json",
+  "project": "chromium-dark-desktop",
+  "test": "both sides of existing 600, 640 and 960px rules",
+  "screenshot": "breakpoint-959-wiki.png",
+  "failure": "screenshot",
+  "differentPixels": 8787,
+  "attribution": {
+   "mainCommit": [
+    "6c4e0ac0e",
+    "2f9cc095f"
+   ],
+   "subject": [
+    "feat(wiki): Activity page, the head's Activity badge, one number waiting, space names and defaults",
+    "refactor(wiki): list topic articles on the Wiki home, drop status cards"
+   ],
+   "mainMerge": [
+    "dcfb5adf6",
+    "be0f8c22a"
+   ],
+   "evidence": "attribution/runs/attr-breakpoints-*: equal to P0.2 through 0982d8ed8 (WebKit 0 px), changed at dcfb5adf6 (the comparator already fails), unchanged at 51f0cdfee, changed again at be0f8c22a, unchanged through f86211ec3 (= the project tip build, WebKit 0 px)",
+   "change": "Wiki head gains the Activity button (6c4e0ac0e); the home lists topic articles instead of status cards (2f9cc095f)"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-2/report.json",
+  "project": "webkit-light-desktop",
+  "test": "both sides of existing 600, 640 and 960px rules",
+  "screenshot": "breakpoint-959-wiki.png",
+  "failure": "screenshot",
+  "differentPixels": 9047,
+  "attribution": {
+   "mainCommit": [
+    "6c4e0ac0e",
+    "2f9cc095f"
+   ],
+   "subject": [
+    "feat(wiki): Activity page, the head's Activity badge, one number waiting, space names and defaults",
+    "refactor(wiki): list topic articles on the Wiki home, drop status cards"
+   ],
+   "mainMerge": [
+    "dcfb5adf6",
+    "be0f8c22a"
+   ],
+   "evidence": "attribution/runs/attr-breakpoints-*: equal to P0.2 through 0982d8ed8 (WebKit 0 px), changed at dcfb5adf6 (the comparator already fails), unchanged at 51f0cdfee, changed again at be0f8c22a, unchanged through f86211ec3 (= the project tip build, WebKit 0 px)",
+   "change": "Wiki head gains the Activity button (6c4e0ac0e); the home lists topic articles instead of status cards (2f9cc095f)"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-2/report.json",
+  "project": "webkit-dark-desktop",
+  "test": "both sides of existing 600, 640 and 960px rules",
+  "screenshot": "breakpoint-959-wiki.png",
+  "failure": "screenshot",
+  "differentPixels": 8840,
+  "attribution": {
+   "mainCommit": [
+    "6c4e0ac0e",
+    "2f9cc095f"
+   ],
+   "subject": [
+    "feat(wiki): Activity page, the head's Activity badge, one number waiting, space names and defaults",
+    "refactor(wiki): list topic articles on the Wiki home, drop status cards"
+   ],
+   "mainMerge": [
+    "dcfb5adf6",
+    "be0f8c22a"
+   ],
+   "evidence": "attribution/runs/attr-breakpoints-*: equal to P0.2 through 0982d8ed8 (WebKit 0 px), changed at dcfb5adf6 (the comparator already fails), unchanged at 51f0cdfee, changed again at be0f8c22a, unchanged through f86211ec3 (= the project tip build, WebKit 0 px)",
+   "change": "Wiki head gains the Activity button (6c4e0ac0e); the home lists topic articles instead of status cards (2f9cc095f)"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-2/report.json",
+  "project": "chromium-light-desktop",
+  "test": "wiki",
+  "screenshot": null,
+  "failure": "locator .wk-card",
+  "differentPixels": null,
+  "attribution": {
+   "mainCommit": "2f9cc095f",
+   "subject": "refactor(wiki): list topic articles on the Wiki home, drop status cards",
+   "mainMerge": "be0f8c22a",
+   "evidence": "attribution/runs/attr-wiki-51f0cdfee (wiki scenario passes in 8/8) -> attribution/runs/attr-wiki-be0f8c22a (the same .wk-card locator failure in 8/8); 2f9cc095f adds WikiHomeContent.test.tsx asserting no .wk-card on the home",
+   "change": "Wiki home no longer renders .wk-card status cards, which the P0 wiki scenario waits for before its wiki-home screenshot"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-2/report.json",
+  "project": "chromium-light-desktop",
+  "test": "profile",
+  "screenshot": "profile.png",
+  "failure": "screenshot",
+  "differentPixels": 9144,
+  "attribution": {
+   "mainCommit": "d233a6cd0",
+   "subject": "feat(auth): add access token management and /pat/self introspection",
+   "mainMerge": "86c6d2d4d",
+   "evidence": "attribution/runs/attr-profile-85b18b646 (profile.png equal to P0.2, 0 px) -> attribution/runs/attr-profile-86c6d2d4d (the comparator reports the same pixel count as on the tip)",
+   "change": "Profile page gains the \"Also revoke all my access tokens\" checkbox and its description"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-2/report.json",
+  "project": "chromium-light-phone",
+  "test": "wiki",
+  "screenshot": null,
+  "failure": "locator .wk-card",
+  "differentPixels": null,
+  "attribution": {
+   "mainCommit": "2f9cc095f",
+   "subject": "refactor(wiki): list topic articles on the Wiki home, drop status cards",
+   "mainMerge": "be0f8c22a",
+   "evidence": "attribution/runs/attr-wiki-51f0cdfee (wiki scenario passes in 8/8) -> attribution/runs/attr-wiki-be0f8c22a (the same .wk-card locator failure in 8/8); 2f9cc095f adds WikiHomeContent.test.tsx asserting no .wk-card on the home",
+   "change": "Wiki home no longer renders .wk-card status cards, which the P0 wiki scenario waits for before its wiki-home screenshot"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-2/report.json",
+  "project": "chromium-light-phone",
+  "test": "profile",
+  "screenshot": "profile.png",
+  "failure": "screenshot",
+  "differentPixels": 4721,
+  "attribution": {
+   "mainCommit": "d233a6cd0",
+   "subject": "feat(auth): add access token management and /pat/self introspection",
+   "mainMerge": "86c6d2d4d",
+   "evidence": "attribution/runs/attr-profile-85b18b646 (profile.png equal to P0.2, 0 px) -> attribution/runs/attr-profile-86c6d2d4d (the comparator reports the same pixel count as on the tip)",
+   "change": "Profile page gains the \"Also revoke all my access tokens\" checkbox and its description"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-2/report.json",
+  "project": "chromium-dark-desktop",
+  "test": "wiki",
+  "screenshot": null,
+  "failure": "locator .wk-card",
+  "differentPixels": null,
+  "attribution": {
+   "mainCommit": "2f9cc095f",
+   "subject": "refactor(wiki): list topic articles on the Wiki home, drop status cards",
+   "mainMerge": "be0f8c22a",
+   "evidence": "attribution/runs/attr-wiki-51f0cdfee (wiki scenario passes in 8/8) -> attribution/runs/attr-wiki-be0f8c22a (the same .wk-card locator failure in 8/8); 2f9cc095f adds WikiHomeContent.test.tsx asserting no .wk-card on the home",
+   "change": "Wiki home no longer renders .wk-card status cards, which the P0 wiki scenario waits for before its wiki-home screenshot"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-2/report.json",
+  "project": "chromium-dark-desktop",
+  "test": "profile",
+  "screenshot": "profile.png",
+  "failure": "screenshot",
+  "differentPixels": 9400,
+  "attribution": {
+   "mainCommit": "d233a6cd0",
+   "subject": "feat(auth): add access token management and /pat/self introspection",
+   "mainMerge": "86c6d2d4d",
+   "evidence": "attribution/runs/attr-profile-85b18b646 (profile.png equal to P0.2, 0 px) -> attribution/runs/attr-profile-86c6d2d4d (the comparator reports the same pixel count as on the tip)",
+   "change": "Profile page gains the \"Also revoke all my access tokens\" checkbox and its description"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-2/report.json",
+  "project": "chromium-dark-phone",
+  "test": "wiki",
+  "screenshot": null,
+  "failure": "locator .wk-card",
+  "differentPixels": null,
+  "attribution": {
+   "mainCommit": "2f9cc095f",
+   "subject": "refactor(wiki): list topic articles on the Wiki home, drop status cards",
+   "mainMerge": "be0f8c22a",
+   "evidence": "attribution/runs/attr-wiki-51f0cdfee (wiki scenario passes in 8/8) -> attribution/runs/attr-wiki-be0f8c22a (the same .wk-card locator failure in 8/8); 2f9cc095f adds WikiHomeContent.test.tsx asserting no .wk-card on the home",
+   "change": "Wiki home no longer renders .wk-card status cards, which the P0 wiki scenario waits for before its wiki-home screenshot"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-2/report.json",
+  "project": "chromium-dark-phone",
+  "test": "profile",
+  "screenshot": "profile.png",
+  "failure": "screenshot",
+  "differentPixels": 4795,
+  "attribution": {
+   "mainCommit": "d233a6cd0",
+   "subject": "feat(auth): add access token management and /pat/self introspection",
+   "mainMerge": "86c6d2d4d",
+   "evidence": "attribution/runs/attr-profile-85b18b646 (profile.png equal to P0.2, 0 px) -> attribution/runs/attr-profile-86c6d2d4d (the comparator reports the same pixel count as on the tip)",
+   "change": "Profile page gains the \"Also revoke all my access tokens\" checkbox and its description"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-2/report.json",
+  "project": "webkit-light-desktop",
+  "test": "wiki",
+  "screenshot": null,
+  "failure": "locator .wk-card",
+  "differentPixels": null,
+  "attribution": {
+   "mainCommit": "2f9cc095f",
+   "subject": "refactor(wiki): list topic articles on the Wiki home, drop status cards",
+   "mainMerge": "be0f8c22a",
+   "evidence": "attribution/runs/attr-wiki-51f0cdfee (wiki scenario passes in 8/8) -> attribution/runs/attr-wiki-be0f8c22a (the same .wk-card locator failure in 8/8); 2f9cc095f adds WikiHomeContent.test.tsx asserting no .wk-card on the home",
+   "change": "Wiki home no longer renders .wk-card status cards, which the P0 wiki scenario waits for before its wiki-home screenshot"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-2/report.json",
+  "project": "webkit-light-desktop",
+  "test": "profile",
+  "screenshot": "profile.png",
+  "failure": "screenshot",
+  "differentPixels": 13970,
+  "attribution": {
+   "mainCommit": "d233a6cd0",
+   "subject": "feat(auth): add access token management and /pat/self introspection",
+   "mainMerge": "86c6d2d4d",
+   "evidence": "attribution/runs/attr-profile-85b18b646 (profile.png equal to P0.2, 0 px) -> attribution/runs/attr-profile-86c6d2d4d (the comparator reports the same pixel count as on the tip)",
+   "change": "Profile page gains the \"Also revoke all my access tokens\" checkbox and its description"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-2/report.json",
+  "project": "webkit-light-phone",
+  "test": "wiki",
+  "screenshot": null,
+  "failure": "locator .wk-card",
+  "differentPixels": null,
+  "attribution": {
+   "mainCommit": "2f9cc095f",
+   "subject": "refactor(wiki): list topic articles on the Wiki home, drop status cards",
+   "mainMerge": "be0f8c22a",
+   "evidence": "attribution/runs/attr-wiki-51f0cdfee (wiki scenario passes in 8/8) -> attribution/runs/attr-wiki-be0f8c22a (the same .wk-card locator failure in 8/8); 2f9cc095f adds WikiHomeContent.test.tsx asserting no .wk-card on the home",
+   "change": "Wiki home no longer renders .wk-card status cards, which the P0 wiki scenario waits for before its wiki-home screenshot"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-2/report.json",
+  "project": "webkit-light-phone",
+  "test": "profile",
+  "screenshot": "profile.png",
+  "failure": "screenshot",
+  "differentPixels": 4626,
+  "attribution": {
+   "mainCommit": "d233a6cd0",
+   "subject": "feat(auth): add access token management and /pat/self introspection",
+   "mainMerge": "86c6d2d4d",
+   "evidence": "attribution/runs/attr-profile-85b18b646 (profile.png equal to P0.2, 0 px) -> attribution/runs/attr-profile-86c6d2d4d (the comparator reports the same pixel count as on the tip)",
+   "change": "Profile page gains the \"Also revoke all my access tokens\" checkbox and its description"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-2/report.json",
+  "project": "webkit-dark-desktop",
+  "test": "wiki",
+  "screenshot": null,
+  "failure": "locator .wk-card",
+  "differentPixels": null,
+  "attribution": {
+   "mainCommit": "2f9cc095f",
+   "subject": "refactor(wiki): list topic articles on the Wiki home, drop status cards",
+   "mainMerge": "be0f8c22a",
+   "evidence": "attribution/runs/attr-wiki-51f0cdfee (wiki scenario passes in 8/8) -> attribution/runs/attr-wiki-be0f8c22a (the same .wk-card locator failure in 8/8); 2f9cc095f adds WikiHomeContent.test.tsx asserting no .wk-card on the home",
+   "change": "Wiki home no longer renders .wk-card status cards, which the P0 wiki scenario waits for before its wiki-home screenshot"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-2/report.json",
+  "project": "webkit-dark-desktop",
+  "test": "profile",
+  "screenshot": "profile.png",
+  "failure": "screenshot",
+  "differentPixels": 13762,
+  "attribution": {
+   "mainCommit": "d233a6cd0",
+   "subject": "feat(auth): add access token management and /pat/self introspection",
+   "mainMerge": "86c6d2d4d",
+   "evidence": "attribution/runs/attr-profile-85b18b646 (profile.png equal to P0.2, 0 px) -> attribution/runs/attr-profile-86c6d2d4d (the comparator reports the same pixel count as on the tip)",
+   "change": "Profile page gains the \"Also revoke all my access tokens\" checkbox and its description"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-2/report.json",
+  "project": "webkit-dark-phone",
+  "test": "wiki",
+  "screenshot": null,
+  "failure": "locator .wk-card",
+  "differentPixels": null,
+  "attribution": {
+   "mainCommit": "2f9cc095f",
+   "subject": "refactor(wiki): list topic articles on the Wiki home, drop status cards",
+   "mainMerge": "be0f8c22a",
+   "evidence": "attribution/runs/attr-wiki-51f0cdfee (wiki scenario passes in 8/8) -> attribution/runs/attr-wiki-be0f8c22a (the same .wk-card locator failure in 8/8); 2f9cc095f adds WikiHomeContent.test.tsx asserting no .wk-card on the home",
+   "change": "Wiki home no longer renders .wk-card status cards, which the P0 wiki scenario waits for before its wiki-home screenshot"
+  }
+ },
+ {
+  "run": "runs/p0-tip-v2-round-2/report.json",
+  "project": "webkit-dark-phone",
+  "test": "profile",
+  "screenshot": "profile.png",
+  "failure": "screenshot",
+  "differentPixels": 4702,
+  "attribution": {
+   "mainCommit": "d233a6cd0",
+   "subject": "feat(auth): add access token management and /pat/self introspection",
+   "mainMerge": "86c6d2d4d",
+   "evidence": "attribution/runs/attr-profile-85b18b646 (profile.png equal to P0.2, 0 px) -> attribution/runs/attr-profile-86c6d2d4d (the comparator reports the same pixel count as on the tip)",
+   "change": "Profile page gains the \"Also revoke all my access tokens\" checkbox and its description"
+  }
+ }
+]

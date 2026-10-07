@@ -1,0 +1,11 @@
+### bgj_2495ed09fdec  bash /var/tmp/google-doc-e2e/run-api.sh  (PROVIDER_SECRET_KEY from secrets.env)
+620:orbit control plane listening on :3376
+622:[Nest] 1169525  - 10/07/2026, 3:02:50 PM    WARN [GoogleSignIn] Google's token endpoint refused the code: 401 invalid_client
+623:[Nest] 1169525  - 10/07/2026, 3:02:54 PM    WARN [GoogleSignIn] Google's token endpoint refused the code: 401 invalid_client
+624:[Nest] 1169525  - 10/07/2026, 3:02:59 PM    WARN [GoogleSignIn] Google's token endpoint refused the code: 401 invalid_client
+
+### bgj_49564d739efa  ROTATE=1 bash /var/tmp/google-doc-e2e/run-api.sh  (a new PROVIDER_SECRET_KEY)
+1:run-api: PROVIDER_SECRET_KEY replaced for this run
+621:orbit control plane listening on :3376
+623:[Nest] 1201172  - 10/07/2026, 3:04:17 PM   ERROR [GoogleSignIn] the saved Google client secret cannot be decrypted; an administrator must enter it again
+624:[Nest] 1201172  - 10/07/2026, 3:04:25 PM    WARN [GoogleSignIn] Google's token endpoint refused the code: 401 invalid_client

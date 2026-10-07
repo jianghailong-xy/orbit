@@ -1,0 +1,485 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/6e5b03a4-fb73-56d2-925b-24e5ae3694ed/node_modules/@playwright/test/cli.js",
+   "test",
+   "--config",
+   "ui-migration/reviews.config.mjs"
+  ],
+  "configFile": "/root/.orbit/worktrees/6e5b03a4-fb73-56d2-925b-24e5ae3694ed/src/web/ui-migration/reviews.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/6e5b03a4-fb73-56d2-925b-24e5ae3694ed/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/6e5b03a4-fb73-56d2-925b-24e5ae3694ed/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/6e5b03a4-fb73-56d2-925b-24e5ae3694ed/src/web/.reviews-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/6e5b03a4-fb73-56d2-925b-24e5ae3694ed/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "reviews.check.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/6e5b03a4-fb73-56d2-925b-24e5ae3694ed/src/web/.reviews-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/6e5b03a4-fb73-56d2-925b-24e5ae3694ed/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "reviews.check.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/6e5b03a4-fb73-56d2-925b-24e5ae3694ed/src/web/.reviews-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/6e5b03a4-fb73-56d2-925b-24e5ae3694ed/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "reviews.check.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/6e5b03a4-fb73-56d2-925b-24e5ae3694ed/src/web/.reviews-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/6e5b03a4-fb73-56d2-925b-24e5ae3694ed/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "reviews.check.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/6e5b03a4-fb73-56d2-925b-24e5ae3694ed/src/web/.reviews-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+   "cwd": "/root/.orbit/worktrees/6e5b03a4-fb73-56d2-925b-24e5ae3694ed/src/web/",
+   "url": "http://127.0.0.1:4177",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "reviews.check.mjs",
+   "file": "reviews.check.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "question traps focus, preserves choices and drafts, and suspends background shortcuts",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1758,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T10:13:58.208Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "question-retained.png",
+           "contentType": "image/png"
+          },
+          {
+           "name": "question-retained.json",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0977331bd6f9464b76c9-ecf9a490e5249ae9e055",
+     "file": "reviews.check.mjs",
+     "line": 55,
+     "column": 1
+    },
+    {
+     "title": "long plan scrolls above visible actions and owns the foreground shortcut",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1422,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T10:14:00.013Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "plan-scrolled.png",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plan-scrolled.json",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0977331bd6f9464b76c9-689edf395eeaa0736d60",
+     "file": "reviews.check.mjs",
+     "line": 105,
+     "column": 1
+    },
+    {
+     "title": "question traps focus, preserves choices and drafts, and suspends background shortcuts",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1611,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T10:14:01.678Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "question-retained.png",
+           "contentType": "image/png"
+          },
+          {
+           "name": "question-retained.json",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0977331bd6f9464b76c9-c9455cbcadceb695a791",
+     "file": "reviews.check.mjs",
+     "line": 55,
+     "column": 1
+    },
+    {
+     "title": "long plan scrolls above visible actions and owns the foreground shortcut",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1680,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T10:14:03.337Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "plan-scrolled.png",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plan-scrolled.json",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0977331bd6f9464b76c9-b80d4c4cbf0070961264",
+     "file": "reviews.check.mjs",
+     "line": 105,
+     "column": 1
+    },
+    {
+     "title": "question traps focus, preserves choices and drafts, and suspends background shortcuts",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1492,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T10:14:05.242Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "question-retained.png",
+           "contentType": "image/png"
+          },
+          {
+           "name": "question-retained.json",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0977331bd6f9464b76c9-bfd57e007b5a7a22080d",
+     "file": "reviews.check.mjs",
+     "line": 55,
+     "column": 1
+    },
+    {
+     "title": "long plan scrolls above visible actions and owns the foreground shortcut",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1451,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T10:14:06.781Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "plan-scrolled.png",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plan-scrolled.json",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0977331bd6f9464b76c9-1f66c289d703d39409c1",
+     "file": "reviews.check.mjs",
+     "line": 105,
+     "column": 1
+    },
+    {
+     "title": "question traps focus, preserves choices and drafts, and suspends background shortcuts",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1662,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T10:14:08.470Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "question-retained.png",
+           "contentType": "image/png"
+          },
+          {
+           "name": "question-retained.json",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0977331bd6f9464b76c9-c59cebfdacd12df6af8c",
+     "file": "reviews.check.mjs",
+     "line": 55,
+     "column": 1
+    },
+    {
+     "title": "long plan scrolls above visible actions and owns the foreground shortcut",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1548,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T10:14:10.180Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "plan-scrolled.png",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plan-scrolled.json",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0977331bd6f9464b76c9-eaef565ddd0b7e8375fa",
+     "file": "reviews.check.mjs",
+     "line": 105,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T10:13:57.568Z",
+  "duration": 14254.637,
+  "expected": 8,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

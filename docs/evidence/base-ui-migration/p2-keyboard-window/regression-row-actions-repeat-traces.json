@@ -1,0 +1,82 @@
+[
+ {
+  "trace": "chromium-light-phone--multiple-choices-in-Dialog-keep-their-owner-and-menus-do-not-activate-a-clickable-row--repeat-22--trace.zip",
+  "moduleRequests": 135,
+  "failedRequests": [],
+  "networkChangedConsoleErrors": 0,
+  "slowestRequests": [
+   {
+    "url": ":4177/node_modules/.vite/deps/antd.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 259.6
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@ant-design_icons.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 207.4
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@tanstack_react-query.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 180.3
+   },
+   {
+    "url": ":4177/src/lib/theme.tsx",
+    "status": 200,
+    "failure": null,
+    "ms": 178.2
+   },
+   {
+    "url": ":4177/src/theme.ts",
+    "status": 200,
+    "failure": null,
+    "ms": 165.4
+   }
+  ],
+  "console": [],
+  "pageErrors": [
+   ""
+  ],
+  "lastActions": [
+   {
+    "api": "expect",
+    "title": "Expect \"toHaveText\"",
+    "start": 59734.513,
+    "error": null
+   },
+   {
+    "api": "expect",
+    "title": "Expect \"toHaveText\"",
+    "start": 59740.17,
+    "error": null
+   },
+   {
+    "api": "focus",
+    "title": null,
+    "start": 59746.07,
+    "error": null
+   },
+   {
+    "api": "keyboardPress",
+    "title": null,
+    "start": 59750.791,
+    "error": null
+   },
+   {
+    "api": "keyboardPress",
+    "title": null,
+    "start": 59766.455,
+    "error": null
+   },
+   {
+    "api": "expect",
+    "title": "Expect \"toHaveText\"",
+    "start": 59784.876,
+    "error": null
+   }
+  ]
+ }
+]

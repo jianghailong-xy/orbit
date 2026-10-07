@@ -49,6 +49,42 @@ public struct SetupStatus: Codable, Sendable {
     public let needsSetup: Bool
 }
 
+/// `GET /auth/methods` (docs/google-sign-in-design.md §6): the ways a server signs people in. The
+/// login page offers Google only when `google` is true, and says Google opens new accounts only
+/// when `googleSignup` is.
+public struct SignInMethods: Codable, Equatable, Sendable {
+    public let password: Bool
+    public let google: Bool
+    public let googleSignup: Bool
+
+    /// Every server from before Google sign-in, and any server that has it switched off.
+    public static let passwordOnly = SignInMethods(password: true, google: false, googleSignup: false)
+
+    public init(password: Bool, google: Bool, googleSignup: Bool) {
+        self.password = password
+        self.google = google
+        self.googleSignup = googleSignup
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        password = try c.decodeIfPresent(Bool.self, forKey: .password) ?? true
+        google = try c.decodeIfPresent(Bool.self, forKey: .google) ?? false
+        googleSignup = try c.decodeIfPresent(Bool.self, forKey: .googleSignup) ?? false
+    }
+}
+
+/// `POST /auth/google/exchange` (§4.3): the ticket the callback brought back, and the PKCE verifier
+/// only the app that started the sign-in holds.
+public struct GoogleExchangeRequest: Codable, Sendable {
+    public let ticket: String
+    public let codeVerifier: String
+    public init(ticket: String, codeVerifier: String) {
+        self.ticket = ticket
+        self.codeVerifier = codeVerifier
+    }
+}
+
 public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let name: String
@@ -420,6 +456,17 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// (idle / task-done / user-ended — shown as dormant) apart from a hard cancel/orphan.
     public let error: String?
     public let endReason: String?
+    /// The SOURCE chain's state for this session — `UNBOUND`, `SELECTED`, `PINNED` or `REFUSED`
+    /// (§6.1). Only `REFUSED` is terminal, and it is the one value this client acts on: such a
+    /// session never re-resolves, and its recovery is a new run (SR34). Absent from older servers,
+    /// which reads as "nothing to say", never as a refusal.
+    public let sourceState: String?
+    /// §10.1's code. Present exactly when `sourceState` is `REFUSED`, which is the DB's own rule
+    /// (`session_source_refusal_chk`).
+    public let sourceRefusalCode: String?
+    /// §10.1's fifth column with `fixAction` folded in — what the refusal was about, in the ref's
+    /// and the runner's own words.
+    public let sourceRefusalDetail: SourceRefusalDetail?
     /// When the server will re-send the message a self-healing failure killed — a spent quota, a
     /// 529, a runner that vanished mid-turn — or nil when nothing is armed. What makes a FAILED
     /// row not yet an outcome: the run continues on its own when this fires, so `isSettled` (and
@@ -543,6 +590,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         engineTurnActive = try values.decodeIfPresent(Bool.self, forKey: .engineTurnActive)
         error = try values.decodeIfPresent(String.self, forKey: .error)
         endReason = try values.decodeIfPresent(String.self, forKey: .endReason)
+        sourceState = try values.decodeIfPresent(String.self, forKey: .sourceState)
+        sourceRefusalCode = try values.decodeIfPresent(String.self, forKey: .sourceRefusalCode)
+        sourceRefusalDetail = try? values.decodeIfPresent(SourceRefusalDetail.self,
+                                                          forKey: .sourceRefusalDetail)
         retryAt = try values.decodeIfPresent(String.self, forKey: .retryAt)
         agent = try values.decodeIfPresent(SessionAgentRef.self, forKey: .agent)
         tags = try values.decodeIfPresent([SessionTag].self, forKey: .tags)
@@ -568,6 +619,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 runningSubagentCount: Int? = nil,
                 engineTurnActive: Bool? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
+                sourceState: String? = nil, sourceRefusalCode: String? = nil,
+                sourceRefusalDetail: SourceRefusalDetail? = nil,
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
                 currentTurnStartedAt: String? = nil,
                 tags: [SessionTag]? = nil, retryAt: String? = nil,
@@ -630,6 +683,9 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.engineTurnActive = engineTurnActive
         self.error = error
         self.endReason = endReason
+        self.sourceState = sourceState
+        self.sourceRefusalCode = sourceRefusalCode
+        self.sourceRefusalDetail = sourceRefusalDetail
         self.retryAt = retryAt
         self.agent = agent
         self.pinnedAt = pinnedAt
@@ -755,9 +811,15 @@ public struct RetryMessage: Codable, Sendable {
     /// apiserver session-message.ts): the Retry then asks the server to re-send them
     /// (`APIClient.resendRetryMessage`, `RetryRoute`). Nil for the owner's own words.
     public let sessionMessage: SessionMessage?
-    public init(text: String, sessionMessage: SessionMessage? = nil) {
+    /// Nothing of anybody's waits to go out — not the owner's words, and not a reply or
+    /// confirmation turn the sweep re-sends on its own (`AutoRetryService.retryMessage`). The card
+    /// swaps its verb for the platform's continue (`AutoRetryLogic.continueMessage`): sent by hand
+    /// now, or by the server at the reset through the switch, which is the arm that owns it.
+    public let nothingToResend: Bool?
+    public init(text: String, sessionMessage: SessionMessage? = nil, nothingToResend: Bool? = nil) {
         self.text = text
         self.sessionMessage = sessionMessage
+        self.nothingToResend = nothingToResend
     }
 }
 
@@ -1158,6 +1220,11 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     public let lifecycleState: SessionLifecycleState?
     /// Authoritative action availability from newer servers. nil retains legacy local inference.
     public let capabilities: SessionCapabilities?
+    /// The engine this session runs on. What the auto-retry card names as the provider whose quota
+    /// ran out — deliberately NOT the composer's pending pick, which a person sets to the *next*
+    /// turn's provider (exactly what one does when a quota is spent) and which renamed an outage
+    /// that had already happened. Web parity: `outageProvider` in WorkspaceView.tsx.
+    public let provider: String?
     /// Project membership and its integration line drive the existing worktree bar labels.
     public let projectId: String?
     public let projectTitle: String?
@@ -1233,6 +1300,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         lifecycleState = try values.decodeIfPresent(SessionLifecycleState.self, forKey: .lifecycleState)
             ?? legacy.decodeIfPresent(SessionLifecycleState.self, forKey: .filingState)
         capabilities = try values.decodeIfPresent(SessionCapabilities.self, forKey: .capabilities)
+        provider = try values.decodeIfPresent(String.self, forKey: .provider)
         projectId = try values.decodeIfPresent(String.self, forKey: .projectId)
         projectTitle = try values.decodeIfPresent(String.self, forKey: .projectTitle)
         projectMembership = try values.decodeIfPresent(SessionProjectMembership.self, forKey: .projectMembership)
@@ -1265,6 +1333,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
                 sessionState: SessionState? = nil,
                 runState: SessionRunState? = nil, lifecycleState: SessionLifecycleState? = nil,
                 capabilities: SessionCapabilities? = nil,
+                provider: String? = nil,
                 projectId: String? = nil, projectTitle: String? = nil,
                 projectMembership: SessionProjectMembership? = nil,
                 projectIntegrationRef: String? = nil,
@@ -1286,6 +1355,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.runState = runState
         self.lifecycleState = lifecycleState
         self.capabilities = capabilities
+        self.provider = provider
         self.projectId = projectId
         self.projectTitle = projectTitle
         self.projectMembership = projectMembership

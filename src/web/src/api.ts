@@ -926,8 +926,14 @@ export const unpinSession = (sessionId: string) =>
 // from that window alone is how the button went missing on exactly the runs an outage kills.
 // `sessionMessage` is the card the words' echo carries when they are another Orbit session's: the
 // Retry then asks the server to re-send them (`resendSessionRetryMessage`).
+// `nothingToResend` says there is not even a turn of the failure's own kind for the sweep to
+// re-send, so a re-send is not what this session is waiting on: the card swaps its verb for
+// Continue (`CONTINUE_MESSAGE`, @orbit/shared) instead of offering a Retry that has nothing to
+// carry. Empty `text` without it means the sweep re-sends a reply or confirmation turn itself.
 export const getSessionRetryMessage = (sessionId: string) =>
-  api<{ text: string; sessionMessage?: SessionMessageCard }>(`/sessions/${sessionId}/retry-message`);
+  api<{ text: string; sessionMessage?: SessionMessageCard; nothingToResend?: boolean }>(
+    `/sessions/${sessionId}/retry-message`,
+  );
 
 // Re-send another session's message from the failure card (docs/session-request-reply-contract.md
 // §2.1): the server re-sends it as the automatic retry would — signed by that session, with the
@@ -944,8 +950,11 @@ export const resendSessionRetryMessage = (
 ) =>
   api<{ turnId: string; placement?: string }>(`/sessions/${sessionId}/retry-message`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(identity),
+    // The object, not `JSON.stringify` of it: `api` serializes the body itself, and handing it a
+    // string puts a JSON STRING on the wire (`"{\"provider\":…}"`), which express's strict body
+    // parser refuses with 400 `Unexpected token '"'` before any handler sees the request — every
+    // press of the failure card's Retry failed that way (seen on orbitd.io, 2026-10-07).
+    body: identity,
   });
 
 // Turn off / put back the retry armed on this session by a spent quota or a transient provider
@@ -1504,6 +1513,14 @@ export interface SessionDetail {
   provider?: string | null;
   /** The routing decision this task run was planned with; null on any other session. */
   route?: TaskRunRoute | null;
+  // The run's SOURCE, as the session row carries it (project-source-contract §6.1). `REFUSED` is a
+  // baseline the runner would not start from — the run never became one — and `sourceRefusalCode`
+  // with `sourceRefusalDetail` is why (the code, the ref and the machine's own words). UNBOUND on
+  // every Legacy session, and the only state an ordinary session ever has.
+  sourceState?: string | null;
+  sourceRef?: string | null;
+  sourceRefusalCode?: string | null;
+  sourceRefusalDetail?: Record<string, unknown> | null;
   /** On an account pool: the member its last claim dispatched on (null before the first). */
   poolMemberProviderId?: string | null;
   /** On a shared pool: the key its last claim chose (null before the first, or when none could run). */

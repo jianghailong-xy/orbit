@@ -65,17 +65,41 @@ public final class APIClient: @unchecked Sendable {
 
     public func login(email: String, password: String) async throws -> LoginResponse {
         let res: LoginResponse = try await post("auth/login", body: LoginRequest(email: email, password: password))
+        try keepSession(res)
+        return res
+    }
+
+    /// The ways this server signs people in (`GET /auth/methods`, docs/google-sign-in-design.md §6).
+    /// A server from before Google sign-in has no such route and answers 404: password only.
+    public func signInMethods() async throws -> SignInMethods {
+        do {
+            return try await get("auth/methods")
+        } catch APIError.http(404, _) {
+            return .passwordOnly
+        }
+    }
+
+    /// Trade the ticket a Google sign-in brought back, with the verifier only this app holds, for a
+    /// session (`POST /auth/google/exchange`, §4.3). The answer is `login`'s, and kept the same way.
+    public func exchangeGoogleTicket(_ ticket: String, codeVerifier: String) async throws -> LoginResponse {
+        let res: LoginResponse = try await post("auth/google/exchange",
+                                                body: GoogleExchangeRequest(ticket: ticket, codeVerifier: codeVerifier))
+        try keepSession(res)
+        return res
+    }
+
+    /// Store a new session's tokens, then read them back: the store can drop a write without saying
+    /// so (see `TokenNotStoredError`), and half a session — an access token with no refresh token —
+    /// would fail later just as silently.
+    private func keepSession(_ res: LoginResponse) throws {
         tokenStore.setToken(res.accessToken, for: baseURL)
         tokenStore.setRefreshToken(res.refreshToken, for: baseURL)
-        // Read back: the store can drop a write without saying so (see `TokenNotStoredError`), and
-        // half a session — an access token with no refresh token — would fail later just as silently.
         guard tokenStore.token(for: baseURL) == res.accessToken,
               tokenStore.refreshToken(for: baseURL) == res.refreshToken else {
             tokenStore.setToken(nil, for: baseURL)
             tokenStore.setRefreshToken(nil, for: baseURL)
             throw TokenNotStoredError()
         }
-        return res
     }
 
     /// Revoke a refresh token server-side on sign-out. Best-effort (`try?`); takes the token
@@ -783,6 +807,12 @@ public final class APIClient: @unchecked Sendable {
         try await get("projects/\(projectID)/integration")
     }
 
+    /// The owner's Retry on a job the integration view says can be retried (`retryable`): the
+    /// silent generation ends and the next one is queued. Answers the integration view read again.
+    public func retryIntegrationJob(_ projectID: String, jobID: String) async throws -> ProjectIntegrationView {
+        try await postEmpty("projects/\(projectID)/integration/jobs/\(jobID)/retry")
+    }
+
     /// One page of the project's top-level tasks, newest first.
     public func projectTaskPage(_ projectID: String, cursor: String? = nil,
                                 limit: Int = 100) async throws -> ProjectTaskPage {
@@ -1381,10 +1411,11 @@ public final class APIClient: @unchecked Sendable {
     }
     public func startRunnerLogin(_ id: String, engine: LoginEngine,
                                  account: String? = nil,
-                                 accountName: String? = nil) async throws -> RunnerLoginState {
+                                 accountName: String? = nil,
+                                 region: String? = nil) async throws -> RunnerLoginState {
         try await post("runners/\(id)/login",
                        body: StartLoginRequest(engine: engine, account: account,
-                                               accountName: accountName))
+                                               accountName: accountName, region: region))
     }
     /// Hand the runner the authorization code the sign-in page gave the user (claude's paste-back
     /// flow). Useless without the PKCE verifier that never leaves the runner process.

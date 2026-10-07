@@ -214,7 +214,10 @@ test('Antigravity keeps its display order when dsh is reported, and accounts lik
   assert.equal(isReportedEngine('antigravity'), true);
   assert.deepEqual(LOGIN_ENGINES, ['claude', 'codex', 'kimi', 'antigravity']);
   assert.deepEqual(REPORTED_ENGINES, ['claude', 'codex', 'kimi', 'opencode', 'antigravity', 'dsh']);
-  assert.equal(isInstallEngine('opencode'), false);
+  // Reportable and installable, never signable-in: the install relay needs a command, the sign-in
+  // relay a flow, and OpenCode only has the former.
+  assert.equal(isInstallEngine('opencode'), true);
+  assert.equal(isLoginEngine('opencode'), false);
 });
 
 /** The `/usage` buckets as step 1's runner reports them (docs/antigravity-runtime-contract.md §16.6). */
@@ -373,4 +376,24 @@ test('a runaway quota report is bounded', () => {
   ])!;
   assert.equal(entry.planUsage?.buckets?.length, PLAN_USAGE_BUCKETS_MAX);
   assert.equal(entry.planUsage?.fetchedAt, undefined, 'an unparseable or missing time is left out, not invented');
+});
+
+test("Kimi's site is carried for Kimi alone, and only as one of its two", () => {
+  assert.deepEqual(
+    sanitizeRunnerEngines([
+      { engine: 'kimi', installed: true, auth: 'yes', kimiRegion: 'global' },
+      { engine: 'codex', installed: true, auth: 'yes', kimiRegion: 'global' },
+    ]),
+    [
+      { engine: 'codex', installed: true, auth: 'yes' },
+      { engine: 'kimi', installed: true, auth: 'yes', kimiRegion: 'global' },
+    ],
+  );
+  for (const kimiRegion of ['mainland-cn', 'global']) {
+    assert.equal(sanitizeRunnerEngines([{ engine: 'kimi', installed: true, auth: 'no', kimiRegion }])![0].kimiRegion, kimiRegion);
+  }
+  // Anything else is no site at all, never a guess at one: the page would name it as the login's.
+  for (const kimiRegion of ['eu', 'kimi.ai', '', 1, null, { region: 'global' }]) {
+    assert.equal('kimiRegion' in sanitizeRunnerEngines([{ engine: 'kimi', installed: true, auth: 'yes', kimiRegion }])![0], false);
+  }
 });

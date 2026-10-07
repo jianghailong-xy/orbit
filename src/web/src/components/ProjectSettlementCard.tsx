@@ -5,11 +5,10 @@ import type { DoneRequest, ProjectDoneRecord, ProjectOpenItemRow, SessionWaiting
 import { api } from '../api';
 import {
   acceptanceConfirmationKey,
-  confirmAcceptanceCriteria,
   readAcceptanceConfirmation,
   type StandardSetConfirmationStanding,
 } from '../lib/acceptanceConfirmation';
-import { ENTER_HINT, SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './CardHotkey';
+import { ENTER_HINT, SHORTCUT_HINT, useCardKeyClaim } from './CardHotkey';
 import { PROVENANCE_LABEL, PROVENANCE_TITLE } from './CriteriaDecisionCard';
 import {
   DONE_CARD_COORDINATOR_CALL,
@@ -42,6 +41,18 @@ import { projectStarted } from '../lib/projectStart';
 
 /**
  * WHY this project is not DONE — the projection, rendered.
+ *
+ * NOT DRAWN IN ANY CONVERSATION SINCE 2026-10-07
+ * ----------------------------------------------
+ * Everything below belongs to two cards this file used to put in the coordinating conversation:
+ * `ProjectSettlementCard` (the rule sentence and the withheld clauses, "Confirm the criteria" and
+ * "Ask the coordinator to handle it") and `ProjectWhyNotDoneCard` in its open state (the two groups
+ * — Waiting on work, Needs your call — and the same hand-over press). The owner's ruling of
+ * 2026-10-07 04:20Z took that question out of the conversation: nothing draws either card now, and
+ * `SessionProjectSettlementCard` at the bottom of this file — the only thing that ever did — draws
+ * the owner's card, its receipt, or nothing at all. What survives of `ProjectWhyNotDoneCard` is its
+ * TERMINAL state, the record Orbit writes itself. The components, their presses and their words stay
+ * in the tree as the projection's own unit-tested rendering; removing them is a cleanup of its own.
  *
  * THE QUESTION THIS ASKS, AND THE ONE IT REPLACED
  * -----------------------------------------------
@@ -260,12 +271,19 @@ export function settlementTally(project: SettlementProjectDocument): string {
  * not — OPEN and started, every stated criterion met by the work filed under it, no task under it
  * IN_PROGRESS, and a projection that does not call it done.
  *
- * The first half is what keeps the card off every unfinished project ("the work is not done yet"
+ * The first half is what kept the card off every unfinished project ("the work is not done yet"
  * is not news, and a card saying it under every project forever is what the condition is shaped to
  * avoid); the second is what makes it a question rather than a status. Both halves come off the
  * same read, and the projection decides the second one — this file decides nothing about DONE.
- * The unified read asks it the same way (`asksWhyNotDone`), and so do the native clients
- * (`ProjectDone.slot`).
+ *
+ * NOTHING DRAWS IT ANY MORE
+ * -------------------------
+ * This condition IS the old `asksWhyNotDone`, and since 2026-10-07 nothing asks it: the owner's
+ * ruling of that day took the question out of the conversation altogether. It is kept — declared
+ * and tested, with no caller — as the plainest statement of what "looks finished" means, which is
+ * the state a reader of the ruling comes looking for. A conversation draws nothing in this state
+ * (and the native clients answer `.none` for it, `ProjectDone.slot`), which
+ * `ProjectDoneConversation.test.tsx` pins.
  */
 export function settlementHeldOnProject(
   project: SettlementProjectDocument | null | undefined,
@@ -608,40 +626,41 @@ export function ProjectSettlementCard({
   );
 }
 
-const CONFIRMATION_CLAUSE = 'STANDARD_SET_UNCONFIRMED';
-
-/**
- * Whether the conversation asks "Why is this project not done?" off the unified read: only of a
- * project that looks finished and is not done (`settlementHeldOnProject`) — never of one with a
- * criterion still unmet or a task still IN_PROGRESS.
- */
-export function asksWhyNotDone(project: SettlementProjectDocument | null | undefined): boolean {
-  const projection = project?.derivedDone;
-  if (!projection || !('counts' in projection)) return false;
-  return settlementHeldOnProject(project);
-}
-
 /**
  * The wired card for one conversation: drawn from the project document, which carries the
  * projection, and re-derived on every render.
  *
- * Delivered once and kept: a reader who has seen why the project is not settling keeps it on
- * screen while the answer is being produced — including the case where the derivation stops
- * withholding, which is the state it goes to rather than vanishing.
+ * ONE QUESTION OUT OF TWO, AND NOT THE ONE IT USED TO ASK
+ * ------------------------------------------------------
+ * Until 2026-10-07 this drew "Why is this project not done?" — the grouped projection card while
+ * the project looked finished, and the rule-sentence card before it on the older read. The owner's
+ * ruling of 2026-10-07 04:20Z took that question out of the conversation altogether: closing a
+ * project is request-driven, and a project nobody has asked about and that nobody has recorded
+ * draws NOTHING here — no card, no press, no fallback. What is left of the two questions on this
+ * file is the ONE that belongs to the owner: "Is this project done?", drawn where the coordinator
+ * asked (a DONE_REQUEST), where the row says Record as done…, or where this conversation's own
+ * press has just recorded it — and the receipt that press leaves, or the one the document itself
+ * carries. Orbit's own DONE is the terminal state, read off the document so that it survives a
+ * refresh.
+ *
+ * The gaps that used to be listed here are not lost: they are the project page's Open items row
+ * and the Needs you hint, which is where the ruling puts them and where an owner goes to act.
+ *
+ * WHERE THE WRITES STILL GO
+ * -------------------------
+ * Unchanged, and none of them is the conversation's own: `POST /projects/:id/done` for the press
+ * (with the seal the request was made about), the request's own decline door for "Not yet…", and
+ * the status door for Reopen project. The reads are the project document and its open items, both
+ * polled, and the acceptance-confirmation standing, which is read only while a card that needs a
+ * seal is up.
  */
 export function SessionProjectSettlementCard({
   projectId,
-  onDelegate,
   coordinator = true,
   waitingKind = null,
 }: {
   /** The project this session coordinates. Ordinary sessions have none and get no card. */
   projectId: string | null | undefined;
-  /** Hands the card's facts to the agent that owns this project, as a turn in this conversation —
-   *  the conversation that coordinates it, so the facts are the whole message: they open by naming
-   *  the project they are about (`projectSettlementContext`). The card stays put: what it says is
-   *  still true. */
-  onDelegate?: (talk: { facts: string }) => void;
   /** WorkspaceView supplies the membership role; omitted keeps the legacy standalone behavior. */
   coordinator?: boolean;
   /** The server's owner-decision signal, used to distinguish a requested card from D5's reminder. */
@@ -649,7 +668,6 @@ export function SessionProjectSettlementCard({
 }): JSX.Element | null {
   const qc = useQueryClient();
   const project = projectId ?? '';
-  const [delivered, setDelivered] = useState(false);
   const documentRead = useQuery({
     queryKey: ['project', project],
     queryFn: () => api<SettlementProjectDocument>(`/projects/${encodeURIComponent(project)}`),
@@ -685,38 +703,16 @@ export function SessionProjectSettlementCard({
       setDoneDelivered(false);
     }
   }, [coordinator, doneRequestRow?.itemId, doneReceipt, hasDoneSignal]);
-  const held = settlementHeldOnProject(document);
   const settled = document?.derivedDone?.done === true;
-  // Delivered once and kept: the older projection's card, which has a settled state to go to rather
-  // than vanishing. The unified read is asked per read instead (`asksWhyNotDone`, below): up exactly
-  // while the project looks finished. Kept past that, it would hold the keys and fall through to the
-  // owner's card, unasked, the moment a task started or a criterion stopped being met.
-  const unified = document?.derivedDone != null && 'counts' in document.derivedDone;
-  useEffect(() => {
-    if (held && !unified) setDelivered(true);
-  }, [held, unified]);
-  const shown = (delivered && !unified) || held;
 
-  // The confirmation standing, read only when the card is up AND the clause withholding settlement
-  // is the one a person clears — the same key and door the start card uses.
-  const needsStanding = (shown && (document?.derivedDone?.withheld.includes(CONFIRMATION_CLAUSE) ?? false))
-    || doneDelivered
-    || doneRequest !== null
-    || hasDoneSignal;
+  // The confirmation standing, read only while a card that needs a seal is up — the same key and
+  // door the start card uses.
+  const needsStanding = doneDelivered || doneRequest !== null || hasDoneSignal;
   const standingRead = useQuery({
     queryKey: acceptanceConfirmationKey(project),
     queryFn: () => readAcceptanceConfirmation(project),
     enabled: Boolean(projectId) && needsStanding,
     refetchInterval: needsStanding ? 20_000 : false,
-  });
-  const confirm = useMutation({
-    mutationFn: (criteriaDigest: string) => confirmAcceptanceCriteria(project, criteriaDigest),
-    onSuccess: (next) => {
-      qc.setQueryData(acceptanceConfirmationKey(project), next);
-      // And the projection, which the confirmation just moved: DONE is stored on this edge.
-      void qc.invalidateQueries({ queryKey: ['project', project] });
-      void qc.invalidateQueries({ queryKey: ['projects'] });
-    },
   });
   const done = useMutation({
     mutationFn: async () => {
@@ -758,48 +754,16 @@ export function SessionProjectSettlementCard({
     },
   });
 
-  // The two presses, named once so that the buttons and the keys make the same one — the same
-  // guards, whether the press came from a finger or the keyboard. Each key follows its own
-  // button's liveness, and the two are not dead together: the confirmation is offered only while
-  // the set is one nobody has stood behind, and handing the work over never depends on that
-  // (`CardHotkey.ts`).
   const standing = standingRead.data ?? null;
-  const confirmSet = (): void => {
-    if (!standing || standing.confirmed || confirm.isPending) return;
-    confirm.mutate(standing.currentVersion.digest);
-  };
-  const delegate = (): void => {
-    if (document === null) return;
-    onDelegate?.({ facts: projectSettlementContext(document) });
-  };
-  const offersConfirmation = document?.derivedDone?.withheld.includes(CONFIRMATION_CLAUSE) ?? false;
-  const confirmable = standing != null && standing.state !== 'CONFIRMED';
-  const asking = (shown || doneDelivered) && document !== null && !settled;
+  // The owner's card claims the keys while it is the thing asking (CardHotkey.ts); the receipt it
+  // turns into does not.
+  const asking = doneDelivered && document !== null && !settled;
   const anchor = useRef<HTMLDivElement>(null);
   const keys = useCardKeyClaim(asking, anchor);
-  useApproveHotkey(keys && offersConfirmation && confirmable && !confirm.isPending, confirmSet, { requireMod: false, anchor });
-  useApproveHotkey(keys, delegate, { anchor });
 
-  // A current server's non-settled projection is the grouped Why-not-done read.  It stays a
-  // separate card until a DONE_REQUEST arrives; the owner card below is only for an actual request
-  // (or the receipt left by answering one).
-  if (!doneDelivered && document !== null && asksWhyNotDone(document)) {
-    return (
-      <ProjectWhyNotDoneCard
-        project={document as unknown as ProjectDoneDocument}
-        openItems={{
-          withCoordinator: openItemsRead.data?.withCoordinator,
-          doneRequest: doneRequestRow,
-        }}
-        onReview={() => setDoneDelivered(true)}
-        onAskCoordinator={delegate}
-      />
-    );
-  }
-
-  // A DONE Orbit recorded itself is the Why-not-done card's terminal state, read off the project
-  // document so that it survives a refresh. Like the question itself, it is drawn only from the
-  // unified read (`counts`); an older projection keeps drawing nothing here.
+  // A DONE Orbit recorded itself is the old question's terminal state — "This project is done ·
+  // recorded by Orbit" — read off the project document so that it survives a refresh. It is drawn
+  // only from the unified read (`counts`); an older projection keeps drawing nothing here.
   if (
     !doneDelivered
     && document?.status === 'DONE'
@@ -838,21 +802,11 @@ export function SessionProjectSettlementCard({
       />
     );
   }
-  if (!shown || document === null) return null;
-  const title = document.title || project;
-  return (
-    <ProjectSettlementCard
-      ref={anchor}
-      project={document}
-      standing={standing}
-      settled={settled}
-      busy={confirm.isPending}
-      error={confirm.isError ? confirm.error : null}
-      keys={keys}
-      onConfirm={confirmSet}
-      onDelegate={delegate}
-    />
-  );
+  // Nobody has asked this conversation to record the project, no press here has recorded it, and
+  // the document does not carry a record: the conversation draws nothing at all. Not a card, not a
+  // line of copy — the older projection's rule-sentence card included, which used to stand in for
+  // the grouped one exactly here.
+  return null;
 }
 
 /* -------------------------------------------------------------------------------------------------
@@ -1314,6 +1268,11 @@ export interface ProjectWhyNotDoneCardProps {
  * It consumes the criterion answers on `derivedDone` themselves — its tally included
  * (`projectWhyNotDoneTally`); it never turns task statuses or merge receipts into a second
  * client-side count.
+ *
+ * Only its settled branch — a project that IS done, "This project is done · recorded by Orbit" —
+ * is drawn anywhere any more (the conversation, for a DONE Orbit recorded itself). The open branch
+ * above it is the card the 2026-10-07 ruling took out of the conversation and is kept, tested,
+ * unrendered: see this file's header.
  */
 export function ProjectWhyNotDoneCard({
   project,

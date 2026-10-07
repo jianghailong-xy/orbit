@@ -1,8 +1,10 @@
-import { BadRequestException, Body, Controller, Get, Post, Query, Req, Res } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { visitorAddress } from '../shared/public-surface.guard';
-import { GoogleExchangeDto } from './dto';
-import { type GoogleCallbackOutcome, type GoogleIntent, GoogleLoginService } from './google-login.service';
+import { GoogleExchangeDto, GoogleLinkDto } from './dto';
+import { type GoogleCallbackOutcome, type GoogleIntent, GoogleLoginService, isGoogleClientState } from './google-login.service';
+import { JwtAuthGuard } from './jwt-auth.guard';
 import { PatForbidden } from './pat-scope.decorator';
 import { googleRedirectUri } from './sign-in-providers.service';
 
@@ -65,13 +67,23 @@ function returnTo(outcome: GoogleCallbackOutcome): string {
  * the browser to, and the exchange of the callback's ticket for a session. While Google sign-in is off
  * — no client saved, or saved and switched off (§7.1) — no flow starts: /start sends the browser back
  * to the client that asked, with GOOGLE_NOT_CONFIGURED, and the exchange is refused.
+ *
+ * And linking Google to the account signed in, and unlinking it (§5.3): behind JwtAuthGuard, and —
+ * the class being refused to every access token — for a login only. Refused GOOGLE_NOT_CONFIGURED
+ * while Google sign-in is off, as the sign-in routes are.
  */
 @PatForbidden('AUTH')
 @Controller('auth/google')
 export class GoogleAuthController {
   constructor(private readonly flows: GoogleLoginService) {}
 
-  /** §4.1: `client=web|native`, `code_challenge`, and for native an optional `client_state` it gets back. */
+  /**
+   * §4.1: `client=web|native`, `code_challenge`, and for native an optional `client_state` it gets back.
+   * The browser comes here by a navigation — the Web page's, or the apps' authentication session — so
+   * a start refused for a client that named itself sends it back by §4.2's failure redirect, with no
+   * cookie: GOOGLE_NOT_CONFIGURED, GOOGLE_BAD_REQUEST, GOOGLE_RATE_LIMITED or GOOGLE_SIGN_IN_BUSY, and
+   * the `client_state` only if it is one /start takes. Without a client there is nowhere to send it: 400.
+   */
   @Get('start')
   async start(
     @Req() req: Request,
@@ -82,7 +94,9 @@ export class GoogleAuthController {
   ) {
     if (client !== 'web' && client !== 'native') throw new BadRequestException('client must be web or native');
     const started = await this.flows.start({ client, codeChallenge, clientState, visitor: visitorAddress(req) });
-    if (!started) return res.redirect(302, googleFailureRedirect(client, 'GOOGLE_NOT_CONFIGURED', clientState));
+    if ('refused' in started) {
+      return res.redirect(302, googleFailureRedirect(client, started.refused, isGoogleClientState(clientState) ? clientState : undefined));
+    }
     res.setHeader('Set-Cookie', bindingCookie(started.binding));
     return res.redirect(302, started.authorizationUrl);
   }
@@ -109,5 +123,37 @@ export class GoogleAuthController {
   @Post('exchange')
   exchange(@Req() req: Request, @Body() dto: GoogleExchangeDto) {
     return this.flows.exchange({ ticket: dto.ticket, codeVerifier: dto.codeVerifier, visitor: visitorAddress(req) });
+  }
+
+  /**
+   * §5.3: `{codeChallenge}` from the profile page of the account signed in. Opens a LINK flow, binds it
+   * to this browser with the cookie /start sets, and answers `{authorizationUrl}` for the page to send
+   * the browser to; the callback returns it to /settings/profile with the ticket (§4.2).
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('link')
+  async link(
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @Body() dto: GoogleLinkDto,
+  ) {
+    const started = await this.flows.startLink({ userId: user.userId, codeChallenge: dto.codeChallenge, visitor: visitorAddress(req) });
+    res.setHeader('Set-Cookie', bindingCookie(started.binding));
+    return { authorizationUrl: started.authorizationUrl };
+  }
+
+  /** §5.3: `{ticket, codeVerifier}` the profile page came back with. Answers the account's `signInMethods`. */
+  @UseGuards(JwtAuthGuard)
+  @Post('link/confirm')
+  confirmLink(@CurrentUser() user: AuthUser, @Body() dto: GoogleExchangeDto) {
+    return this.flows.confirmLink({ userId: user.userId, ticket: dto.ticket, codeVerifier: dto.codeVerifier });
+  }
+
+  /** §5.3: the account signed in unlinks its Google account. Answers its `signInMethods`. */
+  @UseGuards(JwtAuthGuard)
+  @Delete('link')
+  unlink(@CurrentUser() user: AuthUser) {
+    return this.flows.unlink(user.userId);
   }
 }

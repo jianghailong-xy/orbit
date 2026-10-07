@@ -79,6 +79,8 @@ export interface Tenant {
   fuseEpisodeId: string;
   handoffId: string;
   promotionId: string;
+  /** A queued landing of `projectTaskId`. */
+  integrationJobId: string;
   criteriaIntentId: string;
   /** The token that binds a decision to that proposal — what the owner's card answers it with. */
   criteriaCommitToken: string;
@@ -140,6 +142,8 @@ export interface TenantRequest {
   /** Every path parameter of the route. */
   params: Record<string, string | number>;
   query?: Record<string, string>;
+  /** Headers that carry ids — the session-context ones (common/public-id-headers.ts) — beside the credential's. */
+  headers?: Record<string, string>;
   body?: unknown;
   /** Sent as the one file of a multipart/form-data body, instead of a JSON one. */
   file?: { name: string; type: string; content: string };
@@ -210,6 +214,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   },
   'DELETE /admin/users/:id': { request: (of) => ({ params: { id: of.spare.adminSubjectId } }) },
   'PATCH /admin/users/:id/role': { request: (of) => ({ params: { id: of.adminSubjectId }, body: { role: 'ADMIN' } }) },
+  // The subject has no Google account linked: the administrator is answered its sign-in methods as they are.
+  'DELETE /admin/users/:id/identities/google': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
   'PATCH /admin/providers/:id': { request: (of) => ({ params: { id: of.adminProviderId }, body: { label: 'renamed by the census' } }) },
   'DELETE /admin/providers/:id': { request: (of) => ({ params: { id: of.spare.adminProviderId } }) },
 
@@ -252,6 +258,10 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     nested: ['taskId'],
   },
   'POST /projects/:id/tasks/:taskId/integration/retry': {
+    request: (of) => ({ params: { id: of.projectId, taskId: of.projectTaskId }, body: { reason: 'the census' } }),
+    nested: ['taskId'],
+  },
+  'POST /projects/:id/tasks/:taskId/integration/skip-merge-check': {
     request: (of) => ({ params: { id: of.projectId, taskId: of.projectTaskId }, body: { reason: 'the census' } }),
     nested: ['taskId'],
   },
@@ -327,6 +337,10 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /projects/:id/share': { request: (of) => ({ params: { id: of.projectId } }) },
   'PUT /projects/:id/share': { request: (of) => ({ params: { id: of.projectId }, body: {} }) },
   'DELETE /projects/:id/share': { request: (of) => ({ params: { id: of.projectId } }) },
+  'POST /projects/:id/integration/jobs/:jobId/retry': {
+    request: (of) => ({ params: { id: of.projectId, jobId: of.integrationJobId } }),
+    nested: ['jobId'],
+  },
   'POST /projects/:id/promotions/:promotionId/integration/retry': {
     request: (of) => ({ params: { id: of.projectId, promotionId: of.promotionId }, body: { reason: 'the census' } }),
     nested: ['promotionId'],
@@ -1063,9 +1077,9 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
 export const TENANT_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
   'POST /tasks/:id/execute body triggerId':
     'an idempotency key the caller makes up for one press, not a thing it names: it keys only the caller\'s own '
-    + 'run receipt, (owner_id, action_kind, request_token) — tasks.service.ts:12772',
+    + 'run receipt, (owner_id, action_kind, request_token) — tasks.service.ts:12779',
   'POST /tasks/batch-execute body triggerId':
-    'the same press key, for a bulk Run: the caller\'s own receipt, keyed by owner — tasks.service.ts:12772',
+    'the same press key, for a bulk Run: the caller\'s own receipt, keyed by owner — tasks.service.ts:12779',
   'POST /push/register body installationId':
     'a phone\'s own installation id, which only that phone holds and no read hands out; a registration moves '
     + 'with the phone on purpose when it signs in as somebody else (push.controller.ts:32), the device token alike',

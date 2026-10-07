@@ -23,7 +23,10 @@ import {
   SessionFilingState,
   SessionLifecycleState,
   SessionRunState,
+  SessionSourceRefusalDetail,
   SessionState,
+  SourceRefusalCode,
+  SourceState,
 } from '@orbit/shared';
 import { Observable, Subject, filter, map, mergeMap } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
@@ -38,6 +41,7 @@ import { readSessionProjectMembership } from '../sessions/session-project-member
 import { readConfirmationsUnderReview } from '../tasks/owner-confirmation-read';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
 import { latestAcceptedCheckpoint } from '../projects/task-checkpoint.service';
+import { RUNNER_WAKE_CHANNEL } from './runner-wake';
 import {
   ownerItemsForRow,
   readOwnerDecisionsBySession,
@@ -54,7 +58,6 @@ import {
 
 const EVENT_CHANNEL = 'orbit_event';
 const INBOX_CHANNEL = 'orbit_inbox';
-const RUNNER_WAKE_CHANNEL = 'orbit_runner_wake';
 /** How long a wake nobody was parked for stays owed (see notifyRunnerWake). */
 const RUNNER_WAKE_HOLD_MS = 30_000;
 const MAX_NOTIFY_BYTES = 7000; // Postgres NOTIFY payload limit is 8000 bytes; stay under.
@@ -285,13 +288,15 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   private onNotify(channel: string, payload?: string): void {
     if (!payload) return;
-    let m: { i: string; r: string; e?: NormalizedRunEvent; s?: number };
+    let m: { i?: string; r: string; c?: true; e?: NormalizedRunEvent; s?: number };
     try {
       m = JSON.parse(payload);
     } catch {
       return;
     }
-    if (m.i === this.instanceId) return; // our own write — already emitted locally
+    // Our own write — already emitted locally. A committed-transaction wake is the exception: it
+    // carries `c` because nothing emitted it locally, so this replica takes its own delivery too.
+    if (m.i === this.instanceId && !(channel === RUNNER_WAKE_CHANNEL && m.c)) return;
     if (channel === INBOX_CHANNEL) {
       this.inbox.emit(m.r);
       return;
@@ -948,6 +953,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         },
         workspaceId: true,
         folderId: true,
+        // The SOURCE snapshot, which the "this run never started" card reads: the state this run's
+        // baseline was left in, and — when a runner refused it — §10.1's code and the diagnosis
+        // (with the `fixAction` the control plane wrote beside it) that says what to do about it.
+        // `UNBOUND` + nulls on a Legacy session, which is every session that resolves no baseline.
+        sourceState: true,
+        sourceRefusalCode: true,
+        sourceRefusalDetail: true,
         lastTurnAt: true,
         workspace: { select: { id: true, name: true, model: true, effort: true } },
         coordinatorForProject: { select: { id: true, title: true } },
@@ -999,6 +1011,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // Null is a value here: a session moved out of its folder reaches the owner's other clients
       // by this key going null.
       folderId: s.folderId ?? null,
+      // The same three keys the list row and the detail carry, so a client folding this summary
+      // into a row it holds cannot be handed a refused run that looks like one still queued. Sent
+      // on every summary — a session that resolves nothing is `UNBOUND` with nulls, which is what
+      // clears a row that was showing a refusal.
+      sourceState: s.sourceState as SourceState,
+      sourceRefusalCode: (s.sourceRefusalCode as SourceRefusalCode | null) ?? null,
+      sourceRefusalDetail: (s.sourceRefusalDetail as SessionSourceRefusalDetail | null) ?? null,
       projectId: s.coordinatorForProject?.id ?? null,
       projectTitle: s.coordinatorForProject?.title ?? null,
       projectMembership: await readSessionProjectMembership(this.prisma, sessionId),

@@ -1,0 +1,17 @@
+{
+ "job": "bgj_5feb43e801c5",
+ "command": "npm run build -w @orbit/web && npm run test -w @orbit/web",
+ "exitCode": 0,
+ "commit": "c2557f75d3d3c2991ff26a5863560ed687649630",
+ "build": [
+  "> tsc -b && vite build",
+  "✓ built in 2.27s"
+ ],
+ "vitest": [
+  "Test Files  323 passed (323)",
+  "Tests  4065 passed (4065)",
+  "Start at  06:32:13",
+  "Duration  297.44s (tests 49%, import 37%, environment 12%, transform 2%)"
+ ],
+ "failedTests": []
+}

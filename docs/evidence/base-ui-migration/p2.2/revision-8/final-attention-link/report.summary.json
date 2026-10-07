@@ -1,0 +1,893 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/node_modules/@playwright/test/cli.js",
+   "test",
+   "--config",
+   "docs/evidence/base-ui-migration/p2.2/revision-8/attention-link.config.mjs"
+  ],
+  "configFile": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8/attention-link.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.toasts-results/r8-attention-link",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "attention-link.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.toasts-results/r8-attention-link",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "attention-link.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.toasts-results/r8-attention-link",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "attention-link.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.toasts-results/r8-attention-link",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "attention-link.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.toasts-results/r8-attention-link",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "attention-link.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.toasts-results/r8-attention-link",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "attention-link.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.toasts-results/r8-attention-link",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "attention-link.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.toasts-results/r8-attention-link",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8",
+    "testIgnore": [],
+    "testMatch": [
+     "attention-link.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/.toasts-results/r8-attention-link/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 14377 --strictPort",
+   "cwd": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/web/",
+   "url": "http://127.0.0.1:14377",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "attention-link.browser.mjs",
+   "file": "attention-link.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "failure copy link opens its session from a Dialog-owned notification by pointer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3344,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:32:03.446Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "failure-card",
+           "contentType": "image/png"
+          },
+          {
+           "name": "attention-link",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "43747d81a2e926623ab7-ce1ebba45733f95c5f4a",
+     "file": "attention-link.browser.mjs",
+     "line": 47,
+     "column": 1
+    },
+    {
+     "title": "failure copy link is reached with Tab inside the Dialog and opens its session with Enter",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1687,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:32:07.242Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "failure-card",
+           "contentType": "image/png"
+          },
+          {
+           "name": "attention-link",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "43747d81a2e926623ab7-d87f4968f545a6d33b32",
+     "file": "attention-link.browser.mjs",
+     "line": 54,
+     "column": 1
+    },
+    {
+     "title": "failure copy link opens its session from a Dialog-owned notification by pointer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1481,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:32:09.383Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "failure-card",
+           "contentType": "image/png"
+          },
+          {
+           "name": "attention-link",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "43747d81a2e926623ab7-660e2d79db1439e4ac29",
+     "file": "attention-link.browser.mjs",
+     "line": 47,
+     "column": 1
+    },
+    {
+     "title": "failure copy link is reached with Tab inside the Dialog and opens its session with Enter",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1344,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:32:11.008Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "failure-card",
+           "contentType": "image/png"
+          },
+          {
+           "name": "attention-link",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "43747d81a2e926623ab7-4d0fe1a06ae756373030",
+     "file": "attention-link.browser.mjs",
+     "line": 54,
+     "column": 1
+    },
+    {
+     "title": "failure copy link opens its session from a Dialog-owned notification by pointer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1421,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:32:12.609Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "failure-card",
+           "contentType": "image/png"
+          },
+          {
+           "name": "attention-link",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "43747d81a2e926623ab7-d63efcdadd44e666d103",
+     "file": "attention-link.browser.mjs",
+     "line": 47,
+     "column": 1
+    },
+    {
+     "title": "failure copy link is reached with Tab inside the Dialog and opens its session with Enter",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1338,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:32:14.081Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "failure-card",
+           "contentType": "image/png"
+          },
+          {
+           "name": "attention-link",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "43747d81a2e926623ab7-05c5acd7cad1d7cd3cd9",
+     "file": "attention-link.browser.mjs",
+     "line": 54,
+     "column": 1
+    },
+    {
+     "title": "failure copy link opens its session from a Dialog-owned notification by pointer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1352,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:32:15.675Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "failure-card",
+           "contentType": "image/png"
+          },
+          {
+           "name": "attention-link",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "43747d81a2e926623ab7-dfc78f73ca24fc89d559",
+     "file": "attention-link.browser.mjs",
+     "line": 47,
+     "column": 1
+    },
+    {
+     "title": "failure copy link is reached with Tab inside the Dialog and opens its session with Enter",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1305,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:32:17.077Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "failure-card",
+           "contentType": "image/png"
+          },
+          {
+           "name": "attention-link",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "43747d81a2e926623ab7-4b44ad99dbf34f979398",
+     "file": "attention-link.browser.mjs",
+     "line": 54,
+     "column": 1
+    },
+    {
+     "title": "failure copy link opens its session from a Dialog-owned notification by pointer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1183,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:32:18.637Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "failure-card",
+           "contentType": "image/png"
+          },
+          {
+           "name": "attention-link",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "43747d81a2e926623ab7-0881c4adab2232b79bf2",
+     "file": "attention-link.browser.mjs",
+     "line": 47,
+     "column": 1
+    },
+    {
+     "title": "failure copy link is reached with Tab inside the Dialog and opens its session with Enter",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1249,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:32:19.902Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "failure-card",
+           "contentType": "image/png"
+          },
+          {
+           "name": "attention-link",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "43747d81a2e926623ab7-63469b9d1579ed8e3d9c",
+     "file": "attention-link.browser.mjs",
+     "line": 54,
+     "column": 1
+    },
+    {
+     "title": "failure copy link opens its session from a Dialog-owned notification by pointer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1169,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:32:21.427Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "failure-card",
+           "contentType": "image/png"
+          },
+          {
+           "name": "attention-link",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "43747d81a2e926623ab7-d73e219d1fa9e68b1069",
+     "file": "attention-link.browser.mjs",
+     "line": 47,
+     "column": 1
+    },
+    {
+     "title": "failure copy link is reached with Tab inside the Dialog and opens its session with Enter",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1183,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:32:22.661Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "failure-card",
+           "contentType": "image/png"
+          },
+          {
+           "name": "attention-link",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "43747d81a2e926623ab7-e5ff71ed10c3bb97af5a",
+     "file": "attention-link.browser.mjs",
+     "line": 54,
+     "column": 1
+    },
+    {
+     "title": "failure copy link opens its session from a Dialog-owned notification by pointer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1214,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:32:24.127Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "failure-card",
+           "contentType": "image/png"
+          },
+          {
+           "name": "attention-link",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "43747d81a2e926623ab7-9f1917bb03e750888153",
+     "file": "attention-link.browser.mjs",
+     "line": 47,
+     "column": 1
+    },
+    {
+     "title": "failure copy link is reached with Tab inside the Dialog and opens its session with Enter",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1212,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:32:25.406Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "failure-card",
+           "contentType": "image/png"
+          },
+          {
+           "name": "attention-link",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "43747d81a2e926623ab7-f22e211713df7b2ec9a2",
+     "file": "attention-link.browser.mjs",
+     "line": 54,
+     "column": 1
+    },
+    {
+     "title": "failure copy link opens its session from a Dialog-owned notification by pointer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1183,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:32:26.893Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "failure-card",
+           "contentType": "image/png"
+          },
+          {
+           "name": "attention-link",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "43747d81a2e926623ab7-6b7366cf1964fe4cb6e4",
+     "file": "attention-link.browser.mjs",
+     "line": 47,
+     "column": 1
+    },
+    {
+     "title": "failure copy link is reached with Tab inside the Dialog and opens its session with Enter",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1197,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T06:32:28.140Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "failure-card",
+           "contentType": "image/png"
+          },
+          {
+           "name": "attention-link",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "43747d81a2e926623ab7-a6ef1df4ea4ff6b8a4c0",
+     "file": "attention-link.browser.mjs",
+     "line": 54,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-06T06:32:02.354Z",
+  "duration": 27068.747,
+  "expected": 16,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

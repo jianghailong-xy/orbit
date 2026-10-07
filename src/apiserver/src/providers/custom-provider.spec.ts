@@ -563,6 +563,36 @@ test('custom-provider', async (t) => {
     assert.equal(exec.env?.CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP, '1');
   });
 
+  // A conversation that has run on Anthropic's own endpoint carries its late tool discoveries
+  // inline (`tool_definition`); replayed to a vendor shim that speaks only the by-name form, every
+  // turn answers 422 — and the CLI's own fallback never fires because the vendor's wording is not
+  // the one its rejection classifier knows. Off by env, the engine re-declares those tools in
+  // `tools[]` instead, which is the shape such a shim accepts.
+  await t.test('a vendor endpoint is told not to inline late tool definitions', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'deepseek',
+      customRow: row(),
+      sessionModel: null,
+      workspaceModel: null,
+      workspaceEnv: null,
+    });
+    assert.equal(exec.env?.CLAUDE_CODE_INLINE_TOOLS, 'false');
+  });
+
+  // Anthropic's own API serves the inline form, so a BYOK row pointed at it keeps the shape — the
+  // env that turns it off is for the hosts that do not.
+  await t.test('a row pointed at Anthropic keeps inline tool definitions', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'anthropic',
+      customRow: row({ baseUrl: 'https://api.anthropic.com' }),
+      sessionModel: null,
+      workspaceModel: null,
+      workspaceEnv: null,
+    });
+    assert.equal(exec.env?.CLAUDE_CODE_INLINE_TOOLS, undefined);
+    assert.equal(exec.env?.ANTHROPIC_BASE_URL, 'https://api.anthropic.com');
+  });
+
   // The CLI assumes 200k for a model id its own catalog doesn't describe and auto-compacts the
   // session inside that; DeepSeek's shim serves no /v1/models for it to learn the real window from.
   // The preset's declared window is the one authoritative number, so it rides in the env the CLI

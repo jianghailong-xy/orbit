@@ -101,6 +101,10 @@
   `redirect_uri=${PUBLIC_ORIGIN}/api/auth/google/callback`、`scope=openid email profile`、`state`、`nonce`、
   `code_challenge`（Google 这一侧的 PKCE，与客户端那一对不是同一个）、`prompt=select_account`。
 - 未启用 Google：Web 302 回 `/login?google_error=GOOGLE_NOT_CONFIGURED`，原生回 `orbit://auth/google?error=…`。
+- 参数不合法（`code_challenge` 缺失或不是 S256 格式，或 `client_state` 超过 512 字符）、该 IP 超出限流、未完成的
+  flow 已达总量上限（7.4）时，也按 4.2 失败表 302 回跳而不回 JSON，错误码依次为 `GOOGLE_BAD_REQUEST`、
+  `GOOGLE_RATE_LIMITED`、`GOOGLE_SIGN_IN_BUSY`；这些回跳与上一条一样不设 cookie、不写库（连过期行也不清理），
+  原生端只在 `client_state` 合法时带回它；`client` 缺失或不是 `web` / `native` 时无处可回，仍回 400。
 
 ### 4.2 回调：`GET /api/auth/google/callback`
 
@@ -277,7 +281,7 @@ model OAuthLoginFlow {               // oauth_login_flow：短命，兑换即删
 | `POST /api/admin/users` | ADMIN | 新增可选 `passwordless` |
 | `PATCH /api/admin/users/:id/disabled` | ADMIN | `{disabled: boolean}`，5.5 |
 | `DELETE /api/admin/users/:id/identities/google` | ADMIN | 解除他人的关联 |
-| `GET /api/admin/sign-in/google` | ADMIN | `{enabled, clientId, hasSecret, signupPolicy, redirectUri}`，从不返回密钥 |
+| `GET /api/admin/sign-in/google` | ADMIN | `{enabled, clientId, hasSecret, secretUnreadable, signupPolicy, redirectUri}`，从不返回密钥；`secretUnreadable` 为真时管理区提示重填（换了 `PROVIDER_SECRET_KEY`，见 7.1） |
 | `PUT /api/admin/sign-in/google` | ADMIN | `{enabled, clientId, clientSecret?, signupPolicy}`；不带 `clientSecret` 即保留原值 |
 
 全是新路由或增量字段，旧客户端不受影响。新路由要过 `pat-route-coverage.spec.ts` 的声明普查（admin 路由沿用 `@PatForbidden('ADMIN')`）。
@@ -304,6 +308,8 @@ model SignInProvider {               // sign_in_provider，每个提供方一行
 - `enabled` 为真且 ID、密钥都在，才算启用；否则 `/auth/methods` 报 `google: false`，行为与今天完全相同。
 - 回调地址取已有的 `PUBLIC_ORIGIN`，必须与 Google 控制台登记的一字不差；`self-hosting.md` 已要求它是对外的 HTTPS 地址。
 - 密钥与模型提供方的 API key 同一套加密：没有密钥版本，轮换 `PROVIDER_SECRET_KEY` 后要重填（与提供方相同的已知限制）。
+  轮换后 `GET /api/admin/sign-in/google` 报 `secretUnreadable: true`，Sign-in 页据此提示已保存的密钥解不开、要求重填，
+  不显示 On 与「A secret is saved」；用户侧登录仍按 4.3 的通用失败文案处理。
 
 为什么不用环境变量：apiserver 的 compose 段被 `test/compose-topology.test.mjs` 钉住，加变量要所有者重新审批；
 改了还要重启。存库则 orbitd.io 和每个自建部署都是「发版后管理员填一次」，不动部署文件。
@@ -314,9 +320,12 @@ model SignInProvider {               // sign_in_provider，每个提供方一行
    授权域名填部署域名；scope 只要 `openid`、`email`、`profile`。
 2. 凭据 → 创建 OAuth 客户端 ID → 类型「Web 应用」→ 已获授权的重定向 URI 填 `https://<域名>/api/auth/google/callback`。
 3. 把 client ID / secret 填进 Orbit 管理区的「Sign-in」设置，打开开关。
-4. 同意屏幕处于「测试」状态时只有登记的测试用户能登录（最多 100 个），可用来灰度。开放注册必须发布为「正式」：
-   按控制台要求提供应用首页、隐私政策链接，并验证授权域名的所有权。只用基础 scope 通常不需要 Google 的应用审核；
-   要在同意屏显示 Logo 等品牌信息，按控制台当时的要求做品牌验证。
+4. 「测试」状态一般只放行登记的测试用户（最多 100 个），但只申请基础 scope（`openid`、`email`、`profile`）的应用
+   不受此限：Google 的 [Manage App Audience](https://support.google.com/cloud/answer/15549945) 写明这类请求的用户
+   不必在测试用户名单里，也看不到警告。本方案正是如此，所以「测试」状态挡不住任何 Google 账号，不能用来灰度；
+   决定谁能进 Orbit 的是注册策略（默认「仅已有账号」）。开放注册必须发布为「正式」：
+   按控制台要求提供应用首页、隐私政策链接，并验证授权域名的所有权。只用基础 scope 不需要 Google 的应用审核；
+   要在同意屏显示应用名与 Logo，须通过品牌验证（未验证时只显示域名）。
 
 限制：Google 要求回调地址是 https 公网域名（`http://localhost` 例外，可用于本机试用）。只有内网 IP 的自建部署用不了 Google 登录。
 
@@ -331,7 +340,8 @@ model SignInProvider {               // sign_in_provider，每个提供方一行
 
 - `/start` 与 `/exchange` 按 IP 限流，复用 `shared/public-surface.guard.ts` 的 `SharedRateLimiter`
   （按 `visitorAddress()`，即 nginx 给的 `X-Real-IP`）。
-- `/start` 每次删除已过期的 flow；未完成的 flow 设总量上限，超出时回 `503`，不无限写库。
+- `/start` 每次开 flow 前删除已过期的 flow；未完成的 flow 设总量上限，超出时拒绝（`/start` 按 4.1 回跳
+  `GOOGLE_SIGN_IN_BUSY`，`/link` 回 `503`），不无限写库。
 - 密码登录本身仍没有限流，这是既有缺口，不在本方案范围内。
 
 ## 8. 客户端

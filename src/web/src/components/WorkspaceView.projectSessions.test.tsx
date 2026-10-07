@@ -757,7 +757,43 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     expect(page()!.querySelector('.session-project-page-progress')?.textContent).toBe('2/5 done · 1 running');
   });
 
-  it('carries a task landing on the project branch in its card, and opens the project from it', async () => {
+  it('carries a task landing on the project branch in its card, and lists every job in flight from it', async () => {
+    const now = new Date().toISOString();
+    const listed = (over: Record<string, unknown>) => ({
+      kind: 'LAND_TASK', state: 'RUNNING', phase: 'CHECK', taskId: TASK.id, taskTitle: 'Build the package', generation: 1,
+      startedAt: now, queuedAt: now, heartbeatAt: now, runnerName: RUNNER.name, retriedBy: null, timedOut: false,
+      limitSeconds: 4200, retryable: false, ...over,
+    });
+    integrationView = {
+      line: 'PROJECT_BRANCH', ref: 'project/alpha', integratingCount: 1, queuedCount: 1,
+      inFlight: { kind: 'LAND_TASK', state: 'RUNNING', phase: 'CHECK', startedAt: now, heartbeatAt: now, taskTitle: 'Build the package' },
+      inFlightJobs: [
+        listed({ jobId: 'job-build' }),
+        listed({ jobId: 'job-merge', kind: 'LAND_PROMOTION', state: 'QUEUED', phase: null, taskId: null, taskTitle: null,
+          heartbeatAt: null, runnerName: null, limitSeconds: null }),
+      ],
+    };
+    await mount();
+    await openSessions();
+    const landing = (): HTMLElement | null => page()!.querySelector<HTMLElement>('.session-project-page-card .session-project-page-landing');
+    await until(() => expect(landing()?.textContent).toContain('2 jobs'));
+    expect(landing()!.textContent).toContain('Landing');
+    expect(landing()!.getAttribute('aria-haspopup')).toBe('dialog');
+    const before = location;
+    await click(landing(), 'the landing line');
+    const list = (): HTMLElement | null => document.querySelector<HTMLElement>('.landing-jobs-dialog');
+    await until(() => expect(list()?.querySelector('.orbit-overlay-title')?.textContent).toBe('2 jobs in flight'));
+    expect([...list()!.querySelectorAll('.landing-jobs-row')].map((entry) => entry.getAttribute('data-job')))
+      .toEqual(['job-build', 'job-merge']);
+    expect(list()!.textContent).toContain('Build the package');
+    expect(list()!.textContent).toContain('Merge to main');
+    // The list opens over this page rather than leaving it, and outside the card, which still holds
+    // no link of its own.
+    expect(location).toBe(before);
+    expect(page()!.querySelector('.session-project-page-card a')).toBeNull();
+  });
+
+  it('opens the project from the landing line of a server that does not list its jobs', async () => {
     const now = new Date().toISOString();
     integrationView = {
       line: 'PROJECT_BRANCH', ref: 'project/alpha', integratingCount: 1, queuedCount: 0,
@@ -768,8 +804,10 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     const landing = (): HTMLElement | null => page()!.querySelector<HTMLElement>('.session-project-page-card .session-project-page-landing');
     await until(() => expect(landing()?.textContent).toContain('Build the package'));
     expect(landing()!.textContent).toContain('Landing');
+    expect(landing()!.getAttribute('aria-haspopup')).toBeNull();
     await click(landing(), 'the landing line');
     await until(() => expect(location).toBe(`/projects/${PROJECT_ID}`));
+    expect(document.querySelector('.landing-jobs-dialog')).toBeNull();
   });
 
   it('offers Move on a phone’s swipe only for the coordinator, as its menu does', async () => {
@@ -1014,6 +1052,30 @@ describe('the merge into main on the project sessions page', { timeout: 60_000 }
     await click([...card()!.querySelectorAll('button')].find((button) => button.textContent === 'Open coordinator ›'), 'Open coordinator');
     await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
     expect(page()).not.toBeNull();
+  });
+
+  it('lists the jobs in flight from the merge check’s landing row', async () => {
+    const now = new Date().toISOString();
+    integrationView = {
+      line: 'PROJECT_BRANCH', ref: 'project/alpha', integratingCount: 1, queuedCount: 0,
+      inFlight: { kind: 'CHECK_PROMOTION', state: 'RUNNING', phase: 'CHECK', startedAt: now, heartbeatAt: now, taskTitle: null },
+      inFlightJobs: [{
+        jobId: 'job-check', kind: 'CHECK_PROMOTION', state: 'RUNNING', phase: 'CHECK', taskId: null, taskTitle: null,
+        generation: 1, startedAt: now, queuedAt: now, heartbeatAt: now, runnerName: RUNNER.name, retriedBy: null,
+        timedOut: false, limitSeconds: 4200, retryable: false,
+      }],
+    };
+    await mount();
+    await openSessions();
+    await until(() => expect(card()?.getAttribute('data-shape')).toBe('checking'));
+    // The job is the merge card's, so the progress card draws no landing line of its own.
+    expect(page()!.querySelector('.session-project-page-landing')).toBeNull();
+    const press = card()!.querySelector<HTMLButtonElement>('button.project-landing-press');
+    expect(press?.textContent).toContain('Merge check');
+    await click(press, 'the merge check’s landing row');
+    await until(() => expect(document.querySelector('.landing-jobs-dialog .orbit-overlay-title')?.textContent)
+      .toBe('1 job in flight'));
+    expect(document.querySelector('.landing-jobs-row[data-job="job-check"]')?.textContent).toContain('checking');
   });
 
   it('draws nothing about main while nothing is on offer', async () => {

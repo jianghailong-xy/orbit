@@ -1,8 +1,12 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
+  NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma, type User } from '@prisma/client';
@@ -11,6 +15,7 @@ import { generateToken, sha256 } from '../common/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { SharedRateLimiter } from '../shared/public-surface.guard';
 import { USER_NAME_MAX_CHARS } from '../users/dto';
+import { type AccountSignInMethods, SIGN_IN_METHODS_SELECT, signInMethodsOf } from '../users/sign-in-methods';
 import { AuthService } from './auth.service';
 import type { GoogleClient } from './google-auth.controller';
 import {
@@ -28,8 +33,8 @@ export const GOOGLE_TICKET_TTL_MS = 2 * 60_000;
 /**
  * How many sign-ins may be waiting on Google at once, across the deployment (§7.4). /start writes a
  * row for anyone who asks, so the table is bounded here rather than by the rate limit alone: past it
- * a start is refused 503 until rows end or are swept. Far above what people signing in reach — each
- * is one row for at most ten minutes — so only a flood meets it.
+ * a start is refused (GOOGLE_SIGN_IN_BUSY, §4.1; a link 503) until rows end or are swept. Far above
+ * what people signing in reach — each is one row for at most ten minutes — so only a flood meets it.
  */
 export const GOOGLE_PENDING_FLOW_CAP = 10_000;
 /**
@@ -40,6 +45,11 @@ export const GOOGLE_START_RATE_LIMIT = { max: 30, windowMs: 60_000 };
 export const GOOGLE_EXCHANGE_RATE_LIMIT = { max: 30, windowMs: 60_000 };
 /** The longest `client_state` a native client may have handed back. */
 export const GOOGLE_CLIENT_STATE_MAX = 512;
+
+/** A `client_state` /start takes, and so the only kind it hands back: one string of at most GOOGLE_CLIENT_STATE_MAX characters. */
+export function isGoogleClientState(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= GOOGLE_CLIENT_STATE_MAX;
+}
 
 /** A PKCE S256 challenge: 43 base64url characters, the unpadded sha256 (RFC 7636 §4.2). */
 const S256_CHALLENGE = /^[A-Za-z0-9_-]{43}$/;
@@ -56,6 +66,13 @@ export type GoogleCallbackError =
   | 'GOOGLE_EXCHANGE_FAILED'
   | 'GOOGLE_EMAIL_UNVERIFIED'
   | 'GOOGLE_NOT_CONFIGURED';
+
+/**
+ * Why /start sends the client back instead of on to Google (§4.1): Google sign-in is off, a challenge
+ * or `client_state` it cannot take, this address's budget spent, or the flows in flight at their cap
+ * (§7.4).
+ */
+export type GoogleStartRefusal = 'GOOGLE_NOT_CONFIGURED' | 'GOOGLE_BAD_REQUEST' | 'GOOGLE_RATE_LIMITED' | 'GOOGLE_SIGN_IN_BUSY';
 
 /** Who the callback answers: the client that started the flow, as the flow recorded it. */
 export interface GoogleReturnTo {
@@ -74,12 +91,14 @@ export type GoogleCallbackOutcome = { to: GoogleReturnTo; ticket: string } | { t
  */
 const UNKNOWN_FLOW: GoogleReturnTo = { client: 'web', intent: 'LOGIN', clientState: null };
 
-/** What the exchange reads of the row it deletes. */
+/** What the exchange and a link's confirmation read of the row they delete. */
 interface RedeemedFlow {
   intent: string;
   clientChallenge: string;
   ticketExpiresAt: Date | null;
   claims: unknown;
+  /** The account a LINK flow links to; null for a sign-in. */
+  linkUserId: string | null;
 }
 
 /** Two digests in one encoding — sha256 hex, or an S256 challenge — compared in constant time. */
@@ -109,6 +128,37 @@ const mismatch = () =>
   new BadRequestException({
     code: 'GOOGLE_FLOW_MISMATCH',
     message: 'This Google sign-in has expired, was already used, or was started elsewhere — sign in again',
+  });
+
+const notConfigured = () =>
+  new ForbiddenException({ code: 'GOOGLE_NOT_CONFIGURED', message: 'Google sign-in is not enabled on this server' });
+
+/** A link's ticket that links nothing (§5.3): the same code as the exchange's, said for the profile page. */
+const linkMismatch = () =>
+  new BadRequestException({
+    code: 'GOOGLE_FLOW_MISMATCH',
+    message: 'This Google connection has expired, was already used, or was started from another account or browser — connect Google again',
+  });
+
+/** §5.3: the Google account is another Orbit account's. */
+const alreadyLinked = () =>
+  new ConflictException({
+    code: 'GOOGLE_ALREADY_LINKED',
+    message: 'This Google account is already linked to another Orbit account — disconnect it there first, or ask an administrator',
+  });
+
+/** The account has a Google account linked already, and v1 links one (§5.1). */
+const linkExists = () =>
+  new ConflictException({
+    code: 'GOOGLE_LINK_EXISTS',
+    message: 'Your account is already connected to a Google account — disconnect it before connecting another',
+  });
+
+/** §5.3: unlinking would leave the account no way to sign in. */
+const lockOut = () =>
+  new BadRequestException({
+    code: 'GOOGLE_UNLINK_WOULD_LOCK_OUT',
+    message: 'Google is the only way this account signs in — ask an administrator to set a password before disconnecting it',
   });
 
 /**
@@ -145,9 +195,16 @@ export function googleIsAuthoritative(identity: { email: string; emailVerified: 
 /**
  * The Activity row of a Google account linked to an Orbit account (§5.2, §5.3), written with the
  * link: the payload names the provider, the Google email, and how — AUTO, by the authoritative email
- * of an account that existed, or SIGNUP, together with the account opened for it.
+ * of an account that existed; SIGNUP, together with the account opened for it; or SETTINGS, by the
+ * account itself on its profile page.
  */
 export const IDENTITY_LINKED_ACTIVITY = 'identity.linked';
+
+/**
+ * The Activity row of a Google account unlinked (§5.3): by the account itself on its profile page
+ * (SETTINGS), or by an administrator (ADMIN), whose row it is and whose payload names the account.
+ */
+export const IDENTITY_UNLINKED_ACTIVITY = 'identity.unlinked';
 
 /**
  * The name of an account a Google sign-in opens (§5.2 case 5): Google's `name`, cut to the longest
@@ -175,7 +232,9 @@ interface EmailMatch extends SignedInUser {
  * the callback that verifies what Google sent back and hands the client a one-time ticket, and the
  * exchange of that ticket for a session on the Orbit account §5.2 finds, links or opens for it. The
  * callback settles nothing: the session is issued only to whoever presents the ticket together with
- * the verifier of the challenge the start was given.
+ * the verifier of the challenge the start was given. Linking Google to the account signed in (§5.3)
+ * is the same flow with intent LINK: the profile page opens it, and its ticket is confirmed — by the
+ * account that opened it, with the verifier — rather than exchanged.
  *
  * What holds the flow together, each a column of `oauth_login_flow` (migration 0391):
  *  - `state`: one use, ten minutes. A callback finds its flow by the state's hash; the first callback
@@ -209,60 +268,115 @@ export class GoogleLoginService {
 
   /**
    * §4.1: open a flow for `client` and answer where to send the browser, with the binding cookie's
-   * value. Null while Google sign-in is off, before anything is checked or written: the client is
-   * sent back with GOOGLE_NOT_CONFIGURED, as before there was a flow.
+   * value — or why not, with nothing written: GOOGLE_NOT_CONFIGURED while Google sign-in is off,
+   * before anything is checked, as before there was a flow; GOOGLE_BAD_REQUEST for a challenge or
+   * `client_state` it cannot take; GOOGLE_RATE_LIMITED and GOOGLE_SIGN_IN_BUSY for the budget and the
+   * cap (§7.4). The browser came here by a navigation, so the client is sent back with the code
+   * rather than refused with a body nothing would read.
    */
   async start(input: {
     client: GoogleClient;
     codeChallenge?: unknown;
     clientState?: unknown;
     visitor: string;
-  }): Promise<{ authorizationUrl: string; binding: string } | null> {
+  }): Promise<{ authorizationUrl: string; binding: string } | { refused: GoogleStartRefusal }> {
     const clientId = await this.signIn.googleClientId();
-    if (clientId === null) return null;
+    if (clientId === null) return { refused: 'GOOGLE_NOT_CONFIGURED' };
     const { codeChallenge, clientState } = input;
-    if (typeof codeChallenge !== 'string' || !S256_CHALLENGE.test(codeChallenge)) {
-      throw new BadRequestException('code_challenge must be an S256 challenge: 43 base64url characters');
+    if (typeof codeChallenge !== 'string' || !S256_CHALLENGE.test(codeChallenge)
+      || (clientState !== undefined && !isGoogleClientState(clientState))) {
+      return { refused: 'GOOGLE_BAD_REQUEST' };
     }
-    if (clientState !== undefined && (typeof clientState !== 'string' || clientState.length > GOOGLE_CLIENT_STATE_MAX)) {
-      throw new BadRequestException(`client_state must be one string of at most ${GOOGLE_CLIENT_STATE_MAX} characters`);
-    }
-    this.startLimiter.take(input.visitor);
-    await this.sweep();
-    const pending = await this.prisma.oAuthLoginFlow.count({ where: { status: 'PENDING', expiresAt: { gt: new Date() } } });
-    if (pending >= GOOGLE_PENDING_FLOW_CAP) {
-      throw new ServiceUnavailableException({
-        code: 'GOOGLE_SIGN_IN_BUSY',
-        message: 'Too many Google sign-ins are in progress on this server — try again in a few minutes',
-      });
-    }
-    const state = generateToken(32);
-    const nonce = generateToken(32);
-    const binding = generateToken(32);
-    const providerCodeVerifier = generateToken(32);
-    await this.prisma.oAuthLoginFlow.create({
-      data: {
-        provider: GOOGLE,
-        intent: 'LOGIN',
-        client: input.client === 'web' ? 'WEB' : 'NATIVE',
-        stateHash: sha256(state),
-        bindingHash: sha256(binding),
-        nonce,
-        providerCodeVerifier,
-        clientChallenge: codeChallenge,
-        // Only a native client is handed it back (§4.2); the Web's targets are fixed paths.
-        clientState: input.client === 'native' ? (clientState ?? null) : null,
-        expiresAt: new Date(Date.now() + GOOGLE_FLOW_TTL_MS),
-      },
+    return this.open(clientId, input.visitor, {
+      intent: 'LOGIN',
+      client: input.client === 'web' ? 'WEB' : 'NATIVE',
+      clientChallenge: codeChallenge,
+      // Only a native client is handed it back (§4.2); the Web's targets are fixed paths.
+      clientState: input.client === 'native' ? (clientState ?? null) : null,
+      linkUserId: null,
+    }).catch((error: unknown) => {
+      // open's two refusals, which the profile page's link answers as they are (startLink).
+      if (!(error instanceof HttpException)) throw error;
+      if (error.getStatus() === HttpStatus.TOO_MANY_REQUESTS) return { refused: 'GOOGLE_RATE_LIMITED' as const };
+      if (error.getStatus() === HttpStatus.SERVICE_UNAVAILABLE) return { refused: 'GOOGLE_SIGN_IN_BUSY' as const };
+      throw error;
     });
-    const authorizationUrl = this.google.authorizationUrl({
-      clientId,
-      redirectUri: googleRedirectUri(),
-      state,
-      nonce,
-      codeChallenge: s256(providerCodeVerifier),
+  }
+
+  /**
+   * §5.3: open a LINK flow for the signed-in account `userId`, which the profile page sends the
+   * browser to Google with. The same flow a sign-in starts — state, nonce, both sides of PKCE, the
+   * binding cookie — naming the account it links to, and answered back to the profile page (§4.2).
+   * Refused while Google sign-in is off, and while the account already has a Google account linked:
+   * v1 links one (§5.1).
+   */
+  async startLink(input: { userId: string; codeChallenge: string; visitor: string }): Promise<{ authorizationUrl: string; binding: string }> {
+    const clientId = await this.signIn.googleClientId();
+    if (clientId === null) throw notConfigured();
+    if (!S256_CHALLENGE.test(input.codeChallenge)) {
+      throw new BadRequestException('codeChallenge must be an S256 challenge: 43 base64url characters');
+    }
+    const own = await this.prisma.userIdentity.findUnique({
+      where: { userId_provider: { userId: input.userId, provider: GOOGLE } },
+      select: { id: true },
     });
-    return { authorizationUrl, binding };
+    if (own) throw linkExists();
+    return this.open(clientId, input.visitor, {
+      intent: 'LINK',
+      client: 'WEB',
+      clientChallenge: input.codeChallenge,
+      clientState: null,
+      linkUserId: input.userId,
+    });
+  }
+
+  /**
+   * §5.3: link the Google account a LINK flow's callback verified to the account that started it.
+   * The ticket is spent by this presentation whatever follows, as the exchange's is (§4.3); it links
+   * only for the verifier of the flow's challenge, presented by the same account the flow was opened
+   * for — a ticket carried to another account's session, or presented without the verifier, links
+   * nothing. The person proved both sides, so neither the email nor its authority is asked about
+   * (§5.3); a Google account linked to another Orbit account is refused GOOGLE_ALREADY_LINKED.
+   */
+  async confirmLink(input: { userId: string; ticket: string; codeVerifier: string }): Promise<{ signInMethods: AccountSignInMethods }> {
+    if (!(await this.signIn.methods()).google) throw notConfigured();
+    const flow = await this.redeem(sha256(input.ticket));
+    if (!flow
+      || flow.ticketExpiresAt === null || flow.ticketExpiresAt.getTime() <= Date.now()
+      || !CODE_VERIFIER.test(input.codeVerifier) || !sameDigest(s256(input.codeVerifier), flow.clientChallenge)
+      || flow.intent !== 'LINK' || flow.linkUserId !== input.userId) {
+      throw linkMismatch();
+    }
+    const identity = identityOf(flow.claims);
+    if (!identity) throw linkMismatch();
+    await this.linkFromSettings(identity, input.userId).catch((error: unknown) => {
+      // Another link of this Google account, or to this account, committed between the reads and
+      // the insert: read once more, and answer what it left.
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw error;
+      return this.linkFromSettings(identity, input.userId);
+    });
+    return { signInMethods: await this.signInMethods(input.userId) };
+  }
+
+  /**
+   * §5.3: the signed-in account disconnects its Google account. Refused GOOGLE_UNLINK_WOULD_LOCK_OUT
+   * while the account has no password, since Google would then be no way in at all; an administrator
+   * can unlink it (`unlinkByAdmin`) or give it a password. An account with nothing linked is answered
+   * as it is.
+   */
+  async unlink(userId: string): Promise<{ signInMethods: AccountSignInMethods }> {
+    if (!(await this.signIn.methods()).google) throw notConfigured();
+    return { signInMethods: await this.removeGoogle(userId, { actorId: userId, method: 'SETTINGS' }) };
+  }
+
+  /**
+   * §5.3: an administrator unlinks the Google account of `userId` — any account, one without a
+   * password included (a password reset gives it one). Recorded as the administrator's, naming the
+   * account. 404 for an account that does not exist. Not a Google route: it answers while Google
+   * sign-in is off too, so an administrator can still take a link away.
+   */
+  async unlinkByAdmin(adminId: string, userId: string): Promise<{ signInMethods: AccountSignInMethods }> {
+    return { signInMethods: await this.removeGoogle(userId, { actorId: adminId, method: 'ADMIN' }) };
   }
 
   /**
@@ -336,9 +450,7 @@ export class GoogleLoginService {
    */
   async exchange(input: { ticket: string; codeVerifier: string; visitor: string }) {
     const methods = await this.signIn.methods();
-    if (!methods.google) {
-      throw new ForbiddenException({ code: 'GOOGLE_NOT_CONFIGURED', message: 'Google sign-in is not enabled on this server' });
-    }
+    if (!methods.google) throw notConfigured();
     this.exchangeLimiter.take(input.visitor);
     const flow = await this.redeem(sha256(input.ticket));
     if (!flow
@@ -389,7 +501,52 @@ export class GoogleLoginService {
     return this.link(identity, null);
   }
 
-  /** The rows past their end, swept on every start (§7.4). */
+  /**
+   * Open a flow (§4.1) — a sign-in's or a link's — and answer where to send the browser, with the
+   * binding cookie's value. Budgeted per address (429) and refused 503 past the cap of flows in
+   * flight (§7.4), both before anything is written: the sweep comes with the row it makes room for.
+   */
+  private async open(
+    clientId: string,
+    visitor: string,
+    flow: { intent: GoogleIntent; client: 'WEB' | 'NATIVE'; clientChallenge: string; clientState: string | null; linkUserId: string | null },
+  ): Promise<{ authorizationUrl: string; binding: string }> {
+    this.startLimiter.take(visitor);
+    // Rows past their end are not counted, swept or not.
+    const pending = await this.prisma.oAuthLoginFlow.count({ where: { status: 'PENDING', expiresAt: { gt: new Date() } } });
+    if (pending >= GOOGLE_PENDING_FLOW_CAP) {
+      throw new ServiceUnavailableException({
+        code: 'GOOGLE_SIGN_IN_BUSY',
+        message: 'Too many Google sign-ins are in progress on this server — try again in a few minutes',
+      });
+    }
+    await this.sweep();
+    const state = generateToken(32);
+    const nonce = generateToken(32);
+    const binding = generateToken(32);
+    const providerCodeVerifier = generateToken(32);
+    await this.prisma.oAuthLoginFlow.create({
+      data: {
+        provider: GOOGLE,
+        ...flow,
+        stateHash: sha256(state),
+        bindingHash: sha256(binding),
+        nonce,
+        providerCodeVerifier,
+        expiresAt: new Date(Date.now() + GOOGLE_FLOW_TTL_MS),
+      },
+    });
+    const authorizationUrl = this.google.authorizationUrl({
+      clientId,
+      redirectUri: googleRedirectUri(),
+      state,
+      nonce,
+      codeChallenge: s256(providerCodeVerifier),
+    });
+    return { authorizationUrl, binding };
+  }
+
+  /** The rows past their end, swept by every start that opens a flow (§7.4). */
   private async sweep(): Promise<void> {
     await this.prisma.oAuthLoginFlow.deleteMany({ where: { expiresAt: { lt: new Date() } } });
   }
@@ -413,11 +570,15 @@ export class GoogleLoginService {
     return count === 1;
   }
 
-  /** §4.3 step 1: one statement takes the flow that holds the ticket out of the table, and answers it. */
+  /**
+   * §4.3 step 1, for the exchange and for a link's confirmation alike: one statement takes the flow
+   * that holds the ticket out of the table, and answers it.
+   */
   private async redeem(ticketHash: string): Promise<RedeemedFlow | null> {
     const rows = await this.prisma.$queryRaw<RedeemedFlow[]>`
       DELETE FROM "oauth_login_flow" WHERE "ticket_hash" = ${ticketHash} AND "status" = 'AUTHENTICATED'
-      RETURNING "intent", "client_challenge" AS "clientChallenge", "ticket_expires_at" AS "ticketExpiresAt", "claims"`;
+      RETURNING "intent", "client_challenge" AS "clientChallenge", "ticket_expires_at" AS "ticketExpiresAt", "claims",
+        "link_user_id" AS "linkUserId"`;
     return rows[0] ?? null;
   }
 
@@ -485,5 +646,80 @@ export class GoogleLoginService {
       });
       return { id: account.id, email: account.email, name: account.name };
     });
+  }
+
+  /**
+   * §5.3: link the Google account to `userId` from its profile page (SETTINGS), with the Activity row,
+   * in one transaction. Nothing to do when it is this account's already — a second confirmation of
+   * the same link. Refused GOOGLE_ALREADY_LINKED when it is another account's, and GOOGLE_LINK_EXISTS
+   * when this account has another Google account linked meanwhile. The reads are not locks: a link
+   * committed after them fails the insert on user_identity's unique keys, and `confirmLink` reads
+   * once more.
+   */
+  private async linkFromSettings(identity: VerifiedGoogleIdentity, userId: string): Promise<void> {
+    const linked = await this.prisma.userIdentity.findUnique({
+      where: { provider_subject: { provider: GOOGLE, subject: identity.sub } },
+      select: { userId: true },
+    });
+    if (linked?.userId === userId) return;
+    if (linked) throw alreadyLinked();
+    const own = await this.prisma.userIdentity.findUnique({
+      where: { userId_provider: { userId, provider: GOOGLE } },
+      select: { id: true },
+    });
+    if (own) throw linkExists();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userIdentity.create({
+        data: { userId, provider: GOOGLE, subject: identity.sub, email: identity.email, hostedDomain: identity.hd },
+      });
+      await tx.activity.create({
+        data: {
+          actorId: userId,
+          type: IDENTITY_LINKED_ACTIVITY,
+          payload: { provider: GOOGLE, email: identity.email, method: 'SETTINGS' },
+          credentialKind: 'LOGIN',
+        },
+      });
+    });
+  }
+
+  /**
+   * Take the Google account off `userId` (§5.3) and record it, `by` the account itself (SETTINGS) or
+   * by an administrator (ADMIN, the payload naming the account). The account's own unlink is refused
+   * while it has no password. That is decided before the delete, not under a lock: a password, once
+   * an account has one, is never taken away — a reset only sets one — so the account read with a
+   * password still has it. Of two unlinks at once, the one whose delete finds the row records it.
+   * Answers the account's sign-in methods after; 404 when there is no such account.
+   */
+  private async removeGoogle(userId: string, by: { actorId: string; method: 'SETTINGS' | 'ADMIN' }): Promise<AccountSignInMethods> {
+    const account = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true, identities: { where: { provider: GOOGLE }, select: { id: true, email: true } } },
+    });
+    if (!account) throw new NotFoundException('user not found');
+    const [identity] = account.identities;
+    if (identity) {
+      if (by.method === 'SETTINGS' && account.passwordHash === null) throw lockOut();
+      await this.prisma.$transaction(async (tx) => {
+        const { count } = await tx.userIdentity.deleteMany({ where: { id: identity.id } });
+        if (count === 0) return;
+        await tx.activity.create({
+          data: {
+            actorId: by.actorId,
+            type: IDENTITY_UNLINKED_ACTIVITY,
+            payload: { provider: GOOGLE, email: identity.email, method: by.method, ...(by.method === 'ADMIN' ? { userId } : {}) },
+            credentialKind: 'LOGIN',
+          },
+        });
+      });
+    }
+    return signInMethodsOf({ passwordHash: account.passwordHash, identities: [] });
+  }
+
+  /** The account's sign-in methods as `me` answers them. */
+  private async signInMethods(userId: string): Promise<AccountSignInMethods> {
+    const account = await this.prisma.user.findUnique({ where: { id: userId }, select: SIGN_IN_METHODS_SELECT });
+    if (!account) throw new NotFoundException('user not found');
+    return signInMethodsOf(account);
   }
 }

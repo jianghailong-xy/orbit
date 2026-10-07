@@ -30,8 +30,6 @@ import {
   type SettlementProjectDocument,
 } from './ProjectSettlementCard';
 import { PROVENANCE_LABEL } from './CriteriaDecisionCard';
-import { ENTER_HINT, SHORTCUT_HINT } from './CardHotkey';
-import { acceptanceConfirmationKey } from '../lib/acceptanceConfirmation';
 
 /**
  * The card that explains why a project the server has NOT recorded done is not done.
@@ -375,15 +373,26 @@ describe('the card', () => {
   });
 });
 
-/** The card as the conversation meets it: wired to the project read and to the confirmation door. */
-describe('the wired card', () => {
+/**
+ * The card is not drawn in a conversation any more — under either read.
+ *
+ * HOW IT WAS WIRED, AND WHAT IS LEFT TO ASSERT
+ * --------------------------------------------
+ * Until 2026-10-07 this block pressed the card's two doors from the conversation
+ * `SessionProjectSettlementCard` draws it in: `Confirm the criteria` at the confirmation door from
+ * the browser, and `Ask the coordinator to handle it` as one ordinary turn. The owner's ruling of
+ * 2026-10-07 04:20Z took that question out of the conversation, so the session draws the owner's
+ * card, its receipt, or nothing at all — and nothing is what this block is left with: the older
+ * projection's rule-sentence card is gone from the session exactly where the grouped one was, so
+ * the fixture this card's own condition holds for draws no card and writes to no door. The card's
+ * rendering and its presses stay covered by the static cases above; what the conversation draws in
+ * each of its states, and the three drawings that stay, are `ProjectDoneConversation.test.tsx`'s.
+ */
+describe('the conversation draws none of this card', () => {
   type Recorded = { method: string; path: string; body: unknown; init: unknown };
   const recorded: Recorded[] = [];
-  const writes = (): Recorded[] => recorded.filter((request) => request.method !== 'GET');
 
   const server: { document: SettlementProjectDocument | Error } = { document: projectOf() };
-  /** What the press handed the conversation, in the order it did: the card writes nothing itself. */
-  const delegated: Array<{ facts: string }> = [];
 
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
@@ -392,7 +401,6 @@ describe('the wired card', () => {
   beforeEach(() => {
     server.document = projectOf();
     recorded.length = 0;
-    delegated.length = 0;
     vi.mocked(api).mockImplementation((async (
       path: string,
       init?: { method?: string; body?: unknown },
@@ -426,12 +434,24 @@ describe('the wired card', () => {
     });
   }
 
-  async function until(done: () => boolean, what: string): Promise<void> {
-    for (let n = 0; n < 200 && !done(); n += 1) await turn();
-    expect(done(), `waited for ${what}`).toBe(true);
+  const cardsIn = (node: ParentNode): HTMLElement[] => [
+    ...node.querySelectorAll<HTMLElement>('.project-settlement'),
+  ];
+
+  /** Both reads answered and then some: a card that is not drawn by now is not going to be. */
+  async function read(qc: QueryClient): Promise<void> {
+    for (let n = 0; n < 200; n += 1) {
+      const answered = [['project', PROJECT], ['project', PROJECT, 'open-items']].every((key) => {
+        const state = qc.getQueryState(key);
+        return state?.fetchStatus === 'idle' && state.status === 'success';
+      });
+      if (answered) break;
+      await turn();
+    }
+    for (let n = 0; n < 10; n += 1) await turn();
   }
 
-  async function mount(...conversations: Array<string | null>): Promise<{ node: HTMLElement; qc: QueryClient }> {
+  async function mount(): Promise<{ node: HTMLElement; qc: QueryClient }> {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false }, mutations: { retry: false } },
@@ -445,190 +465,42 @@ describe('the wired card', () => {
     await act(async () => {
       tree.render(
         <QueryClientProvider client={qc}>
-          {conversations.map((projectId, index) => (
-            <section key={index}>
-              <SessionProjectSettlementCard projectId={projectId} onDelegate={(talk) => delegated.push(talk)} />
-            </section>
-          ))}
+          <SessionProjectSettlementCard projectId={PROJECT} />
         </QueryClientProvider>,
       );
     });
+    await read(qc);
     return { node, qc };
   }
 
-  const cardsIn = (node: ParentNode): HTMLElement[] => [
-    ...node.querySelectorAll<HTMLElement>('.project-settlement'),
+  /** One press of whatever is on screen, and the writes it reaches: there is nothing to press. */
+  const presses = (node: ParentNode): HTMLButtonElement[] => [
+    ...node.querySelectorAll<HTMLButtonElement>('.project-settlement-actions button'),
   ];
-  const buttons = (card: HTMLElement): HTMLButtonElement[] => [
-    ...card.querySelectorAll<HTMLButtonElement>('.project-settlement-actions button'),
-  ];
-/** What a control draws INSIDE itself to say which key presses it, or nothing. */
-  const hintOn = (button: HTMLElement): string | null =>
-    button.querySelector('.approval-kbd')?.textContent ?? null;
 
-  /** One keypress, as the browser delivers it: on the window, with whatever focus is standing. */
-  async function key(init: KeyboardEventInit = {}): Promise<void> {
-    await act(async () => {
-      window.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init }),
-      );
-    });
-    await turn();
-  }
-
-  /** The words ON a button. The card draws its key inside the button it presses, as a span of its
-   *  own (`CardHotkey.ts`): what the control does is the label, and what presses it is not. */
-  const labelOf = (button: HTMLButtonElement): string => {
-    const hint = button.querySelector<HTMLElement>('.approval-kbd');
-    const text = button.textContent ?? '';
-    return (hint?.textContent ? text.replace(hint.textContent, '') : text).trim();
-  };
-
-  const action = (card: HTMLElement, label: string): HTMLButtonElement => {
-    const found = buttons(card).find((button) => labelOf(button) === label);
-    if (!found) throw new Error(`no "${label}" on the card`);
-    return found;
-  };
-
-  async function delivered(): Promise<{ node: HTMLElement; qc: QueryClient; card: () => HTMLElement }> {
-    const { node, qc } = await mount(PROJECT);
-    await until(() => cardsIn(node).length > 0, 'the card to be delivered');
-    const card = (): HTMLElement => {
-      const [only] = cardsIn(node);
-      if (!only) throw new Error('the card is not on the page');
-      return only;
-    };
-    return { node, qc, card };
-  }
-
-  it('draws none in a conversation that coordinates no project, beside one that does', async () => {
-    const { node } = await mount(null, PROJECT);
-    const [ordinary, coordinator] = [...node.querySelectorAll('section')];
-    await until(() => cardsIn(coordinator!).length === 1, 'the coordinator conversation to draw its card');
-    expect(cardsIn(ordinary!)).toHaveLength(0);
-    expect(recorded.filter((request) => request.path.includes('/projects//'))).toEqual([]);
-  });
-
-  it.each<[string, SettlementProjectDocument]>([
-    ['a server that serves no projection', projectOf({ derivedDone: undefined })],
-    ['a project already recorded done', projectOf({ status: 'DONE' })],
-    ['a projection that withholds nothing', projectOf({
-      derivedDone: { status: 'DONE', done: true, withheld: [], criteria: [], confirmation: 'CONFIRMED' },
-    })],
-  ])('draws nothing for %s, and one once that changes', async (_, document) => {
-    server.document = document;
-    const { node, qc } = await mount(PROJECT);
-    await turn();
-    await turn();
+  it('draws nothing for a project its own condition holds for, and writes to no door', async () => {
+    // The fixture is the state this card was for: started, OPEN, every criterion met, nothing
+    // running — on the older projection, which is the read this card was last drawn from.
+    expect(settlementHeldOnProject(server.document)).toBe(true);
+    const { node } = await mount();
     expect(cardsIn(node)).toHaveLength(0);
-
-    server.document = projectOf();
-    await act(async () => {
-      await qc.invalidateQueries({ queryKey: ['project', PROJECT], exact: true });
-    });
-    await until(() => cardsIn(node).length === 1, 'the card to be delivered');
+    expect(node.textContent).not.toContain(SETTLEMENT_HEADING);
+    expect(node.textContent).not.toContain(SETTLEMENT_DELEGATE_ACTION);
+    expect(presses(node)).toHaveLength(0);
+    expect(recorded.filter((request) => request.method !== 'GET')).toEqual([]);
+    expect(recorded.some((request) => request.path.includes('/acceptance/confirmation'))).toBe(false);
   });
 
-  it('reads the confirmation standing only when that is the clause holding settlement', async () => {
-    const { node, qc } = await delivered();
-    await until(
-      () => qc.getQueryState(acceptanceConfirmationKey(PROJECT))?.fetchStatus === 'idle',
-      'the standing read',
-    );
-    expect(recorded.some((r) => r.path.includes('/acceptance/confirmation'))).toBe(true);
-
-    recorded.length = 0;
-    server.document = unlanded();
-    await act(async () => {
-      await qc.invalidateQueries({ queryKey: ['project', PROJECT], exact: true });
-    });
-    await until(() => node.textContent!.includes('no merge receipt proving'), 'the held card');
-    expect(recorded.some((r) => r.path.includes('/acceptance/confirmation'))).toBe(false);
-  });
-
-  it('confirms the criteria at their own door, carrying the version it read and no session', async () => {
-    const { card } = await delivered();
-    await act(async () => {
-      action(card(), SETTLEMENT_CONFIRM_ACTION).click();
-    });
-    await until(() => writes().length > 0, 'the press to reach the door');
-    const [press] = writes();
-    expect(press!.method).toBe('POST');
-    expect(press!.path).toBe(`/projects/${PROJECT}/acceptance/confirmation`);
-    expect(press!.body).toEqual({ criteriaDigest: 'digest-1' });
-    expect(JSON.stringify(press)).not.toMatch(/session/i);
-  });
-
-  /** The state a press used to be replaced by is read back now: it survives a reload, which an
-   *  in-memory receipt did not. */
-  it('stays on the page when the projection stops withholding, and says so', async () => {
-    const { node, qc, card } = await delivered();
+  it('draws nothing for the unified read of the same project either', async () => {
     server.document = projectOf({
-      derivedDone: { status: 'DONE', done: true, withheld: [], criteria: [], confirmation: 'CONFIRMED' },
+      derivedDone: {
+        ...projectOf().derivedDone!,
+        counts: { criteria: 3, met: 3, landed: 3, onMain: 3, byReason: {} },
+      },
     });
-    await act(async () => {
-      await qc.invalidateQueries({ queryKey: ['project', PROJECT], exact: true });
-    });
-    await until(() => card().textContent!.includes(SETTLEMENT_SETTLED_TITLE), 'the settled state');
-    expect(cardsIn(node)).toHaveLength(1);
+    const { node } = await mount();
+    expect(cardsIn(node)).toHaveLength(0);
+    expect(node.textContent).not.toContain(SETTLEMENT_HEADING);
   });
 
-  it('hands the card’s own facts to the conversation, and leaves the card answerable', async () => {
-    const { node, card } = await delivered();
-    await act(async () => {
-      action(card(), SETTLEMENT_DELEGATE_ACTION).click();
-    });
-    expect(delegated).toHaveLength(1);
-    // The facts ARE the message: they name the project they are about, so nothing else has to.
-    expect(delegated[0]!.facts).toContain(TITLE);
-    expect(delegated[0]!.facts).toContain('Orbit has not recorded it done');
-    // The card is not an answer to anything, so it stays — with its own press still live.
-    expect(cardsIn(node)).toHaveLength(1);
-    expect(writes(), 'the press wrote something itself').toEqual([]);
-  });
-
-  it('takes the keyboard: the bare key confirms at the door and the chord hands the work over', async () => {
-    const { card } = await delivered();
-
-    // One card asking, so it holds the keys — and each control says which key presses it, on the
-    // control itself: a shortcut nobody can see is a shortcut nobody has.
-    expect(hintOn(action(card(), SETTLEMENT_CONFIRM_ACTION))).toBe(ENTER_HINT);
-    expect(hintOn(action(card(), SETTLEMENT_DELEGATE_ACTION))).toBe(SHORTCUT_HINT);
-
-    // The chord first, because it leaves the card standing: it hands the facts over and writes
-    // nothing, exactly as the button does.
-    await key({ metaKey: true });
-    expect(delegated, 'the facts were not handed over, or handed over twice').toHaveLength(1);
-    expect(delegated[0]!.facts).toContain('Orbit has not recorded it done');
-    expect(writes(), 'the chord wrote something').toEqual([]);
-
-    // And the bare key is the press itself: the same door, and the version the card read.
-    await key();
-    await until(() => writes().length > 0, 'the key to reach the door');
-    const [press] = writes();
-    expect(press!.method).toBe('POST');
-    expect(press!.path).toBe(`/projects/${PROJECT}/acceptance/confirmation`);
-    expect(press!.body).toEqual({ criteriaDigest: 'digest-1' });
-  });
-
-  it('shows a refusal on the card rather than eating it', async () => {
-    vi.mocked(api).mockImplementation((async (
-      path: string,
-      init?: { method?: string },
-    ) => {
-      if (init?.method === 'POST') throw new Error('CONFIRMATION_VERSION_MOVED');
-      if (path.includes('/acceptance/confirmation')) {
-        return { state: 'UNCONFIRMED', confirmed: false, currentVersion: { digest: 'digest-1', material: [] }, confirmation: null };
-      }
-      return projectOf();
-    }) as unknown as typeof api);
-    const { card } = await delivered();
-    await act(async () => {
-      action(card(), SETTLEMENT_CONFIRM_ACTION).click();
-    });
-    await until(
-      () => card().textContent!.includes('CONFIRMATION_VERSION_MOVED'),
-      'the refusal to reach the card',
-    );
-  });
 });

@@ -1,0 +1,11 @@
+== tip-1
+  webkit-dark-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and- unexpected frames  297 shifted 144 | nested-2@5770ms dx=48.14 dw=-96.3, nested-2@5829ms dx=48.14 dw=-96.3, nested-2@5842ms dx=48.14 dw=-96.3, nested-2@5858ms dx=48.14 dw=-96.3, nested-2@5874ms dx=48.14 dw=-96.3, nested-2@5891ms dx=48.14 dw=-96.3, nested-2@5906ms dx=48.14 dw=-96.3, nested-2@5923ms dx=48.14 dw=-96.3
+== fixab-1
+== tip-2
+  webkit-light-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit   unexpected frames  117 shifted 6 | close-0@5242ms dx=48.14 dw=-96.3, close-0@5287ms dx=48.14 dw=-96.3, close-0@5293ms dx=48.14 dw=-96.3, close-0@5323ms dx=48.14 dw=-96.3, close-0@5332ms dx=48.14 dw=-96.3, close-0@5340ms dx=48.14 dw=-96.3
+  entrance webkit-light-phone       unexpected frames   2 max gap  204ms  first owned frame t=None opacity=None  owned mid-opacity frames 0
+== fixab-2
+  webkit-dark-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-an skipped    frames  146 shifted 2 | open@588ms dx=16 dw=0, open@679ms dx=0.46 dw=0
+  entrance webkit-light-phone       unexpected frames   5 max gap  130ms  first owned frame t=200 opacity=1  owned mid-opacity frames 0
+  exit reduce        webkit-light-desktop     unexpected connected frames   2 t=[29, 151] owners ['base-ui-_r_a_']
+  exit no-preference webkit-light-phone       unexpected connected frames   2 t=[5, 119] owners ['base-ui-_r_a_']

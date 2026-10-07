@@ -230,7 +230,8 @@ final class TranscriptScrollWiringTests: XCTestCase {
         XCTAssertTrue(presentation.contains("reviewSessionID = nil"),
                       "the dismissed review releases its remembered conversation")
         let held = try XCTUnwrap(blocks(opening:
-            "private func holdScroll(to rowID: String, anchor: UnitPoint, opensReview: Bool = false) {",
+            "private func holdScroll(to rowID: String, anchor: UnitPoint, opensReview: Bool = false,"
+                + " animated: Bool = true) {",
                                        in: view).first)
         XCTAssertTrue(held.contains("sessionID: console.sessionID, opensReview: opensReview"),
                       "the deferred request keeps its originating conversation and review intent")

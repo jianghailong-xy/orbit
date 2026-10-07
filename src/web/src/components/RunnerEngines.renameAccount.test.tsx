@@ -7,7 +7,7 @@ import { App as AntApp } from 'antd';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import { RunnerEngines } from './RunnerEngines';
-import { clickRunnerMenuItem, runnerMenuItem } from './RunnerEngines.test-helpers';
+import { clickRunnerMenuItem, openRunnerCards, runnerMenuItem } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -97,7 +97,7 @@ function renamed(path: string, name: string): RunnerEngineAccount {
 
 function mount(runners: Runner[], { strict = false } = {}) {
   served = runners;
-  localStorage.setItem('orbit:providers-expanded-runners', JSON.stringify(runners.map((r) => r.id)));
+  openRunnerCards(runners);
   apiMock.mockImplementation(async (path: string, options?: { method?: string; body?: unknown }) => {
     if (path === '/runners') return served;
     if (options?.method === 'PATCH') return renamed(path, (options.body as { name: string }).name);

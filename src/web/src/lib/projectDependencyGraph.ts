@@ -23,6 +23,9 @@ export interface ProjectTaskMark extends TaskDependencyGraphNode {
   runReason?: TaskRunReason | null;
   /** Its background jobs have stopped producing output (see `runningLabel`). */
   runStalled?: boolean;
+  /** How it is settled (`EXECUTABLE`, `EVIDENCE_JUDGMENT`, `OWNER_CONFIRMED`, …): what the start card
+   *  reads to say which of the plan comes to the owner. Absent from an older server. */
+  completionCriterion?: string;
 }
 
 export type ProjectTaskWorkState =

@@ -350,6 +350,9 @@ model User {
   /// account through its space.
   wikiSpaces       WikiSpace[]
 
+  /// The account's one managed runner mapping, when it has one (migration 0399).
+  managedRunner    ManagedRunner?
+
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
 }
@@ -733,6 +736,10 @@ model Runner {
   // Codex only: the name of a NEW account the runner is to add and sign in, kept so every
   // redelivered start asks for the same one.
   loginAccountName String? @map("login_account_name")
+  // Kimi only: the site to sign in on, 'mainland-cn' (kimi.com) or 'global' (kimi.ai), kept so every
+  // redelivered start asks for the same one. NULL is a bare `kimi login`, which goes wherever the CLI
+  // decides — what every sign-in was before the choice, and what any other engine's is.
+  loginRegion   String?   @map("login_region")
   loginUrl      String?   @map("login_url")
   // The device flow's one-time code, which the user types on loginUrl's page. Runner → user,
   // the opposite direction from loginCode.
@@ -805,6 +812,10 @@ model Runner {
   authoritativeForCodebases ProjectCodebase[]
   /// Codex earned rate-limit resets confirmed against this machine's default Codex account.
   codexRateLimitResetOperations CodexRateLimitResetOperation[]
+  /// Set when this runner is a managed runner (migration 0399). Restrict on delete, like the
+  /// codebase authority above: deleting the row would cascade to its workspaces and lose the
+  /// mapping's storage record, so compute removal never deletes it.
+  managedRunner ManagedRunner?
 
   @@index([ownerId])
   /// The tenancy fence `project_codebase` hangs off: naming BOTH the runner and the owner in one
@@ -1025,6 +1036,8 @@ model Workspace {
   wikiSpaceBindings WikiSpaceWorkspace[]
   /// The folders this workspace's sessions can be filed in (see SessionFolder).
   sessionFolders SessionFolder[]
+  /// Set when this is a managed runner's default workspace (migration 0399).
+  managedRunnerDefault ManagedRunner? @relation("ManagedRunnerDefaultWorkspace")
 
   /// The key a wiki binding's composite foreign key names (migration 0307), so a space can only be
   /// bound to its own owner's workspaces. `id` alone is already unique.
@@ -1032,6 +1045,116 @@ model Workspace {
   @@index([ownerId])
   @@index([runnerId])
   @@map("workspace")
+}
+
+/// What the owner asked of their managed runner (docs/managed-runner-design.md, "Management and
+/// execution states"). Kept apart from what the manager observed.
+enum ManagedRunnerDesiredState {
+  RUNNING
+  SLEEPING
+  DELETED
+
+  @@map("managed_runner_desired_state")
+}
+
+/// How far the manager has got with a mapping. Only the manager advances it. This version moves
+/// REQUESTED → PROVISIONING → STARTING → READY, and to FAILED; the other values are the contract's
+/// states for capacity, sleep, fencing and deletion, which later work fills in.
+enum ManagedRunnerManagementState {
+  REQUESTED
+  WAITING_CAPACITY
+  PROVISIONING
+  STARTING
+  READY
+  DRAINING
+  SLEEPING
+  FENCING
+  FAILED
+  DELETING
+  DELETED
+
+  @@map("managed_runner_management_state")
+}
+
+/// One user's managed runner: the durable mapping from the owner to a stable runner row, a stable
+/// default workspace and one data PVC in one configured cluster namespace (migration 0399,
+/// docs/managed-runner-design.md "Identity and durable mapping"). Created with the runner and the
+/// workspace in one transaction; the manager reconciles Kubernetes towards `desiredState` and
+/// records what it observed. Absence of a row is the read state NOT_PROVISIONED.
+///
+/// Every reference is RESTRICT: deleting the user, the runner or the workspace would discard the
+/// storage and fencing record, and `Workspace.runner` cascades, so a deleted runner row would take
+/// its workspaces with it. Compute is released by deleting the Pod, never this row or the runner.
+/// The runner and workspace keys are composite with `ownerId`, so the mapping cannot disagree with
+/// either about whose it is.
+model ManagedRunner {
+  id                 String                       @id @default(uuid(7)) @db.Uuid
+  ownerId            String                       @unique @map("owner_id") @db.Uuid
+  owner              User                         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  runnerId           String                       @unique @map("runner_id") @db.Uuid
+  runner             Runner                       @relation(fields: [runnerId, ownerId], references: [id, ownerId], onDelete: Restrict, map: "managed_runner_runner_fkey")
+  defaultWorkspaceId String                       @unique @map("default_workspace_id") @db.Uuid
+  defaultWorkspace   Workspace                    @relation("ManagedRunnerDefaultWorkspace", fields: [defaultWorkspaceId, ownerId], references: [id, ownerId], onDelete: Restrict, map: "managed_runner_default_workspace_fkey")
+  desiredState       ManagedRunnerDesiredState    @default(RUNNING) @map("desired_state")
+  managementState    ManagedRunnerManagementState @default(REQUESTED) @map("management_state")
+  /// The execution incarnation the Pod is created for. Monotonic; only a proven stop or fencing
+  /// receipt may advance it, which this version never does.
+  generation         Int                          @default(1)
+  /// Compare-and-set counter: every write of this row is `WHERE revision = <read>` and bumps it.
+  revision           Int                          @default(1)
+  /// The configured cluster and namespace the PVC lives in, fixed at creation. With `pvcName`
+  /// (`mr-data-<runner uuid>`, held by a CHECK) this is the location no second mapping can take.
+  clusterKey         String                       @map("cluster_key")
+  namespace          String
+  pvcName            String                       @map("pvc_name")
+  /// The PVC, its PV and CSI volume handle as first observed. Once recorded, a PVC under the same
+  /// name with another identity is a conflict for an operator, never a replacement.
+  pvcUid             String?                      @unique @map("pvc_uid")
+  pvUid              String?                      @map("pv_uid")
+  volumeHandle       String?                      @unique @map("volume_handle")
+  /// The one Pod (`mr-<runner uuid>`) of the current generation, as observed.
+  podName            String?                      @map("pod_name")
+  podUid             String?                      @map("pod_uid")
+  nodeName           String?                      @map("node_name")
+  nodeUid            String?                      @map("node_uid")
+  /// Capacity reservation, demand and model supply: kept for the admission, wake and first-session
+  /// work that follows; nothing in this version writes them.
+  reservation        Json?
+  demandRevision     Int                          @default(0) @map("demand_revision")
+  lastDemandAt       DateTime?                    @map("last_demand_at") @db.Timestamptz(3)
+  initialProvider    String?                      @map("initial_provider")
+  resourceProfileId  String?                      @map("resource_profile_id")
+  /// The one resource operation in flight: which (`CREATE_PVC`, `CREATE_SECRET`, `CREATE_POD`,
+  /// `DELETE_POD`), its id, and whether it is PENDING, AMBIGUOUS or settled. An ambiguous create is
+  /// read back by name and compared before anything is retried.
+  resourceOperationId    String?                  @map("resource_operation_id")
+  resourceOperationKind  String?                  @map("resource_operation_kind")
+  resourceOperationState String?                  @map("resource_operation_state")
+  /// Bounded retry of transient failures: attempts spent, when the next may start, and the startup
+  /// deadline STARTING is held to. All from the configured profile, persisted so a restart keeps them.
+  attempt            Int                          @default(0)
+  nextAttemptAt      DateTime?                    @map("next_attempt_at") @db.Timestamptz(3)
+  startupDeadlineAt  DateTime?                    @map("startup_deadline_at") @db.Timestamptz(3)
+  /// `{ code, message, retryable }` — the safe structured cause shown to the owner.
+  lastError          Json?                        @map("last_error")
+  fencingReceipt     Json?                        @map("fencing_receipt")
+  /// The manager replica allowed to act on this mapping until `leaseExpiresAt`. An expired lease
+  /// lets another manager reconcile; it never authorizes another writer of the volume.
+  leaseHolder        String?                      @map("lease_holder")
+  leaseExpiresAt     DateTime?                    @map("lease_expires_at") @db.Timestamptz(3)
+  /// The idempotency key of the last owner request this row answered.
+  lastRequestKey     String?                      @map("last_request_key")
+  /// When `managementState` last changed.
+  stateEnteredAt     DateTime                     @default(now()) @map("state_entered_at") @db.Timestamptz(3)
+  deletedAt          DateTime?                    @map("deleted_at") @db.Timestamptz(3)
+  createdAt          DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([clusterKey, namespace, pvcName], map: "managed_runner_pvc_location_key")
+  /// The defining side of the two owner-composite relations above, which Prisma requires unique.
+  @@unique([runnerId, ownerId], map: "managed_runner_runner_id_owner_id_key")
+  @@unique([defaultWorkspaceId, ownerId], map: "managed_runner_default_workspace_id_owner_id_key")
+  @@map("managed_runner")
 }
 
 /// WHO does the work — an identity, and nothing about where it runs.
@@ -2652,7 +2775,7 @@ model ProjectCodebase {
 ///
 /// Not a session itself, and nothing here starts an engine. A runner claims the row over its
 /// heartbeat, does the git work and runs the checks in a throwaway worktree, and reports back.
-/// Contract revision 11 (§2.9) requires each job to become one attempt inside a platform-driven
+/// Contract revision 12 (§2.9) requires each job to become one attempt inside a platform-driven
 /// landing session, which starts no engine and makes no decisions; that is a requirement on the
 /// landing-session tasks, not yet in this schema — today no session row stands for a landing, and
 /// `sessionId` below is the source work session.
@@ -2680,7 +2803,7 @@ model ProjectIntegrationJob {
   /// SET NULL, not CASCADE: the audit of what the platform pushed outlives the row that asked for it.
   taskId      String?  @map("task_id") @db.Uuid
   task        Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  /// The source work session — never the landing session contract revision 11 adds (§2.9);
+  /// The source work session — never the landing session contract revision 12 adds (§2.9);
   /// routing, base SHA, the claim guard and receipts read it.
   sessionId   String?  @map("session_id") @db.Uuid
   session     Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
@@ -2746,6 +2869,17 @@ model ProjectIntegrationJob {
   retryReason               String? @map("retry_reason")
   retryRequestedBySessionId String? @map("retry_requested_by_session_id") @db.Uuid
   retryRequestedByUserId    String? @map("retry_requested_by_user_id") @db.Uuid
+
+  /// A LAND_TASK generation queued through `integration_skip_merge_check` (migration 0393, contract
+  /// §2.4 J-S5): the merge check did NOT run on it, and the row says so — with the reason, the person
+  /// whose yes it is, and the card it was approved on (NULL when the account owner queued it
+  /// themselves). Only that one generation: the next one is written with the flag false and runs the
+  /// project's check as before. A skip is never written as a pass; `checks` stays empty because
+  /// nothing ran.
+  skipMergeCheck       Boolean @default(false) @map("skip_merge_check")
+  skipReason           String? @map("skip_reason")
+  skipApprovedByUserId String? @map("skip_approved_by_user_id") @db.Uuid
+  skipApprovalId       String? @map("skip_approval_id") @db.Uuid
 
   /// `ij:v1:<kind>:<taskId or promotionId>:<generation>` — enqueue is idempotent on the fact. The one
   /// exception is the landing J-T1e owes the work, keyed by the work's generation instead
@@ -4628,9 +4762,12 @@ model Task {
   @@index([projectId])
   @@index([fixesOpenItemId], map: "task_fixes_open_item_idx")
   @@index([parentTaskId])
-  /// Cover GET /projects' page-wide rollup without visiting the wide Task heap (154 MB for 111k
-  /// rows on the production workload). Created PARTIAL for project tasks in migration 0178; the
-  /// schema cannot express that predicate, just like the two task-tree indexes below.
+  /// Cover GET /projects' page-wide rollup without visiting the wide Task heap (254 MB for 111k
+  /// rows on the production workload). Created PARTIAL for project tasks in migration 0178, and
+  /// given the six columns the classifier reads as INCLUDE payload in 0395 — the rollup's CASE
+  /// reads eleven Task columns, and an index that carries five answers it with a heap fetch per
+  /// row. Neither the predicate nor INCLUDE is something this schema can spell, just like the two
+  /// task-tree indexes below; both live in the migrations.
   @@index([ownerId, projectId, status, id, updatedAt], map: "task_project_rollup_covering_idx")
   /// The two reads `GET /projects/:id/tasks/page` makes: one project's top-level tasks, and one
   /// task's direct children, both in cursor order. They need SEPARATE indexes because the top
@@ -5793,9 +5930,10 @@ model ModelProvider {
   enabled       Boolean  @default(true)
   // Picker display order; NULL sorts last.
   position      Int?
-  // NULL = a shared provider (admin-managed, visible to everyone). Set = a personal (BYOK)
-  // provider: visible in, and dispatchable for, only its owner's sessions. Slugs stay globally
-  // unique either way, so dispatch-by-slug is never ambiguous.
+  // NULL = a shared provider (admin-managed): visible in, and dispatchable for, admins' sessions
+  // only (usableProviderScope). Set = a personal (BYOK) provider: visible in, and dispatchable for,
+  // only its owner's sessions. Slugs stay globally unique either way, so dispatch-by-slug is never
+  // ambiguous.
   ownerId       String?  @map("owner_id") @db.Uuid
   owner         User?    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   // The account pools this provider is a member of. Joining one adds a way to dispatch it and

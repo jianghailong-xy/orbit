@@ -1,0 +1,13 @@
+{
+ "command": "cd /var/tmp/p2kw-c2604b/after3 && git log --oneline -1 && git rev-parse HEAD:src/web && unshare -n bash -c 'ip link set lo up && nice -n -10 npm run test:ui-choices -w @orbit/web -- --grep \"multiple choices in Dialog keep their owner\" --project chromium-light-phone --project webkit-light-phone --repeat-each 40'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_c5ec4536927d",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "28405c86d",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "outputLastWritten": "2026-10-07T05:24:23.856620+00:00",
+ "exitCode": 0,
+ "outputSha256": "a7a8d36e0813a219c422d57c91b01c612c656ba1d36297ac40a7d080d6346269",
+ "outputBytes": 14387,
+ "note": "Fixed tree (scratch worktree at 28405c86d, web tree df7414507c6f...), the same 80 runs at the same time: 80 passed, so chromium-light-phone 40/40 with 0 failures after the fix, as the acceptance asks, and webkit-light-phone 40/40."
+}

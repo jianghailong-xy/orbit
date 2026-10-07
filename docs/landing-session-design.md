@@ -2,7 +2,7 @@
 
 # 落地会话（契约修订 9 草案）
 
-> 本草案作为集成线契约 **v1 修订 11** 落地（`docs/project-integration-line-contract.md` 附录 B；main 的修订 9、10 已另有所指，见 §0.1 第 1 条）。文中的「修订 9」都指修订 11。
+> 本草案作为集成线契约 **v1 修订 12** 落地（`docs/project-integration-line-contract.md` 附录 B；main 的修订 9、10 与附录 B 的 11 号已另有所指，见 §0.1 第 1 条）。文中的「修订 9」都指修订 12。
 
 
 ## 0. 红队修正（2026-10-04，优先于下文；下文与本节冲突处以本节为准）
@@ -71,7 +71,7 @@
 2026-10-07 在 main de0838eb7 上逐条复核。de0838eb7 比 5b73f4717 多 632 个提交。本节没提到的条目，仍按 §0 执行。
 
 ### 编号与基线
-1. **修订号**：main 附录 B 已有 v1 修订 9（Chat about this，2026-10-03，5a897a5ea）和修订 10（合入卡挪到项目 sessions 页，2026-10-06，6b4bef713）。本草案作为**修订 11** 落地，以合入 main 时附录 B 的下一个空号为准。本文标题和正文里的「修订 9」都指修订 11。
+1. **修订号**：main 附录 B 已有 v1 修订 9（Chat about this，2026-10-03，5a897a5ea）和修订 10（合入卡挪到项目 sessions 页，2026-10-06，6b4bef713）。本草案作为**修订 12** 落地：2026-10-08 合入 main 时附录 B 的下一个空号已是 12（11 号被「一次落地可以不带合并检查跑」占用），J-T9 同时被 main 的超时重试占用，本草案原先的四条 J-T 顺延为 J-T10–J-T13；编号一律以合入 main 时附录 B 的下一个空号为准。本文标题和正文里的「修订 9」都指修订 12。
 2. **迁移号**：0377 已是 dsh_runner_gate，main 最新为 0392（2026-10-07）。新迁移一律取实施时 main 最新号之后的空号。
 3. **T0 的 8e69d8013**（orbit/9-a2dcf9）与 main 在附录 B 冲突，要在 origin/main 上重做；10-04 的退回意见仍然成立。
 
@@ -110,7 +110,7 @@
     - 是否收窄为 OF c，由 t1srv-a 配竞态 spec 决定。
 15. **J12 不需要迁移**：error_code 没有 CHECK（0281:85），闭集是 INTEGRATION_ERROR_CODES（project-integration-job.ts:71-83）加契约文本。phase 有 CHECK（0281:109），所以本机锁等待与 prepare 用可选的 step 列，不加 phase 值。
 16. **提交列表改名**：upstreamMovedBy 与 project_promotion.upstream_moved_by（Int，0294）、ProjectPromotionView.recheck.upstreamMovedBy（number）重名，建议改为 upstreamMovedCommits。它放在结果的新可选字段里，不进 errorDetail：errorDetail 会被原样抄进待办 payload（relay :978）。
-17. **J-T8 的「重开」** 指 task_reopen 门，与写 task_reopen_intent 在同一事务里。任务被写成 CANCELLED 或 FAILED 同样叫停。普通的 DONE→IN_PROGRESS 编辑是继续工作，不叫停。按现行 J-T3、J-T8、M-T10 就能做的修复拆成 t1srv-a，不等修订 11：QUEUED 直接 CANCELLED、已请求取消可接管、VERIFY 界线、LAND_TASK 的 J-T8、回填。
+17. **J-T8 的「重开」** 指 task_reopen 门，与写 task_reopen_intent 在同一事务里。任务被写成 CANCELLED 或 FAILED 同样叫停。普通的 DONE→IN_PROGRESS 编辑是继续工作，不叫停。按现行 J-T3、J-T8、M-T10 就能做的修复拆成 t1srv-a，不等修订 12：QUEUED 直接 CANCELLED、已请求取消可接管、VERIFY 界线、LAND_TASK 的 J-T8、回填。
 18. **删除回滚**（改 §9 第 2 条）：LAND_TASK 的 task_id 置空还违反 project_integration_job_land_task_chk（0281:117-119），所以任何一代 LAND_TASK 都会挡住删任务。project_promotion.task_id、session_id（0286:90-93）同样撞 project_promotion_terminal_guard（:128-143）。只能改为不带外键的历史引用，「让守卫放行」行不通。
 19. **会话行补充**（改 §2「会话行」）：
     - root_session_id 为 NULL，否则会获得 CHILD 归属；
@@ -168,7 +168,7 @@
 | ProjectPage.swift:111-201、:184 | :120-203、:196 |
 
 ### 任务调整（2026-10-07）
-- T0 在 origin/main 上重做，作为修订 11。
+- T0 在 origin/main 上重做，作为修订 12。
 - t1srv 拆成两个任务：
   - t1srv-a：按现行条文修撤销与接管，可立即开工；
   - t1srv：v2 协议、续租、「取消中」、release 门。
@@ -176,7 +176,7 @@
 - t4web 拆出「web 入口与 Landings 组」。
 - 新增 t2list，以及效果图 03 的刷新。
 - t2core 不启用会话行插入，由 t2guard 装好守卫后启用（见第 26 条）。
-- 不在本项目：契约对 0378–0381、ef527a22e（J-S2/M3）、门矩阵、da1b9b0b4 的补记。建议另开，作为修订 12，排在修订 11 之后。
+- 不在本项目：契约对 0378–0381、ef527a22e（J-S2/M3）、门矩阵、da1b9b0b4 的补记。建议另开，作为修订 13，排在修订 12 之后。
 
 ## 1. 旧理由为什么站不住
 
@@ -346,7 +346,7 @@
 │   Merge check stopped at 21m 04s (09:14)     │
 ```
 
-- `inFlight` 新增的字段全部可选：`jobId`、`landingSessionId`、`taskId`、`promotionId`、`runner`、`round`、`check{name,index,count,budgetSeconds,startedAt}`、`outputMovedAt`、`typicalMs`、`liveness`。另加 `landings[]`（最多 3 条）。
+- `inFlight` 新增的字段全部可选：`jobId`、`landingSessionId`、`taskId`、`promotionId`、`runner`、`round`、`check{name,index,count,budgetSeconds,startedAt}`、`outputMovedAt`、`progressProtocol`、`typicalMs`、`liveness`。**原提的 `landings[]`（最多 3 条）由 main 的 `inFlightJobs` 取代**（契约 §1.6）：这些可选字段同样加在它的每一项上，落地行动态行与项目 sessions 页的 Landings 组都读它。
 - 旧服务端没有这些 id 时，这一行照旧不可点，并写明原因。
 
 ### 落地会话页

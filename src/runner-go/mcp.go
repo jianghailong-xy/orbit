@@ -591,13 +591,18 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if fields == 0 {
 			return toolResult("no fields to update", true)
 		}
-		// The calling session goes with the edit. Not to move anything — the server settles a
-		// project's coordinator when it is created — but so the acceptance criteria this body may
-		// carry are recorded as THIS conversation's words, and a loosening it proposes is filed
-		// under this session rather than under the account owner who never asked for it.
-		raw, err := s.t.updateProject(s.sessionID, id, body)
+		// A merge-check change goes to the owner first, and the edit itself goes with the calling
+		// session. Not to move anything — the server settles a project's coordinator when it is
+		// created — but so the acceptance criteria this body may carry are recorded as THIS
+		// conversation's words, a loosening it proposes is filed under this session rather than
+		// under the account owner who never asked for it, and a merge check is written against the
+		// card this session was answered on rather than against a card filed somewhere else.
+		raw, declined, err := updateProjectWithApproval(s.t, s.sessionID, id, body)
 		if err != nil {
 			return toolResult("update project failed: "+err.Error(), true)
+		}
+		if declined != "" {
+			return toolResult("the owner did not approve this merge-check change: "+declined, false)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -813,6 +818,48 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			"reports. If it lands they are marked handled in your name and it goes on to the merge check "+
 			"like any landing; if it fails, a new item reaches you on its own and these are marked "+
 			"superseded.\n"+prettyJSON(raw), false)
+
+	case "integration_skip_merge_check":
+		id := getString(args, "projectId")
+		taskID := getString(args, "taskId")
+		if id == "" || taskID == "" {
+			return toolResult("projectId and taskId are required: the landing whose merge check is to "+
+				"be skipped is one DONE task's landing onto this project's own branch", true)
+		}
+		reason := strings.TrimSpace(getString(args, "reason"))
+		if reason == "" {
+			return toolResult("reason is required: say why this check should not hold up this landing. "+
+				"It is what the account owner decides on, and it stays on the generation that skips the "+
+				"check and on every record of it", true)
+		}
+		// The facts first, before anybody is interrupted: which project and which landing this is,
+		// what stopped, and the check command that would be skipped. A card that asked "skip the red
+		// check?" would be unanswerable, and an id that names no failed check is refused here rather
+		// than in front of a person.
+		facts, err := skipMergeCheckFacts(s.t, id, taskID, reason)
+		if err != nil {
+			return toolResult(err.Error(), true)
+		}
+		// The card, and nothing else: the account owner's yes is what makes a skip legitimate, and a
+		// decline is an answer — the landing stands as it failed and nothing is queued.
+		approvalID, declined, err := askForSkipMergeCheck(s.t, s.sessionID, facts)
+		if err != nil {
+			return toolResult(err.Error(), true)
+		}
+		if declined != "" {
+			return toolResult("the human did not approve skipping this check, and nothing was queued: "+
+				declined, false)
+		}
+		raw, err := s.t.skipIntegrationMergeCheck(s.sessionID, id, taskID, reason, approvalID)
+		if err != nil {
+			return toolResult("skip merge check failed: "+err.Error(), true)
+		}
+		return toolResult("One landing is queued again with this project's merge check NOT run — skipped, "+
+			"not passed: the generation records the check it skipped, your reason and the card the "+
+			"account owner approved it on, and any item it goes on to open carries the same. Nothing "+
+			"else changed: the project's own merge check command is untouched, and the next landing and "+
+			"every merge into main are checked exactly as before. Your open items about the failed "+
+			"check are now being handled: they stay open until it lands.\n"+prettyJSON(raw), false)
 
 	case "task_dependency_graph":
 		id, ok := s.resolveTaskID(args)
@@ -1527,13 +1574,56 @@ const (
 // tool cannot be reached without one.
 const blockerResolveApprovalToolName = "orbit_blocker_resolve"
 
+// integrationSkipMergeCheckApprovalToolName keys the card that lets ONE landing run without its
+// merge check (docs/project-integration-line-contract.md §2.4 J-S5).
+//
+// A different question from every other card here: nothing is created and no wait is ended. What the
+// account owner answers is whether this one landing may go on with the check that just failed taken
+// off it — and the server reads the card back by id when the skip is asked for, so a card filed
+// under any other name opens nothing, and neither does one raised about another task.
+//
+// Its neighbour below is the OTHER half of the same subject, and they are deliberately two cards:
+// a skip is one landing going on unchecked, a change is every later landing being checked by
+// something else. "Let this one through" and "stop running that command" are different decisions,
+// and an owner who grants one has not granted the other.
+const integrationSkipMergeCheckApprovalToolName = "orbit_integration_skip_merge_check"
+
+// projectIntegrationApprovalToolName keys the card that lets a session change a project's MERGE
+// CHECK.
+//
+// A third reason again, and it is the line between two decisions that travel in one object. Where a
+// project's work LANDS is the account owner's (contract L5) and stays theirs: a session sending a
+// line field is refused whatever anybody answers. What is CHECKED on the combined tree before a
+// landing is a judgement the session holding a failing check is the one that can make, so it is
+// asked about rather than forbidden — and the card is what the server matches the write against
+// (`projects/project-integration-approval.ts`), which is why the two ends spell this name the same
+// way and why a proposal the owner did not read cannot be written.
+const projectIntegrationApprovalToolName = "orbit_project_update_integration"
+
 // ownerWaitTools are the calls that put a card in front of the owner and block until it is answered.
 var ownerWaitTools = map[string]bool{
 	"task_create": true, "task_create_batch": true, "project_create": true, "project_blocker_resolve": true,
 	"tasklist_propose_dag": true, "provider_create": true, "provider_update": true, "provider_delete": true,
+	"integration_skip_merge_check": true,
 }
 
+// The merge-check fields, in the spelling the server's DTO and the card both use. Everything else
+// in an integration object — the line (`line`, `projectBranchName`, `upstreamRef`) and anything a
+// later version adds — belongs to the account owner, which is what `mergeCheckProposal` says by
+// refusing to cover it.
+var integrationMergeCheckFields = []string{"mergeCheckCommand", "mergeCheckTimeoutSeconds"}
+
+// waitsForTheOwner says whether a call puts a card in front of the owner and blocks until it is
+// answered.
 func waitsForTheOwner(name string, args map[string]interface{}) bool {
+	if name == "project_update" {
+		// An update asks only when it proposes a merge check and nothing else. A title, a goal or a
+		// set of instructions is an agent's own to write; a LINE field is refused by the server
+		// whatever the owner answers, and a card for it would interrupt them with a question that
+		// cannot change anything.
+		_, gated := mergeCheckProposal(integrationSettingsOf(args))
+		return gated
+	}
 	// A dry-run batch writes nothing and asks nobody (task_create_batch).
 	return ownerWaitTools[name] && !(name == "task_create_batch" && getBool(args, "dryRun"))
 }
@@ -1796,6 +1886,255 @@ func resolveBlockerWithApproval(t *Transport, sessionID, projectID, blockerID, r
 		}
 	}
 	raw, err = t.resolveProjectBlocker(projectID, blockerID, map[string]interface{}{"reason": reason})
+	return raw, "", err
+}
+
+// integrationSettingsOf reads an update's `integration` object, when it carries one.
+func integrationSettingsOf(args map[string]interface{}) map[string]interface{} {
+	settings, _ := args["integration"].(map[string]interface{})
+	return settings
+}
+
+// mergeCheckCardRequired says whether this body has to be put in front of the owner before it is
+// sent — the condition `waitsForTheOwner` applies to the tool's own arguments.
+func mergeCheckCardRequired(body map[string]interface{}) bool {
+	_, gated := mergeCheckProposal(integrationSettingsOf(body))
+	return gated
+}
+
+func isMergeCheckField(key string) bool {
+	for _, field := range integrationMergeCheckFields {
+		if key == field {
+			return true
+		}
+	}
+	return false
+}
+
+// mergeCheckProposal returns the merge-check fields `settings` names — the whole of what a card is
+// about — and whether this object is one a card can cover at all.
+//
+// An object that names a line field, or any other field this session does not write, is not: the
+// server refuses that request whatever the owner answers, so a card for it would be a question with
+// no yes that changes anything. A key present with a null value counts as named, exactly as it does
+// on the server, where `null` is a setting ("put the timeout back to its default") rather than an
+// absence.
+func mergeCheckProposal(settings map[string]interface{}) (map[string]interface{}, bool) {
+	proposal := map[string]interface{}{}
+	for _, field := range integrationMergeCheckFields {
+		if value, present := settings[field]; present {
+			proposal[field] = value
+		}
+	}
+	if len(proposal) == 0 {
+		return nil, false
+	}
+	for key := range settings {
+		if !isMergeCheckField(key) {
+			return nil, false
+		}
+	}
+	return proposal, true
+}
+
+// skipMergeCheckFacts reads what the skip card is decided on, before any card is filed: the project
+// and the landing it names, what that landing stopped on, and the check command that would be
+// skipped. The project read carries the check (`integration.mergeCheckCommand`) and the task read
+// carries the landing's own sentence (`integration.blockingReason.summary`), which is where both are
+// written for a person already.
+//
+// It refuses here — without interrupting anybody — when the landing is not one this door answers: a
+// task that is not DONE, one whose newest landing never failed, or one that stopped on something
+// other than a check. That is not a substitute for the server's own decision (the server re-reads
+// every fact under the task's row lock); it is so that a person is never shown a card for a skip
+// that cannot be queued.
+func skipMergeCheckFacts(t *Transport, projectID, taskID, reason string) (map[string]interface{}, error) {
+	projectRaw, err := t.getProject(projectID)
+	if err != nil {
+		return nil, fmt.Errorf("read project %s: %w", projectID, err)
+	}
+	var project struct {
+		Title       string `json:"title"`
+		Integration struct {
+			MergeCheckCommand string `json:"mergeCheckCommand"`
+		} `json:"integration"`
+	}
+	if err := json.Unmarshal(projectRaw, &project); err != nil {
+		return nil, fmt.Errorf("read project %s: %w", projectID, err)
+	}
+	taskRaw, err := t.getTask(taskID)
+	if err != nil {
+		return nil, fmt.Errorf("read task %s: %w", taskID, err)
+	}
+	var task struct {
+		Title       string `json:"title"`
+		Status      string `json:"status"`
+		ProjectID   string `json:"projectId"`
+		Integration struct {
+			State    string `json:"state"`
+			LandTask *struct {
+				State          string `json:"state"`
+				Phase          string `json:"phase"`
+				Generation     string `json:"generation"`
+				BlockingReason *struct {
+					Code    string `json:"code"`
+					Summary string `json:"summary"`
+				} `json:"blockingReason"`
+			} `json:"landTask"`
+		} `json:"integration"`
+	}
+	if err := json.Unmarshal(taskRaw, &task); err != nil {
+		return nil, fmt.Errorf("read task %s: %w", taskID, err)
+	}
+	if task.ProjectID != "" && task.ProjectID != projectID {
+		return nil, fmt.Errorf("task %s is not filed under project %s: a project's coordinator skips a "+
+			"check on its own project's landings", taskID, projectID)
+	}
+	if task.Status != "DONE" {
+		return nil, fmt.Errorf("task %s is %s, not DONE: a landing delivers a finished task's work, so "+
+			"there is no finished delivery whose check could be taken off", taskID, task.Status)
+	}
+	// A check that ran out of its budget is the same state from here: the runner records it as
+	// CHECK_FAILED with `timedOut` on the check it killed, so one state covers both and the class the
+	// server decides on is read off that column there.
+	landing := task.Integration.LandTask
+	if landing == nil || landing.State != "CHECK_FAILED" {
+		what := "no landing on this project's integration line"
+		if landing != nil {
+			what = fmt.Sprintf("its newest landing is %s", landing.State)
+		}
+		if landing != nil && landing.State == "ERROR" {
+			return nil, fmt.Errorf("task %s: %s. The integration machinery stopped rather than a check "+
+				"disagreeing, and there is no check to skip: run the landing again with integration_retry "+
+				"and say what changed", taskID, what)
+		}
+		return nil, fmt.Errorf("task %s: %s. A merge check is skipped only where a check RAN and its "+
+			"result is not accepted, so there is nothing for this door to take off: read the landing's "+
+			"own item, or the project's integration read", taskID, what)
+	}
+	if project.Integration.MergeCheckCommand == "" {
+		return nil, fmt.Errorf("project %s has no merge check command, so this landing was never stopped "+
+			"by one and there is nothing to skip", projectID)
+	}
+	summary := ""
+	if landing.BlockingReason != nil {
+		summary = landing.BlockingReason.Summary
+	}
+	return map[string]interface{}{
+		"projectId":    projectID,
+		"projectTitle": project.Title,
+		"taskId":       taskID,
+		"taskTitle":    task.Title,
+		// The command that would NOT run, verbatim: the decision is about that command, and a card
+		// that paraphrased it would be asking about something nobody can see.
+		"checkCommand": project.Integration.MergeCheckCommand,
+		"failure":      summary,
+		"generation":   landing.Generation,
+		"reason":       reason,
+	}, nil
+}
+
+// askForSkipMergeCheck files the skip card and returns its id once the account owner has answered it,
+// with declined != "" when the answer was no.
+//
+// The id is the whole reason this does not go through askBeforeCreate, which answers only yes or no:
+// the card IS the approval as far as the server is concerned — the skip is refused unless it names an
+// ALLOWED card raised by this same conversation about this same landing — so the id has to travel
+// with the call. Headless there is no session and nobody to ask, and it returns empty: that caller is
+// the owner operating their own machine, and their own door takes no card (see the CLI).
+func askForSkipMergeCheck(t *Transport, sessionID string, facts map[string]interface{}) (approvalID, declined string, err error) {
+	if sessionID == "" {
+		return "", "", nil
+	}
+	body := map[string]interface{}{
+		"toolName": integrationSkipMergeCheckApprovalToolName,
+		"input":    facts,
+	}
+	// As for every other card: a runner-hosted job outlives the turn it was raised in, and the server
+	// must know that when it decides whether the card still has a reader.
+	if jobID := strings.TrimSpace(os.Getenv(envBgJobID)); jobID != "" {
+		body["backgroundJobId"] = jobID
+	}
+	id, err := t.createApproval(context.Background(), sessionID, body)
+	if err != nil {
+		return "", "", fmt.Errorf("could not register approval: %w", err)
+	}
+	dec, err := awaitApprovalDecision(context.Background(), t, sessionID, id)
+	if err != nil {
+		return "", "", fmt.Errorf("approval poll failed: %w", err)
+	}
+	if dec.Status == "ALLOWED" {
+		return id, "", nil
+	}
+	if dec.Message != "" {
+		return id, dec.Message, nil
+	}
+	return id, "denied by the user", nil
+}
+
+// projectMergeCheckCard is the card the owner answers before a merge check moves: which project,
+// what the check is now, and what it would become.
+//
+// The two CURRENT values come from the project read rather than from the caller, for the reason
+// `openBlockerFacts` reads the blocker: the card's whole job is to say what is being changed, and an
+// agent's recollection of the value it is changing is exactly the thing a person is there to check.
+// The proposed values are the caller's own, because they are the request.
+func projectMergeCheckCard(t *Transport, projectID string, proposal map[string]interface{}) (map[string]interface{}, error) {
+	raw, err := t.getProject(projectID)
+	if err != nil {
+		return nil, fmt.Errorf("read project %s: %w", projectID, err)
+	}
+	var project struct {
+		Title       string `json:"title"`
+		Integration struct {
+			MergeCheckCommand        interface{} `json:"mergeCheckCommand"`
+			MergeCheckTimeoutSeconds interface{} `json:"mergeCheckTimeoutSeconds"`
+		} `json:"integration"`
+	}
+	if err := json.Unmarshal(raw, &project); err != nil {
+		return nil, fmt.Errorf("read project %s: %w", projectID, err)
+	}
+	input := map[string]interface{}{
+		"projectId":                       projectID,
+		"projectTitle":                    project.Title,
+		"currentMergeCheckCommand":        project.Integration.MergeCheckCommand,
+		"currentMergeCheckTimeoutSeconds": project.Integration.MergeCheckTimeoutSeconds,
+	}
+	for key, value := range proposal {
+		input[key] = value
+	}
+	return input, nil
+}
+
+// updateProjectWithApproval performs a project update, putting the merge-check change it carries in
+// front of the account owner first — the same shape as `resolveBlockerWithApproval`, and for a
+// stronger version of the same reason: the server writes a session's merge check only against an
+// ALLOWED card whose input reproduces this exact proposal, so a runner that skipped the card would
+// have its write refused with a 403 telling the agent to go and ask.
+//
+// An update carrying no merge check — a rename, a new goal, a line field the server will refuse —
+// files nothing and reaches the door unchanged.
+//
+// Headless there is no session, no card and nobody to ask, and the write goes straight through: that
+// caller is the owner operating their own machine, which is the same rule every create here follows.
+func updateProjectWithApproval(t *Transport, sessionID, projectID string, body map[string]interface{}) (raw json.RawMessage, declined string, err error) {
+	if sessionID != "" {
+		settings, _ := body["integration"].(map[string]interface{})
+		if proposal, gated := mergeCheckProposal(settings); gated {
+			input, err := projectMergeCheckCard(t, projectID, proposal)
+			if err != nil {
+				return nil, "", err
+			}
+			declined, err := askBeforeCreate(t, sessionID, projectIntegrationApprovalToolName, input)
+			if err != nil {
+				return nil, "", err
+			}
+			if declined != "" {
+				return nil, declined, nil
+			}
+		}
+	}
+	raw, err = t.updateProject(sessionID, projectID, body)
 	return raw, "", err
 }
 
@@ -3006,16 +3345,24 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"integration": map[string]interface{}{
 					"type": "object",
-					"description": "Where this project's finished tasks land, as " +
-						"{line: MAIN | PROJECT_BRANCH, projectBranchName, upstreamRef, " +
-						"mergeCheckCommand, mergeCheckTimeoutSeconds}. Refused whenever this tool is " +
-						"called from inside a session, which is every call you make: which branch a " +
-						"project's work lands on is the account owner's to choose, from the Orbit web " +
-						"app, the user API, or `orbit project update` at their own terminal. Read the " +
-						"line back from project_get, which carries it as `integration`, and say what " +
-						"you would change rather than changing it. Once a project has started " +
-						"integrating the line is locked, and a request to move it is refused even " +
-						"from the owner: to change it, its project branch reaches main first.",
+					"description": "Where this project's finished tasks land, and what is " +
+						"checked before they do, as {line: MAIN | PROJECT_BRANCH, " +
+						"projectBranchName, upstreamRef, mergeCheckCommand, " +
+						"mergeCheckTimeoutSeconds}. The two halves are not the same decision. " +
+						"THE LINE — line, projectBranchName, upstreamRef — is the account owner's " +
+						"to choose, and a request carrying one is refused whenever this tool is " +
+						"called from inside a session, which is every call you make: read it back " +
+						"from project_get, which carries it as `integration`, and say what you would " +
+						"change rather than changing it. THE MERGE CHECK — mergeCheckCommand, " +
+						"mergeCheckTimeoutSeconds — is yours to propose: this call first puts the " +
+						"project, what the check is now and what it would become on a confirmation " +
+						"card and BLOCKS until the owner answers, and the change takes effect only " +
+						"if they approve it. Nothing is written if they decline, and a second " +
+						"change is a second question — an approval covers the exact command and " +
+						"timeout it named and nothing else. Send mergeCheckCommand: null to remove " +
+						"the check. Once a project has started integrating the line is locked, and " +
+						"a request to move it is refused even from the owner: to change it, its " +
+						"project branch reaches main first.",
 				},
 				"expectedConfigRevision": map[string]interface{}{
 					"type": "string",
@@ -3146,10 +3493,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"a criterion served only by work that looks like it produces no code (OWNER_CONFIRMED, or " +
 				"EVIDENCE_JUDGMENT with no acceptance command) and does not declare codeless; tasks set " +
 				"to start by hand (autoRunWhenReady=false); and Automatic on a project branch with no " +
-				"merge check. Declare the work that commits nothing codeless before asking, and the " +
-				"first goes away. The owner then sees a \"Start this project?\" card with your " +
-				"settings as suggestions, may change any of them, and presses Start; you are told when " +
-				"the project starts. Suggest what you would choose and say why in one sentence. Asking " +
+				"merge check. The warnings are yours: the owner's card does not show them, so act on " +
+				"the ones that are right and leave the rest — declare the work that commits nothing " +
+				"codeless, and the first goes away. The owner then sees a \"Start this project?\" card " +
+				"with your settings as suggestions — Automatic on whatever you send — may change any of " +
+				"them, and presses Start; you are told when the project starts. Suggest what you would " +
+				"choose and say why in one sentence. Asking " +
 				"again replaces the open request, and changing the plan before the start — tasks, " +
 				"dependencies or criteria — voids it, so ask again after the plan changes. Only the " +
 				"conversation the project is coordinated from may ask, and only before it has started.",
@@ -3175,8 +3524,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"type": "boolean",
 					"description": "Whether you run the project for the owner: you decide when each task is " +
 						"done, handle conflicts and failed checks, and the project branch merges into main " +
-						"once its merge check passes. false brings those to the owner; the project runs " +
-						"either way.",
+						"once its merge check passes (with none, once it rebases cleanly). false brings those " +
+						"to the owner; the project runs either way. Leave it out for on. The owner's card " +
+						"opens with Automatic on whatever you send; if you would keep it off, say why in why.",
 				},
 				"maxConcurrentTasks": map[string]interface{}{
 					"type":        "integer",
@@ -3195,7 +3545,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "One sentence on why the plan is ready and why these settings, shown " +
 						"to the owner on the card as written.",
 				},
-			}, "projectId", "line", "automatic", "maxConcurrentTasks", "why"),
+			}, "projectId", "line", "maxConcurrentTasks", "why"),
 		},
 		{
 			"name": "project_request_done",
@@ -3347,7 +3697,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"open_item_hand_over with an explanation; if changing a merge-check command, time limit or " +
 				"another owner-only choice is required, use ask_owner with options. This tool never hands " +
 				"an item to the owner and never answers that choice. Refused with the reason when the task's landing or the " +
-				"candidate is already queued or running, when the failure's item is the account owner's " +
+				"candidate is already queued or running (a task's landing whose runner stopped reporting " +
+				"past its limit is the exception: it is ended as ERROR RUNNER_LOST and run again), when " +
+				"the failure's item is the account owner's " +
 				"(escalated, or a project that is not Automatic), when the owner has an open blocker on " +
 				"the task, or when the task or candidate is not this project's. Only the conversation the " +
 				"project is coordinated from may call it.",
@@ -3371,6 +3723,48 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"one. Up to 2000 characters; it stays on the new job and on every item it handles.",
 				},
 			}, "projectId", "reason"),
+		},
+		{
+			"name": "integration_skip_merge_check",
+			"description": "Queue ONE landing of a DONE task again with the project's merge check NOT " +
+				"RUN — skipped, never passed — and only with the account owner's yes on a confirmation " +
+				"card. Use it when the check is what is red rather than the delivery: a command that " +
+				"cannot pass where the runner runs it (a shell without GNU timeout or bash 4, a missing " +
+				"tool, a baseline the machine does not have). Every other door is wrong for that red: " +
+				"integration_retry runs the same command against the same machine and is red again by " +
+				"construction, task_reopen sends back work that is not at fault, and the check COMMAND " +
+				"is the account owner's to change (project_update can PROPOSE one; they decide on its " +
+				"card) — which is the decision this card puts in front of them for this one landing " +
+				"instead. What it does: reads the project, the task and the failed landing first, raises " +
+				"the card (the project, the task, the check command verbatim, what stopped, and your " +
+				"reason), and queues exactly one LAND_TASK generation only if they answer yes; a decline " +
+				"queues nothing and the landing stands as it failed. ONCE: the project's mergeCheckCommand " +
+				"setting is untouched, the next landing and every merge into main are checked as before, " +
+				"and the generation this queues records the check it skipped, your reason and the card " +
+				"the owner approved it on — as does any item that landing goes on to open. Refused for " +
+				"anything but a landing that stopped on a check (CHECK_FAILED, including a check that ran " +
+				"out of its budget): a CONFLICT is the branch's, an ERROR is the machinery's (use " +
+				"integration_retry), and a landing already in flight refuses — and the same three " +
+				"refusals integration_retry has apply (a failure whose item is the account owner's, a " +
+				"project that is not Automatic, a task of another project). Only the conversation the " +
+				"project is coordinated from may call it.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project you coordinate, as shown in its web UI URL (/projects/<id>).",
+				},
+				"taskId": map[string]interface{}{
+					"type": "string",
+					"description": "The DONE task whose failed landing should go on without the project's " +
+						"merge check. Its newest landing must have ended CHECK_FAILED.",
+				},
+				"reason": map[string]interface{}{
+					"type": "string",
+					"description": "Why this check should not hold up this landing — what makes it red " +
+						"about the check rather than the work. Up to 2000 characters; the owner decides " +
+						"on it, and it stays on the generation and on every record of it.",
+				},
+			}, "projectId", "taskId", "reason"),
 		},
 		{
 			"name": "project_delete",

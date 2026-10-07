@@ -1,0 +1,107 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2-promotion-toast/settled-main-stack/<name>",
+ "files": [
+  {
+   "name": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack-styles.json",
+   "bytes": 15379,
+   "sha256": "ca00cd4be719f08a04c3ea56edc5b63bbc3c68e62870986534b1bc251cf74d19"
+  },
+  {
+   "name": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack-styles.json",
+   "bytes": 10558,
+   "sha256": "2137bb4e36d0fcc7a7ca2b4e1057e523b2b6f9cf6cda75cc745ef72af7ebba89"
+  },
+  {
+   "name": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+   "bytes": 453,
+   "sha256": "85a11048de334ea5de397c493511c0b960c2069872be4e6b28a038ebdb504a38"
+  },
+  {
+   "name": "chromium-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack-styles.json",
+   "bytes": 7987,
+   "sha256": "f36262f2a65517c52e6e5ee490d468e100e74ef41da5c33d6a8b00e2e8daeb84"
+  },
+  {
+   "name": "chromium-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+   "bytes": 281,
+   "sha256": "3a5ea682622208d82af78c14bc987c129a01f4b5b1139b115bfe824f9672f49d"
+  },
+  {
+   "name": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack-styles.json",
+   "bytes": 15318,
+   "sha256": "665fe6c022e90d32e3827246b12e46edc29639f0446bbfed9ced20711ca26a9f"
+  },
+  {
+   "name": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack-styles.json",
+   "bytes": 10514,
+   "sha256": "ce102b2f77097038f0af6128271ff6a1637018098105886f18bf9ed30bb14997"
+  },
+  {
+   "name": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+   "bytes": 453,
+   "sha256": "85a11048de334ea5de397c493511c0b960c2069872be4e6b28a038ebdb504a38"
+  },
+  {
+   "name": "chromium-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack-styles.json",
+   "bytes": 7956,
+   "sha256": "67c3ab27b5fa71cba1b4327e116c7e1b84767aec4d594a7f9a0e27172a110b89"
+  },
+  {
+   "name": "chromium-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+   "bytes": 281,
+   "sha256": "3a5ea682622208d82af78c14bc987c129a01f4b5b1139b115bfe824f9672f49d"
+  },
+  {
+   "name": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack-styles.json",
+   "bytes": 15107,
+   "sha256": "a7dbe1c63b05ab7131292d8cb07fb9ca774dd8da5a84f09bcd0e4bac168bed21"
+  },
+  {
+   "name": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack-styles.json",
+   "bytes": 10366,
+   "sha256": "54b62124b65ef1877cac8c2a64f0b74d7a538f5f43f77c1c644d258e5d3ccbf8"
+  },
+  {
+   "name": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+   "bytes": 453,
+   "sha256": "5e7ec847209c51f0c15fda381fe2451a68cf58ca6a0a06246b8a2c711ed538d1"
+  },
+  {
+   "name": "webkit-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack-styles.json",
+   "bytes": 7843,
+   "sha256": "469365f5d5daba779e6d20c36f3c48eceea64c4ea539bdaf8804d8d95b66ee71"
+  },
+  {
+   "name": "webkit-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+   "bytes": 281,
+   "sha256": "273d1ca978b144617c711a0b8103c84de47a2a99ceba3fe0145752cd754957a0"
+  },
+  {
+   "name": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack-styles.json",
+   "bytes": 15046,
+   "sha256": "cea97983a97a5edcc8681ff756cee187364f066dca4b7724423e51f40c0da314"
+  },
+  {
+   "name": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack-styles.json",
+   "bytes": 10322,
+   "sha256": "a7ea41836afa6607295010ea657cc4e5e87b2b0fae94d2794915746ca4421fb8"
+  },
+  {
+   "name": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+   "bytes": 453,
+   "sha256": "5e7ec847209c51f0c15fda381fe2451a68cf58ca6a0a06246b8a2c711ed538d1"
+  },
+  {
+   "name": "webkit-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack-styles.json",
+   "bytes": 7812,
+   "sha256": "c437f0584f677e0776d3f36714f8b9a67429367a5402f5e28034f871f76ac1d2"
+  },
+  {
+   "name": "webkit-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--stack-geometry.json",
+   "bytes": 281,
+   "sha256": "273d1ca978b144617c711a0b8103c84de47a2a99ceba3fe0145752cd754957a0"
+  }
+ ]
+}

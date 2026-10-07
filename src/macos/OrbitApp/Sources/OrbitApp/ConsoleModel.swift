@@ -145,6 +145,12 @@ final class ConsoleModel {
     private(set) var runnerAntigravity: RunnerAntigravityState?
     private(set) var runnerVersion: String?
     private(set) var sessionError: String?
+    /// The SOURCE refusal this session's row carries, adopted by name like `sessionError` — the
+    /// three columns the "never started" card reads to say WHY a run that produced no transcript
+    /// never began. Nil on a session that was not refused.
+    private(set) var sessionSourceState: String?
+    private(set) var sessionSourceRefusalCode: String?
+    private(set) var sessionSourceRefusalDetail: SourceRefusalDetail?
     private(set) var antigravityInstalling = false
     private(set) var runnerInstall: RunnerInstallState?
 
@@ -180,6 +186,37 @@ final class ConsoleModel {
     var queuedDshRepair: DshRuntime.Repair? {
         guard executesDsh, sessionStatus == .pending else { return nil }
         return DshRuntime.repair(sessionError)
+    }
+
+    /// The card this session's page draws when no engine ever ran on it — a refused SOURCE, or a
+    /// machine-side reason with nothing behind it. Nil when this console has nothing to say (see
+    /// `SessionRunStart`), which is also how the two engine cards above stay the only card for the
+    /// engines they own.
+    var runStart: SessionRunStart.Card? {
+        SessionRunStart.card(error: sessionError, sourceState: sessionSourceState,
+                             sourceRefusalCode: sessionSourceRefusalCode,
+                             sourceRefusalDetail: sessionSourceRefusalDetail,
+                             status: sessionStatus, runnerName: runnerName, runnerVersion: runnerVersion)
+    }
+
+    /// "Start it again" for a refused run: SR34's recovery, which is a NEW run on the task — a
+    /// refused session never re-resolves. The same door the task page's Run press uses, with this
+    /// press's own trigger id (the server's idempotency name for one ask).
+    func startRefusedRunAgain() async {
+        guard let taskID, !startingRun else { return }
+        startingRun = true
+        defer { startingRun = false }
+        do {
+            try await api.executeTask(taskID, triggerId: PublicID.newToken())
+            showTransientStatus("Starting a new run…")
+        } catch {
+            statusMessage = "Couldn't start it again — \(APIClient.failureReason(error))."
+        }
+    }
+
+    /// Hand the composer a reply about this run, the way every other card's "Chat about this" does.
+    func chatAboutRunStart() {
+        composerText = "About this run: "
     }
 
     var canInstallDsh: Bool {
@@ -400,6 +437,8 @@ final class ConsoleModel {
     /// Keeps the composer's contents put and the send button spinning until the ids land.
     private(set) var waitingForUploads = false
     private(set) var sending = false
+    /// A "Start it again" on a refused run is in flight: one press, one new run.
+    private(set) var startingRun = false
     /// True from the moment the user sends a message until the agent's first output for that turn
     /// lands (or the send fails). Bridges the window where the POST has returned but the live
     /// `RUNNING` status hasn't arrived yet, so the tail "working" indicator doesn't blink off in
@@ -1847,6 +1886,9 @@ final class ConsoleModel {
         guard let session, session.id == sessionID else { return }
         serverStatus = session.effectiveRunStatus
         sessionError = session.error
+        sessionSourceState = session.sourceState
+        sessionSourceRefusalCode = session.sourceRefusalCode
+        sessionSourceRefusalDetail = session.sourceRefusalDetail
         if let keys = session.agent?.antigravityKeyAvailableByRunner { workspaceAntigravityKeys = keys }
         serverCapabilities = session.capabilities
         // What this row says it is waiting on the owner for moves before any card here does: a
@@ -2569,6 +2611,11 @@ final class ConsoleModel {
     /// Whose those words are, when the server's answer says they are another Orbit session's
     /// (`RetryMessage.sessionMessage`): what routes the Retry to the server (`RetryRoute`).
     private(set) var serverRetrySender: SessionMessage?
+    /// …and whether the server said there is nothing at all for a re-send to carry
+    /// (`RetryMessage.nothingToResend`). The card swaps its verb for a continue then, and the press
+    /// sends the platform's own sentence (`AutoRetryLogic.continueMessage`) rather than any words
+    /// read from this window.
+    private(set) var serverNothingToResend = false
 
     /// What a retry sends: what is on screen when that answers it, and the server's answer when
     /// nothing on screen does.
@@ -2583,6 +2630,7 @@ final class ConsoleModel {
         let answer = try? await api.retryMessage(sessionID: sessionID)
         serverRetryText = answer?.text ?? ""
         serverRetrySender = answer?.sessionMessage
+        serverNothingToResend = answer?.nothingToResend ?? false
     }
 
     /// Re-send that message once the runner is signed back in (web's "Retry — re-send my last
@@ -2596,6 +2644,18 @@ final class ConsoleModel {
         // window — the server's words stand in, and there are no files to carry with them.
         let last = lastUserMessage
         guard !sending, !retryInFlight else { return }
+        // Nothing of anybody's to re-send — the failure landed on a turn nobody sent, and the server
+        // said so. The press sends the platform's own sentence in the reader's name
+        // (`AutoRetryLogic.continueMessage`, quoted under the button they pressed), through the same
+        // send as anything typed, so the composer's provider pick travels with it.
+        if last.text.isEmpty, serverRetryText.isEmpty, serverNothingToResend {
+            retryInFlight = true
+            defer { retryInFlight = false }
+            sendingAutoRetry = true
+            defer { sendingAutoRetry = false }
+            await send(overrideText: AutoRetryLogic.continueMessage, overrideAttachments: [])
+            return
+        }
         switch RetryRoute.of(loadedText: last.text, loadedSender: last.sessionMessage,
                              serverText: serverRetryText, serverSender: serverRetrySender) {
         case .nothing:
@@ -2644,6 +2704,13 @@ final class ConsoleModel {
     var armedRetryAt: Date? { worktree.detail?.retryAt.flatMap(RelativeTime.parse) }
     /// Attempts already spent on the current outage — what separates "never armed" from "gave up".
     var retryAttempts: Int { worktree.detail?.retryAttempts ?? 0 }
+    /// The provider whose outage the card names: the SESSION's own, never the composer's pending
+    /// pick. Picking a provider for the next turn — exactly what a person does when a quota is spent
+    /// — writes the same `provider` this console otherwise shows, and it renamed the provider that
+    /// had failed, so a card about claude's spent window read as deepseek's. The detail is the
+    /// freshest word on what the session runs; the console's own provider is the fallback for a
+    /// detail that has not loaded.
+    var outageProvider: String { worktree.detail?.provider ?? provider }
 
     /// Re-read the armed retry. Called when an auto-retry card appears: the server arms the retry as
     /// the failing turn settles, and a session that just went terminal is exactly the one the
@@ -3394,6 +3461,9 @@ final class ConsoleModel {
     /// read is not OPEN either — and `ProjectCriteriaDocument.taskCount` is where a document that
     /// did not say the count is read as none.
     private(set) var projectTaskCount = 0
+    /// How long a problem waits on this project's coordinator before it reaches the owner, off the
+    /// same read — what the start card's list of what still comes to the owner says.
+    private(set) var projectEscalationSeconds = StartProject.defaultEscalationSeconds
     /// The coordinator's request the start card in this conversation is drawn for — kept while the
     /// card is on screen, so a request that stops standing leaves its card stale in place rather
     /// than blank (web's `delivered`), and let go of once the project is started.
@@ -3689,6 +3759,7 @@ final class ConsoleModel {
             projectStatus = document.status
             projectStarted = document.started
             projectTaskCount = document.taskCount
+            projectEscalationSeconds = document.exceptionEscalationSeconds ?? projectEscalationSeconds
             projectDone = document.doneSubject
             // A read asked for after a press here, and still not DONE: the project was reopened, so
             // the press's own record no longer makes the card a receipt (`ProjectDone.recorded`).
@@ -3818,7 +3889,7 @@ final class ConsoleModel {
     }
 
     /// The start card's settings as the owner has left them: their edits on this request, or the
-    /// coordinator's suggestion untouched.
+    /// coordinator's suggestion with Automatic on (`StartSettingsDraft(_:)`).
     func startDraft(for row: ProjectOpenItemRow) -> StartSettingsDraft {
         if let draft = startDrafts[row.itemId] { return draft }
         guard let request = row.startRequest else {
@@ -3834,18 +3905,19 @@ final class ConsoleModel {
     /// Which closing card this conversation draws (`ProjectDone.slot`), adopted from the reads — one
     /// at a time, the way the browser's `SessionProjectSettlementCard` switches between them: "Is
     /// this project done?" while the coordinator's request stands (or the row says Record as done…),
-    /// its receipt once the project is recorded done, and otherwise "Why is this project not done?".
+    /// its receipt once the project is recorded done, and otherwise nothing. Nothing asks "Why is
+    /// this project not done?" in a conversation any more (the owner's ruling of 2026-10-07
+    /// 04:20Z); Orbit's own DONE is the terminal state of that old card, drawn as it always was.
     ///
     /// Each card is re-derived from the reads on every render, so a request the coordinator filed
     /// again is the same card with the new request in it. A read that has not answered changes
     /// nothing on screen; one that answered and asks nothing takes the closing card down, as the
-    /// browser draws none — "Why is this project not done?" is up only while the project looks
-    /// finished, and the owner's card only while it is asked or recorded.
+    /// browser draws none — the owner's card is up only while it is asked or recorded.
     private func adoptDoneSlot() {
         let live = ProjectDone.live(openItems: openItems, status: projectDone?.status)
         doneRequestRow = live
         switch ProjectDone.slot(subject: projectDone, request: live, waitingKind: sessionWaitingKind,
-                                record: doneRecord, started: projectStarted) {
+                                record: doneRecord) {
         case .none:
             if projectDone != nil {
                 decisionCards.removeAll { $0.kind == .projectDone || $0.kind == .projectNotDone }

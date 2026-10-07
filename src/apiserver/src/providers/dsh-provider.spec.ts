@@ -33,8 +33,11 @@ function harness() {
   };
 }
 
+/** An admin, for whom a shared row resolves as any row of theirs does (usableProviderScope). */
+const admin = { findUnique: async () => ({ role: 'ADMIN' }) };
+
 function serviceFor(db: object) {
-  return new ProvidersService(db as never, { publishForUser() {}, publishForAllUsers() {} } as never, {} as never);
+  return new ProvidersService({ user: admin, ...db } as never, { publishForUser() {}, publishForAllUsers() {} } as never, {} as never);
 }
 
 function createDto(overrides: Partial<CreateModelProviderDto> = {}): CreateModelProviderDto {
@@ -142,9 +145,10 @@ test('P1a dsh keyword collisions preserve configured providers and pools', async
   assert.equal(execRuntime({ declaredProvider: 'dsh', declaredProviderBuiltin: false, customRow: null }), AgentProvider.CLAUDE);
   assert.equal(execRuntime({ declaredProvider: 'dsh', declaredProviderBuiltin: true, customRow: null }), AgentProvider.DSH);
   const session = { provider: 'dsh', providerBuiltin: false, ownerId: OWNER };
-  const rowDb = { modelProvider: { findFirst: async () => colliding } };
+  const rowDb = { user: admin, modelProvider: { findFirst: async () => colliding } };
   assert.equal(await sessionExecRuntime(rowDb as never, session), AgentProvider.CLAUDE);
   const poolDb = {
+    user: admin,
     modelProvider: { findFirst: async () => null },
     providerPool: { findFirst: async () => ({ shared: false, engine: 'codex' }) },
   };

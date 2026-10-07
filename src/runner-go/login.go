@@ -391,6 +391,16 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 			return
 		}
 	}
+	// Kimi signs in on one of two sites, each with accounts of its own (kimi_region.go). A start
+	// naming one passes it on; one naming none is the bare `kimi login` it always was.
+	if flow.engine == providerKimi && lr.Region != "" {
+		argv, refusal := kimiLoginArgv(flow.argv, lr.Region)
+		if refusal != "" {
+			giveUp(refusal)
+			return
+		}
+		flow.argv = argv
+	}
 	r.mu.Lock()
 	if prev := r.runs[key]; prev != nil {
 		if attempt == "" || attempt == prev.attempt {

@@ -1,0 +1,120 @@
+/**
+ * The managed runner contract the server and the three clients share
+ * (docs/managed-runner-design.md, "Server and three client interfaces").
+ *
+ * The feature is off unless the server sets ORBIT_MANAGED_RUNNERS_ENABLED=true. A client reads
+ * `GET /api/auth/capabilities` first: a missing `managedRunners` member, a 404 from a server that
+ * predates it, `enabled: false` or a contract version it does not know all mean no managed UI.
+ */
+
+/** The contract version this file describes. A client that knows another shows no managed UI. */
+export const MANAGED_RUNNER_CONTRACT_VERSION = 1;
+
+/**
+ * The refusal of a managed runner write while the feature is off: 404, as a server without the
+ * feature answers, sent only after the caller has authenticated and before anything is written.
+ */
+export const MANAGED_RUNNER_DISABLED = 'MANAGED_RUNNER_DISABLED';
+
+/** The feature is on but this server cannot reconcile (its environment profile is missing or invalid). */
+export const MANAGED_RUNNER_UNAVAILABLE = 'MANAGED_RUNNER_UNAVAILABLE';
+
+/** A write that needs the mapping's current revision named another one. */
+export const MANAGED_RUNNER_REVISION_CONFLICT = 'MANAGED_RUNNER_REVISION_CONFLICT';
+
+/** A transition the mapping's state does not allow, or one this server version does not perform. */
+export const MANAGED_RUNNER_TRANSITION_REFUSED = 'MANAGED_RUNNER_TRANSITION_REFUSED';
+
+/** A managed runner's row is removed only through the managed deletion workflow, never by unregistering. */
+export const MANAGED_RUNNER_DELETE_REFUSED = 'MANAGED_RUNNER_DELETE_REFUSED';
+
+/** The server decided this account is not given a managed runner (who is, is the server's decision). */
+export const MANAGED_RUNNER_NOT_ELIGIBLE = 'MANAGED_RUNNER_NOT_ELIGIBLE';
+
+/**
+ * The managed runner is up, but none of its runtimes is installed and signed in, so it is not READY
+ * and nothing chooses an engine for its first session. Signing a runtime in on the runner clears it.
+ * Also the refusal of a first session asked for on a runtime the managed runner cannot run.
+ */
+export const MODEL_UNAVAILABLE = 'MODEL_UNAVAILABLE';
+
+/** What the owner asked of the managed runner. */
+export type ManagedRunnerDesiredState = 'RUNNING' | 'SLEEPING' | 'DELETED';
+
+/** How far the server's manager has got. Only the manager moves it. */
+export type ManagedRunnerManagementState =
+  | 'REQUESTED'
+  | 'WAITING_CAPACITY'
+  | 'PROVISIONING'
+  | 'STARTING'
+  | 'READY'
+  | 'DRAINING'
+  | 'SLEEPING'
+  | 'FENCING'
+  | 'FAILED'
+  | 'DELETING'
+  | 'DELETED';
+
+/** What a read reports: a management state, or that the owner has no mapping at all. */
+export type ManagedRunnerReadState = ManagedRunnerManagementState | 'NOT_PROVISIONED';
+
+/** `GET /api/auth/capabilities` → `managedRunners`. Reading it allocates nothing. */
+export interface ManagedRunnerCapability {
+  enabled: boolean;
+  contractVersion: number;
+}
+
+export interface ServerCapabilities {
+  managedRunners: ManagedRunnerCapability;
+}
+
+/** A safe, structured cause. Never a raw infrastructure error, endpoint or credential. */
+export interface ManagedRunnerReason {
+  code: string;
+  message: string;
+  retryable: boolean;
+}
+
+export interface ManagedRunnerActions {
+  canEnsure: boolean;
+  canWake: boolean;
+  canSleep: boolean;
+  canRetry: boolean;
+  canDelete: boolean;
+}
+
+/**
+ * `GET /api/managed-runner`, and the body of every accepted managed runner write: the
+ * authenticated owner's mapping, stored and derived, without allocating anything. Ids use the
+ * existing public id codec, timestamps ISO 8601; ids are null before the mapping exists.
+ */
+export interface ManagedRunnerStatus {
+  contractVersion: number;
+  /** The server's switch. False: management is frozen and every action is refused. */
+  enabled: boolean;
+  /** The mapping's compare-and-set revision; 0 when there is none. */
+  revision: number;
+  managementState: ManagedRunnerReadState;
+  desiredState: ManagedRunnerDesiredState | null;
+  runnerId: string | null;
+  workspaceId: string | null;
+  /** The runner row's own heartbeat observation (`ONLINE`, `OFFLINE`, `DRAINING`). */
+  heartbeatStatus: string | null;
+  lastHeartbeatAt: string | null;
+  /** READY with a fresh heartbeat: new session turns can be claimed. */
+  usable: boolean;
+  reason: ManagedRunnerReason | null;
+  retryAfter: string | null;
+  /** The runtime the runner was found installed and signed in with when it became READY: what a
+   *  default workspace with no history starts its first session on. Null until then. */
+  initialProvider: string | null;
+  actions: ManagedRunnerActions;
+}
+
+/** The body of every managed runner write. */
+export interface ManagedRunnerWriteRequest {
+  /** Required: a retried request with the same key is answered with the same mapping. */
+  idempotencyKey: string;
+  /** The revision the caller read; required by retry, sleep and delete. */
+  revision?: number;
+}

@@ -1,0 +1,43 @@
+{
+ "about": "The coordinator decision on the evidence of P4.1 (34Za39Do3N6tkmIMP0GBP) that this registration cites, copied verbatim from Orbit records. evidenceRevisions: task_evidence_list(34Za39Do3N6tkmIMP0GBP) as read by this registration session on 2026-10-07 (one revision; the evidence body is omitted, its digest identifies it). decisionCall: the coordinator session 34b245G3NiwgVVUj2JFJw called task_evidence_decide on revision 1; the call input and the server response are copied from that session transcript (path in transcript).",
+ "task": "34Za39Do3N6tkmIMP0GBP",
+ "evidenceRevisions": [
+  {
+   "revision": "1",
+   "id": "2HlXDdKQS1Ze5LcD2cETLY",
+   "evidenceDigest": "9477611a4499f613621b9dcc7e7c99a7dce050f1caca7ffa22fd95ca60467d57",
+   "submittedAt": "2026-10-07T15:56:07.572Z",
+   "sourceSessionId": "1a8yDYmfk7c7iy76awC5i5"
+  }
+ ],
+ "transcript": "/root/.orbit/claude-accounts/44bf2acd/projects/-root--orbit-worktrees-01a10f8f-a15b-7306-96d0-11c294fab7f8/9c787a99-55d7-4401-bc23-0a0df17502ad.jsonl",
+ "decisionCall": {
+  "toolUseId": "toolu_01LLkAQshWwbYDMWiNGufZhY",
+  "evidenceRevision": 1,
+  "call": {
+   "timestamp": "2026-10-07T16:00:53.266Z",
+   "tool": "mcp__orbit__task_evidence_decide",
+   "input": {
+    "taskId": "34Za39Do3N6tkmIMP0GBP",
+    "evidenceRevision": "1",
+    "decision": "CONFIRM",
+    "note": "独立核对通过，交付是 a84bc61e7 之上的 0bb647a81、7d81822b1、b0b59fa39、62641903e。\n- 清单：start-check-owners 里 P4.1 有 18 项，delivery-check-owners 里已没有 P4.1，unowned 和 pending 都为 0，其他批次计数不变。\n- 改动范围：\n  - components/ui 新增 Card、Field、PasswordInput、Table、useFormFields，扩展 Segmented、MultiSelect、Popconfirm、Overlay.css；\n  - 5 个页面和 2 个组件切换到这些组件；\n  - P0 的 page-scenarios.mjs 只把本批页面的计算样式定位器从 .ant-* 换成 .orbit-*，Save 按钮的定位从正则收紧为精确匹配；截图名、截取区域和断言都不变。作业指导要求各批同步维护自己的定位器，这正是该做的。\n  - 单测改动都是把 AntD 类名选择器换成按角色和可访问名称定位，例如对话框按 aria-labelledby、单选和复选按 aria-checked、卡片按 section[aria-labelledby]。断言没有放宽，有几处更严。\n- 协调者对 gaps 的判定：\n  1) P0 的 WebKit 明暗手机 profile-validation 两张接受为本批的迁移差异。根因和隔离都写清了：AntD 表单项的一次同步布局读取，与 Linux WebKit 手机模拟的 8px 滚动条相互作用。Orbit 的结果与 Chromium 手机、设置页 \"Setting saved\" 的位置一致；真机 iOS 用的是覆盖式滚动条，不受影响。不为测试环境复刻那次布局读取。另建登记任务，在本批落地后登记进已接受层（before 取 a84bc61e7），并引用本判定。\n  2) Sign-in methods 卡片和管理端 Sign-in 卡片各变 1px，是 .orbit-card 收为公共样式、并与 AntD Card 几何对齐的结果，与同页另两张卡片一致，接受。.orbit-card 的命名决定（收为公共样式）接受。\n  3) p41-profile-photo 头像边缘的抗锯齿差异：两棵树各自多轮之间也有同量级的波动，接受为渲染噪声。\n  4) P3.2 试点两轮完整复跑在高负载下各有一次超时，单独重跑都是 3/3 通过，接受。P7.1 会在最终候选上重跑全部入口。\n  5) 浮层第一帧位置问题不属本批范围，另建修复任务，排在第 2 批窗口跟进之后。\n- 合并检查：构建和 Vitest 通过（347 个文件、4414 个用例）。标准 P0 两轮都是 99 通过、11 跳过、2 失败，2 个失败正是上面接受的两张。\n落地时请注意本批的 Overlay.css、Popconfirm.tsx 与第 2 批窗口跟进的 Overlay.tsx 改动相邻。"
+   }
+  },
+  "response": {
+   "timestamp": "2026-10-07T16:01:00.892Z",
+   "isError": false,
+   "text": "{\n  \"id\": \"6sLVdUrgEbiS5PlOAN8QoZ\",\n  \"taskId\": \"34Za39Do3N6tkmIMP0GBP\",\n  \"evidenceId\": \"2HlXDdKQS1Ze5LcD2cETLY\",\n  \"evidenceRevision\": \"1\",\n  \"criterionRevision\": \"cea9e64268a4eeb3edbfe637edacd7dba2f75db878c6d367a8e7537785ffe7fa\",\n  \"evidenceDigest\": \"9477611a4499f613621b9dcc7e7c99a7dce050f1caca7ffa22fd95ca60467d57\",\n  \"decision\": \"CONFIRM\",\n  \"note\": \"独立核对通过，交付是 a84bc61e7 之上的 0bb647a81、7d81822b1、b0b59fa39、62641903e。\\n- 清单：start-check-owners 里 P4.1 有 18 项，delivery-check-owners 里已没有 P4.1，unowned 和 pending 都为 0，其他批次计数不变。\\n- 改动范围：\\n  - components/ui 新增 Card、Field、PasswordInput、Table、useFormFields，扩展 Segmented、MultiSelect、Popconfirm、Overlay.css；\\n  - 5 个页面和 2 个组件切换到这些组件；\\n  - P0 的 page-scenarios.mjs 只把本批页面的计算样式定位器从 .ant-* 换成 .orbit-*，Save 按钮的定位从正则收紧为精确匹配；截图名、截取区域和断言都不变。作业指导要求各批同步维护自己的定位器，这正是该做的。\\n  - 单测改动都是把 AntD 类名选择器换成按角色和可访问名称定位，例如对话框按 aria-labelledby、单选和复选按 aria-checked、卡片按 section[aria-labelledby]。断言没有放宽，有几处更严。\\n- 协调者对 gaps 的判定：\\n  1) P0 的 WebKit 明暗手机 profile-validation 两张接受为本批的迁移差异。根因和隔离都写清了：AntD 表单项的一次同步布局读取，与 Linux WebKit 手机模拟的 8px 滚动条相互作用。Orbit 的结果与 Chromium 手机、设置页 \\\"Setting saved\\\" 的位置一致；真机 iOS 用的是覆盖式滚动条，不受影响。不为测试环境复刻那次布局读取。另建登记任务，在本批落地后登记进已接受层（before 取 a84bc61e7），并引用本判定。\\n  2) Sign-in methods 卡片和管理端 Sign-in 卡片各变 1px，是 .orbit-card 收为公共样式、并与 AntD Card 几何对齐的结果，与同页另两张卡片一致，接受。.orbit-card 的命名决定（收为公共样式）接受。\\n  3) p41-profile-photo 头像边缘的抗锯齿差异：两棵树各自多轮之间也有同量级的波动，接受为渲染噪声。\\n  4) P3.2 试点两轮完整复跑在高负载下各有一次超时，单独重跑都是 3/3 通过，接受。P7.1 会在最终候选上重跑全部入口。\\n  5) 浮层第一帧位置问题不属本批范围，另建修复任务，排在第 2 批窗口跟进之后。\\n- 合并检查：构建和 Vitest 通过（347 个文件、4414 个用例）。标准 P0 两轮都是 99 通过、11 跳过、2 失败，2 个失败正是上面接受的两张。\\n落地时请注意本批的 Overlay.css、Popconfirm.tsx 与第 2 批窗口跟进的 Overlay.tsx 改动相邻。\",\n  \"decidedAt\": \"2026-10-07T16:00:53.812Z\",\n  \"decidedByType\": \"AGENT\",\n  \"decidedById\": \"34ZHGcIxwsZUxkgh2z65V\",\n  \"decidingSessionId\": \"34b245G3NiwgVVUj2JFJw\",\n  \"publicId\": \"6sLVdUrgEbiS5PlOAN8QoZ\",\n  \"taskPublicId\": \"34Za39Do3N6tkmIMP0GBP\",\n  \"decidedByPublicId\": \"34ZHGcIxwsZUxkgh2z65V\",\n  \"evidencePublicId\": \"2HlXDdKQS1Ze5LcD2cETLY\",\n  \"decidingSessionPublicId\": \"34b245G3NiwgVVUj2JFJw\"\n}"
+  }
+ },
+ "cited": {
+  "taskId": "34Za39Do3N6tkmIMP0GBP",
+  "evidenceRevision": 1,
+  "evidenceDigest": "9477611a4499f613621b9dcc7e7c99a7dce050f1caca7ffa22fd95ca60467d57",
+  "verdict": "CONFIRM",
+  "decisionRecord": "6sLVdUrgEbiS5PlOAN8QoZ",
+  "decidedAt": "2026-10-07T16:00:53.812Z",
+  "decidingSessionId": "34b245G3NiwgVVUj2JFJw",
+  "document": "p4.1/README.md"
+ }
+}

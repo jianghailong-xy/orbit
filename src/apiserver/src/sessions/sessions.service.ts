@@ -78,6 +78,9 @@ import {
   SessionState,
   type SessionProjectMembership,
   type SessionSearchHit,
+  type SessionSourceRefusalDetail,
+  type SourceRefusalCode,
+  type SourceState,
   supportsMidTurnSteer,
   supportsTargetBoundCurrentWorkSteer,
   uuidToBase62,
@@ -177,12 +180,14 @@ import {
 } from '../common/runtime-provider';
 import {
   accountPoolRuntime,
+  adminOnlyProviderRefusal,
   execRuntime,
   isBuiltinProvider,
   openCodeKeyRows,
   resolveProviderExec,
   runsOnOpenCode,
   sessionExecRuntime,
+  usableProviderScope,
 } from '../providers/custom-provider';
 import { ownsModel } from '../providers/preset-overlay';
 import {
@@ -205,6 +210,7 @@ import {
   type TranscriptRecordKind,
 } from './transcript-around';
 import { EngineSignedOutConflict, engineSignInAction, signedOutEngineRefusal } from './engine-signin-preflight';
+import { assertManagedFirstSessionRuntime } from '../managed-runners/managed-runner-supply';
 import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
 import { DSH_RUNNER_UPGRADE_ERROR, dshRuntimeUnavailable } from '../runner-api/runner-provider-support';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
@@ -897,6 +903,9 @@ export class SessionsService {
     let workspaceEnv: unknown;
     // The accounts the workspace pins its sessions to, whose sign-ins the preflight below judges.
     let accountChoices: WorkspaceAccountChoices | undefined;
+    // Set when the workspace is a managed runner's default workspace: that runner, whose first
+    // session is held to the runtimes it has ready (see the preflight below).
+    let managedRunnerId: string | undefined;
     if (!assignedRunnerId && dto.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
@@ -908,6 +917,7 @@ export class SessionsService {
           codexAccount: true,
           claudeAccount: true,
           antigravityAccount: true,
+          managedRunnerDefault: { select: { runnerId: true } },
         },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
@@ -923,16 +933,21 @@ export class SessionsService {
       enableWorktree = workspace.enableWorktree;
       workspaceEnv = workspace.env;
       accountChoices = workspace;
+      managedRunnerId = workspace.managedRunnerDefault?.runnerId;
     } else if (dto.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
-        select: { enableWorktree: true, enabled: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true },
+        select: {
+          enableWorktree: true, enabled: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true,
+          managedRunnerDefault: { select: { runnerId: true } },
+        },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
       if (workspace.enabled === false) throw new ForbiddenException('workspace is disabled');
       enableWorktree = workspace.enableWorktree;
       workspaceEnv = workspace.env;
       accountChoices = workspace;
+      managedRunnerId = workspace.managedRunnerDefault?.runnerId;
     }
     if (!assignedRunnerId) {
       throw new BadRequestException('pick a workspace bound to a runner, or pass assignedRunnerId');
@@ -961,7 +976,7 @@ export class SessionsService {
           where: {
             slug: dto.provider,
             ...(provider === AgentProvider.DSH ? {} : { enabled: true }),
-            OR: [{ ownerId: null }, { ownerId }],
+            ...(await usableProviderScope(this.prisma, ownerId)),
           },
           select: { runtime: true, enabled: true },
         });
@@ -975,7 +990,9 @@ export class SessionsService {
         if (configured || borrowedRuntime) providerBuiltin = false;
         // The slug is named: a command-line caller typed it, and no picker checked it first.
         if (!providerBuiltin && !configured && !borrowedRuntime) {
-          throw new BadRequestException(`provider not available: "${dto.provider}"`);
+          throw new BadRequestException(
+            (await adminOnlyProviderRefusal(this.prisma, ownerId, dto.provider)) ?? `provider not available: "${dto.provider}"`,
+          );
         }
         if (!configured && borrowedRuntime) await this.assertUsablePool(ownerId, dto.provider);
       }
@@ -984,13 +1001,17 @@ export class SessionsService {
       // Inherited from the workspace: a removed/disabled provider cannot substitute the runner's
       // own Claude login for the configured endpoint the caller inherited.
       const configured = await this.prisma.modelProvider.findFirst({
-        where: { slug: provider, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
+        where: { slug: provider, enabled: true, ...(await usableProviderScope(this.prisma, ownerId)) },
         select: { runtime: true },
       });
       borrowedRuntime = configured
         ? configured.runtime
         : await accountPoolRuntime(this.prisma, ownerId, provider);
-      if (!borrowedRuntime) throw new BadRequestException(`provider not available: "${provider}"`);
+      if (!borrowedRuntime) {
+        throw new BadRequestException(
+          (await adminOnlyProviderRefusal(this.prisma, ownerId, provider)) ?? `provider not available: "${provider}"`,
+        );
+      }
       if (!configured && borrowedRuntime) await this.assertUsablePool(ownerId, provider);
     }
     if (borrowedRuntime && (!Object.values(AgentProvider).includes(borrowedRuntime as AgentProvider) ||
@@ -1002,11 +1023,14 @@ export class SessionsService {
     const openCodeKey = provider === AgentProvider.OPENCODE ? openCodeKeyOf(dto.model) : null;
     if (openCodeKey) {
       const row = await this.prisma.modelProvider.findFirst({
-        where: { slug: openCodeKey.slug, OR: [{ ownerId: null }, { ownerId }] },
+        where: { slug: openCodeKey.slug, ...(await usableProviderScope(this.prisma, ownerId)) },
         select: { enabled: true, runtime: true, apiKeyEnc: true },
       });
       if (!row || !runsOnOpenCode(row)) {
-        throw new BadRequestException(`provider not available on OpenCode: "${openCodeKey.slug}"`);
+        throw new BadRequestException(
+          (!row && (await adminOnlyProviderRefusal(this.prisma, ownerId, openCodeKey.slug)))
+            || `provider not available on OpenCode: "${openCodeKey.slug}"`,
+        );
       }
     }
     await this.assertOwnedRefs(ownerId, { workspaceId: dto.workspaceId, assignedRunnerId });
@@ -1190,6 +1214,18 @@ export class SessionsService {
     // clears it where Orbit can start one, so a client can offer that as a button.
     if (refusal && targetRunner) {
       throw new EngineSignedOutConflict(runtime, refusal, assignedRunnerId, engineSignInAction(runtime, targetRunner));
+    }
+    // A managed runner installs no engine on demand, so its default workspace's first session runs on
+    // a runtime it reported ready — the default derived above is the one it became READY with — or is
+    // refused MODEL_UNAVAILABLE here (docs/managed-runner-design.md, "Provisioning retry wake and sleep" 3).
+    if (managedRunnerId && managedRunnerId === assignedRunnerId && targetRunner && dto.workspaceId) {
+      await assertManagedFirstSessionRuntime(this.prisma, {
+        workspaceId: dto.workspaceId,
+        runtime,
+        bringsOwnCredentials: borrowedRuntime != null,
+        workspaceEnv,
+        runner: targetRunner,
+      });
     }
     // §13.8: a conversation gets no worktree. Applied after the workspace's default is read, so it
     // is a deliberate override rather than a second source of the default.
@@ -1443,8 +1479,10 @@ export class SessionsService {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${SessionsService.IMPORT_LOCK_NAMESPACE}, ${lockKey})`;
         // Rejection ③: a Claude transcript can be imported once — the imported session IS the
         // continuation of it. A Trashed one does not count: deleting the import frees the id.
+        // Once per account: a session of another account with this engine id is not this
+        // account's to be told about — not that it exists, nor its id or title — nor in its way.
         const claimed = await tx.session.findFirst({
-          where: { runtimeSessionId: dto.claudeSessionId, deletedAt: null },
+          where: { ownerId, runtimeSessionId: dto.claudeSessionId, deletedAt: null },
           select: { id: true, title: true },
         });
         if (claimed) {
@@ -2946,6 +2984,9 @@ export class SessionsService {
       lastToolUse: string | null;
       lastUserText: string | null;
       mergeStatus: string | null;
+      sourceState: SourceState;
+      sourceRefusalCode: SourceRefusalCode | null;
+      sourceRefusalDetail: SessionSourceRefusalDetail | null;
       pinnedAt: Date | null;
       folderId: string | null;
       shared: boolean;
@@ -3025,6 +3066,14 @@ export class SessionsService {
         s.last_tool_use   AS "lastToolUse",
         left(s.last_user_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastUserText",
         s.merge_status    AS "mergeStatus",
+        -- The SOURCE snapshot (migration 0231), for the "this run never started" card: which
+        -- baseline this run was to start from, and — when a runner refused it — the code, and the
+        -- diagnosis carrying §10.1's fixAction. On the row rather than behind a second request,
+        -- because the card is drawn over a list and a refused run is otherwise a row that says
+        -- nothing is wrong. UNBOUND + nulls on every Legacy session.
+        s.source_state    AS "sourceState",
+        s.source_refusal_code   AS "sourceRefusalCode",
+        s.source_refusal_detail AS "sourceRefusalDetail",
         s.pinned_at       AS "pinnedAt",
         -- The folder this session is filed in (0348), which the clients group the list by.
         s.folder_id       AS "folderId",
@@ -3182,6 +3231,11 @@ export class SessionsService {
         lastToolUse: r.lastToolUse,
         lastUserText: r.lastUserText,
         mergeStatus: r.mergeStatus,
+        // The SOURCE snapshot, passed through as the columns hold it: a row that resolves nothing
+        // is `UNBOUND` with nulls, which is the shape a card tests before it draws anything.
+        sourceState: r.sourceState,
+        sourceRefusalCode: r.sourceRefusalCode ?? null,
+        sourceRefusalDetail: r.sourceRefusalDetail ?? null,
         pinnedAt: r.pinnedAt,
         folderId: r.folderId,
         shared: r.shared === true,
@@ -7906,13 +7960,15 @@ export class SessionsService {
     const currentRow = isBuiltinProvider(declared, session.providerBuiltin)
       ? null
       : await tx.modelProvider.findFirst({
-          where: { slug: declared, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
+          where: { slug: declared, ...(await usableProviderScope(tx, session.ownerId)) },
         });
     const fromPool = isBuiltinProvider(declared, session.providerBuiltin) || currentRow
       ? null
       : await accountPoolRuntime(tx, session.ownerId, declared);
     if (!isBuiltinProvider(declared, session.providerBuiltin) && !currentRow && !fromPool) {
-      throw new BadRequestException(`provider not available: "${declared}"`);
+      throw new BadRequestException(
+        (await adminOnlyProviderRefusal(tx, session.ownerId, declared)) ?? `provider not available: "${declared}"`,
+      );
     }
     if (requested === undefined || requested === declared) {
       if (currentRow?.enabled === false) throw new BadRequestException('provider is disabled');
@@ -7933,7 +7989,7 @@ export class SessionsService {
           where: {
             slug: requested,
             ...(requested === AgentProvider.DSH ? {} : { enabled: true }),
-            OR: [{ ownerId: null }, { ownerId: session.ownerId }],
+            ...(await usableProviderScope(tx, session.ownerId)),
           },
         });
     if (targetRow?.enabled === false) throw new BadRequestException('provider not available');
@@ -7945,7 +8001,9 @@ export class SessionsService {
         : await accountPoolRuntime(tx, session.ownerId, requested);
     if (targetRow || poolRuntime) providerBuiltin = false;
     if (!providerBuiltin && !targetRow && !poolRuntime) {
-      throw new BadRequestException('provider not available');
+      throw new BadRequestException(
+        (await adminOnlyProviderRefusal(tx, session.ownerId, requested)) ?? 'provider not available',
+      );
     }
     if (poolRuntime) await this.assertUsablePool(session.ownerId, requested, tx);
     // A session already on a pool has no row either, and runs on that pool's engine — a shared pool's
