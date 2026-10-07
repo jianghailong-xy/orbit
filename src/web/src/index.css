@@ -8845,6 +8845,30 @@ button.chat-jump-start:hover {
   color: var(--brand);
 }
 
+/* The refusal card over a conversation whose run never started (RunNeverStartedCard). Same
+   skeleton as the remedy cards above — that is the point, one fact one card — plus the three
+   lines they do not have: the line that names the situation (the weight the repair cards give
+   their title, carried here by the sentence under it), the ref the run was pinned to, and the one
+   step that changes the answer, set off by a rule because it is the card's conclusion. */
+.run-never-started-why {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.run-never-started-subject {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+.run-never-started-next {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--warning-border);
+  color: var(--text-1);
+}
+.run-never-started-foot {
+  margin-top: 9px;
+}
+
 /* Provider quota exhausted. Not an error — a pause — and the card's weight follows one
    question: does the reader still have to do something? While a retry is armed the answer is
    no, so this sits neutral, a status line rather than an alarm; a card that stays orange for
@@ -17087,6 +17111,54 @@ button.chat-jump-start:hover {
   margin-right: 5px;
   color: var(--text-2);
   font-weight: 600;
+}
+/* A refused-start blocker (SOURCE_UNRESOLVED): the sentence that names the situation, the kind and
+   ref it is about, and the rows of the runs the line refused. Same type scale as the row's other
+   lines — this is one more thing the blocker says, not a card inside a card. */
+.project-blockers-why {
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.project-blockers-refusal {
+  margin-top: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace;
+  font-size: 11.5px;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+.project-blockers-tasks {
+  margin: 7px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.project-blockers-tasks li {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 3px 0;
+  font-size: 12.5px;
+}
+.project-blockers-task-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--danger, #c53b3b);
+  transform: translateY(-1px);
+}
+.project-blockers-task-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-blockers-task-state {
+  flex: none;
+  color: var(--text-3);
+  font-size: 12px;
 }
 .project-blockers-paths {
   margin-top: 6px;

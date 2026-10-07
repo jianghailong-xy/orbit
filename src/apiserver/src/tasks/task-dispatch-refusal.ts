@@ -2,9 +2,9 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import { CreatorType, Prisma } from '@prisma/client';
 import {
+  dispatchRefusalNextStep,
   SOURCE_FIX_ACTIONS,
   SOURCE_REFUSAL_CODES,
-  SourceFixAction,
   SourceRefusalCode,
   TaskDispatchRefusal,
   uuidToBase62,
@@ -301,46 +301,13 @@ async function prerequisitesThatLanded(
 /**
  * What to do about a refusal, in the words a person or a coordinator acts on.
  *
- * One sentence per fixAction, read by the task's comment and by the coordinator's message alike, so
- * the two cannot give different advice about the same refusal. Every one of them ends the same way,
- * because it is the thing the old note got wrong: starting the task again changes nothing until the
- * cause has.
+ * The sentence itself lives in `@orbit/shared` (`source-refusal.ts`) because it now has THREE
+ * readers, not two: the task's comment and the coordinator's message below, and the clients' card
+ * over the conversation whose run never started. One refusal, one piece of advice — a second copy
+ * on either side of this file would be free to drift from the other. Re-exported from here so the
+ * callers that already read it from this module keep working.
  */
-export function dispatchRefusalNextStep(
-  refusal: { fixAction: SourceFixAction | string; ref: string | null },
-): string {
-  const again = '在那之前重新开工只会得到同一个拒绝。';
-  const line = refusal.ref ? `集成线 ${branchName(refusal.ref)}` : '这次起跑的线';
-  switch (refusal.fixAction) {
-    case 'SYNC_INTEGRATION_LINE':
-      return (
-        `前置已经落地了——缺的是它落地的提交不在${line}上：前置的成果进了 upstream，而这条线还没吸收 `
-        + 'upstream。先让这条线追上它（下一次任务落地时的 main 同步会做；等不及就从这条线的 tip 出发把 '
-        + 'upstream 合进来、推回这条线，不 rebase、不 force push），再开工。'
-        + '在那之前重新开工只会得到同一个拒绝：新的开工从同一个 tip 起跑，要求的是同一组提交。'
-      );
-    case 'FIX_REF':
-      // §10.1's one code whose cause is the line itself: there is nothing to sync and nothing to
-      // restore, the ref the run was told to start from simply is not there. Said without naming a
-      // gate, because the answer is the same whether the runner found that out with `ls-remote`
-      // before a pin or with a checkout after one.
-      return (
-        `解析的时候仓库里没有 ${refusal.ref ? `\`${refusal.ref}\`` : '这次起跑要用的 ref'}：`
-        + '它还不存在、已经被删掉，或者和项目绑定里的名字对不上。先把它建出来'
-        + '（这个项目在这条线上的第一次落地会创建它），或者把绑定的 integrationRef 改成实际存在的那一条，'
-        + '再开工。' + again
-      );
-    case 'RESTORE_COMMIT':
-      return '执行它的 runner 的仓库里没有这次钉住的提交：把它取回或恢复到那个仓库里，再开工。' + again;
-    case 'ENABLE_ISOLATION':
-      return (
-        'runner 没能在钉住的提交上建出独立的 worktree：确认这个工作区的 workDir 是 git 仓库、'
-        + '没有关掉 worktree 隔离，并按上面 runner 的原话排查 `git worktree add` 的报错，再开工。' + again
-      );
-    default:
-      return `按处置 ${refusal.fixAction} 修好之后再开工。` + again;
-  }
-}
+export { dispatchRefusalNextStep };
 
 /** The note the refusal leaves on the task's own timeline, in place of the generic failure note. */
 function dispatchRefusalComment(
