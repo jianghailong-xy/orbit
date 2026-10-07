@@ -3784,7 +3784,7 @@ html[data-theme='dark'] .session-tag-chip {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* "Tasks created here" (SessionCreatedTasksStrip.tsx) sits in the tray's shell above; these are
+/* The Tasks card (SessionCreatedTasksStrip.tsx) sits in the tray's shell above; these are
    only what a task list adds to it. Collapsed, the title never wraps and the sentence never gives
    way: beside the sentence the title is what truncates, beside a lone task's name the name does;
    the failed count is red. Opened, one row per task: a fixed status column, the title (with what it
@@ -3857,6 +3857,26 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .ct-replaces {
   color: var(--text-3);
+}
+/* What the session's watches wait on: a count on the folded line and an eye in its own column, so
+   the titles still start under each other; orange while a watch goes unchecked. */
+.ct-watching {
+  flex: none;
+  color: var(--brand);
+  white-space: nowrap;
+}
+.ct-eye {
+  flex: none;
+  width: 14px;
+  display: flex;
+  justify-content: center;
+}
+.ct-eye-ico {
+  color: var(--brand);
+}
+.ct-watching.is-stale,
+.ct-eye-ico.is-stale {
+  color: var(--warning);
 }
 .ct-age {
   flex: none;
