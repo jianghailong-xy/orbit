@@ -1,0 +1,2 @@
+engine: Settings row 9 label="Infrastructure, 2 need you" value="" frame=(16.0, 661.0, 370.0, 52.0) hittable=true
+engine: 9 label="Sign in" value="" frame=(303.66666666666663, 201.66666666666666, 66.33333333333331, 28.333333333333343) hittable=true

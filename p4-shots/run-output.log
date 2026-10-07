@@ -1,0 +1,41 @@
+==> stub ready after 2s
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+Test Case '-[P4ProbeUITests.InfrastructureShotTests test1SettingsAndEveryBlockOfThePage]' started.
+Test Case '-[P4ProbeUITests.InfrastructureShotTests test1SettingsAndEveryBlockOfThePage]' passed (405.794 seconds).
+Test Case '-[P4ProbeUITests.InfrastructureShotTests test2SignInOpensTheEnginesPage]' started.
+Test Case '-[P4ProbeUITests.InfrastructureShotTests test2SignInOpensTheEnginesPage]' passed (36.685 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 442.479 (442.483) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 442.479 (442.484) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 442.479 (442.486) seconds
+** TEST SUCCEEDED **
+.p4-probe/run.sh: line 53:  5032 Terminated: 15          python3 -u stub.py 8765 "$OUT/ios/requests.log" > "$OUT/ios/stub.out" 2>&1
+total 7320
+drwxr-xr-x  29 runner  staff     928 Oct  7 06:25 .
+drwxr-xr-x   3 runner  staff      96 Oct  7 06:03 ..
+drwxr-xr-x  14 runner  staff     448 Oct  7 06:25 attachments
+-rw-r--r--@  1 runner  staff    1375 Oct  7 06:23 InfrastructureShotTeststest1SettingsAndEveryBlockOfThePage-notes.txt
+-rw-r--r--@  1 runner  staff     248 Oct  7 06:24 InfrastructureShotTeststest2SignInOpensTheEnginesPage-notes.txt
+-rw-r--r--   1 runner  staff  216159 Oct  7 06:21 ios-01-settings-dark.png
+-rw-r--r--   1 runner  staff  217474 Oct  7 06:17 ios-01-settings-light.png
+-rw-r--r--   1 runner  staff  334709 Oct  7 06:21 ios-02-infrastructure-top-dark.png
+-rw-r--r--   1 runner  staff  342912 Oct  7 06:18 ios-02-infrastructure-top-light.png
+-rw-r--r--   1 runner  staff  340736 Oct  7 06:22 ios-03-infrastructure-machines-dark.png
+-rw-r--r--   1 runner  staff  376676 Oct  7 06:18 ios-03-infrastructure-machines-light.png
+-rw-r--r--   1 runner  staff  351166 Oct  7 06:23 ios-04-infrastructure-pools-and-keys-dark.png
+-rw-r--r--   1 runner  staff  383247 Oct  7 06:20 ios-04-infrastructure-pools-and-keys-light.png
+-rw-r--r--   1 runner  staff  174328 Oct  7 06:24 ios-05-codex-on-mac-studio.png
+-rw-r--r--@  1 runner  staff   23767 Oct  7 06:23 missing-band-pools-dark.txt
+-rw-r--r--@  1 runner  staff   23767 Oct  7 06:20 missing-band-pools-light.txt
+-rw-r--r--   1 runner  staff     347 Oct  7 06:25 not-served.txt
+-rw-r--r--   1 runner  staff   17620 Oct  7 06:24 requests.log
+-rw-r--r--   1 runner  staff      49 Oct  7 06:03 stub.out
+-rw-r--r--@  1 runner  staff   16219 Oct  7 06:24 tree-engine-page.txt
+-rw-r--r--@  1 runner  staff   24676 Oct  7 06:22 tree-page-machines-dark.txt
+-rw-r--r--@  1 runner  staff   24676 Oct  7 06:18 tree-page-machines-light.txt
+-rw-r--r--@  1 runner  staff   23767 Oct  7 06:23 tree-page-pools-dark.txt
+-rw-r--r--@  1 runner  staff   23767 Oct  7 06:20 tree-page-pools-light.txt
+-rw-r--r--@  1 runner  staff   19764 Oct  7 06:21 tree-page-top-dark.txt
+-rw-r--r--@  1 runner  staff   19764 Oct  7 06:18 tree-page-top-light.txt
+-rw-r--r--@  1 runner  staff   22273 Oct  7 06:21 tree-settings-dark.txt
+-rw-r--r--@  1 runner  staff   22273 Oct  7 06:17 tree-settings-light.txt
+-rw-r--r--   1 runner  staff  693869 Oct  7 06:25 xcodebuild-ios.log

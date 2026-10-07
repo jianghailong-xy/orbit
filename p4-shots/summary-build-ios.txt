@@ -1,0 +1,8 @@
+Test Case '-[P4ProbeUITests.InfrastructureShotTests test1SettingsAndEveryBlockOfThePage]' started.
+Test Case '-[P4ProbeUITests.InfrastructureShotTests test1SettingsAndEveryBlockOfThePage]' passed (405.794 seconds).
+Test Case '-[P4ProbeUITests.InfrastructureShotTests test2SignInOpensTheEnginesPage]' started.
+Test Case '-[P4ProbeUITests.InfrastructureShotTests test2SignInOpensTheEnginesPage]' passed (36.685 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 442.479 (442.483) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 442.479 (442.484) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 442.479 (442.486) seconds
+** TEST SUCCEEDED **

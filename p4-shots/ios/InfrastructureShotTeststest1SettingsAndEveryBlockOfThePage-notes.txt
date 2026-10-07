@@ -1,0 +1,12 @@
+settings-light: rows named Runners or Providers: 0
+page-light: Settings row 9 label="Infrastructure, 2 need you" value="" frame=(16.0, 661.0, 370.0, 52.0) hittable=true
+machines-light: in view after 6 drag(s) at (192.33333333333337, 111.66666666666663, 177.66666666666663, 15.666666666666671)
+machines-light: 9 label="Mac Studio, 2 / 4 running · 1 engine signed out" value="" frame=(16.0, 137.33333333333337, 370.0, 74.33333333333329) hittable=true
+machines-light: 9 label="HPC, 5 / 8 running · All signed in" value="" frame=(16.0, 211.66666666666663, 370.0, 74.33333333333331) hittable=true
+pools-light: never in the band 90.0–260.0; last frame (16.0, 344.0, 370.0, 35.666666666666686)
+settings-dark: rows named Runners or Providers: 0
+page-dark: Settings row 9 label="Infrastructure, 2 need you" value="" frame=(16.0, 661.0, 370.0, 52.0) hittable=true
+machines-dark: in view after 6 drag(s) at (192.33333333333337, 111.66666666666663, 177.66666666666663, 15.666666666666671)
+machines-dark: 9 label="Mac Studio, 2 / 4 running · 1 engine signed out" value="" frame=(16.0, 137.33333333333337, 370.0, 74.33333333333329) hittable=true
+machines-dark: 9 label="HPC, 5 / 8 running · All signed in" value="" frame=(16.0, 211.66666666666663, 370.0, 74.33333333333331) hittable=true
+pools-dark: never in the band 90.0–260.0; last frame (16.0, 344.0, 370.0, 35.666666666666686)
