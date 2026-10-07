@@ -290,7 +290,9 @@ fi
 # permission request must still work and the app must stay up.
 if [[ "$phases" == *" storage "* ]] && (( api >= 33 )); then
   adbx -s "$serial" shell pm clear "$package" > "$output/storage-clear.txt"
-  adbx -s "$serial" shell run-as "$package" sh -c 'mkdir -p no_backup && rm -rf no_backup/push && echo blocked > no_backup/push'
+  # One string: adb shell joins its arguments, so a separately quoted `sh -c` script would be re-split.
+  adbx -s "$serial" shell "run-as $package sh -c 'mkdir -p no_backup && rm -rf no_backup/push && echo blocked > no_backup/push'"
+  adbx -s "$serial" shell "run-as $package ls -l no_backup" > "$output/storage-blocked.txt"
   adbx -s "$serial" shell pm revoke "$package" android.permission.POST_NOTIFICATIONS
   adbx -s "$serial" shell pm clear-permission-flags "$package" android.permission.POST_NOTIFICATIONS user-set user-fixed
   instrument storage "$cold#permissionPromptSurvivesUnwritablePushStorage"
