@@ -1,0 +1,8 @@
+/* The replaced avatar's text case: 1px clear border, centred initial, line height 1.5714 of its font. */
+.orbit-avatar {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+  overflow: hidden; border: 1px solid transparent; border-radius: 50%; color: #fff; background: var(--orbit-avatar-bg);
+  font-family: var(--orbit-font-family); font-size: var(--orbit-font-size); line-height: 1.5714285714285714;
+  white-space: nowrap; text-align: center; vertical-align: middle;
+}
+.orbit-avatar-string { display: block; }

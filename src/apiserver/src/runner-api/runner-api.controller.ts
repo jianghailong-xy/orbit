@@ -285,7 +285,14 @@ import {
   withSessionReplies,
   withTaskStart,
 } from './control-plane-note';
-import { accountPoolRuntime, isBuiltinProvider, openCodeKeyRows, resolveProviderExec } from '../providers/custom-provider';
+import {
+  accountPoolRuntime,
+  adminOnlyProviderRefusal,
+  isBuiltinProvider,
+  openCodeKeyRows,
+  resolveProviderExec,
+  usableProviderScope,
+} from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
 import { bgLaunchConfirmed, bgLaunchKind } from './bg-launch-receipt';
 import { enginePhaseAfter, enginePhaseSinceAfter, engineTurnActiveAfter } from './engine-turn';
@@ -332,6 +339,7 @@ import {
   retireSessionInboxGeneration,
 } from '../common/session-inbox-fence';
 import {
+  ADMIN_ONLY_PROVIDER_ERROR,
   ADVERTISED_RUNTIMES,
   DSH_RUNNER_UPGRADE_ERROR,
   PROVIDER_UNAVAILABLE_ERROR,
@@ -2421,8 +2429,9 @@ export class RunnerApiController {
       const declared = s.provider ?? null;
       // Custom provider borrows a built-in runtime — resolve the runner-facing provider, model,
       // and injected env so a resumed session keeps talking to the configured endpoint. Owner
-      // scope mirrors the claim path: a personal provider resolves only for its owner's sessions,
-      // and an account pool is rebuilt on the member the claim would choose, not the runner's login — a
+      // scope mirrors the claim path: a personal provider resolves only for its owner's sessions, a
+      // shared one only for an admin's (usableProviderScope), and an account pool is rebuilt on the
+      // member the claim would choose, not the runner's login — a
       // shared pool, or a Codex pool of the owner's own login, on the gateway with a token of its own, as
       // the claim builds it. A maintenance run, as on the claim, never through a pool.
       const declaredIsBuiltin = isBuiltinProvider(declared, s.providerBuiltin);
@@ -2431,7 +2440,7 @@ export class RunnerApiController {
         : ((await this.prisma.modelProvider.findFirst({
             where: {
               slug: declared!,
-              OR: [{ ownerId: null }, { ownerId: s.ownerId }],
+              ...(await usableProviderScope(this.prisma, s.ownerId)),
             },
           })) ??
           (maintenance
@@ -2446,7 +2455,11 @@ export class RunnerApiController {
         && (await accountPoolRuntime(this.prisma, s.ownerId, declared!)) === AgentProvider.CLAUDE;
       if (!declaredIsBuiltin && !poolFallback && (!customRow?.enabled
         || !['claude', 'codex', 'kimi', 'antigravity', 'dsh'].includes(customRow.runtime))) {
-        await this.markProviderUpgradeRequired(runner.id, { id: s.id }, PROVIDER_UNAVAILABLE_ERROR,
+        // The same sentence the queue holds it with (QueueService.pausedPendingSessions), or the two would
+        // take turns rewriting it.
+        const adminOnly = !customRow && await adminOnlyProviderRefusal(this.prisma, s.ownerId, declared!);
+        await this.markProviderUpgradeRequired(runner.id, { id: s.id },
+          adminOnly ? ADMIN_ONLY_PROVIDER_ERROR : PROVIDER_UNAVAILABLE_ERROR,
           s.status === RunStatus.PENDING ? [{ id: s.id, error: s.error }] : []);
         continue;
       }
@@ -3820,7 +3833,7 @@ export class RunnerApiController {
       : ((await tx.modelProvider.findFirst({
           where: {
             slug: session.provider!,
-            OR: [{ ownerId: null }, { ownerId: session.ownerId }],
+            ...(await usableProviderScope(tx, session.ownerId)),
           },
         })) ??
         (await this.queue.resolveLoginPool(tx, session, session.provider!)) ??
@@ -4012,7 +4025,7 @@ export class RunnerApiController {
     let runtime = normalizeRuntimeProvider(session.provider, session.providerBuiltin);
     if (!isBuiltinProvider(session.provider, session.providerBuiltin)) {
       const customRow = await this.prisma.modelProvider.findFirst({
-        where: { slug: session.provider!, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
+        where: { slug: session.provider!, ...(await usableProviderScope(this.prisma, session.ownerId)) },
         select: { runtime: true },
       });
       // A pool has no row of its own: a shared pool runs Codex.

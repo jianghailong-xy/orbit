@@ -1,0 +1,8 @@
+{
+  "tabBothDirections": true,
+  "dragReleaseIgnored": true,
+  "escape": true,
+  "outside": "mouse",
+  "closeButton": true,
+  "restored": true
+}

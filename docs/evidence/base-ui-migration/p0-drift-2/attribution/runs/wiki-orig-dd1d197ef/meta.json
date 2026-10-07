@@ -1,0 +1,19 @@
+{
+ "app": "/var/tmp/p0d2/trees/dd1d197ef",
+ "commit": "dd1d197ef0dde7a6e2693a761401778138426bb5",
+ "runner": "/var/tmp/p0d2/runners/orig",
+ "runnerCommit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+ "args": "pages.browser.mjs -g wiki$",
+ "started": "2026-10-07T05:46:10Z",
+ "finished": "2026-10-07T05:48:22Z",
+ "exit": 1,
+ "environment": "p0.2",
+ "stats": {
+  "expected": 0,
+  "unexpected": 8,
+  "flaky": 0,
+  "skipped": 0
+ },
+ "screenshots": 0,
+ "environmentSha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+}

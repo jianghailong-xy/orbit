@@ -1,0 +1,128 @@
+{
+  "antd": {
+    "popup": {
+      "surface": {
+        "x": 0,
+        "y": 0,
+        "width": 200.625,
+        "height": 109.5,
+        "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+        "fontSize": "14px",
+        "lineHeight": "22px",
+        "fontWeight": "400",
+        "color": "rgb(31, 35, 41)",
+        "backgroundColor": "rgb(255, 255, 255)",
+        "borderRadius": "8px",
+        "borderColor": "rgb(31, 35, 41)",
+        "borderWidth": "0px",
+        "borderStyle": "none",
+        "padding": "4px",
+        "boxShadow": "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+      },
+      "rows": [
+        {
+          "label": "Only youTurns the link off.",
+          "x": 4,
+          "y": 4,
+          "width": 192.625,
+          "height": 50.75,
+          "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+          "fontSize": "14px",
+          "lineHeight": "22px",
+          "fontWeight": "400",
+          "color": "rgb(51, 112, 255)",
+          "backgroundColor": "rgb(240, 247, 255)",
+          "borderRadius": "4px",
+          "borderColor": "rgb(51, 112, 255)",
+          "borderWidth": "0px",
+          "borderStyle": "none",
+          "padding": "5px 12px",
+          "boxShadow": "none"
+        },
+        {
+          "label": "Anyone with the linkNo sign-in needed to view.",
+          "x": 4,
+          "y": 54.75,
+          "width": 192.625,
+          "height": 50.75,
+          "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+          "fontSize": "14px",
+          "lineHeight": "22px",
+          "fontWeight": "400",
+          "color": "rgb(31, 35, 41)",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "borderRadius": "4px",
+          "borderColor": "rgb(31, 35, 41)",
+          "borderWidth": "0px",
+          "borderStyle": "none",
+          "padding": "5px 12px",
+          "boxShadow": "none"
+        }
+      ],
+      "separators": []
+    }
+  },
+  "orbit": {
+    "popup": {
+      "surface": {
+        "x": 0,
+        "y": 0,
+        "width": 200.625,
+        "height": 109.5,
+        "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+        "fontSize": "14px",
+        "lineHeight": "22px",
+        "fontWeight": "400",
+        "color": "rgb(31, 35, 41)",
+        "backgroundColor": "rgb(255, 255, 255)",
+        "borderRadius": "8px",
+        "borderColor": "rgb(31, 35, 41)",
+        "borderWidth": "0px",
+        "borderStyle": "none",
+        "padding": "4px",
+        "boxShadow": "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+      },
+      "rows": [
+        {
+          "label": "Only youTurns the link off.",
+          "x": 4,
+          "y": 4,
+          "width": 192.625,
+          "height": 50.75,
+          "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+          "fontSize": "14px",
+          "lineHeight": "22px",
+          "fontWeight": "400",
+          "color": "rgb(51, 112, 255)",
+          "backgroundColor": "rgb(240, 247, 255)",
+          "borderRadius": "4px",
+          "borderColor": "rgb(51, 112, 255)",
+          "borderWidth": "0px",
+          "borderStyle": "none",
+          "padding": "5px 12px",
+          "boxShadow": "none"
+        },
+        {
+          "label": "Anyone with the linkNo sign-in needed to view.",
+          "x": 4,
+          "y": 54.75,
+          "width": 192.625,
+          "height": 50.75,
+          "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+          "fontSize": "14px",
+          "lineHeight": "22px",
+          "fontWeight": "400",
+          "color": "rgb(31, 35, 41)",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "borderRadius": "4px",
+          "borderColor": "rgb(31, 35, 41)",
+          "borderWidth": "0px",
+          "borderStyle": "none",
+          "padding": "5px 12px",
+          "boxShadow": "none"
+        }
+      ],
+      "separators": []
+    }
+  }
+}

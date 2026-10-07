@@ -1,0 +1,3 @@
+screenshots 240 equal 219 differ 21 missing 0
+traces 56 equal 42
+captures with style deltas 0 of 240

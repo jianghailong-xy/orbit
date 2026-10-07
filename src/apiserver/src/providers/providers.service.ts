@@ -21,7 +21,7 @@ import {
 } from './pool-admission';
 import { selectPoolMember, spentUntil } from './pool-select';
 import { withPreset } from './preset-overlay';
-import { runsOnOpenCode } from './custom-provider';
+import { runsOnOpenCode, usableProviderScope } from './custom-provider';
 import { pickFreeSlug, slugBase } from './provider-slug';
 
 /**
@@ -230,14 +230,14 @@ export class ProvidersService {
     private readonly planUsage: ProviderPlanUsageService,
   ) {}
 
-  /** De-sensitized picker catalog (no key, no baseUrl): the shared providers plus the
-   *  caller's own personal ones. Enabled only. */
+  /** De-sensitized picker catalog (no key, no baseUrl): the caller's own personal providers, and
+   *  for an admin the shared ones too (usableProviderScope). Enabled only. */
   async listPublic(userId: string) {
     const rows = await this.prisma.modelProvider.findMany({
       where: {
         slug: { notIn: COMPATIBILITY_GUARD_SLUGS },
         enabled: true,
-        OR: [{ ownerId: null }, { ownerId: userId }],
+        ...(await usableProviderScope(this.prisma, userId)),
       },
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
       select: {
@@ -274,7 +274,8 @@ export class ProvidersService {
    * The provider slugs this caller may actually dispatch with — what `provider` accepts on a
    * session, a task, or the `--provider` flag of either. Mirrors the check both write paths run
    * (TasksService.assertUsableProvider, SessionsService.create), so a slug listed here is a slug
-   * those two accept and one that is absent is one they refuse with `provider not available`.
+   * those two accept and one that is absent is one they refuse with `provider not available` — or,
+   * for a shared provider a member names, with who may use it (adminOnlyProviderRefusal).
    *
    * It exists because a configured provider's slug is derived and never shown (provider-slug.ts):
    * a browser picks providers by clicking a row, but an agent has to type the string, and until
@@ -295,7 +296,7 @@ export class ProvidersService {
         // guard rows that hold those slugs are not second providers to choose between.
         slug: { notIn: COMPATIBILITY_GUARD_SLUGS },
         AND: [{ OR: [{ enabled: true }, { slug: AgentProvider.DSH }] }],
-        OR: [{ ownerId: null }, { ownerId }],
+        ...(await usableProviderScope(this.prisma, ownerId)),
       },
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
       select: {

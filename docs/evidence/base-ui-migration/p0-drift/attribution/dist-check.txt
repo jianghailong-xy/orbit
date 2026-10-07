@@ -1,0 +1,38 @@
+d66517339 parent=f4d47e853 dist=58b4f875c43643d7 vs-parent=changed Merge refs/heads/main into refs/heads/project/34ZZeq0e3IR65GVm2kAs7
+6bbf3ecc3 parent=d66517339 dist=58b4f875c43643d7 vs-parent=identical test(web): establish reproducible UI migration baselines
+8d8c5bc5f parent=6bbf3ecc3 dist=8fc947a3d10bc38b vs-parent=changed Merge refs/heads/main into refs/heads/project/34ZZeq0e3IR65GVm2kAs7
+3641c5c1f parent=8d8c5bc5f dist=8fc947a3d10bc38b vs-parent=identical fix: prepare isolated worktree dependencies from the lockfile
+37f645f8e parent=3641c5c1f dist=8fc947a3d10bc38b vs-parent=identical test: verify P1.1 integration dependency preparation and isolation
+d8f43efbd parent=37f645f8e dist=8fc947a3d10bc38b vs-parent=identical Merge refs/heads/main into refs/heads/project/34ZZeq0e3IR65GVm2kAs7
+5bea0a3f6 parent=d8f43efbd dist=713d5bdcaf701e9d vs-parent=changed feat(web): add Base UI theme foundations and coexistence checks
+ed108d8c8 parent=5bea0a3f6 dist=df96864fabffb3b6 vs-parent=changed Merge refs/heads/main into refs/heads/project/34ZZeq0e3IR65GVm2kAs7
+297d33e97 parent=ed108d8c8 dist=e78ead3eb34327bf vs-parent=changed feat(web): add Orbit basic controls and state comparisons
+e5a470fe6 parent=297d33e97 dist=ff9065adad4f8ab6 vs-parent=changed Merge refs/heads/main into refs/heads/project/34ZZeq0e3IR65GVm2kAs7
+df79e55f7 parent=e5a470fe6 dist=d9976c6362b2550b vs-parent=changed feat(web): add Orbit dialogs drawers and async confirmation
+bde8ffd0e parent=df79e55f7 dist=d9976c6362b2550b vs-parent=identical test(web): record P2.1 overlay behavior and visual evidence
+0860351de parent=bde8ffd0e dist=d02a84c2367af5a1 vs-parent=changed fix(web): preserve drawer separators and align overlay visual states
+67e62c0b4 parent=0860351de dist=d02a84c2367af5a1 vs-parent=identical test(web): archive P2.1 separator and state parity repair evidence
+42e7e01f4 parent=67e62c0b4 dist=f96e588a948c980a vs-parent=changed Merge refs/heads/main into refs/heads/project/34ZZeq0e3IR65GVm2kAs7
+eebda088d parent=42e7e01f4 dist=f96e588a948c980a vs-parent=identical test(web): restore compact review card integration regressions
+a500b5aa8 parent=eebda088d dist=f96e588a948c980a vs-parent=identical test(web): keep review result ignore independent of P2.3
+ba9a0381b parent=a500b5aa8 dist=f96e588a948c980a vs-parent=identical docs(web): record compact card baseline repair and P2.3 integration ev
+618fc69f2 parent=ba9a0381b dist=f96e588a948c980a vs-parent=identical docs(web): include raw compact card verification logs
+e361ee373 parent=618fc69f2 dist=24e5aa0b7da09372 vs-parent=changed fix(web): keep Orbit notifications accessible inside modal overlays
+69d023c6f parent=e361ee373 dist=24e5aa0b7da09372 vs-parent=identical test(web): archive P2.3 notification compatibility evidence
+42cc92d96 parent=69d023c6f dist=24e5aa0b7da09372 vs-parent=identical docs: cite recorded command rows for P2.3 evidence
+57f792135 parent=42cc92d96 dist=ad3188b24221aeb7 vs-parent=changed fix(web): preserve notification motion and hover across modal changes
+9f58b950f parent=57f792135 dist=ad3188b24221aeb7 vs-parent=identical test(web): archive P2.3 notification lifecycle repair evidence
+6d2156683 parent=9f58b950f dist=b10f48f45fb23187 vs-parent=changed fix(web): retain toast dwell under stationary pointers
+18e75cfe1 parent=6d2156683 dist=b10f48f45fb23187 vs-parent=identical docs: record P2.3 stationary hover repair evidence
+8ef6b60d1 parent=18e75cfe1 dist=00f01eec2ae1430d vs-parent=changed Merge refs/heads/orbit/p2-2-2e616a into refs/heads/project/34ZZeq0e3IR
+c500817e2 parent=8ef6b60d1 dist=33efb6ae5c251d86 vs-parent=changed Merge refs/heads/main into refs/heads/project/34ZZeq0e3IR65GVm2kAs7
+31aa07c91 parent=c500817e2 dist=33efb6ae5c251d86 vs-parent=identical fix(web): let Select keys that beat the focus move act on the open lis
+f7a91822e parent=31aa07c91 dist=33efb6ae5c251d86 vs-parent=identical docs(web): record the Select fast-key fix evidence
+dc70caa5d parent=f7a91822e dist=33efb6ae5c251d86 vs-parent=identical Merge refs/heads/main into refs/heads/project/34ZZeq0e3IR65GVm2kAs7
+3dd6e9b51 parent=dc70caa5d dist=33efb6ae5c251d86 vs-parent=identical fix(web): keep Orbit text-field focus over hover and 16px up to 960px
+81f15bef1 parent=3dd6e9b51 dist=f3fbe853cc31360b vs-parent=changed feat(web): auto-sizing Orbit Textarea with a native ref and borderless
+e207a13eb parent=81f15bef1 dist=f3fbe853cc31360b vs-parent=identical test(web): compare the Orbit Textarea with the AntD field in the real 
+1d00d6665 parent=e207a13eb dist=f3fbe853cc31360b vs-parent=identical test(web): judge composer pixels at antialiasing level after exact sty
+fe18bb5b8 parent=1d00d6665 dist=f3fbe853cc31360b vs-parent=identical test(web): pin text-field focus under the pointer and 16px to 960px ag
+3389ce299 parent=fe18bb5b8 dist=f3fbe853cc31360b vs-parent=identical docs(web): describe the Textarea ref without naming the AntD internal
+da13423d3 parent=3389ce299 dist=f3fbe853cc31360b vs-parent=identical docs(web): record P3.1 textarea and session-input compatibility eviden

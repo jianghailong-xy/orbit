@@ -1,0 +1,12 @@
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index 1a05a4792..5fae0f266 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -22393,3 +22393,7 @@ button.agent-progress-agent:hover {
+   text-align: center;
+   text-wrap: balance;
+ }
++
++/* P0 drift batch 2 negative control 2 (temporary commit, not delivered): 1px on the desktop Wiki home, whose
++   topic rows get their padding from the min-width 961px rule (wiki-home on desktops, breakpoint-961-wiki). */
++@media (min-width: 961px) { .wk-home .wk-pl-doc.phone.topic { padding-top: 11px; } }
