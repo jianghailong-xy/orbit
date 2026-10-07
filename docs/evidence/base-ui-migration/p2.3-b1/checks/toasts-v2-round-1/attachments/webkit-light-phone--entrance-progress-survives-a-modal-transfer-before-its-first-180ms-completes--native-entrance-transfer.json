@@ -1,0 +1,91 @@
+[
+  {
+    "t": 46,
+    "opacity": 0.73301,
+    "progress": 0.22222222222222182,
+    "owner": false,
+    "delay": "0s"
+  },
+  {
+    "t": 70,
+    "opacity": 0.879175,
+    "progress": 0.3611111111111108,
+    "owner": false,
+    "delay": "0s"
+  },
+  {
+    "t": 116,
+    "opacity": 0.974364,
+    "progress": 0.6111111111111114,
+    "owner": true,
+    "delay": "-0.065s"
+  },
+  {
+    "t": 131,
+    "opacity": 0.986232,
+    "progress": 0.6944444444444448,
+    "owner": true,
+    "delay": "-0.065s"
+  },
+  {
+    "t": 180,
+    "opacity": 0.999947,
+    "progress": 0.9666666666666667,
+    "owner": true,
+    "delay": "-0.065s"
+  },
+  {
+    "t": 232,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.065s"
+  },
+  {
+    "t": 243,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.065s"
+  },
+  {
+    "t": 259,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.065s"
+  },
+  {
+    "t": 275,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.065s"
+  },
+  {
+    "t": 291,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.065s"
+  },
+  {
+    "t": 307,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.065s"
+  },
+  {
+    "t": 325,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.065s"
+  },
+  {
+    "t": 340,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.065s"
+  },
+  {
+    "t": 407,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.065s"
+  }
+]
