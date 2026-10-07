@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -291,10 +292,13 @@ private fun EntryAnswers(entry: WikiEntry, busy: Boolean, confirm: () -> Unit, r
     var reasons by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         if (WikiModeLogic.canConfirm(entry.status, entry.trust)) Button(onClick = confirm, enabled = !busy,
-            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("wiki-entry-confirm")) { Text("✓ " + WikiModeCopy.confirm) }
+            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("wiki-entry-confirm")) {
+            // Said without its tick (TalkBack handed "✓ Confirm" to the voice as written).
+            Text("✓ " + WikiModeCopy.confirm, Modifier.semantics { contentDescription = WikiModeCopy.confirm }) }
         Box(Modifier.weight(1f)) {
             OutlinedButton(onClick = { reasons = true }, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("wiki-entry-reject"),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text(WikiCopy.reject + " ▾") }
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
+                Text(WikiCopy.reject + " ▾", Modifier.semantics { contentDescription = WikiCopy.reject }) }
             DropdownMenu(reasons, { reasons = false }) {
                 // The four reasons, headed by where the reason goes.
                 Text(WikiModeCopy.rejectOnRecord, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = WikiType.label, color = WikiPalette.secondary)

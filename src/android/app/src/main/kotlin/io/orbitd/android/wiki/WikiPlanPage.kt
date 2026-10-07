@@ -178,7 +178,8 @@ private fun PlanVersionMenu(shown: WikiPlanLogic.Shown, versions: List<WikiPlanL
             Row(Modifier.background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f), CircleShape).padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(WikiPlanCopy.versionLabel(shown.version), style = WikiType.label.copy(fontWeight = FontWeight.SemiBold))
-                Text("· ${shown.status.label}", style = WikiType.label, color = WikiPalette.secondary)
+                // Its status without the dot: in the menu's row TalkBack spoke "·" on its own.
+                Text("· ${shown.status.label}", Modifier.semantics { contentDescription = shown.status.label }, style = WikiType.label, color = WikiPalette.secondary)
                 Icon(painterResource(R.drawable.ic_chevron_updown), null, Modifier.size(12.dp))
             }
         }

@@ -98,7 +98,7 @@ internal fun WikiRowButton(tag: String, enabled: Boolean = true, onClick: () -> 
 /** A band's heading, as the first row of its band: the title, its count, a badge, a hint. */
 @Composable
 internal fun WikiBandHeader(title: String, count: Int? = null, badge: String? = null, hint: String? = null) {
-    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 4.dp).semantics { heading() },
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 4.dp).semantics(mergeDescendants = true) { heading() },
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(title, style = WikiType.subtext.copy(fontWeight = FontWeight.Bold))
         if (count != null) Text("$count", style = WikiType.label.copy(fontWeight = FontWeight.SemiBold), color = WikiPalette.secondary)

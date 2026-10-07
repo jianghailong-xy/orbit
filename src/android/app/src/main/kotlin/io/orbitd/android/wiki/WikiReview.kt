@@ -16,6 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
@@ -259,7 +261,7 @@ private fun AutoAccept() {
 @Composable
 private fun AutoRow(title: String, note: String) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("✓", style = WikiType.label.copy(fontWeight = FontWeight.SemiBold), color = LocalOrbitColors.current.success)
+        Text("✓", Modifier.clearAndSetSemantics {}, style = WikiType.label.copy(fontWeight = FontWeight.SemiBold), color = LocalOrbitColors.current.success)
         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(title, style = WikiType.subtext.copy(fontWeight = FontWeight.SemiBold))
             Text(note, style = WikiType.label, color = WikiPalette.secondary)
@@ -387,7 +389,7 @@ private fun ChallengeLine(op: WikiChangesetOp, entry: WikiEntry?) {
     }
     Row(Modifier.fillMaxWidth().background(WikiPalette.amberWash, RoundedCornerShape(10.dp)).padding(10.dp).testTag("wiki-review-challenge")
         .semantics(mergeDescendants = true) {}, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("◎", style = WikiType.label, color = Color(0xFFFF9500))
+        Text("◎", Modifier.clearAndSetSemantics {}, style = WikiType.label, color = Color(0xFFFF9500))
         Text(text, style = WikiType.label)
     }
 }
@@ -460,7 +462,8 @@ private fun Labelled(label: String, lines: List<String>, mono: Boolean = false) 
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Text(label, style = WikiType.label, color = WikiPalette.secondary)
         // The dash that says "none" is a word, not code, whatever the row holds.
-        lines.forEach { line -> Text(line, style = if (mono && line != "—") WikiType.mono else WikiType.prose) }
+        lines.forEach { line -> Text(line, if (line == "—") Modifier.semantics { contentDescription = WikiCopy.similarNone } else Modifier,
+            style = if (mono && line != "—") WikiType.mono else WikiType.prose) }
     }
 }
 
