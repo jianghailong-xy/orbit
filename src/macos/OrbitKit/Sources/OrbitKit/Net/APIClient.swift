@@ -1359,6 +1359,13 @@ public final class APIClient: @unchecked Sendable {
         return try await post("runners/\(runnerID)/install", body: Request())
     }
 
+    /// Install one engine's CLI on the runner (POST /runners/:id/install) — what an engine's page offers
+    /// for an engine the machine doesn't have, as the web's engine row does.
+    public func installEngine(_ runnerID: String, engine: String) async throws -> RunnerInstallState {
+        struct Request: Encodable { let engine: String }
+        return try await post("runners/\(runnerID)/install", body: Request(engine: engine))
+    }
+
     @discardableResult
     public func refreshRunnerModels(_ id: String) async throws -> RunnerModelRefresh {
         try await postEmpty("runners/\(id)/refresh-models")
