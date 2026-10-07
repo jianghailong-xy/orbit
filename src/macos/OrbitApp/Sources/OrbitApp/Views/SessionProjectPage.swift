@@ -771,6 +771,14 @@ private struct ProjectMergeCardView: View {
     @ViewBuilder private func merging(_ view: ProjectPromotionView) -> some View {
         header(PromotionCards.pageTitle(view), symbol: "arrow.triangle.merge")
         Text(PromotionCards.mergingStatusLine(view)).font(.orbitLabel)
+        // Who is ahead of it, once the queue has been read: the same sentence the sheet's rows are
+        // drawn from, amber when the head has gone quiet past the claim's lease window (§2.2 J1).
+        if let queue = merge.queue, let jobId = merge.myQueueJobID,
+           let wait = PromotionQueueCards.waitLine(jobId, in: queue) {
+            Text(wait)
+                .font(.orbitMeta)
+                .foregroundStyle(queue.jobs.first?.stale == true ? Color.orange : Color.secondary)
+        }
         if let landing {
             // While it waits its turn the row is a door onto the queue it waits in (§2.2 J1): the
             // chevron is the sessions page's own mark for a row that opens something. A claimed

@@ -38,6 +38,12 @@ final class ProjectMergeModel: PromotionReviewSource {
 
     var receipts: [PromotionCards.Receipt] { PromotionCards.receipts(merged: merged) }
 
+    /// This merge's own row in the queue, when the queue has been read: the landing of THIS
+    /// project's branch onto the target ref — the row the card's own position is counted from.
+    var myQueueJobID: String? {
+        queue?.jobs.first { $0.kind == "LAND_PROMOTION" && $0.projectId == projectID }?.jobId
+    }
+
     /// One poll. The candidate every time, since it is what the card is; then, side by side, the
     /// merges when the candidate moved and otherwise once a minute; the open items every 20 seconds
     /// while one is blocked, because its holder is on the card; the criteria once a minute while one
@@ -58,16 +64,24 @@ final class ProjectMergeModel: PromotionReviewSource {
         let mergedDue = force || moved || mergedReadAt.map({ Date().timeIntervalSince($0) > 60 }) != false
         let itemsDue = force || (stage == .blocked && (moved || itemsReadAt.map({ Date().timeIntervalSince($0) > 20 }) != false))
         let criteriaDue = stage == .askingYou && (force || criteriaReadAt.map({ Date().timeIntervalSince($0) > 60 }) != false)
+        // The queue only while the merge waits its turn, and slowly: it is what the card's one
+        // sentence about "who is ahead" is drawn from, and a read every four seconds on the page's
+        // own clock would ask the control plane a question only the queued card has on screen.
+        let queueDue = current?.execution?.state == "QUEUED"
+            && (force || queueReadAt.map({ Date().timeIntervalSince($0) > 20 }) != false)
         let mergedRead: Task<[ProjectPromotionView], Error>? = mergedDue
             ? Task { try await api.mergedPromotions(projectID: projectID) } : nil
         let itemsRead: Task<ProjectOpenItemsView, Error>? = itemsDue
             ? Task { try await api.projectOpenItems(projectID: projectID) } : nil
         let criteriaRead: Task<ProjectCriteriaDocument, Error>? = criteriaDue
             ? Task { try await api.projectCriteria(projectID: projectID) } : nil
+        let queueRead: Task<ProjectIntegrationQueue, Error>? = queueDue
+            ? Task { try await api.projectIntegrationQueue(projectID) } : nil
         defer {
             mergedRead?.cancel()
             itemsRead?.cancel()
             criteriaRead?.cancel()
+            queueRead?.cancel()
         }
         if let read = try? await mergedRead?.value, mine == generation {
             merged = read
@@ -80,6 +94,10 @@ final class ProjectMergeModel: PromotionReviewSource {
         if let document = try? await criteriaRead?.value, mine == generation {
             criteria = document.acceptanceCriteriaItems ?? []
             criteriaReadAt = Date()
+        }
+        if let read = try? await queueRead?.value, mine == generation {
+            queue = read
+            queueReadAt = Date()
         }
     }
 

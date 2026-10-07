@@ -24,11 +24,6 @@ struct IntegrationQueueSheet: View {
     let promotion: ProjectPromotionView
     @Environment(\.dismiss) private var dismiss
 
-    /// This merge's own row: the landing of THIS project's branch onto the target ref.
-    private var myJobID: String? {
-        model.queue?.jobs.first { $0.kind == "LAND_PROMOTION" && $0.projectId == model.projectID }?.jobId
-    }
-
     var body: some View {
         NavigationStack {
             TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -85,7 +80,7 @@ struct IntegrationQueueSheet: View {
                     Text(PromotionQueueCards.jobTitle(job))
                         .font(.orbitLabel.weight(.semibold))
                         .lineLimit(2)
-                    if job.jobId == myJobID { chip(PromotionQueueCards.queueYou) }
+                    if job.jobId == model.myQueueJobID { chip(PromotionQueueCards.queueYou) }
                     if job.automatic { chip(PromotionQueueCards.queueAutomatic) }
                     Spacer(minLength: 6)
                     Text(PromotionQueueCards.jobSpan(job, now: now))

@@ -444,6 +444,15 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(merging.contains("if view.execution?.state == \"QUEUED\" {")
                       && merging.contains("Button { onQueue(view.promotionId) } label: {"),
                       "only a merge that is still waiting opens the queue; a claimed job's phases are its own line")
+        XCTAssertTrue(merging.contains("PromotionQueueCards.waitLine(jobId, in: queue)"),
+                      "the card's one sentence about who is ahead is the sheet's own sentence")
+        let mergeModel = code(try appSource("ProjectMergeModel.swift"))
+        XCTAssertTrue(mergeModel.contains("api.projectIntegrationQueue(projectID)"),
+                      "the queue is read for the card while the merge waits")
+        XCTAssertTrue(mergeModel.contains("var myQueueJobID: String?"),
+                      "which row is this merge's is asked of the model, not answered twice")
+        XCTAssertTrue(mergeModel.contains("current?.execution?.state == \"QUEUED\""),
+                      "and only while it waits: a claimed job is described by its own phases")
         let sheet = try appSource("Views/IntegrationQueueSheet.swift")
         XCTAssertTrue(sheet.contains("PromotionQueueCards.jobStaleClause(job, now: now)"),
                       "a quiet head is said in the sheet, from the served fact")
