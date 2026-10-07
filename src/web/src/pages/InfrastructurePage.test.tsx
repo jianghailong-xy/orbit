@@ -12,7 +12,8 @@ import { InfrastructurePage } from './InfrastructurePage';
 
 /**
  * /infrastructure as a page (docs/mocks/infrastructure-page/02-after-*.png): its name, its line and
- * Add, then Machines, API keys and Account pools in that order — each with what it says before there
+ * Add, then what the agents can run on (InfrastructurePage.overview.test.tsx), Machines, API keys and
+ * Account pools in that order — each with what it says before there
  * is anything in it — a key's own Edit and Delete, and a machine's engines with every way in they
  * had on Providers.
  */
@@ -168,12 +169,17 @@ const card = (name: string) =>
   [...document.body.querySelectorAll<HTMLElement>('.re-runner-card')].find((el) => text(el.querySelector('.re-runner')) === name)!;
 
 describe('/infrastructure', () => {
-  it('heads the page with its name, its line and Add, then Machines, API keys and Account pools in that order', async () => {
+  it('heads the page with its name, its line and Add, then what the agents can run on, Machines, API keys and Account pools in that order', async () => {
     await mount();
     expect(text(document.body.querySelector('h1'))).toBe('Infrastructure');
     expect(text(document.body.querySelector('.prov-page-sub'))).toBe('Where your agents run, and whose model quota they spend.');
     expect(button('Add')).not.toBeNull();
-    expect([...document.body.querySelectorAll('.re-sec-head h3')].map(text)).toEqual(['Machines', 'API keys', 'Account pools']);
+    expect([...document.body.querySelectorAll('.re-sec-head h3')].map(text)).toEqual([
+      'What your agents can run on',
+      'Machines',
+      'API keys',
+      'Account pools',
+    ]);
     expect(text(sectionHead('Machines')?.querySelector('.re-sec-sub'))).toBe(
       'Subscriptions signed in here are spent only by sessions on that machine.',
     );

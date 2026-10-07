@@ -115,6 +115,16 @@ export function rowKindOf(
   return 'unknown';
 }
 
+/** One engine on one machine as its row reads it: the runner's own report — for Antigravity with its
+ *  install and credential taken from the server's answer (`runner.antigravity`) once it has one. */
+export function engineHealthOf(runner: Runner, engine: LoginEngine): RunnerEngineHealth | undefined {
+  const reported = runner.engines?.find((e) => e.engine === engine);
+  const state = engine === 'antigravity' ? runner.antigravity : undefined;
+  return state && state.installed != null
+    ? { ...reported, engine, installed: state.installed, version: state.version ?? reported?.version, auth: reported?.auth ?? (state.envKeyAvailable ? 'yes' : 'unknown'), authSource: state.authSource ?? reported?.authSource } as RunnerEngineHealth
+    : reported;
+}
+
 
 const STATUS_TAG: Record<RowKind, { color: string; label: string }> = {
   in: { color: 'green', label: 'Signed in' },
@@ -1154,11 +1164,7 @@ function RunnerEngineCard({
       </div>
       {collapsed ? null : engines ? (
         ENGINE_SLUGS.map((engine) => {
-          const reported = engines.find((e) => e.engine === engine);
-          const state = engine === 'antigravity' ? runner.antigravity : undefined;
-          const health = state && state.installed != null
-            ? { ...reported, engine, installed: state.installed, version: state.version ?? reported?.version, auth: reported?.auth ?? (state.envKeyAvailable ? 'yes' : 'unknown'), authSource: state.authSource ?? reported?.authSource } as RunnerEngineHealth
-            : reported;
+          const health = engineHealthOf(runner, engine);
           const accounts = accountRowsOf(engine, health, runner.install);
           // Read across the whole group, since a repeat is a fact about two of its rows.
           const repeats = duplicateAccounts(accounts);

@@ -13,6 +13,7 @@ import { latestRunnerVersion, runnerAttention, type AttentionWorkspace } from '.
 import { providerDisplayLabel } from '../lib/sessionProviderChoices';
 import { ownPoolWithAccess, poolAccessQuery, sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
 import { AccountPools, NewPoolModal, PoolHint } from '../components/AccountPools';
+import { EngineOverview, NeedsAttention } from '../components/InfrastructureOverview';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
 import { RunnerEngines } from '../components/RunnerEngines';
 import { DshRunnerStatus } from '../components/DshRunnerStatus';
@@ -24,7 +25,10 @@ import type { Runner } from '../components/TasksSidePanel';
  * Where the user's agents run, and whose model quota they spend — what the Runners and Providers
  * pages used to split between them, on one page (docs/mocks/infrastructure-page).
  *
- * First the machines (RunnerEngines), each with the engines signed in on it: a subscription there is
+ * At the top, what needs a person and what each engine can run on (NeedsAttention, EngineOverview),
+ * read from the lists the sections below show.
+ *
+ * Then the machines (RunnerEngines), each with the engines signed in on it: a subscription there is
  * spent only by sessions on that machine and needs nothing pasted, which is what most sessions
  * actually run on. Each card is also where its machine is renamed, reordered and deleted.
  *
@@ -92,15 +96,14 @@ export function InfrastructurePage() {
   const eligible = poolEligibleCount(providers.data ?? []);
   const refusals = poolRefusals(providers.data ?? []);
   const [creatingPool, setCreatingPool] = useState(false);
+  // What needs attention and what each engine can run on are read from every list on the page, so
+  // they wait for all of them: an engine called Not set up before its keys arrived would be wrong.
+  const settled = !runners.isPending && !providers.isPending && !pools.isPending && !shared.isPending;
 
-  // A section named in the address comes into view once everything above it has its height: the
-  // machines and the keys for #keys, and the pools themselves too for #pools.
+  // A section named in the address comes into view once everything above it has its height — the
+  // top of the page included, which is read from the pools too.
   const target = hash === '#keys' ? keySection : hash === '#pools' ? poolSection : null;
-  const arrived =
-    target !== null &&
-    !runners.isPending &&
-    !providers.isPending &&
-    (target === keySection || (!pools.isPending && !shared.isPending));
+  const arrived = target !== null && settled;
   useEffect(() => {
     if (arrived) target?.current?.scrollIntoView({ block: 'start' });
   }, [arrived, target]);
@@ -273,6 +276,13 @@ export function InfrastructurePage() {
           Where your agents run, and whose model quota they spend.
         </div>
       </div>
+
+      {settled && (
+        <>
+          <NeedsAttention runners={machines} pools={poolList} />
+          <EngineOverview runners={machines} keys={providers.data ?? []} pools={poolList} />
+        </>
+      )}
 
       <div ref={machineSection} id="machines">
         <RunnerEngines
