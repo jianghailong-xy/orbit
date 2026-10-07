@@ -76,13 +76,14 @@ enum WindowFit {
                     seen.insert(before)
                     log("window (screen \(screen.frame), visible \(visible), backing \(window.backingScaleFactor)): \(frame) content \(window.contentView?.frame ?? .zero)")
                 }
-                guard frame.height > visible.height || frame.width > visible.width
-                        || frame.minY < visible.minY || frame.maxY > visible.maxY else { continue }
-                var fit = frame
-                fit.size.width = min(frame.width, visible.width)
-                fit.size.height = min(frame.height, visible.height)
-                fit.origin.x = min(max(frame.minX, visible.minX), visible.maxX - fit.width)
-                fit.origin.y = visible.maxY - fit.height
+                // The whole visible frame, in both directions: what the picture needs is the most
+                // window this display allows, and a window the app opened smaller than that (or
+                // bigger — its own console page asks for more than the screen) is the same fault
+                // from either side.
+                var fit = visible
+                fit.origin.x = visible.minX
+                fit.origin.y = visible.minY
+                guard fit != frame else { continue }
                 window.setFrame(fit, display: true)
                 log("fitWindow: \(frame) -> \(window.frame) content \(window.contentView?.frame ?? .zero)")
             }
