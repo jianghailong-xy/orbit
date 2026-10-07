@@ -87,6 +87,9 @@ until [[ "$("$adb" -s "$serial" shell getprop sys.boot_completed | tr -d '\r')" 
   sleep 2
 done
 api="$("$adb" -s "$serial" shell getprop ro.build.version.sdk | tr -d '\r')"
+# Emulators only: a physical phone on the same adb server is scheduled by the coordinator, never here.
+[[ "$("$adb" -s "$serial" shell getprop ro.kernel.qemu | tr -d '\r')" == 1 ]] || { echo "$serial is not an emulator" >&2; exit 2; }
+export ANDROID_SERIAL="$serial"
 {
   printf 'serial=%s\n' "$serial"
   for prop in ro.product.model ro.build.version.release ro.build.version.sdk ro.build.fingerprint ro.kernel.qemu; do
@@ -175,7 +178,9 @@ tray_tap() { # Host-driven: a production process posts one entry, dies, and Syst
   sleep 1
   "$adb" -s "$serial" exec-out screencap -p > "$output/tray-cold-shade.png"
   python3 "$scripts/push-host-ui.py" tap "$serial" 'A10 tray approval' "$output/tray-shade.xml" --timeout 20 >> "$output/tray.txt"
-  python3 "$scripts/push-host-ui.py" wait "$serial" 'Allow' "$output/tray-card.xml" --timeout 45 >> "$output/tray.txt"
+  python3 "$scripts/push-host-ui.py" wait "$serial" 'Card verification' "$output/tray-session.xml" --timeout 45 >> "$output/tray.txt"
+  "$adb" -s "$serial" exec-out screencap -p > "$output/tray-cold-session.png"
+  python3 "$scripts/push-host-ui.py" wait "$serial" 'Allow' "$output/tray-card.xml" --timeout 30 --scroll >> "$output/tray.txt"
   new_pid="$("$adb" -s "$serial" shell pidof "$package" | tr -d '\r')"
   "$adb" -s "$serial" shell dumpsys activity activities > "$output/tray-activities.txt"
   "$adb" -s "$serial" exec-out screencap -p > "$output/tray-cold-card.png"
@@ -235,9 +240,10 @@ fi
 
 # 4. First signed-in foreground on Android 13+: one system request, refused, business still works.
 if [[ "$phases" == *" permission "* ]] && (( api >= 33 )); then
+  # Fresh-installation state (no login, no push storage, new channels), as the first sign-in sees it.
+  "$adb" -s "$serial" shell pm clear "$package" > "$output/permission-clear.txt"
   "$adb" -s "$serial" shell pm revoke "$package" android.permission.POST_NOTIFICATIONS
   "$adb" -s "$serial" shell pm clear-permission-flags "$package" android.permission.POST_NOTIFICATIONS user-set user-fixed
-  "$adb" -s "$serial" shell run-as "$package" rm -rf no_backup/push
   instrument permission "$cold#permissionPrompt"
   evidence permission
   if passed "$output/permission.txt"; then record permission PASS; else record permission FAIL; fi
