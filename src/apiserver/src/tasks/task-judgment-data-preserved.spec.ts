@@ -2003,6 +2003,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // INSERT, UPDATE or DELETE: the build reads every task row once and writes none, and the DROP
       // takes the index away inside the migration's own transaction, so no reader sees it missing.
       '0395_project_rollup_covering_idx_columns',
+      // `runner.login_region` (0397): one nullable TEXT column, no default, on `runner`, beside the
+      // sign-in relay's `login_account` (0296) — which of Kimi Code's two sites the relay signs in
+      // on. Read against every claim above: one `ADD COLUMN` statement and nothing else — no
+      // function, trigger, type, index or constraint is created or dropped, so it is not another
+      // writer of the DONE fence and names none of the six preserved objects; `runner` is not a
+      // preserved relation, and no `task`, `project` or `project_acceptance_*` object is named. No
+      // INSERT, UPDATE or DELETE: no stored row is read, locked, backfilled or rewritten.
+      '0397_runner_login_region',
       // The System model's state (0398): one new table, `wiki_model_status`, of exactly one row,
       // with its primary key and four CHECKs (the single row, the closed set of states, a model
       // named whenever one is configured, a reason exactly when the state is not up). Pure

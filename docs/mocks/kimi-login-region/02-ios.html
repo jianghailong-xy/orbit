@@ -1,0 +1,137 @@
+<!doctype html>
+<!-- Design mock: Kimi Code sign-in on the iOS engine page (RunnerEnginePage.swift → RunnerSignInView.swift,
+     shared with macOS), telling kimi.com from kimi.ai. ① is today's view drawn from the SwiftUI source;
+     ② – ④ are the proposal, matching the web prototype in 01-web. Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kimi sign-in · kimi.com / kimi.ai · iOS</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../antigravity-accounts/kit.css">
+<style>
+  .m-sheet { width: 1900px; }
+  .row4 { display: grid; grid-template-columns: repeat(4, 413px); gap: 34px; align-items: start; }
+  .m-cap { font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 6px 4px 0; }
+  .m-cap b { color: var(--text-1); }
+  .m-cap code, .m-notes code { font-size: 11.5px; padding: 0 4px; border-radius: 4px; background: #eef0f3; }
+  .notes2 { display: grid; grid-template-columns: 1fr 1fr; gap: 34px; margin-top: 22px; }
+  .notes2 .m-notes { margin-top: 0; }
+  /* RunnerSignInView's pieces, iOS 26: a regular-size .borderedProminent button, footnote text. */
+  .pbtn { align-self: flex-start; display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 16px; border-radius: 99px;
+          background: #3e69f6; color: #fff; font-size: 16px; font-weight: 500; white-space: nowrap; }
+  .pbtn svg { width: 16px; height: 16px; fill: #fff; }
+  .sv { display: flex; flex-direction: column; gap: 8px; }
+  .kq { font-size: 13px; line-height: 18px; }
+  .ksites { display: flex; flex-direction: column; gap: 8px; }
+  .ksite { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 14px; background: rgba(120, 120, 128, .12); }
+  .ksite .c { display: flex; flex-direction: column; }
+  .ksite b { font-size: 17px; line-height: 22px; font-weight: 600; color: #000; }
+  .ksite span.w { font-size: 13px; line-height: 17px; color: #8a8a8e; }
+  .ksite .cur { margin-left: auto; padding: 2px 9px; border-radius: 99px; background: rgba(62, 105, 246, .14); color: #3e69f6; font-size: 13px; font-weight: 600; }
+  .khint { font-size: 13px; line-height: 18px; color: #8a8a8e; }
+  .kcode { display: inline-flex; align-items: center; gap: 6px; font: 600 13px/18px SFMono-Regular, ui-monospace, monospace; letter-spacing: .5px; }
+  .kcode svg { width: 13px; height: 13px; fill: none; stroke: #8a8a8e; stroke-width: 1.4; }
+  .klinks { display: flex; gap: 18px; }
+  .sig-h b { color: #000; font-weight: 600; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">Kimi 登录 · iOS 引擎页：同一个选择，同一套文案</h1>
+  <p class="m-sub zh">iOS 和 macOS 的登录卡是同一个 <code>RunnerSignInView.swift</code>，从运行器页点 Kimi Code 进引擎页、按 Sign In 出现。改法和 web（01-web）一一对应：开始时选站点、设备码写明站点并能一键换、登录后看得到站点、Sign In Again 换站点。</p>
+
+  <div class="m-stage">
+    <div class="row4">
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k">现在</span>按下 Sign In 之后</div>
+        <div id="p1"></div>
+        <p class="m-cap zh"><b>A</b> 一个「Sign in to Kimi Code」，站点由 runner 上的 CLI 自己定（Orbit 装的 = kimi.com）。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>先选站点</div>
+        <div id="p2"></div>
+        <p class="m-cap zh"><b>1</b> 两个按钮上下排，手机上整行好点；按哪个就在那个站点开始登录。下面一句说明两个站点账号不通。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>设备码（kimi.ai）</div>
+        <div id="p3"></div>
+        <p class="m-cap zh"><b>2</b> 按钮和提示写明 kimi.ai（读自登录 URL 的域名）。<b>3</b> 「Use kimi.com instead」取消并在另一站点重来。代码仍是点一下复制。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>已登录 kimi.com，按 Sign In Again</div>
+        <div id="p4"></div>
+        <p class="m-cap zh"><b>4</b> 账号行下面写站点（<code>kimi.com</code>），运行器页的引擎行也是 <code>2.1.1 · kimi.com · Signed in</code>。<b>5</b> Sign In Again 打开同一个选择，当前站点标 <b>Current</b>，点 kimi.ai 就换过去。</p>
+      </div>
+    </div>
+    <div class="notes2">
+      <ul class="m-notes zh">
+        <li><span class="m-n">a</span><span><b>文案和 web 逐字一致</b>（Which Kimi account are you signing in with? / kimi.com · Mainland China / kimi.ai · International / Use kimi.com instead），放进 OrbitKit 的 copy 常量，沿用现有的 web ↔ Swift 文案一致性测试（<code>CodexSignInCopyParityTests</code> 那一类）。</span></li>
+        <li><span class="m-n">b</span><span><b>RunnerSignInModel.begin(region:)</b> 把站点带进 <code>POST /runners/:id/login</code>；设备码状态里的站点从 <code>model.url</code> 的域名读，和 web 同一条规则。</span></li>
+      </ul>
+      <ul class="m-notes zh">
+        <li><span class="m-n">c</span><span><b>旧 runner</b>（没声明 <code>kimi-login-region/v1</code>）：kimi.ai 按钮 disabled，说明换成「This runner signs in on kimi.com only. Update it to sign in with a kimi.ai account.」——和 web 第 7 点一样。</span></li>
+        <li><span class="m-n">d</span><span>Android 没有 runner 登录卡，不涉及。</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<script src="../antigravity-accounts/glyphs.js"></script>
+<script src="../antigravity-accounts/kit.js"></script>
+<script>
+  const COPY = '<svg viewBox="0 0 14 14"><rect x="4.5" y="1" width="8.5" height="9" rx="2"/><rect x="1" y="4" width="8.5" height="9" rx="2" fill="#fff"/></svg>';
+  const head = (sub) => `<div class="hd">${mark('kimi', 30)}<div><div class="n">Kimi Code</div><div class="s">${sub}</div></div></div>`;
+  const update = section({ rows: [btnRow('Update Engines Now')],
+    footer: '<p>Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends that subscription, nothing to paste.</p>' });
+  const close = '<span class="bl">Close</span>';
+  const sites = (current) => `<div class="kq" id="${current ? 'q4' : 'q2'}">Which Kimi account are you signing in with?</div>
+    <div class="ksites" id="${current ? 's4' : 's2'}">
+      <div class="ksite"><div class="c"><b>kimi.com</b><span class="w">Mainland China</span></div>${current === 'com' ? '<span class="cur">Current</span>' : ''}</div>
+      <div class="ksite"><div class="c"><b>kimi.ai</b><span class="w">International</span></div>${current === 'ai' ? '<span class="cur">Current</span>' : ''}</div>
+    </div>
+    <div class="khint">The two sites keep separate accounts — pick the one you signed up on.</div>`;
+  const page = ({ sub, account }) => head(sub) + section({ header: 'Sign-In', rows: [account] }) + update;
+
+  // ① today: the account line, then RunnerSignInView's idle state and the row's Close.
+  const p1 = page({ sub: '2.1.1 · checked 29m ago', account: accountRow({ name: 'Default', status: { text: 'Signed out', tone: 'warn' },
+    body: `<div class="sv"><span class="pbtn" id="t-b">Sign in to Kimi Code</span></div>${close}` }) });
+
+  // ② the choice of site is the press that starts it.
+  const p2 = page({ sub: '2.1.1 · checked 29m ago', account: accountRow({ name: 'Default', status: { text: 'Signed out', tone: 'warn' },
+    body: `<div class="sv">${sites(null)}</div>${close}` }) });
+
+  // ③ device flow on kimi.ai.
+  const p3 = page({ sub: '2.1.1 · checked 29m ago', account: accountRow({ name: 'Default', status: { text: 'Signed out', tone: 'warn' },
+    body: `<div class="sv">
+      <div id="d-top" class="sv"><span class="pbtn">${ICON.open}Open the kimi.ai sign-in page</span>
+      <div class="sig-h">Sign in with your <b>kimi.ai</b> account there, then enter this one-time code:</div></div>
+      <span class="kcode">62WK-UEL8 ${COPY}</span>
+      <div class="sig-row">${ICON.spin}Waiting for you to approve it…</div>
+      <div class="klinks"><span class="bl">Cancel</span><span class="bl" id="d-swap">Use kimi.com instead</span></div>
+    </div>${close}` }) });
+
+  // ④ signed in on kimi.com; Sign In Again opened the same choice, Current marked.
+  const p4 = page({ sub: '2.1.1 · checked 29m ago', account: accountRow({ name: 'Default', sub: '<span id="a-site">kimi.com</span>',
+    status: { text: 'Signed in', tone: 'ok' }, body: `<div class="sv">${sites('com')}</div>${close}` }) });
+
+  document.getElementById('p1').outerHTML = phone({ title: 'Kimi Code', body: p1 });
+  document.getElementById('p2').outerHTML = phone({ title: 'Kimi Code', body: p2 });
+  document.getElementById('p3').outerHTML = phone({ title: 'Kimi Code', body: p3 });
+  document.getElementById('p4').outerHTML = phone({ title: 'Kimi Code', body: p4 });
+
+  window.drawMarks = () => {
+    const [q1, q2, q3, q4] = document.querySelectorAll('.ph');
+    const grey = (html) => html.replace(/class="mk-n" style="([^"]*)"/g, 'class="mk-n" style="$1;background:#5b6270"').replace(/class="ring /g, 'class="ring grey ');
+    const r = at(q1, '#t-b');
+    q1.insertAdjacentHTML('beforeend', grey(marks([{ x: r.x - 5, y: r.y - 5, w: r.w + 10, h: r.h + 10, cls: '' }, { n: 'A', x: r.x + r.w - 6, y: r.y - 16 }])));
+    q1.querySelectorAll('.ring').forEach((el) => { el.style.borderColor = '#5b6270'; });
+    ringMark(q2, '#s2', '1', 5);
+    ringMark(q3, '#d-top', '2', 5);
+    ringMark(q3, '#d-swap', '3', 4, 18, 14);
+    ringMark(q4, '#a-site', '4', 4, 18, 13);
+    ringMark(q4, '#s4', '5', 5);
+  };
+</script>
+</body>
+</html>

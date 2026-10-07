@@ -1354,6 +1354,96 @@ test('a task of another project is refused, as is one that is not DONE, one that
     }
   });
 
+test('timed out: the owner retries a landing whose runner never answered its claim — the lost generation '
+  + 'ends ERROR · RUNNER_LOST and the next one is queued as theirs (§2.2 J-T9)',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'timeout-owner');
+      const task = await doneTask(stack, w, 'timeout-owner');
+      const [lost] = await claim(stack, w, 'lease-lost-response');
+      assert.ok(lost, `the DONE queued no landing — ${await jobsOf(stack.db, task.taskId)}`);
+      const owner = { userId: w.ownerId, email: `${w.ownerId}@retry.invalid` };
+      const press = () => stack.ownerRetry.retryTimedOutJob(owner, w.projectId, lost.jobId);
+
+      // Inside the lease the claim is in flight, whatever became of it: nothing is retried beside it.
+      const early = await denied(press);
+      assert.deepEqual([early.status, early.code], [409, 'INTEGRATION_RETRY_IN_FLIGHT']);
+
+      // The response carrying the claim never reached the runner: nothing reported since, past the lease.
+      const claimedAt = new Date(Date.now() - 11 * 60_000);
+      await stack.db.projectIntegrationJob.update({
+        where: { id: lost.jobId },
+        data: { claimedAt, heartbeatAt: claimedAt },
+      });
+
+      const view = await press();
+      const rows = await landings(stack.db, task.taskId);
+      assert.deepEqual(rows.map((row) => [row.generation, row.state]), [[1, 'ERROR'], [2, 'QUEUED']]);
+      const ended = await stack.db.projectIntegrationJob.findUniqueOrThrow({
+        where: { id: lost.jobId },
+        select: { errorCode: true, errorDetail: true, finishedAt: true },
+      });
+      assert.equal(ended.errorCode, 'RUNNER_LOST');
+      assert.equal((ended.errorDetail as { pushRecorded?: boolean; phase?: string }).pushRecorded, false);
+      assert.equal((ended.errorDetail as { phase?: string }).phase, 'FETCH');
+      assert.ok(ended.finishedAt, 'the lost generation is finished');
+      const next = rows[1]!;
+      assert.equal(next.retryOfJobId, lost.jobId);
+      assert.equal(next.retryFailureClass, 'ERROR');
+      assert.equal(next.retryRequestedByUserId, w.ownerId);
+      assert.equal(next.retryRequestedBySessionId, null);
+      assert.match(next.retryReason ?? '',
+        /^Retried by the account owner after a timeout: no report from runner .+ for 11 minutes \(limit 10\), last step FETCH\.$/);
+      // The press answers with the view the job list redraws from: the next generation, the owner's.
+      assert.deepEqual(view.inFlightJobs?.map((job) => [job.generation, job.state, job.retriedBy, job.timedOut]),
+        [[2, 'QUEUED', 'OWNER', false]]);
+      // The retry is the answer to the timeout: no item is opened about it.
+      assert.deepEqual(await itemsOf(stack.db, task.taskId), []);
+
+      // Were the lost claim to report after all, the job it names is finished: nothing of it is taken.
+      const late = await report(stack, w, lost, LANDED);
+      assert.equal(late.accepted, false);
+
+      // And a second press finds nothing timed out to retry.
+      const again = await denied(press);
+      assert.deepEqual([again.status, again.code], [409, 'INTEGRATION_RETRY_NOT_APPLICABLE']);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('timed out: the coordinator\'s integration_retry takes a landing whose runner went silent mid-step, '
+  + 'and refuses one that is still reporting', { skip, timeout: 180_000 }, async () => {
+  const stack = await connect();
+  try {
+    const w = await world(stack, 'timeout-coordinator');
+    const task = await doneTask(stack, w, 'timeout-coordinator');
+    const [silent] = await claim(stack, w, 'lease-silent');
+    assert.ok(silent, `the DONE queued no landing — ${await jobsOf(stack.db, task.taskId)}`);
+    // It reported a step, then nothing past the lease.
+    const lastReport = new Date(Date.now() - 12 * 60_000);
+    await stack.db.projectIntegrationJob.update({
+      where: { id: silent.jobId },
+      data: { phase: 'REBASE', claimedAt: new Date(lastReport.getTime() - 60_000), heartbeatAt: lastReport },
+    });
+
+    const queued = await retry(stack, w, task.taskId, 'its runner went silent mid-rebase: the machinery, not the delivery');
+    assert.deepEqual([queued.generation, queued.failureClass, queued.retryOfJobId], [2, 'ERROR', silent.jobId]);
+    const rows = await landings(stack.db, task.taskId);
+    assert.deepEqual(rows.map((row) => [row.generation, row.state]), [[1, 'ERROR'], [2, 'QUEUED']]);
+    assert.equal(rows[1]!.retryRequestedBySessionId, w.coordinatorSessionId);
+
+    // The next generation is claimed and reports within its lease: a retry of it is in flight.
+    const [running] = await claim(stack, w, 'lease-healthy');
+    assert.equal(running?.jobId, rows[1]!.id);
+    const refused = await denied(() => retry(stack, w, task.taskId, 'pressed while it runs'));
+    assert.deepEqual([refused.status, refused.code], [409, 'INTEGRATION_RETRY_IN_FLIGHT']);
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
+
 test('the integration-retry PostgreSQL target is explicitly disposable', { skip }, () => {
   assert.doesNotThrow(() => assertCoordinatorPgUrlIsIsolated(URL));
 });
