@@ -91,5 +91,126 @@ for name, count in (('choices-regression-2', 1), ('choices-regression-3', 2), ('
     claim(f'{name}: {count} failures, all at the Row actions keyboard step ({step})',
           len(lines) == count and all(l.endswith(step) for l in lines))
 
+# Round 2 (README "第 2 轮：合入 main"): main merged in, the pilot compared again on main as merged.
+MAIN, MAIN_NOW = 'f33589b4c', '71e644742'
+LINKED, R2, MERGED_AGAIN = '7145f084f', '5ce67d6dd', '3c1b24f02'
+claim(f'r2-merge-check ran clean on {LINKED} and exited 0', ran('r2-merge-check', LINKED))
+plain = lambda name: re.sub(r'\x1b\[[0-9;]*m', '', log(name))
+for name in ('r2-merge-check', 'r2b-merge-check'):
+    claim(f'{name}: 338 test files and 4295 tests passed', re.search(r'Test Files\s+338 passed \(338\)', plain(name)) is not None
+          and re.search(r'Tests\s+4295 passed \(4295\)', plain(name)) is not None)
+for name in ('r2-build', 'r2-pilot', 'r2-pilot-compare', 'r2-pilot-summary', 'r2-merge-scope'):
+    claim(f'{name} ran clean on {R2} and exited 0', ran(name, R2))
+for name in ('r2-ref-build', 'r2-ref-pilot', 'r2-ref-pilot-again'):
+    r = record(name)
+    claim(f'{name} ran on main {MAIN} with only the pilot specs copied in, and exited 0',
+          r['commit'].startswith(MAIN) and r['exitCode'] == 0 and all(p.startswith('?? src/web/ui-migration/pilot') for p in r['dirty']))
+
+r2 = json.loads((here / 'r2-pilot-summary.json').read_text())
+claim('r2 pilot: 72/72 in both trees', r2['totals']['tests'] == {'passed/passed': 72})
+claim('r2 pilot: 256 shots, 90 identical, 156 within antialiasing, 10 beyond',
+      (r2['totals']['screenshots'], r2['totals']['identical'], r2['totals']['antialias'], r2['totals']['beyondAntialias']) == (256, 90, 156, 10))
+r2_fields = {f for test in r2['traces'].values() for step in test.get('steps', []) for f in step['fields']}
+claim(f'r2 pilot: no trace step of the 64 differs in its requests (fields that differ: {sorted(r2_fields)})',
+      r2['totals']['traces'] == 64 and 'requests' not in r2_fields)
+r2_deltas = [(f, a, b) for capture in r2['styles'].values() for element in capture.values() for f, (a, b) in element.items()]
+claim(f'r2 pilot: all {len(r2_deltas)} computed-style differences are line heights within 0.0001px',
+      all(f == 'lineHeight' and abs(float(a[:-2]) - float(b[:-2])) < 0.0001 for f, a, b in r2_deltas))
+choosing = ['pilot-detail', 'pilot-field-hover', 'pilot-assignee-open', 'pilot-suggested-open', 'pilot-provider-open', 'pilot-model-open',
+            'pilot-list-open', 'pilot-list-search', 'pilot-account', 'pilot-account-open', 'pilot-antigravity-account', 'pilot-antigravity-account-open']
+claim(f'r2 pilot: the {len(choosing)} field, model and account picker shots are identical or within antialiasing in all 8 environments',
+      all(r2['screenshots'][s]['environments'] == 8 and not r2['screenshots'][s]['beyond'] for s in choosing))
+r2_compare = json.loads((here / 'r2-pilot-compare.json').read_text())
+antigravity = {k: v for k, v in r2_compare['traces'].items() if 'Antigravity account picker' in k}
+claim('r2 pilot: the Antigravity case differs only at its open and pick steps, never in requests; its Create step is equal in all 8',
+      len(antigravity) == 8 and all({d['step'] for d in v.get('differences', [])} <= {'antigravity account open', 'antigravity account Work'}
+                                    for v in antigravity.values()))
+# The shots beyond antialiasing: the first round's known ones (same environment, same pixel count beyond 2,
+# same level as in run 6), and one the reference shows against itself.
+v1 = json.loads((here / 'pilot-compare-6.json').read_text())['screenshots']
+noise2 = json.loads((here / 'r2-reference-noise-compare.json').read_text())['screenshots']
+over = lambda v: (v.get('pixels', 0) - v.get('pixelsAtMost2', 0), v.get('maxChannelDiff'))
+r2_beyond = {k: over(v) for k, v in r2_compare['screenshots'].items() if not v.get('equal') and v.get('pixels') != v.get('pixelsAtMost2')}
+as_v1 = {k for k, v in r2_beyond.items() if k in v1 and over(v1[k]) == v}
+as_noise = {k for k, v in r2_beyond.items() if k in noise2 and over(noise2[k]) == v}
+claim(f'r2 pilot: of the {len(r2_beyond)} shots beyond antialiasing, {len(as_v1)} are run 6\'s own, the rest '
+      f'({sorted(set(r2_beyond) - as_v1)}) the reference\'s own noise', len(as_v1) == 9 and set(r2_beyond) - as_v1 <= as_noise)
+n2 = json.loads((here / 'r2-reference-noise-summary.json').read_text())['totals']
+claim('r2 reference noise: 217 identical, 37 within antialiasing, 2 beyond, no computed-style difference',
+      (n2['identical'], n2['antialias'], n2['beyondAntialias'], n2['capturesWithStyleDeltas']) == (217, 37, 2, 0))
+scope = json.loads((here / 'r2-merge-scope.json').read_text())
+claim(f"r2 merge scope: all {len(scope['checks'])} checks hold", all(c['holds'] for c in scope['checks']))
+for name in ('r2b-merge-check', 'r2b-merge-scope', 'r2b-dist-compare', 'r2-orbitkit-compare'):
+    claim(f'{name} ran clean on {MERGED_AGAIN} and exited 0', ran(name, MERGED_AGAIN))
+claim(f'r2-orbitkit (git archive of {MERGED_AGAIN}) and r2-orbitkit-main (of main {MAIN_NOW}) both exited 1, on main\'s own failures (below)',
+      ran('r2-orbitkit', MERGED_AGAIN, 1) and record('r2-orbitkit-main')['exitCode'] == 1
+      and log('r2-orbitkit').startswith('commit ' + record('r2-orbitkit')['commit']) and log('r2-orbitkit-main').startswith('commit ' + MAIN_NOW))
+claim('r2b-dist-compare and r2b-ref-dist-compare: both trees build byte for byte what the pilot comparison served',
+      log('r2b-dist-compare').strip() == '' and log('r2b-ref-dist-compare').strip() == '')
+for name in ('r2b-ref-build', 'r2b-ref-dist-compare'):
+    r = record(name)
+    claim(f'{name} ran on main {MAIN_NOW} and exited 0', r['commit'].startswith(MAIN_NOW) and r['exitCode'] == 0)
+scope_again = json.loads((here / 'r2b-merge-scope.json').read_text())
+claim(f"r2b merge scope (main {MAIN_NOW}): all {len(scope_again['checks'])} checks hold", all(c['holds'] for c in scope_again['checks']))
+swift = json.loads((here / 'r2-orbitkit-compare.json').read_text())
+claim(f"r2 OrbitKit: no case fails on {MERGED_AGAIN} that passes on main {MAIN_NOW} ({swift['delivery']['summary']})",
+      swift['onlyDelivery'] == [] and record('r2-orbitkit-main')['command'][-2] == MAIN_NOW)
+claim(f"r2 OrbitKit: main and the delivery fail the same {len(swift['tip']['failed'])} cases",
+      swift['tip']['failed'] == swift['delivery']['failed'] and swift['onlyTip'] == [])
+claim('r2 OrbitKit: SharePanelCopyParityTests, TaskDetailCopyParityTests and TaskDetailWiringTests pass on both trees',
+      all(re.search(rf"Test Suite '{suite}' passed", log(name)) for suite in ('SharePanelCopyParityTests', 'TaskDetailCopyParityTests', 'TaskDetailWiringTests')
+          for name in ('r2-orbitkit-main', 'r2-orbitkit')))
+
+# Round 2, the component matrices and the review dialogs on the merged tree.
+summary_line = lambda name: ' '.join(re.findall(r'^\s+(\d+ (?:passed|failed|skipped|flaky))', plain(name), re.M))
+for name, expected in (('r2b-foundation-regression', '48 passed'), ('r2b-controls-regression', '32 passed'),
+                       ('r2b-overlays-regression', '96 passed'), ('r2b-choices-regression', '520 passed'),
+                       ('r2b-ref-reviews', '6 skipped 6 passed'), ('r2b-reviews', '6 skipped 6 passed')):
+    r = record(name)
+    on = MAIN_NOW if name.startswith('r2b-ref-') else MERGED_AGAIN
+    claim(f'{name}: {expected} on {on}, exit 0', r['commit'].startswith(on) and r['exitCode'] == 0 and summary_line(name) == expected)
+for name, expected in (('r2b-composer-regression', '1 failed 23 skipped 120 passed'), ('r2b-toasts-regression', '4 failed 268 passed')):
+    claim(f'{name}: {expected} on {MERGED_AGAIN}', ran(name, MERGED_AGAIN, 1) and summary_line(name) == expected)
+motion = re.findall(r'✘\s+\d+ \[([\w-]+)\] › ui-migration/(\S+?):\d+:\d+ › (.+?) \(', plain('r2b-composer-regression') + plain('r2b-toasts-regression'))
+claim(f'r2b composer and toasts: the {len(motion)} failures are all motion or animation-progress samples',
+      len(motion) == 5 and all(re.search(r'motion|progress|Drawer', t) for _, _, t in motion))
+count = lambda name, word: sum(int(n) for n in re.findall(rf'^\s+(\d+) {word}\b', plain(name), re.M))
+repeats = ('composer-motion', 'toasts-drawer-entry', 'toasts-exit-progress', 'toasts-entrance-progress', 'toasts-drawer-pixels')
+main_runs = [(count(f'ref-r2b-{r}-repeat', 'passed'), count(f'ref-r2b-{r}-repeat', 'failed')) for r in repeats]
+del_runs = [(count(f'r2b-{r}-repeat', 'passed'), count(f'r2b-{r}-repeat', 'failed')) for r in repeats]
+claim(f'r2b repeats of the 5 motion failures: main {sum(p for p, _ in main_runs)}/30, the delivery {sum(p for p, _ in del_runs)}/30',
+      (sum(p for p, _ in main_runs), sum(p + f for p, f in main_runs), sum(p for p, _ in del_runs), sum(p + f for p, f in del_runs)) == (26, 30, 29, 30)
+      and all(record(f'ref-r2b-{r}-repeat')['commit'].startswith(MAIN_NOW) and record(f'r2b-{r}-repeat')['commit'].startswith(MERGED_AGAIN) for r in repeats))
+first_reruns = [f'{side}p0-{s}-{e}' for s, e in (('settings', 'webkit-light-desktop'), ('settings', 'webkit-dark-desktop'), ('settings', 'webkit-dark-phone'),
+                                                  ('profile', 'chromium-light-desktop'), ('profile', 'webkit-dark-desktop')) for side in ('r2b-ref-', 'r2b-')]
+claim('r2b P0 first reruns: all 10 met the saved-toast intermittent (strict mode on the toast and its live region) or the screenshot it left unwritten',
+      all(record(n)['exitCode'] == 1 and re.search(r"strict mode violation: getByText\('(Setting|Name) saved'|A snapshot doesn't exist", plain(n)) for n in first_reruns))
+reviews2 = json.loads((here / 'r2b-reviews-compare.json').read_text())
+attachments2 = [v for k, v in reviews2.items() if k != '_missing']
+claim(f'r2b review dialogs: all {len(attachments2)} attachments equal to main\'s',
+      len(attachments2) == 12 and all(v['equal'] for v in attachments2) and not any(reviews2['_missing'].values()))
+
+# Round 2, the P0 page matrix: main writes the screenshots, the delivery is compared at 0 pixels.
+p0_log = plain('r2b-p0-vs-main')
+p0_failed = re.findall(r'✘\s+\d+ \[([\w-]+)\] › ui-migration/pages\.browser\.mjs:\d+:\d+ › (\w+) \(', p0_log)
+ref_failed = re.findall(r'✘\s+\d+ \[([\w-]+)\] › ui-migration/pages\.browser\.mjs:\d+:\d+ › (\w+) \(', plain('r2b-ref-p0'))
+claim('r2b P0: 21 failed, 11 skipped, 80 passed on the delivery; 13 failed, 11 skipped, 88 passed on main',
+      summary_line('r2b-p0-vs-main') == '21 failed 11 skipped 80 passed' and summary_line('r2b-ref-p0') == '13 failed 11 skipped 88 passed')
+envs = lambda failed, scenario: {e for e, x in failed if x == scenario}
+flaky = lambda failed: {(e, x) for e, x in failed if x in ('settings', 'profile')}
+claim('r2b P0: the delivery fails task and wiki in all 8 environments and settings/profile exactly where main failed them; '
+      'main fails wiki in all 8 and nothing else but settings/profile',
+      len(envs(p0_failed, 'task')) == 8 and len(envs(p0_failed, 'wiki')) == 8 and len(envs(ref_failed, 'wiki')) == 8
+      and {x for _, x in p0_failed} <= {'task', 'wiki', 'settings', 'profile'} and {x for _, x in ref_failed} <= {'wiki', 'settings', 'profile'}
+      and flaky(p0_failed) == flaky(ref_failed))
+claim('r2b P0: every wiki failure on either tree is the wait for .wk-card, which main\'s Wiki home no longer draws',
+      p0_log.count("Locator: locator('.wk-card').first()") >= 8 and plain('r2b-ref-p0').count("Locator: locator('.wk-card').first()") >= 8)
+task2 = json.loads((here / 'r2b-p0-task-summary.json').read_text())['screenshots']
+task6 = json.loads((here / 'p0-task-summary-6.json').read_text())['screenshots']
+claim('r2b P0 task scenario: task-action-menu and task-share-dialog differ in each environment exactly as in run 6; the other task shots are identical or within antialiasing',
+      all({e: over(v) for e, v in task2[s]['beyond'].items()} == {e: over(v) for e, v in task6[s]['beyond'].items()}
+          for s in ('task-action-menu', 'task-share-dialog', 'task-public-share'))
+      and all(not task2[s]['beyond'] for s in ('task-detail', 'task-action-hover', 'task-action-focus')))
+
 print(f'{sum(results)}/{len(results)} claims hold')
 sys.exit(0 if all(results) else 1)

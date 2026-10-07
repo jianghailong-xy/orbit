@@ -1,0 +1,18 @@
+
+Running 12 tests using 1 worker
+
+  -   1 [chromium-light-desktop] › ui-migration/reviews.check.mjs:55:1 › question traps focus, preserves choices and drafts, and suspends background shortcuts
+  -   2 [chromium-light-desktop] › ui-migration/reviews.check.mjs:106:1 › long plan scrolls above visible actions and owns the foreground shortcut
+  ✓   3 [chromium-light-desktop] › ui-migration/reviews.check.mjs:130:1 › wide screens show full questions and actions without opening a preview (2.2s)
+  ✓   4 [chromium-light-phone] › ui-migration/reviews.check.mjs:55:1 › question traps focus, preserves choices and drafts, and suspends background shortcuts (3.1s)
+  ✓   5 [chromium-light-phone] › ui-migration/reviews.check.mjs:106:1 › long plan scrolls above visible actions and owns the foreground shortcut (2.4s)
+  -   6 [chromium-light-phone] › ui-migration/reviews.check.mjs:130:1 › wide screens show full questions and actions without opening a preview
+  -   7 [chromium-dark-desktop] › ui-migration/reviews.check.mjs:55:1 › question traps focus, preserves choices and drafts, and suspends background shortcuts
+  -   8 [chromium-dark-desktop] › ui-migration/reviews.check.mjs:106:1 › long plan scrolls above visible actions and owns the foreground shortcut
+  ✓   9 [chromium-dark-desktop] › ui-migration/reviews.check.mjs:130:1 › wide screens show full questions and actions without opening a preview (2.0s)
+  ✓  10 [chromium-dark-phone] › ui-migration/reviews.check.mjs:55:1 › question traps focus, preserves choices and drafts, and suspends background shortcuts (3.8s)
+  ✓  11 [chromium-dark-phone] › ui-migration/reviews.check.mjs:106:1 › long plan scrolls above visible actions and owns the foreground shortcut (2.6s)
+  -  12 [chromium-dark-phone] › ui-migration/reviews.check.mjs:130:1 › wide screens show full questions and actions without opening a preview
+
+  6 skipped
+  6 passed (31.9s)
