@@ -1,0 +1,27 @@
+{
+  "target": "antd-sample",
+  "sequence": "select-down",
+  "control": null,
+  "mode": "burst",
+  "run": 18,
+  "keys": [
+    "ArrowDown"
+  ],
+  "from": "Never",
+  "before": "Never",
+  "after": "Never",
+  "result": "Never | list open",
+  "listOpen": true,
+  "active": "combobox:Sample choice",
+  "keyLog": [
+    {
+      "key": "ArrowDown",
+      "t": 96.9,
+      "target": "combobox:Sample choice",
+      "trusted": true,
+      "focused": "combobox:Sample choice",
+      "listbox": false,
+      "highlighted": null
+    }
+  ]
+}

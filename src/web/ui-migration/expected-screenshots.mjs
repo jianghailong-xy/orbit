@@ -15,6 +15,10 @@ export const expectedScreenshots = fileURLToPath(new URL('../.ui-migration-resul
 const sha256 = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
 const commit = /^[0-9a-f]{40}$/;
 const pngs = (dir) => (existsSync(dir) ? readdirSync(dir, { recursive: true }).filter((file) => file.endsWith('.png')) : []);
+// A coordinator's CONFIRM decision on a task's evidence: task id, evidence revision and digest, and the
+// evidence document it judged (relative to the evidence root).
+const confirmed = (decision) => decision?.verdict === 'CONFIRM' && /^[0-9A-Za-z]{20,24}$/.test(decision.taskId ?? '') && Number.isInteger(decision.evidenceRevision)
+  && decision.evidenceRevision >= 1 && /^[0-9a-f]{64}$/.test(decision.evidenceDigest ?? '') && !!decision.document && existsSync(join(evidence, decision.document));
 
 export default function assembleExpectedScreenshots() {
   const sources = {};
@@ -35,6 +39,14 @@ export default function assembleExpectedScreenshots() {
     if (generatedFrom?.commit !== mainCommits.at(-1) || generatedFrom.environment !== environment) {
       throw new Error(`${where}: generate it on the tree of its last main commit, in the P0.2 environment.`);
     }
+    // The bounded exception (p0-drift README, main drift rule 7): every main tree with that commit carries
+    // a migration regression whose fix the coordinator confirmed, so it was generated with the fix applied.
+    if ('migrationFix' in entry) {
+      const { commit: fix, generationTree, decision, isolation } = entry.migrationFix ?? {};
+      if (!commit.test(fix ?? '') || !commit.test(generationTree ?? '') || !confirmed(decision) || !isolation || !existsSync(join(evidence, isolation))) {
+        throw new Error(`${where}: generated with a migration fix applied, name the fix and the tree it ran on, cite the coordinator's CONFIRM decision on that fix (task id, evidence revision and digest, document) and the isolation proofs.`);
+      }
+    }
     const path = `p0-drift/reference/screenshots/${screenshot}`;
     if (sha256(join(evidence, path)) !== recorded) throw new Error(`${where} no longer matches its registered SHA-256.`);
     sources[screenshot] = { layer: 'p0-drift', path, sha256: recorded, mainCommits };
@@ -54,8 +66,7 @@ export default function assembleExpectedScreenshots() {
     if (replaces?.layer !== current.layer || replaces.sha256 !== current.sha256) {
       throw new Error(`${where}: it replaces ${replaces?.layer} ${replaces?.sha256}, but the current expectation is ${current.layer} ${current.sha256}; register it again.`);
     }
-    if (decision?.verdict !== 'CONFIRM' || !/^[0-9A-Za-z]{20,24}$/.test(decision.taskId ?? '') || !Number.isInteger(decision.evidenceRevision)
-      || decision.evidenceRevision < 1 || !/^[0-9a-f]{64}$/.test(decision.evidenceDigest ?? '') || !decision.document || !existsSync(join(evidence, decision.document))) {
+    if (!confirmed(decision)) {
       throw new Error(`${where}: cite the coordinator's CONFIRM decision on the batch's evidence (task id, evidence revision and digest, document).`);
     }
     if (!difference?.trim()) throw new Error(`${where}: describe the accepted difference.`);

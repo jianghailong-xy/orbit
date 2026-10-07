@@ -1,0 +1,27 @@
+{
+  "target": "orbit-sample",
+  "sequence": "select-down",
+  "control": null,
+  "mode": "paced",
+  "run": 16,
+  "keys": [
+    "ArrowDown"
+  ],
+  "from": "Never",
+  "before": "Never",
+  "after": "Never",
+  "result": "Never | list open",
+  "listOpen": true,
+  "active": "option:Never",
+  "keyLog": [
+    {
+      "key": "ArrowDown",
+      "t": 38.7,
+      "target": "combobox:Sample choice",
+      "trusted": true,
+      "focused": "combobox:Sample choice",
+      "listbox": false,
+      "highlighted": null
+    }
+  ]
+}

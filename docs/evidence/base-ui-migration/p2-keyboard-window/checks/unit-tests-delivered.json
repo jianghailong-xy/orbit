@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec && npm test -w @orbit/web -- src/lib/theme.test.tsx src/components/ui/boundary.test.ts src/components/ShareModal.test.tsx src/components/WorkspaceView.composerMenu.test.tsx",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_bb2420092256",
+ "cwd": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec",
+ "commit": "25309143fa5b571bb85c0f634cb04f339c9c3ccd",
+ "webTree": "7709bb72da4dd0ddb22b6563a62715821318a913",
+ "outputLastWritten": "2026-10-06T21:41:15.039805+00:00",
+ "exitCode": 0,
+ "outputSha256": "38dd57be85dfa040b57d7987f466c2f080311bc3403723cb11557fac62e4e87d",
+ "outputBytes": 67326,
+ "note": "Delivered tree. 4 files / 22 tests passed (the P2.2 focused unit set): theme, the ui boundary (Base UI only inside Orbit components, public components free of AntD), ShareModal, the composer attachment menu (whose test file P3.1 changed)."
+}

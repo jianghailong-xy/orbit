@@ -1,0 +1,6 @@
+
+Running 1 test using 1 worker
+
+  ✓  1 [chromium-light-desktop] › ui-migration/pilot-performance.browser.mjs:28:1 › record pilot performance (8.8s)
+
+  1 passed (9.5s)

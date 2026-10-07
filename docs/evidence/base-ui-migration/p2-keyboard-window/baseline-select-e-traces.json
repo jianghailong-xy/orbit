@@ -1,0 +1,196 @@
+[
+ {
+  "trace": "chromium-dark-desktop--antd-sample-select-down-n-enter-paced-sample-10--trace.zip",
+  "moduleRequests": 29,
+  "failedRequests": [
+   {
+    "url": ":4177/src/components/ui/Input.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 204.0
+   },
+   {
+    "url": ":4177/src/components/ui/Dialog.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 204.1
+   },
+   {
+    "url": ":4177/src/components/ui/Overlay.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 204.1
+   },
+   {
+    "url": ":4177/src/components/ui/Menu.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 204.1
+   },
+   {
+    "url": ":4177/src/components/ui/Popover.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 204.1
+   },
+   {
+    "url": ":4177/src/components/ui/Tooltip.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 204.1
+   },
+   {
+    "url": ":4177/src/components/ui/Select.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 204.1
+   },
+   {
+    "url": ":4177/src/components/ui/Combobox.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 204.1
+   },
+   {
+    "url": ":4177/src/components/ui/MultiSelect.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 204.1
+   },
+   {
+    "url": ":4177/src/components/ui/__fixtures__/ChoicesFixture.css",
+    "status": -1,
+    "failure": null,
+    "ms": 204.1
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/rolldown-runtime-DC62tzP2.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 159.2
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/react-dom.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 97.4
+   }
+  ],
+  "networkChangedConsoleErrors": 12,
+  "slowestRequests": [
+   {
+    "url": ":4177/node_modules/.vite/deps/react.js?v=4b7e2d66",
+    "status": 200,
+    "failure": null,
+    "ms": 220.5
+   },
+   {
+    "url": ":4177/src/components/ui/Dialog.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 204.1
+   },
+   {
+    "url": ":4177/src/components/ui/Overlay.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 204.1
+   },
+   {
+    "url": ":4177/src/components/ui/Menu.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 204.1
+   },
+   {
+    "url": ":4177/src/components/ui/Popover.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 204.1
+   }
+  ],
+  "console": [
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   }
+  ],
+  "pageErrors": [
+   ""
+  ],
+  "lastActions": [
+   {
+    "api": "hook",
+    "title": "Worker Cleanup",
+    "start": 886521.726,
+    "error": null
+   },
+   {
+    "api": "fixture",
+    "title": "Fixture \"browser\"",
+    "start": 886522.192,
+    "error": null
+   },
+   {
+    "api": "fixture",
+    "title": "Fixture \"browserName\"",
+    "start": 886559.622,
+    "error": null
+   },
+   {
+    "api": "newPage",
+    "title": null,
+    "start": 871011.525,
+    "error": null
+   },
+   {
+    "api": "goto",
+    "title": null,
+    "start": 871028.119,
+    "error": null
+   },
+   {
+    "api": "expect",
+    "title": "Expect \"toHaveText\"",
+    "start": 871427.233,
+    "error": null
+   }
+  ]
+ }
+]

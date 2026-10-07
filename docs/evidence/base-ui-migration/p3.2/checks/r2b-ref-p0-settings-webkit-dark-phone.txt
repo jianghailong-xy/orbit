@@ -1,0 +1,48 @@
+
+Running 1 test using 1 worker
+
+  ✘  1 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (2.5s)
+
+
+  1) [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings ───────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('Setting saved', { exact: true })
+    Expected: visible
+    Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:
+        1) <span class="toast-head">Setting saved</span> aka getByRole('region', { name: 'Notifications' }).getByText('Setting saved')
+        2) <div class="sr-only" aria-atomic="true" aria-live="polite">Setting saved</div> aka getByText('Setting saved').nth(1)
+
+    Call log:
+      - Expect "toBeVisible" getByText('Setting saved', { exact: true }) with timeout 15000ms
+      - waiting for getByText('Setting saved', { exact: true })
+
+
+       at page-scenarios.mjs:102
+
+      100 |   await firstSwitch.click();
+      101 |   await expect(firstSwitch).toHaveAttribute('aria-checked', previous === 'true' ? 'false' : 'true');
+    > 102 |   await expect(page.getByText('Setting saved', { exact: true })).toBeVisible();
+          |                                                                  ^
+      103 |   await capture('settings-saved', { switch: firstSwitch });
+      104 | }
+      105 |
+        at settingsScenario (/var/tmp/p32r2-ref/src/web/ui-migration/page-scenarios.mjs:102:66)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0-settings-webkit-dark-phone/pages.browser.mjs-settings-webkit-dark-phone/attachments/computed-styles-and-timings-6aeba5e0f99bbc0f85d81bd61978c47852785a6c.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../p32r2-final/r2b-ref-p0-settings-webkit-dark-phone/pages.browser.mjs-settings-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0-settings-webkit-dark-phone/pages.browser.mjs-settings-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p32r2-final/r2b-ref-p0-settings-webkit-dark-phone/pages.browser.mjs-settings-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings ────────────────────────────

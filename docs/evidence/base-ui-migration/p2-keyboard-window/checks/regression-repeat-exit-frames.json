@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869 && npm run test:ui-choices -w @orbit/web -- --grep 'no-preference Dialog Popover Select exits' --project webkit-light-desktop --repeat-each 10",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_8f15bdea1cad",
+ "cwd": "/root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869",
+ "commit": "923c8d856c2637fe63a10da9a4f79813894e7a39",
+ "webTree": "1780d071a6b402eef7d34ea74185684d73db3a85",
+ "outputLastWritten": "2026-10-06T14:22:18.227667+00:00",
+ "exitCode": 0,
+ "outputSha256": "9f69ef3a2c5bde525fea84b5d9a0c89611f26551768b0cbb886575eaa72f27d1",
+ "outputBytes": 2044,
+ "note": "10 passed: the case that failed in the second full run, alone in its environment, ten times; unchanged test, timeout and retries."
+}

@@ -1,0 +1,3413 @@
+{
+  "config": {
+    "argv": [
+      "/usr/local/bin/node",
+      "/var/tmp/p2kw-c2604b/before/node_modules/.bin/playwright",
+      "test",
+      "--config",
+      "ui-migration/choices.config.mjs",
+      "--grep",
+      "multiple choices in Dialog keep their owner",
+      "--project",
+      "chromium-light-phone",
+      "--project",
+      "webkit-light-phone",
+      "--repeat-each",
+      "40"
+    ],
+    "configFile": "/var/tmp/p2kw-c2604b/before/src/web/ui-migration/choices.config.mjs",
+    "rootDir": "/var/tmp/p2kw-c2604b/before/src/web/ui-migration",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": "/var/tmp/p2kw-c2604b/before/src/web/ui-migration/environment.mjs",
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/before/src/web/.choices-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-light-desktop",
+        "name": "chromium-light-desktop",
+        "testDir": "/var/tmp/p2kw-c2604b/before/src/web/ui-migration",
+        "testIgnore": [],
+        "testMatch": [
+          "choices*.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/before/src/web/.choices-results",
+        "repeatEach": 40,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-light-phone",
+        "name": "chromium-light-phone",
+        "testDir": "/var/tmp/p2kw-c2604b/before/src/web/ui-migration",
+        "testIgnore": [],
+        "testMatch": [
+          "choices*.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/before/src/web/.choices-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-dark-desktop",
+        "name": "chromium-dark-desktop",
+        "testDir": "/var/tmp/p2kw-c2604b/before/src/web/ui-migration",
+        "testIgnore": [],
+        "testMatch": [
+          "choices*.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/before/src/web/.choices-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-dark-phone",
+        "name": "chromium-dark-phone",
+        "testDir": "/var/tmp/p2kw-c2604b/before/src/web/ui-migration",
+        "testIgnore": [],
+        "testMatch": [
+          "choices*.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/before/src/web/.choices-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-light-desktop",
+        "name": "webkit-light-desktop",
+        "testDir": "/var/tmp/p2kw-c2604b/before/src/web/ui-migration",
+        "testIgnore": [],
+        "testMatch": [
+          "choices*.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/before/src/web/.choices-results",
+        "repeatEach": 40,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-light-phone",
+        "name": "webkit-light-phone",
+        "testDir": "/var/tmp/p2kw-c2604b/before/src/web/ui-migration",
+        "testIgnore": [],
+        "testMatch": [
+          "choices*.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/before/src/web/.choices-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-dark-desktop",
+        "name": "webkit-dark-desktop",
+        "testDir": "/var/tmp/p2kw-c2604b/before/src/web/ui-migration",
+        "testIgnore": [],
+        "testMatch": [
+          "choices*.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/before/src/web/.choices-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-dark-phone",
+        "name": "webkit-dark-phone",
+        "testDir": "/var/tmp/p2kw-c2604b/before/src/web/ui-migration",
+        "testIgnore": [],
+        "testMatch": [
+          "choices*.browser.mjs"
+        ],
+        "timeout": 90000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "/var/tmp/p2kw-c2604b/before/src/web/.choices-results/report.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "none",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": {
+      "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+      "cwd": "/var/tmp/p2kw-c2604b/before/src/web/",
+      "url": "http://127.0.0.1:4177",
+      "reuseExistingServer": false,
+      "timeout": 30000
+    }
+  },
+  "suites": [
+    {
+      "title": "choices.browser.mjs",
+      "file": "choices.browser.mjs",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2207,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:08.573Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-e7cfea0b9caa8ae3b828",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1675,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:11.258Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-b9421376b5ab04f31009",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1707,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:13.272Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-959e724209fba7c8bed0",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1822,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:15.308Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-5246cc5b824bd654cd4b",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 4,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1796,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:17.501Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-6fe1f716947f1d417bae",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 5,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1752,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:19.668Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-43d73456e9a51550fe00",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 6,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1767,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:21.762Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-b5cd337787b5aae0170c",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 7,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1783,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:23.847Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-c549d5a9e1f9d5c2fd67",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 8,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1885,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:25.948Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-d916b5ff3f34aab12e51",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 9,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1759,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:28.155Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-b1fcc090ff87ae8cd68c",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 10,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1748,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:30.254Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-99d15e151fc755c0198c",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 11,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1903,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:32.371Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-8eba23233ac6facc04e3",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 12,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1903,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:34.619Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-a01924044cd6d61714f0",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 13,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1822,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:36.930Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-0cd10689a156f951f73a",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 14,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1839,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:39.110Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-dfff43d63b844fe4ab7a",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 15,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1740,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:41.259Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-b0eb615ba86d8b865ad7",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 16,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1784,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:43.282Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-7d1877fa6e16ffec5e6c",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 17,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1900,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:45.403Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-d818cef46d4484a2120e",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 18,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1635,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:47.665Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-d7e5ee6249950569690a",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 19,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1815,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:49.630Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-4269d5d6a2e895ba2759",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 20,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2051,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:51.799Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-0622c277d5eada894988",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 21,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1601,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:54.168Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-ac986954e16d0f3e6cd6",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 22,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1808,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:56.055Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-b3f077cf403fa32a601c",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 23,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1699,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:21:58.194Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-13cc9dd73baa8c2587f2",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 24,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1967,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:00.197Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-0c1dcba7d50ffff6bbc1",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 25,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1989,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:02.480Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-9160c6d730066a3869d4",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 26,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1839,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:04.799Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-2b352ad498b6d09762a9",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 27,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1783,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:06.944Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-a59303800b528c5192f7",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 28,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2092,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:09.073Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-9dcda0b473231d9439cd",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 29,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1684,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:11.459Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-7214aaee2c1aeb06954a",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 30,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1893,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:13.440Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-4510b00b2876ebb34386",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 31,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2198,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:15.703Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-8096a9baf54a85c23ec0",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 32,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1973,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:18.311Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-1d4ac302f028f6a58aaf",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 33,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1701,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:20.633Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-c22bd6029a693b280618",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 34,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2010,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:22.672Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-b1c0b5e55968bd892e09",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 35,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2266,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:25.044Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-cd12afa48fd41df0f432",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 36,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1917,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:27.729Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-dfbb512be50e71b413d5",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 37,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1804,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:29.980Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-7fefb689c5fde2a77581",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 38,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2281,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:32.264Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-3dc4c370c99783d815c5",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 39,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2066,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:34.942Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-39f141434eda6b0f258e",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 40,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2177,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:37.411Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-c82145c680b3e18c8694",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 41,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2092,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:40.088Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-1edbd83f3c93063702e4",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 42,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3022,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:42.690Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-ca80b7b1bf0fddfeb56b",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 43,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2187,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:46.293Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-83c8ed7f1a9c06c876b0",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 44,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2452,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:48.912Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-cd6f87d9676f770f123e",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 45,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2643,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:51.917Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-7ba495f7411ee6ab7e8a",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 46,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1749,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:54.993Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-4234089378089f3ec064",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 47,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1988,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:57.228Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-6f590b87aef84bf92660",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 48,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1657,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:22:59.618Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-6b90a5189b3e3d37788a",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 49,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1992,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:01.678Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-1fd8e491953ab6c89508",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 50,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2385,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:04.100Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-176d8713ae63fcaf1409",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 51,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2048,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:07.013Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-96c77e529a96f3d06cc9",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 52,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1815,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:09.494Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-e8174da15afde9b95722",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 53,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1853,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:11.789Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-70fbd056eeb6821ddaa7",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 54,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1721,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:14.053Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-8d141502341b0acd041c",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 55,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2031,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:16.154Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-3ff5a0286264d367001a",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 56,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2202,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:18.652Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-2ff392d0386f62b35d9a",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 57,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2293,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:21.276Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-a18470c860ccf9e604de",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 58,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2239,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:24.093Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-ea27d641321ecc673788",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 59,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2137,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:26.871Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-500e551e006a90b337df",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 60,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3565,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:29.448Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-925d5bbb65b53ab877c8",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 61,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2422,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:33.456Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-0d8911dbd5af51c7bd8e",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 62,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1957,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:36.295Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-58c7b425321d7dc9284f",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 63,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1985,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:38.662Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-00185cf169155bac3c9e",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 64,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1934,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:41.063Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-ffcedb18e04d78c4065c",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 65,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1603,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:43.395Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-9a4739046dc99dc67bbb",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 66,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1981,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:45.369Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-a72c7ff483e32cc856ca",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 67,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1953,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:47.768Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-52ef833eb8bbf42f5139",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 68,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1918,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:50.123Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-053de0eda1c7b869d312",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 69,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1558,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:52.468Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-71ce9536ad4ed968ede1",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 70,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1549,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:54.386Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-8a445457c65b74870dd8",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 71,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1507,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:56.268Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-8e2d9b1f6b7a2bad3804",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 72,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1689,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:23:58.161Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-08bbb22b2711b8d3f8fe",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 73,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2207,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:24:00.311Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-75ad96b4fccaae0d6a22",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 74,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2791,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:24:02.992Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-6247e093b2903606f0f3",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 75,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2615,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:24:06.313Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-555b03c07d4aa2f5ec54",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 76,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2147,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:24:09.353Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-39a03e175778ada1f9d5",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 77,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2368,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:24:12.007Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-ebbdf36bedf4e39c7c20",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 78,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2261,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:24:14.933Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-f07b2c1a6dfa3503a7f9",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        },
+        {
+          "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 79,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2016,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:24:17.689Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "multi-dialog-and-row",
+                      "contentType": "application/json",
+                      "body": "ewogICJwb3J0YWxJbnNpZGVPd25lciI6IHRydWUsCiAgInNlcXVlbnRpYWxFc2NhcGUiOiB0cnVlLAogICJjb21wb3NpdGlvbklnbm9yZWQiOiB0cnVlLAogICJmb2N1c1JldHVybiI6IHRydWUsCiAgInBvaW50ZXJBbmRLZXlib2FyZFN0b3BSb3dDbGljayI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-e0e21cfeaa4732e19c66",
+          "file": "choices.browser.mjs",
+          "line": 592,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-07T05:21:07.382Z",
+    "duration": 192598.84,
+    "expected": 80,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

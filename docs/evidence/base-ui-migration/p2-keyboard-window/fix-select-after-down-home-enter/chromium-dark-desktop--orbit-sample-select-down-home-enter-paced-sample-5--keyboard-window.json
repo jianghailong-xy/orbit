@@ -1,0 +1,47 @@
+{
+  "target": "orbit-sample",
+  "sequence": "select-down-home-enter",
+  "control": "select-down-enter-from-7",
+  "mode": "paced",
+  "run": 5,
+  "keys": [
+    "ArrowDown",
+    "Home",
+    "Enter"
+  ],
+  "from": "7 days",
+  "before": "7 days",
+  "after": "Never",
+  "result": "Never | list closed",
+  "listOpen": false,
+  "active": "combobox:Sample choice",
+  "keyLog": [
+    {
+      "key": "ArrowDown",
+      "t": 18.2,
+      "target": "combobox:Sample choice",
+      "trusted": true,
+      "focused": "combobox:Sample choice",
+      "listbox": false,
+      "highlighted": null
+    },
+    {
+      "key": "Home",
+      "t": 339.3,
+      "target": "option:7 days",
+      "trusted": true,
+      "focused": "option:7 days",
+      "listbox": true,
+      "highlighted": "7 days"
+    },
+    {
+      "key": "Enter",
+      "t": 650.2,
+      "target": "option:Never",
+      "trusted": true,
+      "focused": "option:Never",
+      "listbox": true,
+      "highlighted": "Never"
+    }
+  ]
+}

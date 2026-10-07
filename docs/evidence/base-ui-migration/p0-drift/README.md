@@ -189,14 +189,19 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 
 ## main 漂移参考层
 
-**位置**：[reference/registry.json](reference/registry.json) 和 `reference/screenshots/{project}/{name}.png`，共 121 张。
+**位置**：[reference/registry.json](reference/registry.json) 和 `reference/screenshots/{project}/{name}.png`，共 164 张。
 
 | 组 | 截图 | 张数 | mainCommits | 生成树（generatedFrom） |
 | --- | --- | ---: | --- | --- |
 | 会话列表行 | session-idle、session-streaming、session-composer-focus、session-attachment-menu、session-attachment-staged、notification-error、breakpoint-961-session（4 个桌面项目） | 28 | `918034e7…`、`f5bdd7fd…` | `f5bdd7fd3`（运行 full2-f5bdd7fd3） |
 | 项目页 | project-overview、project-graph（8 项目），project-graph-fullscreen、breakpoint-639/641-graph（桌面） | 28 | `93d3ec58…` | `93d3ec580`（full2-93d3ec580） |
 | 任务面板与设置 | task-detail、task-action-hover/focus/menu、task-share-dialog、settings、settings-saved（8 项目），breakpoint-599/601-dialog（桌面） | 64 | `4088d37e…` | `4088d37e6`（full2-4088d37e6） |
-| Wiki 961px 暗色 | breakpoint-961-wiki（chromium-dark-desktop） | 1 | `e64d0c72…` | `e64d0c72a`（m5-e64d0c72a） |
+| Wiki 961px 暗色 | breakpoint-961-wiki（chromium-dark-desktop）。第 2 批按第 6 条追加 main 提交并替换参考图，旧图在 git 历史里 | 1 | `e64d0c72…`、`6c4e0ac0…`、`2f9cc095…`、`a884fda3…` | `a884fda36`（full-maint-a884fda36）；第 1 批为 `e64d0c72a`（m5-e64d0c72a） |
+| 资料页（第 2 批，A6） | profile（8 项目），profile-validation（WebKit 桌面 2 个项目） | 10 | `d233a6cd…` | `d233a6cd0`（full-maint-d233a6cd0） |
+| 资料页，第 7 条例外（第 2 批，A6） | profile-validation（Chromium 4 个项目，WebKit 手机 2 个项目） | 6 | `d233a6cd…` | `d233a6cd0` 加 B1 修复 `3ec9cf83d`，即 `dcb5fd1bd`（full-maint-xfix-d233a6cd0），见 `migrationFix` |
+| Wiki 首页窄屏与 959px（第 2 批，A7、A8） | wiki-home、wiki-new-entry（手机 4 个项目），breakpoint-959-wiki（桌面 4 个项目） | 12 | `6c4e0ac0…`、`2f9cc095…` | `2f9cc095f`（full-maint-2f9cc095f） |
+| Wiki 目录抽屉（第 2 批，A8） | wiki-contents（手机 4 个项目） | 4 | `2f9cc095…` | `2f9cc095f`（full-maint-2f9cc095f） |
+| Wiki 首页桌面与 961px（第 2 批，A7、A8、A9） | wiki-home、wiki-new-entry（桌面 4 个项目），breakpoint-961-wiki（桌面 3 个项目，chromium-dark-desktop 见上面「Wiki 961px 暗色」） | 11 | `6c4e0ac0…`、`2f9cc095…`、`a884fda3…` | `a884fda36`（full-maint-a884fda36） |
 
 **每条登记的字段**：
 
@@ -211,13 +216,17 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 | `generatedFrom.run` | 生成运行的标签 |
 | `projectLine` | 吸收它的项目线提交 |
 | `group`、`change` | 所属组和归因编号 |
+| `migrationFix` | 只有第 7 条例外的条目才有：修复提交 `commit`、实际生成用的树 `generationTree`、迁移回归 `regression`、修复的 CONFIRM 判定 `decision`、隔离证明文件 `isolation` |
 
 **生成方式**：
 - 参考图来自在该 main 提交的树上用 P0 原测试和固定数据跑出的截图（[make-reference.py](tools/make-reference.py)），没有任何加工。
 - 这些 main 树都在 P2.3 晋升（`90e749e72`）之前，不含 B1。
 - 会话组的生成树 `f5bdd7fd3` 含 P1.1/P1.2 的晋升，项目页的 `93d3ec580` 含 P2.1 的晋升。这些晋升提交本身经过同样的运行，确认没有改变对应截图。
+- 第 2 批的生成树都在 P2.3 晋升之后，含 B1。B1 只改变设置页、资料页的成功提示胶囊。所以 profile-validation 中受 B1 影响的 6 张按第 7 条，在 X 加 B1 修复的树上生成，其余截图在 X 的树上生成，不受 B1 影响（见 [p0-drift-2](../p0-drift-2/README.md)）。
 
-**未登记**：B1 独有的 profile-validation 6 张，以及其余 125 张，仍然对照 P0.2。
+**未登记**：其余 88 张仍然对照 P0.2。
+
+**第 2 批**：归因、同环境证明和登记经过见 [p0-drift-2](../p0-drift-2/README.md)。
 
 ## 「已接受的迁移差异」层
 
@@ -290,6 +299,39 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 6. **main 再次改动已登记的页面**：
    - 按同一流程处理：在 `mainCommits` 末尾追加新提交，`generatedFrom` 改为新提交，参考图以单独提交替换，旧图保留在 git 历史里。
    - 若该截图在 `accepted/` 里也有登记，那条登记的 `replaces` 随之不再匹配，运行失败，直到按下节第 6 条第一种情况重新登记。
+7. **迁移回归已修复时的有界例外**（协调者 2026-10-07 授权，第 2 批 profile-validation 首次使用，见 [p0-drift-2](../p0-drift-2/README.md)）：第 4 条 (d) 第一种情况和第 5 条照旧适用，只有同时满足下面三条时例外：
+   - 含 X 的每一棵 main 树都含某个迁移回归 R：R 经晋升合并带入，没有被接受；
+   - R 已在项目线上由提交 F 修复；
+   - 协调者已对 F 所在任务的证据作出 CONFIRM 判定。
+
+   这时参考图可以在 X 的树上应用 F（cherry-pick）后生成，其余按第 4 条。另须附两项同环境、逐张的隔离证明：
+   - (i) X 的树与 X+F 的树之间，差异只在 R 影响的区域，像素数和形态与 R 的特征一致，其余像素逐字节相同；
+   - (ii) X 的 first-parent 前驱加 F 的树与 P0.2（或当时的期望）相比，这些截图逐字节相同，或只在已记录的噪声范围内。
+
+   这类条目在 registry 里多一个 `migrationFix` 字段，记录：
+   - F 的完整提交号 `commit`，实际生成用的 X+F 提交 `generationTree`，R 的说明 `regression`；
+   - F 的 CONFIRM 判定 `decision`：任务 id、证据版本号与摘要、证据文档；
+   - 隔离证明文件 `isolation`。
+
+   `generatedFrom.commit` 仍是 X。`expected-screenshots.mjs` 每次运行都校验这些字段，缺一项，整次运行失败。不满足这三条时仍按第 4、5 条：X 的树含未接受的迁移改动，该截图就不能登记。
+
+### 场景维护
+
+main 删掉了 P0 场景依赖的元素，使场景在截图前的等待或定位处失败时，可以最小限度地改这个场景的等待或定位条件：
+1. **只改那一处等待或定位**：改成同一页面上取代被删元素的内容。截图名、截取的页面和区域（P0 是整页截图）、截图比对、断言内容和容差都不变。
+2. **引用 main 提交**：注释和提交说明都写明删掉该元素的 main 提交。同环境运行要证明：该提交的 first-parent 前驱上原条件通过，该提交上原条件定位失败。
+3. **单独提交**：只改场景文件，不与登记或其他改动混在一起，可单独回退。
+4. **改后的截图照常归因、登记**：
+   - 维护后场景截到的截图按 main 漂移参考第 4 条归因；
+   - 参考图用维护后的场景生成，它与 P0 原测试只差这一处等待；
+   - 在该 main 提交之前的树上，原条件仍然成立，归因运行用原场景。
+5. **不属于场景维护的情况**：截图差异、断言失败、迁移造成的定位失败（例如迁移改了类名）都不属于场景维护。迁移批次按作业指导，同步维护归属本批的定位器。
+
+已做的场景维护：
+
+| 提交 | 场景 | 原条件 | 新条件 | 删掉原元素的 main 提交 | 截取 |
+| --- | --- | --- | --- | --- | --- |
+| `d2479173b` | wiki：`wiki-home` 截图前的等待 | `.wk-card`：首页第一张卡片，P0.2 时是 Principles 卡 | `.wk-pl-doc.topic`：取代卡片的话题文章行，首页的读取都完成后才画出 | `2f9cc095f` refactor(wiki): list topic articles on the Wiki home, drop status cards | 仍是 `/wiki/orbit` 首页的整页截图 `wiki-home.png`。之后的 `wiki-contents`、`wiki-new-entry` 截图和全部断言都没有改 |
 
 ### 已接受的迁移差异（`accepted/`）
 
@@ -432,7 +474,7 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 
 ```sh
 bash scripts/worktree-overlay.sh
-NO_COLOR=1 npm run test:ui-migration -w @orbit/web     # 现在：失败只有 B1 的 8 个
+NO_COLOR=1 npm run test:ui-migration -w @orbit/web     # 第 2 批之后：只剩 P3.2 待登记的 8 个 task 用例（见 p0-drift-2）
 npm run build -w @orbit/web && npm run test -w @orbit/web
 node docs/evidence/base-ui-migration/p0-drift/tools/validator-checks.mjs "$PWD" /tmp/p0-validator-checks
 ```

@@ -1,0 +1,20 @@
+{
+ "tip": {
+  "summary": "Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds",
+  "failed": []
+ },
+ "delivery": {
+  "summary": "Executed 5 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds",
+  "failed": [
+   "SharePanelCopyParityTests.testTheLinksPressesAreTheContractsAndCopiedIsTheDialogs",
+   "SharePanelCopyParityTests.testTurningOffAsksInTheContractsWords",
+   "TaskDetailCopyParityTests.testTheInputsWords"
+  ]
+ },
+ "onlyDelivery": [
+  "SharePanelCopyParityTests.testTheLinksPressesAreTheContractsAndCopiedIsTheDialogs",
+  "SharePanelCopyParityTests.testTurningOffAsksInTheContractsWords",
+  "TaskDetailCopyParityTests.testTheInputsWords"
+ ],
+ "onlyTip": []
+}
