@@ -432,11 +432,23 @@ describe('back from Google with a ticket', () => {
 });
 
 describe('back from Google with google_error', () => {
-  /** Every code the callback sends the browser back with (§4.1, §4.2) and the sentence it is shown as. */
+  /** Every code the start or the callback sends the browser back with (§4.1, §4.2) and the sentence it is shown as. */
   const failures: Array<[code: string, sentence: string]> = [
     [
       'GOOGLE_NOT_CONFIGURED',
       'Google sign-in is turned off on this Orbit server. Sign in with your email and password, or ask an administrator to turn it on.',
+    ],
+    [
+      'GOOGLE_RATE_LIMITED',
+      'Too many Google sign-ins from your network. Wait a minute, then continue with Google again.',
+    ],
+    [
+      'GOOGLE_SIGN_IN_BUSY',
+      'Too many Google sign-ins are in progress on this Orbit server. Wait a few minutes, then continue with Google again, or sign in with your password.',
+    ],
+    [
+      'GOOGLE_BAD_REQUEST',
+      "Orbit couldn't start Google sign-in from this page. Reload the page, then continue with Google again; if it keeps failing, sign in with your password.",
     ],
     [
       'GOOGLE_FLOW_EXPIRED',

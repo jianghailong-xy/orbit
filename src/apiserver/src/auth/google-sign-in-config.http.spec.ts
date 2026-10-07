@@ -172,6 +172,11 @@ async function assertStartRefuses(call: Awaited<ReturnType<typeof boot>>['call']
   assert.equal(stateless.status, 302, state);
   assert.equal(stateless.location, 'orbit://auth/google?error=GOOGLE_NOT_CONFIGURED', state);
 
+  // A state /start would not take is not handed back.
+  const unfit = await call('GET', `/api/auth/google/start?client=native&client_state=${'s'.repeat(513)}`);
+  assert.equal(unfit.status, 302, `${state}: ${unfit.status} ${unfit.text}`);
+  assert.equal(unfit.location, 'orbit://auth/google?error=GOOGLE_NOT_CONFIGURED', state);
+
   // No client, or one that is neither: there is nowhere to send the browser back to.
   for (const query of ['', '?client=ios', '?client=web&client=native']) {
     const refused = await call('GET', `/api/auth/google/start${query}`);
@@ -222,11 +227,11 @@ test('on: /auth/methods offers Google, and sign-up only under OPEN; /start no lo
   assert.deepEqual((await call('GET', '/api/auth/methods')).json, { password: true, google: true, googleSignup: true });
 
   // On, /start goes on to the flow (google-sign-in-flow.http.spec.ts): one without a challenge is
-  // refused for the challenge, not sent back GOOGLE_NOT_CONFIGURED.
+  // sent back for the challenge, GOOGLE_BAD_REQUEST, not GOOGLE_NOT_CONFIGURED.
   const start = await call('GET', '/api/auth/google/start?client=web');
-  assert.equal(start.status, 400, start.text);
-  assert.match(start.text, /code_challenge/);
-  assert.equal(start.location, null);
+  assert.equal(start.status, 302, start.text);
+  assert.equal(start.location, '/login?google_error=GOOGLE_BAD_REQUEST');
+  assert.equal(start.setCookie, null);
 });
 
 test('admin: GET and PUT /admin/sign-in/google save and read back the setting, keep the secret encrypted, and never answer it', async (t) => {

@@ -101,6 +101,10 @@
   `redirect_uri=${PUBLIC_ORIGIN}/api/auth/google/callback`、`scope=openid email profile`、`state`、`nonce`、
   `code_challenge`（Google 这一侧的 PKCE，与客户端那一对不是同一个）、`prompt=select_account`。
 - 未启用 Google：Web 302 回 `/login?google_error=GOOGLE_NOT_CONFIGURED`，原生回 `orbit://auth/google?error=…`。
+- 参数不合法（`code_challenge` 不是 S256 格式，或 `client_state` 超过 512 字符）、该 IP 超出限流、未完成的 flow
+  已达总量上限（7.4）时，也按 4.2 失败表 302 回跳而不回 JSON，错误码依次为 `GOOGLE_BAD_REQUEST`、
+  `GOOGLE_RATE_LIMITED`、`GOOGLE_SIGN_IN_BUSY`；这些回跳与上一条一样不设 cookie、不写库（连过期行也不清理），
+  原生端只在 `client_state` 合法时带回它；`client` 缺失或不是 `web` / `native` 时无处可回，仍回 400。
 
 ### 4.2 回调：`GET /api/auth/google/callback`
 
@@ -334,7 +338,8 @@ model SignInProvider {               // sign_in_provider，每个提供方一行
 
 - `/start` 与 `/exchange` 按 IP 限流，复用 `shared/public-surface.guard.ts` 的 `SharedRateLimiter`
   （按 `visitorAddress()`，即 nginx 给的 `X-Real-IP`）。
-- `/start` 每次删除已过期的 flow；未完成的 flow 设总量上限，超出时回 `503`，不无限写库。
+- `/start` 每次开 flow 前删除已过期的 flow；未完成的 flow 设总量上限，超出时拒绝（`/start` 按 4.1 回跳
+  `GOOGLE_SIGN_IN_BUSY`，`/link` 回 `503`），不无限写库。
 - 密码登录本身仍没有限流，这是既有缺口，不在本方案范围内。
 
 ## 8. 客户端
