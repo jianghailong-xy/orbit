@@ -1,0 +1,111 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<style>
+/* 本图板新增：落地行的“等因”三行（对照 OrbitKit 的 ProjectLandingRow：环 13pt、词 15/semibold、
+   数字 13 tabular、等因 13/1.45），以及详情 Sheet 里 Ahead 行的琥珀副行 */
+.mc .lrow { margin-top: 5px; }
+.mc .lrow .lr1 { display: flex; align-items: center; gap: 8px; }
+.mc .lrow .lr1 .w { font-size: 15px; font-weight: 600; color: var(--l2); }
+.mc .lrow .lr1 .s { margin-left: auto; font-size: 13px; color: var(--l2); }
+.mc .lrow .lr2 { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--l2);
+                 margin-top: 3px; font-variant-numeric: tabular-nums; }
+.mc .lrow .lr2 b { color: var(--label); font-weight: 600; }
+.mc .lrow .lr2 .s2 { margin-left: auto; }
+.mc .lrs { font-size: 13px; color: var(--l2); margin-top: 6px; line-height: 1.45; }
+.mc .lrs.amb { color: var(--amber-ink); }
+.kvr .v.amb { color: var(--amber-ink); font-size: 14px; }
+.mono { font-family: "DejaVu Sans Mono", monospace; font-size: 12.5px; }
+/* Queue Sheet 的行：环 mark + 名字/状态两行 + 右侧时长 */
+.qhead { font-size: 13.5px; color: var(--l2); margin: 2px 0 4px; }
+.qrow { display: flex; gap: 11px; padding: 11px 0 12px; border-bottom: .5px solid var(--sep); }
+.qrow .qm { width: 30px; height: 30px; border-radius: 50%; background: rgba(120,120,128,.12); display: flex; align-items: center; justify-content: center; flex: none; }
+.qrow .qm.run { background: rgba(62,105,246,.14); }
+.qrow .qb { flex: 1; min-width: 0; }
+.qrow .qa { display: flex; align-items: flex-start; gap: 6px; }
+.qrow .qa b { font-size: 15.5px; font-weight: 600; line-height: 1.3; flex: 1; min-width: 0; }
+.qrow .qa .tm { font-size: 13px; color: var(--l2); flex: none; font-variant-numeric: tabular-nums; padding-top: 1px; }
+.qrow .qs { font-size: 13.5px; color: var(--l2); margin-top: 2px; line-height: 1.45; }
+.qrow .qs.amb { color: var(--amber-ink); }
+.chip.you { background: var(--tint-bg); color: var(--tint); }
+</style>
+<script src="kit.js"></script>
+<body>
+<h1>合入 main 排着队时：这一行在等什么</h1>
+<p class="lede" style="max-width:1810px">现在的合入卡（①，10-07 01:42 截图同款）只说了 “Merge into main queued · Queued for 70m 55s”，下面一句 “Nothing to do — it lands on its own”。可 main 是一条<b>串行队列</b>：同一个仓库的 main 上同时只跑一个落地（J1），排在前面的可能是别的项目——它不结束，这一条哪也去不了。真正在等什么，数据都在服务端（claim 的那几个条件），只是没发出来。<br><b>方案：这一行写清在等谁（②③），点它打开 “Queue for main” 的队列列表——每条任务是什么、在跑还是排队、跑了多久（④）。</b>普通排队是灰的，前面那条超过认领租约（10 分钟）没有任何上报，才用琥珀色说“它可能卡住了”。数字全是真实队列：1 条在跑（Orbit Web 组件迁移，23:38 认领后没有上报），DeepSeek 这一条 00:31 入队，排在 4 条里的第 2 位。</p>
+<div class="row" id="figs"></div>
+<script>
+// ── 这一轮的真实数据 ────────────────────────────────────────
+const PROJ = 'DeepSeek Harness 首版后续改进';
+const HOLDER_PROJ = 'Orbit Web 组件迁移：Base UI + Orbit 自有组件';
+const HOLDER_TASK = '修复 D3：DeepSeek Harness 会话上的 EXECUTABLE 验收命令无法执行';
+const navReal = (sessions) => `<div class="nav"><div class="circ">${ic('chevl', 21, '#000', 2.4)}</div>
+<div class="ttl"><b>${PROJ}</b><span>Project · ${sessions} sessions</span></div><div class="circ">${ic('dots', 25, '#000', 1.7)}</div></div>`;
+
+// 合入卡 · queued（①现状 与 ②③方案 同一个骨架；现状没有位置、没有箭头、没有等因行）
+const cardQueued = ({ reason = '', amber = false, now = true } = {}) => `<div class="mc run"><div class="mh"><span class="tile" style="background:rgba(62,105,246,.16);color:var(--tint)">${ic('merge', 17, 'var(--tint)', 2.3)}</span><b>Merge into main queued</b></div>
+<div class="st">confirmed — queued to merge into main</div>
+<div class="lrow"><div class="lr1">${ic('ring', 13, 'var(--l2)', 2.4)}<span class="w">Merge to main</span><span class="s">queued</span></div>
+<div class="lr2"><span>Queued for <b>70m 55s</b></span><span class="s2">${now ? '2nd of 4 for main' : 'Updated just now'}</span>${now ? chev('var(--l3)', 12) : ''}</div>
+${reason ? `<div class="lrs ${amber ? 'amb' : ''}">${reason}</div>` : ''}</div>
+<div class="note">Nothing to do — it lands on its own if the re-check passes, and comes back here if it doesn’t.</div>
+<div class="foot" style="margin-top:10px"><span class="btn sec sm" style="margin-left:auto">Cancel</span></div></div>`;
+
+const page = (at, card) => phone(`${statusBar(at)}${navReal(6)}<div class="list">${progCard(3, 4, 0)}${card}${sh('Coordinator')}${mkRow(coordRow({ t: PROJ, eye: true, tm: 'just now', sub: 'Watching' }), 0)}</div>`);
+
+// ① 现在
+const a = page('01:42', cardQueued({ now: false }));
+
+// ② 方案 · 普通排队：前面是一条在正常跑的任务落地
+const b = page('01:42', cardQueued({
+  reason: `Waiting to merge: the landing of “${HOLDER_TASK}” is running on main first`,
+}));
+
+// ③ 方案 · 你这次的真实情形：前面那条 2h 3m 没有上报
+const c = page('01:42', cardQueued({
+  amber: true,
+  reason: `Waiting to merge: “${HOLDER_PROJ}” has not reported for 2h 3m — it may be stuck`,
+}));
+
+// ④ 方案 · 点这一行 → Queue Sheet：main 这条队列的任务列表和每条状态
+const qrow = ({ run = false, title, chips = '', right, sub, amber = false }) => `<div class="qrow">
+<div class="qm ${run ? 'run' : ''}">${ic('ring', 15, run ? 'var(--tint)' : 'var(--l2)', 2.4)}</div>
+<div class="qb"><div class="qa"><b>${title}</b>${chips}<span class="tm">${right}</span></div>
+<div class="qs ${amber ? 'amb' : ''}">${sub}</div></div></div>`;
+const s = `<div class="dimbg"></div><div class="sheet"><div class="grab"></div>
+<div class="sn">Queue for main<span class="x">${ic('x', 15, 'rgba(60,60,67,.75)', 2.6)}</span></div><div class="sb">
+<div class="qhead">1 running · 3 waiting · the order the queue takes them</div>
+${qrow({ run: true, title: '“' + HOLDER_PROJ + '”', right: '2h 3m',
+        sub: 'Merge into main · fetching · no report since 23:38 — it may be stuck', amber: true })}
+${qrow({ title: '“' + PROJ + '”', chips: '<span class="chip you">You</span>', right: '1h 10m',
+        sub: 'Merge into main · queued' })}
+${qrow({ title: '“Google 账号登录与开放注册”', chips: '<span class="chip">Automatic</span>', right: '1h 0m',
+        sub: 'Merge into main · queued' })}
+${qrow({ title: '“Runners 与 Providers 合并为 Infrastructure”', chips: '<span class="chip">Automatic</span>', right: '48m',
+        sub: 'Merge into main · queued' })}
+</div><div class="bar"><span class="btn sec">Cancel</span></div></div>`;
+const d = phone(`${statusBar('01:42')}${navReal(6)}<div class="list">${progCard(3, 4, 0)}${cardQueued()}</div>${s}`);
+
+document.getElementById('figs').innerHTML = [
+  fig('now', '① 现在', a, `<b>排队只有时长，没有原因</b><ol>
+<li>${n(1)}“Queued for 70m 55s” 是真排队：main 上一次只跑一个落地，前面的不结束，这条动不了。</li>
+<li>${n(2)}“Nothing to do — it lands on its own” 只在没人挡着时成立；前面那条卡住了，它也照样这么写。</li>
+<li>${n(3)}这一行点不动，卡里也没有第二个入口，详情里更没有 Queue 这一段。</li></ol>`),
+  fig('after', '② 方案 · 普通排队', b, `<b>行里说清在等谁</b><ol>
+<li>${n(1)}等因行：<span class="mono">Waiting to merge: the landing of “…” is running on main first</span> —— 和任务页上落地的等因同一套词（web 的 <code>LandTaskStatus</code>），三端一句话。</li>
+<li>${n(2)}右边 “2nd of 4 for main” 顶掉 “Updated just now”：排队时没有上报可看，位置才是读者要的。</li>
+<li>${n(3)}普通排队是灰的：不长于认领租约就只是等，不动声色。</li></ol>`),
+  fig('after', '③ 方案 · 头卡住了（真实）', c, `<b>超过租约没有上报，说实话并转琥珀</b><ol>
+<li>${n(1)}判据用的是平台自己的那个窗口：认领后 10 分钟没有任何上报（<code>INTEGRATION_CLAIM_STALE_MS</code>），等于“它可以被别的进程接管”的同一把尺。</li>
+<li>${n(2)}措辞只说事实（“has not reported for 2h 3m”），不下结论；用户 10-07 这条真实队列，头就是 23:38 认领后一直停在 fetching。</li>
+<li>${n(3)}这句话不该只有 iOS 有：服务端把它写成一个字段，web 的合入卡画同一句。</li></ol>`),
+  fig('after', '④ 方案 · 点开这一行 = 队列列表', d, `<b>点这条排队行 → “Queue for main”：队列里的每条任务和它的状态</b><ol>
+<li>${n(1)}顺序就是队列取活的顺序（入队先后）。每条一行：环（在跑的转、排队的静）+ 名字 + 状态行 + 右侧时长；在跑的那条是 fetching，排队的写 queued。</li>
+<li>${n(2)}超过 10 分钟没上报的那条，状态行转琥珀并说明（“no report since 23:38 — it may be stuck”）——你这次的真实队头。</li>
+<li>${n(3)}自己的那条带 <b>You</b> 标；Automatic 自动合入的带 <b>Automatic</b> 标；任务落地在列表里写作 “Landing · ‘任务名’ · rebasing”。自己的项目/任务可点进去，另一个账号的只说 “Another account’s merge into main”，不可点。</li>
+<li>${n(4)}合入详情（Details）里的 Queue 行也开这同一张表；Cancel 仍然只取消自己那条。</li></ol>`),
+].join('');
+
+// shot.sh 从 title 里读 SIZE
+document.title = `SIZE ${document.body.scrollWidth}x${document.body.scrollHeight}`;
+</script>
+</body></html>
