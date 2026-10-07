@@ -2372,4 +2372,8 @@ export const EXCLUDED_SOURCES: readonly ExcludedSource[] = [
     path: 'projects/project-contract-test-helper.ts',
     why: 'A PostgreSQL-spec fixture helper. It seeds a goal and one acceptance criterion so a fixture has a real completion contract, and is not reachable from an application module or HTTP route.',
   },
+  {
+    path: 'auth/tenant-isolation-fixtures.ts',
+    why: 'The tenant isolation census\'s fixtures: the accounts and every object they hold, written straight into their tables as each spec of their own writes them, for the census\'s two PostgreSQL specs to send across accounts. Imported by those specs alone, never by an application module or reachable from an HTTP route.',
+  },
 ];

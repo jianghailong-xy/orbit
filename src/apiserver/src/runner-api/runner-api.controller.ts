@@ -1457,13 +1457,13 @@ export class RunnerApiController {
   @Post('integration-jobs/:jobId/result')
   @HttpCode(200)
   async integrationJobResult(
-    @CurrentRunner() runner: { id: string },
+    @CurrentRunner() runner: { id: string; ownerId?: string },
     @Param('jobId', PublicIdPipe) jobId: string,
     @Body() body: IntegrationJobResultRequest,
   ): Promise<IntegrationJobResultResponse> {
     let applied: Awaited<ReturnType<IntegrationJobRelay['applyResult']>>;
     try {
-      applied = await this.integrationQueue().applyResult(jobId, runner.id, body);
+      applied = await this.integrationQueue().applyResult(jobId, runner.id, body, runner.ownerId);
     } catch (error) {
       throw integrationJobHttpError(error);
     }
@@ -2835,9 +2835,10 @@ export class RunnerApiController {
     // FOR UPDATE lock. A reclaim storm may call takeover-leases on the same session
     // hundreds of times per minute; each call would otherwise acquire a row lock that
     // starves the claim queue's FOR UPDATE SKIP LOCKED, preventing new PENDING
-    // sessions from ever being claimed.
-    const preflight = await this.prisma.session.findUnique({
-      where: { id: sessionId },
+    // sessions from ever being claimed. Read on this runner's sessions only, as the lock
+    // below is: a session of another runner is one this one has never heard of.
+    const preflight = await this.prisma.session.findFirst({
+      where: { id: sessionId, assignedRunnerId: runner.id },
       select: { inboxLeaseOwner: true, inboxLeaseGeneration: true, status: true, provider: true, providerBuiltin: true, ownerId: true },
     });
     const preflightRuntime = preflight ? await sessionExecRuntime(this.prisma, preflight) : undefined;
@@ -6432,7 +6433,7 @@ export class RunnerApiController {
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/worktrees-removable')
   async worktreesRemovable(
-    @CurrentRunner() runner: { id: string },
+    @CurrentRunner() runner: { id: string; ownerId?: string },
     @Body() dto: WorktreesRemovableRequest,
   ): Promise<WorktreesRemovableResponse> {
     const ids = (dto.ids ?? []).slice(0, 1000);
@@ -6442,6 +6443,10 @@ export class RunnerApiController {
       ? await this.prisma.session.findMany({
           where: {
             id: { in: valid },
+            // Only the runner's own account's sessions are kept: a checkout no session of that
+            // account names is leftover, whatever another account's session of that id is doing —
+            // and what another account's session is doing is not this runner's to learn.
+            ...(runner.ownerId !== undefined ? { ownerId: runner.ownerId } : {}),
             completedAt: null,
             archivedAt: null,
             deletedAt: null,
