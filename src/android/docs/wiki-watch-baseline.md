@@ -203,3 +203,20 @@ The Wiki run/entry examples come from `wiki-review-mode.fixture.json`; docs and 
 `src/android/scripts/wiki-watch-device-test.sh APP_APK TEST_APK EVIDENCE_DIR SERIAL|API29..API35` holds `/var/lib/orbit/android/ui.lock` for the whole run, installs both APKs, clears the app, sets `A12_FONT_SCALE`/`A12_NIGHT`, starts the fixture behind `adb reverse tcp:18770`, runs `WikiWatchDeviceTest` (11 journeys) and restores font, night mode and the reverse afterwards. It drives emulators only (`ro.kernel.qemu` is checked); `APInn` boots `orbit-ui-apiNN` on port 5556 inside the hold and shuts it down in cleanup. Each journey writes its identity (source SHA, link, login path), journal, captures and, on failure, its stack trace before the scenario closes.
 
 Only `aSpaceLinkOpensItsHomeThroughLoginAndRecreation` signs in on the login form (the link waits on the login across recreation, which is what it checks). The other journeys sign in with `AuthSession.login` before the Activity starts, and every journey signs out after its Activity is closed. `AuthSession` publishes SignedIn/SignedOut from its own thread; under the Compose test rule the effect dispatcher is an unconfined test dispatcher, so a live composition collecting that state can recompose on that thread (`CalledFromWrongThreadException`, then a `SlotWriter` crash while the half-applied composition is disposed). It was seen twice at dark/200% on emulator-5554 before this arrangement. The app's own dispatcher resumes on the main thread, so production is not exposed, but every device suite that signs in on the form under a Compose rule shares the hazard. A screenshot the starved device cannot take is retried; one still missing is counted in `result.txt` and leaves its semantics tree.
+
+## A12 live journeys on an isolated stack
+
+`src/android/scripts/a12-stack` (see its README) runs the apiserver and runner of `0f98546a5` (the merge above; the same server trees) on the host's loopback with their own PostgreSQL. It seeds them through the HTTP API alone and reads the server back after every write: an owner and a second account, a Manual space with owner-written entries, a fresh and a stale pending proposal from the agent door (the stack runner's token and a session it hosts), a run that Tiered applied, and a task with a NOTIFY_USER watch. `WikiWatchLiveTest` (ten journeys) opens each journey from its link on the emulator, acts through the screens, and reads the server back with the acting account's own token:
+
+- search finds an entry, and its page opens;
+- Review's Accept is recorded `accepted`;
+- Accept of the stale op is recorded `conflict`, the entry is unchanged, and the refusal shows;
+- Edit adds one revision;
+- the review mode changes, and changes back;
+- Pause, Resume and Stop;
+- the other account opens the owner's entry, space and watch: a 404 on the server, a withdrawn page, and none of the owner's titles;
+- Revert takes back the run.
+
+`cycle.sh` seeds the stack once per evidence directory and resumes a run that was cut off.
+
+On 2026-10-08 (emulator-5554, API 36), with the product tree of `1052be908`, 8 of 10 passed: the app said "Accepted" for the conflict, and the owner's space link opened the other account's own space. With the review-1 fix (`9095a638f`) merged, all 10 passed. The stack cannot show a maintenance-origin run or a plan draft: both need a model engine on a runner, and the stack's engine is a fake that calls none. It also says nothing about iOS, a physical phone or production.
