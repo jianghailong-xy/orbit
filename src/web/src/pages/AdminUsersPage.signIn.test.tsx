@@ -195,7 +195,7 @@ describe('Admin → Users · Google sign-in', { timeout: 60_000 }, () => {
     const googleOnly = [...dialog!.querySelectorAll<HTMLElement>('label.orbit-choice')].find((label) => label.textContent === GOOGLE_SIGN_IN_ONLY);
     await click(googleOnly?.querySelector('[role="checkbox"]'), GOOGLE_SIGN_IN_ONLY);
     expect(googleOnly?.querySelector('[role="checkbox"]')?.getAttribute('aria-checked')).toBe('true');
-    // The limit is stated where the administrator chooses it (§5.6): only Gmail or Workspace, and a
+    // The limit is stated where the administrator chooses it (§5.2): only Gmail or Workspace, and a
     // password for anyone else, because a passwordless account no Google account vouches for has no way in.
     expect(dialog?.textContent).toContain(GOOGLE_SIGN_IN_ONLY_HINT);
     expect(dialog?.textContent).toContain('must be a Gmail or Google Workspace address');

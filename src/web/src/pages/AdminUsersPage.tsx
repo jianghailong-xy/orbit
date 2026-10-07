@@ -42,7 +42,7 @@ interface CreateResult {
 export const GOOGLE_SIGN_IN_ONLY = 'Google sign-in only';
 export const UNLINK_GOOGLE = 'Unlink Google';
 /**
- * What the Add-user dialog says under **Google sign-in only** (design §5.6): only a Gmail or Google
+ * What the Add-user dialog says under **Google sign-in only** (design §5.2): only a Gmail or Google
  * Workspace address is one Google vouches for, so only that address can be linked by it. Any other
  * address leaves the account without a password and without a way in.
  */
