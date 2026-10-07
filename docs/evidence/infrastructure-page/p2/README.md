@@ -1,6 +1,8 @@
 # P2 Web：机器详情页复用引擎组件，改掉指向 Providers 的链接和文案 — 验证
 
-代码在提交 `39f906344`（基于项目分支 `d60daf95f`，即 P1 之后）。
+代码在提交 `39f906344`（写在项目分支 `d60daf95f`，即 P1 之后）。P3 先落地了，所以本任务以合并提交 `95a0df082` 并到项目分支
+tip `c8b92dd0d` 上：P3 把引擎健康状态抽成了 `engineHealthOf`，合并时 `MachineEngines` 改用它，删去 P2 自己那份相同的函数。
+下文的测试与截图对两者都成立；第 4 节有合并之后的运行。
 
 ## 1. 机器详情页的 Engines
 
@@ -83,17 +85,20 @@ web 全量（`npx vitest run --maxWorkers=2`，另写 JSON 报告），本分支
 | 本分支 `39f906344` | `bgj_b3db5013b276` | 342 个文件，4352 个用例全部通过 |
 | 干净 main `db69d833b`（`origin/main`，项目分支的基点；临时 git worktree） | `bgj_7d9676f2e840` | 340 个文件，4326 个用例全部通过 |
 | 对比：P1 的 [`compare.mjs`](../p1/compare.mjs) 按失败用例全名求差集 | 会话内命令 | 两边都没有失败用例；本分支独有的失败：无 |
+| 合并之后 `95a0df082`（含 P3） | `bgj_7870aab1d885` | 343 个文件，4361 个用例全部通过（多出的是 P3 的 `InfrastructurePage.overview.test.tsx`） |
+| 对比：干净 main 对合并之后 | 会话内命令 | 两边都没有失败用例；合并之后独有的失败：无 |
 
 两边文件之差：main 独有 P1 搬走的 `ProvidersPage.*.test.tsx`、`RunnersPage.test.tsx`，以及本次删除的 `RunnerEnginesSection.test.tsx`；
 本分支独有 P1 的 `InfrastructurePage.*.test.tsx`、`App.infrastructure.test.tsx`，以及本次新增的 `RunnerDetailPage.engines.test.tsx`。
 
-验收 1 的 grep：在 `39f906344` 上 `git grep -nE "/providers\?runner|Providers page" -- src/web/src ':!*.test.*'` 无输出（退出码 1）。
+验收 1 的 grep：在 `39f906344` 和合并之后的 `95a0df082` 上，`git grep -nE "/providers\?runner|Providers page" -- src/web/src ':!*.test.*'` 无输出（退出码 1）。
 
-OrbitKit（`swift:6.1` docker，`swift test` 全量）：`bgj_75a56ed904fe` 在 `f5efedeb3` 上 3257 个用例，0 失败（5 个 `PerfBaselineTests` 在 Linux 上跳过）。
+OrbitKit（`swift:6.1` docker，`swift test` 全量）：`bgj_75a56ed904fe` 在 `f5efedeb3` 上、`bgj_3ae796af1e27` 在合并之后的 `95a0df082` 上，
+都是 3257 个用例，0 失败（5 个 `PerfBaselineTests` 在 Linux 上跳过）。
 `f5efedeb3` 与 `39f906344` 只差 `NewSessionProviderHero.test.tsx`，没有 Swift 测试读它。此前一次运行（`bgj_e6f6c5ffaa27`）有 2 个失败：
 `PoolAccessCopyParityTests` 也读 web 的 `ProviderPoolPage.whoCanUseIt.test.tsx`，当时它还写着旧文案；同一提交里已改。
 
-`npm run build`（`tsc -b && vite build`）在本分支通过。
+`npm run build`（`tsc -b && vite build`）在 `39f906344` 和合并之后的 `95a0df082` 上都通过。
 
 ## 5. 有意没做，或留给后续阶段
 
