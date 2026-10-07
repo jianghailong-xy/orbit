@@ -165,10 +165,12 @@ tray_tap() { # Host-driven: a production process posts one entry, dies, and Syst
   # --no-restart attaches to that running process and skips the force-stop that would cancel the entry.
   instrument tray-entry io.orbitd.android.push.ColdTrayEntryTest --no-restart
   adbx -s "$serial" shell dumpsys notification --noredact > "$output/tray-notifications-before.txt"
-  if ! passed "$output/tray-entry.txt" || ! grep -q "pkg=$package" "$output/tray-notifications-before.txt"; then
-    echo 'tray_tap=NOT_RUN (no surviving entry from the attached production process)' >> "$output/tray.txt"
+  if grep -q 'commandError=true' "$output/tray-entry.txt"; then
+    echo 'tray_tap=NOT_RUN (this platform cannot attach an instrumentation with --no-restart)' >> "$output/tray.txt"
     return 1
   fi
+  passed "$output/tray-entry.txt"
+  grep -q "pkg=$package" "$output/tray-notifications-before.txt"
   local old_pid new_pid
   old_pid="$(adbx -s "$serial" shell pidof "$package" | tr -d '\r' || true)"
   adbx -s "$serial" shell am kill "$package"
