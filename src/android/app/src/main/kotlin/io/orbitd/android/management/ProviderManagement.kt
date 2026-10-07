@@ -121,8 +121,9 @@ private fun ProvidersOverview(api: ManagementApi, revision: Long, open: (OrbitRo
                     if (ProviderPools.runsCodex(pool)) {
                         val value = ProviderPools.codexPoolValue(pool, now)
                         Column(Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(pool.label, maxLines = 1); if (ProviderPools.isShared(pool)) Chip("SHARED", brand = true)
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(pool.label, Modifier.align(Alignment.CenterVertically), maxLines = 1)
+                                if (ProviderPools.isShared(pool)) Chip("SHARED", Modifier.align(Alignment.CenterVertically), brand = true)
                             }
                             Text(ProviderPools.codexPoolLine(pool, now), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                         }
@@ -155,10 +156,10 @@ internal fun poolTone(tone: String) = when (tone) {
 }
 
 @Composable
-private fun Chip(text: String, brand: Boolean = false) {
-    Text(text, Modifier.clip(RoundedCornerShape(5.dp)).background(if (brand) MaterialTheme.colorScheme.primary.copy(alpha = .12f) else Ink.muted.copy(alpha = .1f))
+private fun Chip(text: String, modifier: Modifier = Modifier, brand: Boolean = false) {
+    Text(text, modifier.clip(RoundedCornerShape(5.dp)).background(if (brand) MaterialTheme.colorScheme.primary.copy(alpha = .12f) else Ink.muted.copy(alpha = .1f))
         .padding(horizontal = 5.dp, vertical = 1.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-        color = if (brand) MaterialTheme.colorScheme.primary else Ink.muted)
+        color = if (brand) MaterialTheme.colorScheme.primary else Ink.muted, maxLines = 1, softWrap = false)
 }
 
 @Composable
@@ -291,14 +292,15 @@ private fun AccountPoolPage(pool: Pool, now: Long, pause: suspend (PoolMember, I
 
 @Composable
 private fun PoolHeader(title: String, count: Int?, trailing: String?, reading: PoolStatus?) {
-    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 20.dp), verticalAlignment = Alignment.Bottom,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(title, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold), color = Ink.muted)
-        count?.let { Text("$it", style = MaterialTheme.typography.labelMedium, color = Ink.muted.copy(alpha = .6f)) }
-        Spacer(Modifier.weight(1f))
-        trailing?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.muted, maxLines = 2) }
-        reading?.let { Text(it.label, style = MaterialTheme.typography.labelMedium.copy(fontWeight = if (it.tone == "warning") FontWeight.SemiBold else FontWeight.Normal),
-            color = poolTone(it.tone), maxLines = 1) }
+    // One line while it fits; at large text sizes the trailing words go under the title, still at the end.
+    FlowRow(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 20.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, Modifier.align(Alignment.Bottom), style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold), color = Ink.muted)
+        count?.let { Text("$it", Modifier.align(Alignment.Bottom), style = MaterialTheme.typography.labelMedium, color = Ink.muted.copy(alpha = .6f)) }
+        if (trailing != null || reading != null) FlowRow(Modifier.weight(1f).align(Alignment.Bottom), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End)) {
+            trailing?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.muted, maxLines = 2) }
+            reading?.let { Text(it.label, style = MaterialTheme.typography.labelMedium.copy(fontWeight = if (it.tone == "warning") FontWeight.SemiBold else FontWeight.Normal),
+                color = poolTone(it.tone), maxLines = 1, softWrap = false) }
+        }
     }
 }
 

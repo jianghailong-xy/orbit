@@ -81,7 +81,7 @@ fun AdminSettings(api: ManagementApi, revision: Long, userId: String?, open: (Or
                         open(OrbitRoute(Destination.SETTINGS, "admin", recordId = user.text("id")))
                     }.padding(vertical = 8.dp)) {
                         Text(user.str("name")?.takeIf { it.isNotEmpty() } ?: user.text("email"), maxLines = 1)
-                        Text("${user.text("email")} · ${user.text("role")}", style = MaterialTheme.typography.bodySmall, color = Ink.muted, maxLines = 1)
+                        Text("${user.text("email")} · ${user.text("role")}", style = MaterialTheme.typography.bodySmall, color = Ink.muted, maxLines = 2)
                     }
                 }
             }

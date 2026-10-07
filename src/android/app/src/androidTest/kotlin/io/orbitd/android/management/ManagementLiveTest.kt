@@ -270,6 +270,9 @@ class ManagementLiveTest {
         click(hasText("Keep Free") and hasClickAction()); click(hasText("Off") and hasClickAction(), scroll = false)
         eventually("server: minFreeDiskMb = null (Off)") { runner(owner)["minFreeDiskMb"].let { it == null || it is JsonNull } }
         capture("live-runner-after")
+        // The runner reports its engines on a check-in of its own, which can come after the steps above.
+        eventually("server: the runner reports its engines", timeoutMs = 180_000) { (runner(owner)["engines"] as? JsonArray)?.isNotEmpty() == true }
+        await("Claude Code", timeoutMs = 60_000)
         click(hasText("Claude Code") and hasClickAction()); await("Accounts")
         capture("live-runner-engine")
         val runnerId = runner(owner).s("id")!!

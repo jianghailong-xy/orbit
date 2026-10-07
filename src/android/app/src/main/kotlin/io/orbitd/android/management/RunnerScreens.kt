@@ -290,7 +290,7 @@ private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: 
         StatusDot(RunnerPage.presence(runner, now))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(name, Modifier.weight(1f), maxLines = 1)
+                Text(name, Modifier.weight(1f), maxLines = 2)
                 RunnerPage.slots(runner, now)?.let { (active, max) ->
                     Text(RunnerCopy.slots(active, max), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                     Spacer(Modifier.width(7.dp))

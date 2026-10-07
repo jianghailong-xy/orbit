@@ -322,8 +322,13 @@ class ManagementDeviceTest {
             val savedEnabled = shell("settings get secure accessibility_enabled").trim()
             val report = StringBuilder(); val problems = mutableListOf<String>()
             val manager = app.getSystemService(AccessibilityManager::class.java)
+            // TalkBack asks to post notifications the first time it starts, in a system dialog over the app. It is
+            // granted here for the run and put back after, so the dialog neither covers the pages nor is answered.
+            val talkBackPackage = talkBack.substringBefore('/')
+            val notifying = "android.permission.POST_NOTIFICATIONS: granted=true" in shell("dumpsys package $talkBackPackage")
             try {
-                report.appendLine("talkback_package=${shell("pm path ${talkBack.substringBefore('/')}").trim().ifEmpty { "not installed" }}")
+                report.appendLine("talkback_package=${shell("pm path $talkBackPackage").trim().ifEmpty { "not installed" }} notifications_granted_before=$notifying")
+                if (!notifying) shell("pm grant $talkBackPackage android.permission.POST_NOTIFICATIONS")
                 role = "ADMIN"; runnerOnline = true
                 signIn(server)
                 shell("settings put secure enabled_accessibility_services $talkBack")
@@ -333,8 +338,15 @@ class ManagementDeviceTest {
                 report.appendLine("talkback_enabled=${manager.isEnabled} touch_exploration=${manager.isTouchExplorationEnabled} " +
                     "services=${manager.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK).map { it.id }}")
                 assertTrue("TalkBack must be running for this check", manager.isTouchExplorationEnabled)
-                SystemClock.sleep(2_000)
-                report.appendLine("active window: ${automation.rootInActiveWindow?.packageName}")
+                val front = SystemClock.uptimeMillis() + 10_000
+                while (automation.rootInActiveWindow?.packageName != app.packageName && SystemClock.uptimeMillis() < front) SystemClock.sleep(250)
+                val active = automation.rootInActiveWindow
+                report.appendLine("active window: ${active?.packageName}")
+                if (active?.packageName != app.packageName) {
+                    capture("talkback-covered")
+                    fun texts(node: AccessibilityNodeInfo): List<String> = words(node) + (0 until node.childCount).mapNotNull(node::getChild).flatMap(::texts)
+                    fail("TalkBack's start left ${active?.packageName} over the app: ${active?.let(::texts)}")
+                }
                 // Between pages: semantics actions and the back key. On each page: TalkBack's gestures only.
                 compose.onAllNodesWithContentDescription("Open navigation").onFirst().performSemanticsAction(SemanticsActions.OnClick)
                 compose.onNode(hasText("Settings") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
@@ -376,6 +388,7 @@ class ManagementDeviceTest {
                 File(app.filesDir, "a13-management").apply { mkdirs() }.resolve("talkback-problems.txt").writeText(problems.joinToString("\n"))
                 assertTrue("TalkBack problems: $problems", problems.isEmpty())
             } finally {
+                if (!notifying) shell("pm revoke $talkBackPackage android.permission.POST_NOTIFICATIONS")
                 if (savedServices == "null" || savedServices.isBlank()) shell("settings delete secure enabled_accessibility_services")
                 else shell("settings put secure enabled_accessibility_services $savedServices")
                 if (savedEnabled == "null" || savedEnabled.isBlank()) shell("settings delete secure accessibility_enabled")

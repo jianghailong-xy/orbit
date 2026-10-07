@@ -26,6 +26,7 @@ object ManagementFixture {
     @Volatile var workspaceName = "Alpha"
     @Volatile var runnerAlias = "Old alias"
     @Volatile var runnerCapacity = 2
+    @Volatile var poolLabel = "Team Codex"
     @Volatile var theme = "system"
     @Volatile var shareFails = false
     @Volatile var accessFails = false
@@ -42,7 +43,7 @@ object ManagementFixture {
     @Volatile private var opened = 0
 
     fun reset() {
-        calls.clear(); workspaceName = "Alpha"; runnerAlias = "Old alias"; runnerCapacity = 2; theme = "system"; shareFails = false; accessFails = false
+        calls.clear(); workspaceName = "Alpha"; runnerAlias = "Old alias"; runnerCapacity = 2; poolLabel = "Team Codex"; theme = "system"; shareFails = false; accessFails = false
         viewerRole = "ADMIN"; viewerCreates = true; membersCanAdd = false; membersCanAddAccounts = false; loginState = "ACTIVE"
         secondRunner = false; runnerOrder = listOf(RUNNER, RUNNER_TWO)
         drop = CompletableDeferred(); opened = 0
@@ -82,8 +83,8 @@ object ManagementFixture {
     private fun link() = """{"id":"L1","token":"fixture-token","kind":"SESSION","state":"ACTIVE","root":{"id":"$SESSION","title":"Fixture session"},
         "include":{"toolOutput":true},"viewCount":0}"""
     private fun login() = """{"state":"$loginState","email":"me@example.test","plan":"plus","fingerprint":"…AB12","userId":"$ME","next":true}"""
-    private fun pools() = """[{"id":"$POOL","slug":"team-codex","label":"Team Codex","engine":"codex","logins":[${login()}]}]"""
-    private fun access() = """{"id":"$POOL","slug":"team-codex","label":"Team Codex","engine":"codex","shared":false,"logins":[${login()}],
+    private fun pools() = """[{"id":"$POOL","slug":"team-codex","label":"$poolLabel","engine":"codex","logins":[${login()}]}]"""
+    private fun access() = """{"id":"$POOL","slug":"team-codex","label":"$poolLabel","engine":"codex","shared":false,"logins":[${login()}],
         "membersCanAdd":$membersCanAdd,"membersCanAddAccounts":$membersCanAddAccounts,"ownKeyFirst":false,"viewerRole":"$viewerRole",
         "people":[{"userId":"$ME","name":"Fixture","role":"$viewerRole","creator":$viewerCreates,"you":true,"keys":1,"sessions":1},
           {"userId":"$OTHER","name":"Owner Two","role":"${if (viewerCreates) "MEMBER" else "ADMIN"}","creator":${!viewerCreates},"you":false,"keys":0,"sessions":0}],
@@ -124,6 +125,7 @@ object ManagementFixture {
                 else -> ok(link())
             }
             "providers/pools" -> ok(pools())
+            "share-links" -> ok("""{"links":[${link()}]}""")
             "providers/shared-pools" -> ok("[]")
             "providers/shared-pools/$POOL" -> if (accessFails) fail(503, "pool read failed") else ok(access())
             else -> ok("[]")

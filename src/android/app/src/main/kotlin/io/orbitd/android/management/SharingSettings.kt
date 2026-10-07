@@ -212,7 +212,8 @@ fun SharingSettings(api: ManagementApi, revision: Long) {
                             Text(link.obj("root")?.str("title") ?: ShareCopy.kindWord(link.text("kind")), maxLines = 2)
                             Text(ShareCopy.whereLine(link), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                             Text(ShareCopy.viewsLine(link.int("viewCount") ?: 0, link.str("lastViewedAt"), now), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            // At large text sizes a button that no longer fits goes to the next line whole.
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 if (link.text("state") == "ACTIVE") {
                                     val url = sharingPublicUrl(api.handle.account.server, link.text("token"))
                                     TextButton(onClick = { copyText(context, "Public link", url); notice.show("Link copied") }) { Text("Copy Link") }
@@ -328,7 +329,7 @@ fun ShareResourcePanel(api: ManagementApi, revision: Long, kind: String, id: Str
         link?.let { current ->
             val url = sharingPublicUrl(api.handle.account.server, current.text("token"))
             SelectionContainer { Text(url, style = MaterialTheme.typography.bodySmall) }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { copyText(context, "Public link", url); copied = true }) { Text(if (copied) "Copied" else "Copy Link") }
                 OutlinedButton(onClick = { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain")
                     .putExtra(Intent.EXTRA_TEXT, url), null)) }) { Text("Share Link…") }

@@ -2,13 +2,18 @@ package io.orbitd.android.management
 
 import android.content.ComponentName
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.Density
 import io.orbitd.android.core.auth.AuthState
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
@@ -21,6 +26,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /** The pool page and the share panel over the controlled server: what they say after a failed read, and what they offer each role. */
 @RunWith(RobolectricTestRunner::class)
@@ -134,5 +140,42 @@ class ManagementPanelTest {
         compose.onNodeWithText("share read failed", substring = true).assertExists()
         compose.onNode(hasText("Retry") and hasClickAction()).assertExists()
         compose.onAllNodes(hasText("Only you") and isSelectable() and isEnabled()).assertCountEquals(0)
+    }
+
+    /**
+     * At twice the font size (and with a long pool name) a button or a chip keeps its words on one line: what does not
+     * fit beside the others moves down whole. Seen on the emulator at 200%: Turn off one letter per line, Share Link…
+     * broken, the SHARED chip upright. Real text measurement needs Robolectric's native graphics.
+     */
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE) fun atTwiceTheFontSizeNoButtonOrChipBreaksItsWords() {
+        val api = api()
+        fixture.poolLabel = "Team Codex for the whole studio"
+        var page by mutableStateOf("links")
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale = 2f)) {
+                when (page) {
+                    "links" -> SharingSettings(api, revision)
+                    "share" -> ShareResourcePanel(api, revision, "SESSION", fixture.SESSION)
+                    else -> ProviderManagement(api, revision, null, {}, {})
+                }
+            }
+        }
+        val broken = mutableListOf<String>()
+        await("Turn off"); listOf("Copy Link", "Share Link…", "Turn off").forEach { broken += lines(it) }
+        page = "share"; await("Tool calls and output"); listOf("Copy Link", "Share Link…").forEach { broken += lines(it) }
+        page = "providers"; await("SHARED"); broken += lines("SHARED")
+        assertEquals("Broken across lines at 200%", emptyList<String>(), broken)
+    }
+
+    /** "<text>: N lines" for each place [text] is drawn on more than one line. */
+    private fun lines(text: String): List<String> {
+        compose.waitForIdle()
+        val nodes = compose.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes()
+        assertTrue("\"$text\" is shown", nodes.isNotEmpty())
+        return nodes.mapNotNull { node ->
+            val layout = mutableListOf<TextLayoutResult>()
+            node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(layout)
+            layout.firstOrNull()?.lineCount?.takeIf { it > 1 }?.let { "$text: $it lines" }
+        }
     }
 }
