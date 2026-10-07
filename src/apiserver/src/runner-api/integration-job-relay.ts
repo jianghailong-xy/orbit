@@ -11,7 +11,6 @@ import {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  DEFAULT_CHECK_TIMEOUT_SECONDS,
   INTEGRATION_CLAIM_STALE_MS,
   INTEGRATION_JOBS_PER_HEARTBEAT,
   INTEGRATION_JOB_CLAIM,
@@ -21,6 +20,7 @@ import {
   MAX_CHECK_OUTPUT_TAIL,
   PROMOTION_AUTOMATIC_LAND,
   checkSawTheFinishedBranch,
+  checksFor,
   integrationDedupeKey,
   integrationItemTitle,
   isTerminalJobState,
@@ -256,57 +256,6 @@ export async function dispatchIntegrationJobs(
     });
   }
   return commands;
-}
-
-/**
- * The commands to run on the combined tree (§2.4 J-S5), in the order a person would run them: the
- * task's own acceptance first, because a task that cannot pass its own criterion on the merged tree
- * is the narrower failure and the one whose owner is obvious.
- *
- * A task with no acceptance command contributes none. That is not a gap: an EVIDENCE_JUDGMENT or
- * OWNER_CONFIRMED task was settled by somebody looking at it, and there is no command to re-run.
- *
- * ONE GENERATION MAY SKIP ITS CHECK. `integration_skip_merge_check` queues a landing with the merge
- * check NOT RUN, because the account owner agreed the check is what is red rather than the delivery
- * (§2.4 J-S5, 0393) — so no MERGE_CHECK spec is built and the runner's CHECK phase does not happen
- * at all. The task's own acceptance is deliberately NOT skipped with it: the check the owner was
- * asked about is the project's, and a task whose own criterion cannot pass on the combined tree is a
- * statement about that task that no approval here chose to waive. This is the only place a check
- * disappears, and it disappears for the job whose row says so — the next generation is queued with
- * the flag false and is handed its check like any other.
- */
-export function checksFor(row: ClaimedRow): IntegrationCheckSpec[] {
-  const checks: IntegrationCheckSpec[] = [];
-  // Which checks a job runs is decided by WHAT IT IS PUTTING WHERE (§3.4 M-S3). A landing on the
-  // project branch runs the task's own acceptance on the combined tree, and so does a `TASK_BRANCH`
-  // promotion — it is one task's work arriving on the upstream, and the task's acceptance command is
-  // the criterion the whole thing was judged by. A `PROJECT_BRANCH` promotion runs the project's
-  // merge check and nothing else: every task it carries already passed its own acceptance on the
-  // line, and the session the job names belongs to one of those tasks only so the queue can find a
-  // checkout to work in — the job itself names no task, which is why `row.acceptanceCommand` here is
-  // that session's task's and not the promotion's.
-  const taskAcceptanceApplies = row.kind === 'LAND_TASK' || row.promotionSourceKind === 'TASK_BRANCH';
-  if (taskAcceptanceApplies && row.acceptanceCommand && row.acceptanceExpectedExitCode != null) {
-    checks.push({
-      name: 'TASK_ACCEPTANCE',
-      command: row.acceptanceCommand,
-      expectedExitCode: row.acceptanceExpectedExitCode,
-      timeoutSeconds: row.acceptanceTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS,
-    });
-  }
-  // The kind is checked as well as the flag even though 0393's CHECK makes the combination
-  // impossible: what skips a check is one task's landing onto the project's own branch, and a row
-  // that arrived saying otherwise — a hand-written fixture, a build ahead of the migration — keeps
-  // the check it was queued for rather than landing unchecked.
-  if (row.mergeCheckCommand && !(row.kind === 'LAND_TASK' && row.skipMergeCheck)) {
-    checks.push({
-      name: 'MERGE_CHECK',
-      command: row.mergeCheckCommand,
-      expectedExitCode: 0,
-      timeoutSeconds: row.mergeCheckTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS,
-    });
-  }
-  return checks;
 }
 
 /**
