@@ -159,7 +159,6 @@ final class WikiCopyParityTests: XCTestCase {
             ("WIKI_TAB_ADD", WikiCopy.tabAdd),
             ("WIKI_TAB_AMEND", WikiCopy.tabAmend),
             ("WIKI_TAB_RETIRE", WikiCopy.tabRetire),
-            ("WIKI_NO_PRINCIPLES", WikiCopy.noPrinciples),
             ("WIKI_NO_REVIEW", WikiCopy.noReview),
             ("WIKI_NO_CHANGES", WikiCopy.noChanges),
             ("WIKI_NO_DECISIONS", WikiCopy.noDecisions),
@@ -413,54 +412,99 @@ final class WikiCopyParityTests: XCTestCase {
 
     // MARK: the home page
 
-    /// The web phone draws one column (mock 12): the Review bar first (the one block that asks for
-    /// anything), then the main column — Principles, Recent decisions — then the rest of the right
-    /// column, Recently changed and Agents used the wiki; the right column's Review card is the bar.
-    /// iOS draws the same blocks in the same order, its banner where the web phone's bar is. The
-    /// topics are no band at either end: they are the directory (the web's column and drawer, the
-    /// native Contents sheet).
+    /// The home under its head, top to bottom (design §12.3.1, mocks 30 ③, 31 ① ③): the line that says what
+    /// the space holds, the search, the principles when there are any, the documents by category, then Browse
+    /// by category · A–Z index. Three places hold the web phone's order together — `WikiPage.tsx` draws the
+    /// head, the line and the search, `WikiHome.tsx` the rest, and index.css's phone rules keep them one
+    /// column in that order — and iOS draws `WikiLogic.HomeBand` in the same one. No block says how the wiki
+    /// is kept: the status row, Review, the plan, the decisions, the changes and the agents' use are Activity's.
     func testTheHomeBandsAreTheWebPhonesInItsOrder() throws {
+        let page = try source(Self.page)
+        let frame = try slice(page, from: "function WikiFrame(", to: "function WikiHeadSpace(")
+        assertOrder(frame, ["<h1 className=\"page-title\">{WIKI_TITLE}</h1>",
+                            "{space && (home || activity) && <WikiHomeState spaceId={space.id} />}",
+                            "<div className=\"wk-search\" role=\"search\">",
+                            "{!home && !activity && <WikiStatusRow space={space} />}",
+                            "<div className={`wk-layout${home ? ' home' : ''}`}>"], "the web's head, line and search")
         let home = try source(Self.home)
-        let columns = try slice(home, from: "<div className=\"wk-cols\">", to: "<UsageCard space={space} />")
-        let main = try slice(columns, from: "<div className=\"wk-col\">", to: "</div> <div className=\"wk-col\">")
-        assertOrder(main, ["title={WIKI_PRINCIPLES}", "title={WIKI_RECENT_DECISIONS}"], "the main column")
-        XCTAssertFalse(home.contains("title={WIKI_TOPICS}"), "the Topics grid is the directory now")
-        let side = try slice(columns, from: "</div> <div className=\"wk-col\">", to: "<UsageCard space={space} />")
-        assertOrder(side, ["<ReviewCard", "title={WIKI_RECENTLY_CHANGED}", "<UsageCard"], "the right column")
-        assertSays(home, "title={WIKI_REVIEW_TITLE}", in: Self.home)
-        assertSays(home, "className=\"wk-review-card\"", in: Self.home)
-        assertSays(home, "<WikiCard title={WIKI_AGENTS_USED} hint={WIKI_AGENTS_USED_HINT}>", in: Self.home)
-        // The bar leads the page, ahead of the columns, and says what the native banner says.
-        assertOrder(home, ["<Link className=\"wk-banner\" to={WIKI_REVIEW_PATH}>",
-                           "{wikiProposalsToReview(pending.length)}", "<div className=\"wk-cols\">"], "the phone's bar")
-
-        // The phone rule that makes that one column: the bar shown, the card hidden, the two columns
-        // stacked in their own order.
+        let body = try slice(home, from: "export function WikiHome(", to: "export function WikiHomeState(")
+        assertOrder(body, ["{principles.length > 0 && <HomePrinciples", "<HomeSkeleton />", "<HomeCategory key={category.key}",
+                           "<HomeTopics key={group.key}", "<HomeNewSpace", "<div className=\"wk-home-more\">",
+                           "{WIKI_BROWSE}", "{WIKI_AZ_INDEX}"], "the web's home")
+        for gone in ["wk-cols", "<ReviewCard", "WIKI_RECENT_DECISIONS", "WIKI_RECENTLY_CHANGED", "<UsageCard", "wk-banner"] {
+            XCTAssertFalse(body.contains(gone), "the home draws \(gone) again: that is Activity's")
+        }
+        // A phone: one column — the head, the line under it (no rule moves it from there), the search, then
+        // the home, which ends on Browse · A–Z; the directory is the Contents drawer.
         let css = try source(Self.css)
         let phone = try slice(css, from: "@media (max-width: 960px) { .wk-page { display: flex; flex-direction: column; }",
                               to: ".wk-art-page .t-title, .wk-browse-page .t-title")
-        for rule in [".wk-banner { display: flex; }", ".wk-review-card { display: none; }",
-                     ".wk-cols { display: flex; flex-direction: column; gap: 16px; }"] {
+        for rule in [".wk-page > .wk-title-row { order: 0; }", ".wk-page > .wk-search { order: 2;",
+                     ".wk-page > .wk-layout, .wk-page > .wk-body { order: 3; }", ".wk-home > .wk-home-more { display: flex; }",
+                     ".wk-dir-col { display: none; }"] {
             assertSays(phone, rule, in: Self.css)
         }
-        let webPhone = [WikiCopy.reviewTitle, WikiCopy.principles, WikiCopy.recentDecisions,
-                        WikiCopy.recentlyChanged, WikiCopy.agentsUsed]
-        let native = WikiLogic.HomeBand.allCases.filter { $0 != .search }
-            .map { $0 == .reviewBanner ? WikiCopy.reviewTitle : ($0.title ?? "") }
-        XCTAssertEqual(native, webPhone, "the native bands are the web phone's, block for block")
+        XCTAssertFalse(css.contains(".wk-home-state { order"), "the line stays where the page draws it: under the head")
+        assertSays(css, ".wk-home-more { display: none;", in: Self.css)
+        XCTAssertEqual(WikiLogic.HomeBand.allCases, [.state, .search, .principles, .documents, .more],
+                       "the native bands are the web phone's, block for block")
+        XCTAssertEqual(WikiLogic.HomeBand.allCases.compactMap(\.title), [WikiCopy.principles])
+    }
 
-        // The Review card counts the space on screen; the sidebar's row counts every space.
-        assertSays(home, "wikiReviewQuery(space.id)", in: Self.home)
-        // The head: the title, the search and the status row, which a phone draws status line first —
-        // the native header's title and status line, then the search band.
-        let page = try source(Self.page)
-        assertOrder(page, ["<h1 className=\"page-title\">{WIKI_TITLE}</h1>", "<div className=\"wk-search\" role=\"search\">",
-                           "<div className=\"project-integration wk-status-row\">"], "the web's head")
-        for rule in [".wk-page > .wk-status-row { order: 1;", ".wk-page > .wk-search { order: 2;",
-                     ".wk-status-review { display: none; }"] {
-            assertSays(phone, rule, in: Self.css)
+    /// What each band draws of what the home read — the web's branches, the native `homeDocuments` and
+    /// `homeLine`: grey bars while the first read is out; the confirmed plan's documents; before a plan, the
+    /// topic articles; else a new space's card, or nothing once maintenance is set up. Browse · A–Z ends the
+    /// home only once something is listed.
+    func testTheHomeDrawsWhatItReadAsTheWebDoes() throws {
+        let home = try source(Self.home)
+        assertSays(home, "loading: docs.isPending || (!byDocs && articles.isPending),", in: Self.home)
+        assertSays(home, "const listed = home.directory !== null || home.topics > 0;", in: Self.home)
+        assertSays(home, "!space.settings?.maintenance?.enabled && <HomeNewSpace spaceSlug={space.slug} />", in: Self.home)
+        assertSays(home, "{!home.loading && listed && (", in: Self.home)
+        assertSays(home, "{home.loading ? <span className=\"wk-sk\" aria-hidden=\"true\" /> : wikiHomeLine(home.directory, home.topics)}",
+                   in: Self.home)
+        assertSays(home, "<p>{WIKI_NO_DOCUMENTS_NOTE}</p> <Link to={wikiSettingsPath(spaceSlug)}>{WIKI_PLAN_SET_UP} ›</Link>",
+                   in: Self.home)
+
+        let plan = try JSONDecoder().decode(WikiDocsDirectory.self, from: Data(#"""
+            {"spaceId":"s","plan":{"version":13,"confirmedAt":"2026-10-01T00:00:00.000Z"},"docs":{"total":3,"written":1},
+             "categories":[{"key":"overview","number":1,"title":"产品概览与架构","docs":[
+               {"slug":"product","number":"1.1","title":"产品定位与核心能力","written":true,"updatedAt":"2026-10-06T08:00:00.000Z",
+                "lead":"Orbit 是自托管的 coding agent 控制台。"},
+               {"slug":"deploy","number":"1.2","title":"自部署与首次运行","written":false}]},
+              {"key":"runners","number":4,"title":"Runner 与运行时","docs":[{"slug":"runner","number":"4.1","title":"Runner 注册与排障","written":false}]},
+              {"key":"empty","number":5,"title":"Nothing yet","docs":[]}]}
+            """#.utf8))
+        let articles = try JSONDecoder().decode(WikiArticleDirectory.self, from: Data(#"""
+            {"spaceId":"s","categories":[{"key":"platform","title":"Platform core","topics":[
+               {"slug":"tasks","title":"任务与派发"},{"slug":"sessions","title":"会话"}]}],"uncategorized":[]}
+            """#.utf8))
+        let none = try JSONDecoder().decode(WikiArticleDirectory.self, from: Data(#"{"categories":[],"uncategorized":[]}"#.utf8))
+        let unplanned = try JSONDecoder().decode(WikiDocsDirectory.self, from: Data(#"{"plan":null,"docs":null,"categories":[]}"#.utf8))
+
+        XCTAssertEqual(WikiLogic.homeDocuments(docs: plan, articles: articles, loading: true, maintenance: false, seen: 0), .loading)
+        XCTAssertNil(WikiLogic.homeLine(docs: plan, articles: articles, loading: true))
+        guard case .categories(let categories) = WikiLogic.homeDocuments(docs: plan, articles: articles, loading: false,
+                                                                          maintenance: false, seen: 0) else {
+            return XCTFail("a confirmed plan's home lists its documents")
         }
-        XCTAssertEqual(WikiLogic.HomeBand.allCases.first, .search)
+        XCTAssertEqual(categories.map(\.number), [1, 4], "a category with no document is left out")
+        XCTAssertEqual(categories.map(WikiDocLogic.notWrittenRow), ["+1 not written yet", "1 document · Not written yet"])
+        XCTAssertEqual(WikiLogic.homeLine(docs: plan, articles: articles, loading: false), "3 documents · 1 written")
+
+        let topics = WikiLogic.homeDocuments(docs: unplanned, articles: articles, loading: false, maintenance: false, seen: 0)
+        XCTAssertEqual(topics, .topics(WikiArticleLogic.directoryGroups(articles)), "before a plan: the topic articles")
+        XCTAssertTrue(topics.listed)
+        XCTAssertEqual(WikiLogic.homeLine(docs: unplanned, articles: articles, loading: false), "2 articles")
+
+        XCTAssertEqual(WikiLogic.homeDocuments(docs: unplanned, articles: none, loading: false, maintenance: false, seen: 0), .newSpace)
+        XCTAssertEqual(WikiLogic.homeDocuments(docs: nil, articles: nil, loading: false, maintenance: true, seen: 0), .nothing,
+                       "maintenance set up: the line says No documents yet, and nothing more")
+        XCTAssertFalse(WikiLogic.HomeDocuments.newSpace.listed)
+        XCTAssertEqual(WikiLogic.homeLine(docs: unplanned, articles: none, loading: false), WikiCopy.noDocuments)
+        XCTAssertEqual(WikiDocCopy.noDocumentsNote,
+                       "This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space.")
+        XCTAssertEqual(WikiPlanCopy.setUp, "Set up maintenance")
     }
 
     /// The home page's rows are the web's: principles oldest recorded first, the four newest
@@ -485,11 +529,12 @@ final class WikiCopyParityTests: XCTestCase {
     }
 
     /// Principles and Recent decisions read their own kind at both ends, the same number of each — never
-    /// picked out of the newest 200 entries of every kind — and an empty Principles band speaks for the
-    /// principles, not for the whole space.
+    /// picked out of the newest 200 entries of every kind — and with no principle the home draws no band and
+    /// says nothing of them (mock 31 ③); with some, the first three, then `All N ›`.
     func testTheHomeReadsItsBandsByKind() throws {
         let home = try source(Self.home)
-        assertSays(home, "const PRINCIPLES_READ = \(WikiHomeContent.principlesRead);", in: Self.home)
+        assertSays(home, "const PRINCIPLES_READ = \(WikiLogic.principlesRead);", in: Self.home)
+        assertSays(home, "const PRINCIPLES_SHOWN = \(WikiLogic.principlesShown);", in: Self.home)
         assertSays(home, "const RECENT_DECISIONS = \(WikiHomeContent.recentDecisionCount);", in: Self.home)
         assertSays(home, "useQuery(wikiEntriesOfKindQuery(space.id, 'principle', PRINCIPLES_READ))", in: Self.home)
         assertSays(home, "wikiEntriesOfKind(principleRead.data ?? [], 'principle')", in: Self.home)
@@ -498,8 +543,30 @@ final class WikiCopyParityTests: XCTestCase {
         let activity = try source(Self.activity)
         assertSays(activity, "useQuery(wikiEntriesOfKindQuery(space.id, 'decision', RECENT_DECISIONS))", in: Self.activity)
         assertSays(activity, "wikiEntriesOfKind(decisionRead.data ?? [], 'decision')", in: Self.activity)
-        assertSays(home, "<WikiEmpty>{WIKI_NO_PRINCIPLES}</WikiEmpty>", in: Self.home)
+        assertSays(home, "{principles.length > 0 && <HomePrinciples", in: Self.home)
+        XCTAssertFalse(home.contains("WIKI_NO_PRINCIPLES"), "no principle, no band — and nothing said of them")
         XCTAssertFalse(home.contains("WIKI_NO_ENTRIES"), "the home no longer says the space holds nothing")
+        // Oldest recorded first, the first three a title a row with its day, then the way to all of them.
+        assertSays(home, "(a, b) => Date.parse(a.recordedAt) - Date.parse(b.recordedAt),", in: Self.home)
+        assertSays(home, "{!all && principles.length > PRINCIPLES_SHOWN && (", in: Self.home)
+        assertSays(home, "{wikiAllPrinciples(principles.length)}", in: Self.home)
+        assertSays(home, "<WikiTrustBadge trust=\"owner\" />", in: Self.home)
+        assertSays(home, "fresh={wikiChangedSince([entry], seen).length > 0}", in: Self.home)
+        assertSays(home, "end={<span className=\"d\">{wikiShortDay(entry.validFrom)}</span>}", in: Self.home)
+        let lib = try source(Self.lib)
+        assertSays(lib, "wikiAllPrinciples = (count: number): string => `All ${count} ›`;", in: Self.lib)
+        assertSays(lib, "return `${at.getMonth() + 1}/${at.getDate()}`;", in: Self.lib)
+        XCTAssertEqual(WikiCopy.allPrinciples(6), "All 6 ›")
+        let utc = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        XCTAssertEqual(WikiLogic.shortDay("2026-09-06T12:00:00.000Z", timeZone: utc), "9/6")
+        XCTAssertEqual(WikiLogic.shortDay("2026-10-19T12:00:00.000Z", timeZone: utc), "10/19")
+        XCTAssertNil(WikiLogic.shortDay("not a day", timeZone: utc))
+        let at = { (id: String, day: String) in
+            WikiEntry(id: id, kind: .principle, trust: .owner, title: id, validFrom: day, recordedAt: day)
+        }
+        XCTAssertEqual(WikiLogic.principles([at("b", "2026-09-19T00:00:00.000Z"), at("a", "2026-09-06T00:00:00.000Z"),
+                                             at("c", "2026-09-19T00:00:00.000Z")]).map(\.id), ["a", "b", "c"],
+                       "oldest first, a tie in the server's order")
         let queries = try source("src/web/src/lib/queries.ts")
         assertSays(queries, "/entries?kind=${kind}&limit=${limit}`", in: "src/web/src/lib/queries.ts")
     }

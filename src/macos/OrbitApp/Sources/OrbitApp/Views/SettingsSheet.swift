@@ -1245,9 +1245,8 @@ private struct AccessTokensSettingsPage: View {
         .navigationTitle(AccessTokensList.title)
         .task { await model.accessTokens?.load() }
         .refreshable { await model.accessTokens?.load() }
-        .confirmationDialog(pendingRevoke.map(AccessTokensList.revokeTitle) ?? AccessTokensList.revoke,
-                            isPresented: revokeAsked, titleVisibility: .visible,
-                            presenting: pendingRevoke) { token in
+        .orbitConfirmation(AccessTokensList.revokeTitle, isPresented: revokeAsked,
+                           presenting: pendingRevoke) { token in
             Button(AccessTokensList.revoke, role: .destructive) { Task { await revoke(token) } }
             Button(SharePanelCopy.cancel, role: .cancel) {}
         } message: { _ in

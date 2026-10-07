@@ -125,6 +125,7 @@ public enum CodexAccounts {
     ///   Different plans hold very different amounts, so how much is left is not compared across
     ///   accounts — only when it expires. An account with nothing reported comes after every one that has.
     /// - Equal expiry: the one with more room, by its tightest window. Unread ranks after read.
+    /// - One paused by hand (`pausedUntil`) waits as a spent one does, until its pause ends.
     /// - Every candidate spent: the one that frees up first.
     /// - Ties go to Default, then to the lower id.
     ///
@@ -142,11 +143,16 @@ public enum CodexAccounts {
             let open = ws.filter { !(resetTime($0).map { $0 <= now.timeIntervalSince1970 } ?? false) }
             let spent = open.filter { $0.utilization >= 100 }
             let resets = spent.map { resetTime($0) ?? .infinity }
+            var spentUntil = spent.isEmpty ? nil : resets.max()
+            if let pause = account.pausedUntil.flatMap(RelativeTime.parse)?.timeIntervalSince1970,
+               pause > now.timeIntervalSince1970 {
+                spentUntil = max(pause, spentUntil ?? 0)
+            }
             return Candidate(id: account.id,
                              nearLimit: own.map { nearlySpent($0, now: now) } ?? false,
                              expiresAt: own.map { expiresAt($0, now: now) } ?? .infinity,
                              tightest: ws.map(\.utilization).max() ?? .infinity,
-                             spentUntil: spent.isEmpty ? nil : resets.max())
+                             spentUntil: spentUntil)
         }
         func byID(_ a: Candidate, _ b: Candidate) -> Bool {
             if (a.id == defaultID) != (b.id == defaultID) { return a.id == defaultID }

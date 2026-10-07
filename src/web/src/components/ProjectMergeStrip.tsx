@@ -160,7 +160,7 @@ export function ProjectMergeStrip({
       {shape === 'merging' && current ? (
         <>
           <div className="session-project-merge-head">
-            <span className="promotion-spin" aria-hidden="true" />
+            <span className="session-project-merge-tile"><MergeGlyph /></span>
             <span className="session-project-merge-title">{promotionPageTitle(current)}</span>
           </div>
           <div className="session-project-merge-status">{promotionMergingStatus(current)}</div>
