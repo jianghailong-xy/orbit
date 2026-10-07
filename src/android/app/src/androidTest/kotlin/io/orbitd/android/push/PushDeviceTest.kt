@@ -12,9 +12,9 @@ import android.graphics.Rect
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.ParcelFileDescriptor
 import android.os.Process
 import android.os.SystemClock
+import android.provider.Settings
 import android.service.notification.StatusBarNotification
 import android.view.InputDevice
 import android.view.MotionEvent
@@ -59,7 +59,7 @@ class PushDeviceTest {
     private val manager get() = app.getSystemService(NotificationManager::class.java)
     private val evidence get() = File(app.filesDir, "a10-push").apply { mkdirs() }
     private lateinit var fixture: PushHttpFixture
-    private var previousNotificationMode: String? = null
+    private var appNotificationsOff = false
     private val queuedWork = mutableListOf<String>()
     private val activities = CopyOnWriteArrayList<MainActivity>()
     private val startedActivities = CopyOnWriteArrayList<MainActivity>()
@@ -106,7 +106,7 @@ class PushDeviceTest {
     @After fun finish() {
         try {
             queuedWork.forEach { WorkManager.getInstance(app).cancelUniqueWork(it).result.get(5, TimeUnit.SECONDS) }
-            previousNotificationMode?.let { shell("cmd appops set ${app.packageName} POST_NOTIFICATION $it") }
+            if (appNotificationsOff) setAppNotificationsInSettings(true)
             // Recreate a deliberately removed channel; this does not override user-changed importance.
             PushNotifications(app)
             if (::fixture.isInitialized) {
@@ -226,16 +226,12 @@ class PushDeviceTest {
         login(); openSession(); awaitCard()
         assertTrue("Host must grant notification permission for the default journey", app.push.notifications.allowed())
         if (Build.VERSION.SDK_INT < 33) {
-            // API 29–32 block an app's notifications through this app-op. On 13+ the switch is the
+            // API 29–32 have no runtime permission: a person turns the app's notifications off in
+            // Android's notification settings (the legacy app-op does not). On 13+ that switch is the
             // POST_NOTIFICATIONS grant, refused in its own process by ColdPushDeviceTest.permissionPrompt.
-            previousNotificationMode = Regex("POST_NOTIFICATION:\\s*(allow|ignore|deny|default|foreground)")
-                .find(shell("cmd appops get ${app.packageName} POST_NOTIFICATION"))?.groupValues?.get(1) ?: "default"
-            shell("cmd appops set ${app.packageName} POST_NOTIFICATION ignore")
-            awaitCondition { !app.push.notifications.allowed() }
+            setAppNotificationsInSettings(false)
             background(); deliver(alert()); awaitNotifications(0)
-            shell("cmd appops set ${app.packageName} POST_NOTIFICATION $previousNotificationMode")
-            previousNotificationMode = null
-            awaitCondition { app.push.notifications.allowed() }
+            setAppNotificationsInSettings(true)
         } else background()
         manager.deleteNotificationChannel(PushNotifications.NEEDS_YOU)
         assertFalse(app.push.notifications.allowed(PushNotifications.NEEDS_YOU))
@@ -480,8 +476,32 @@ class PushDeviceTest {
         roots.forEach { visit(it, 0) }
         File(evidence, "$label-hierarchy.txt").writeText(text.toString())
     }
-    private fun shell(command: String): String = ParcelFileDescriptor.AutoCloseInputStream(instrument.uiAutomation.executeShellCommand(command))
-        .bufferedReader().use { it.readText() }
+    /** The app-level switch in Android's notification settings (API 29–32), operated as a person does. */
+    private fun setAppNotificationsInSettings(enabled: Boolean) {
+        instrument.runOnMainSync {
+            app.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, app.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+        val service = instrument.uiAutomation.serviceInfo
+        service.flags = service.flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+        instrument.uiAutomation.serviceInfo = service
+        fun find(node: AccessibilityNodeInfo?, depth: Int): AccessibilityNodeInfo? {
+            if (node == null || depth > 40) return null
+            if (node.isVisibleToUser && node.isCheckable && node.packageName == "com.android.settings") return node
+            for (index in 0 until node.childCount) find(node.getChild(index), depth + 1)?.let { return it }
+            return null
+        }
+        var master: AccessibilityNodeInfo? = null
+        // The first switch on the page is the app's own; the channel switches follow it.
+        awaitCondition { master = (instrument.uiAutomation.windows.mapNotNull { it.root } + listOfNotNull(instrument.uiAutomation.rootInActiveWindow))
+            .firstNotNullOfOrNull { find(it, 0) }; master != null }
+        if (master!!.isChecked != enabled) assertTrue(master!!.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        awaitCondition { (manager.areNotificationsEnabled()) == enabled }
+        appNotificationsOff = !enabled
+        capture("${name.methodName}-settings-${if (enabled) "on" else "off"}")
+        assertTrue(instrument.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
+        instrument.waitForIdleSync()
+    }
     private fun capture(label: String) {
         SystemClock.sleep(1_000) // The emulator's software renderer presents frames after the UI state settles.
         instrument.uiAutomation.takeScreenshot()?.let { bitmap ->
