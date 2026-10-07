@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import type {
   EventSearchResponse,
+  IntegrationQueueView,
   LinkPreviewRef,
   LinkPreviewsResponse,
   ProjectIntegrationView,
@@ -875,6 +876,22 @@ export const projectIntegrationQuery = (projectId: string) =>
     queryFn: () =>
       api<ProjectIntegrationView>(`/projects/${encodeURIComponent(projectId)}/integration`),
     refetchInterval: 30_000,
+  });
+
+/**
+ * The landing queue this project's merges wait in (§2.2 J1): every job queued or running on the
+ * same repository-and-ref, in claim order — which is the order the platform takes them.
+ *
+ * Read only while something of this project's is waiting (`enabled` by the card that draws it),
+ * because the queue is the line's own and a project with nothing queued has no reason to poll it.
+ * Polled faster than the line row while it IS drawn: a queue is read to watch it move.
+ */
+export const projectIntegrationQueueQuery = (projectId: string) =>
+  queryOptions({
+    queryKey: ['project', projectId, 'integration', 'queue'] as const,
+    queryFn: () =>
+      api<IntegrationQueueView>(`/projects/${encodeURIComponent(projectId)}/integration/queue`),
+    refetchInterval: 15_000,
   });
 
 /**

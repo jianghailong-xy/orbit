@@ -126,6 +126,68 @@ export interface ProjectIntegrationInFlight<Instant = string> {
 /** The integration claim's existing lease window, also used to stop stale activity indicators. */
 export const INTEGRATION_CLAIM_STALE_MS = 10 * 60 * 1_000;
 
+/**
+ * One entry in the landing queue for a repository-and-ref, as `GET /projects/:id/integration/queue`
+ * serves it (§2.2 J1).
+ *
+ * The queue is the serial key's own, not the project's: landing jobs are claimed one at a time per
+ * repository and target ref, so the row in front of a project's merge can be another project's —
+ * and the reader who asks "what is mine waiting on" is answered by this list rather than by a
+ * sentence computed from counts.
+ *
+ * `title` and the two ids are this owner's work only: J1's key is a repository and a ref, which
+ * another account's projects share, and naming another account's task or project would leak it.
+ * `mine` is that boundary stated once, so a client never has to re-derive it from a missing title.
+ */
+export interface IntegrationQueueJob<Instant = string> {
+  jobId: string;
+  kind: IntegrationJobKind;
+  /** `RUNNING` is the head, actually being performed; every other entry waits its turn, `QUEUED`. */
+  state: 'QUEUED' | 'RUNNING';
+  /** The runner's reported step — null before its first report. */
+  phase: IntegrationJobPhase | null;
+  /** The task's or the project's title, for this owner's work; null for another account's. */
+  title: string | null;
+  /** Whether this job is the asking owner's. False entries carry no title and no ids. */
+  mine: boolean;
+  /** A landing the project's Automatic setting confirmed rather than the owner's press (M-T11). */
+  automatic: boolean;
+  /** The project the job is filed under — this owner's only, null otherwise. */
+  projectId: string | null;
+  /** The task a `LAND_TASK` lands — this owner's only, null for promotions and other accounts. */
+  taskId: string | null;
+  enqueuedAt: Instant;
+  /** The claim; null while it waits. */
+  startedAt: Instant | null;
+  /** The claimer's last report; null while it waits, or on an older server. */
+  lastReportAt: Instant | null;
+  /**
+   * The head, claimed and then silent for longer than the claim's own lease window
+   * (`INTEGRATION_CLAIM_STALE_MS`). The same window a takeover needs, so a client's "it may be
+   * stuck" and the platform's "another process may take it over" name one condition.
+   */
+  stale: boolean;
+}
+
+/**
+ * The queue a project's integrations wait in, for the card that shows one waiting (§2.2 J1).
+ *
+ * `targetRef` is the ref the queue serialises on — the project's upstream, e.g. `refs/heads/main` —
+ * and the jobs are in claim order (the order the platform takes them), so a client's position is
+ * its index and its "who is ahead" is everything before it. Bounded by what is actually queued:
+ * a few entries in any project somebody is watching.
+ */
+export interface IntegrationQueueView<Instant = string> {
+  /**
+   * The ref the queue serialises on — the project's upstream, e.g. `refs/heads/main`. Null for a
+   * project with no primary binding: there is no line, so there is no queue to draw one from.
+   */
+  targetRef: string | null;
+  running: number;
+  waiting: number;
+  jobs: IntegrationQueueJob<Instant>[];
+}
+
 /** All ready OPEN tasks with neither automatic dispatch nor a schedule, and one task to open. */
 export interface ProjectManualReady {
   count: number;

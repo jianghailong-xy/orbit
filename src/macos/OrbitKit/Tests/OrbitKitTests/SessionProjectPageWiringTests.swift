@@ -429,6 +429,26 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(page.contains("PromotionReviewSheet(source: merge, promotionID: target.id)"),
                       "the page opens the conversation's own review, reading the page's model")
         XCTAssertTrue(page.contains(".sheet(item: $promotionReceipt) { PromotionReceiptSheet(promotion: $0.promotion) }"))
+        // The queue a waiting merge is in (§2.2 J1): the card's queued row is the door, the page
+        // hosts the sheet, and the sheet reads the page's own merge model.
+        XCTAssertTrue(card.contains("onQueue: { promotionQueue = PromotionQueueTarget(id: $0) }"),
+                      "the queued landing row opens this project's queue, by the id the card was drawn for")
+        XCTAssertTrue(page.contains(".sheet(item: $promotionQueue)"),
+                      "the queue sheet is hosted by the page, so a poll redrawing the card cannot dismiss it")
+        XCTAssertTrue(page.contains("IntegrationQueueSheet(model: merge, promotion: view)"),
+                      "the queue sheet reads the page's merge model")
+        // The card view is its own struct in this file, so the merging body is sliced from the file.
+        let cardView = try slice(source, from: "private struct ProjectMergeCardView: View {", to: "\n}\n")
+        let merging = try slice(cardView, from: "@ViewBuilder private func merging(_ view: ProjectPromotionView) -> some View {",
+                                to: "\n    }\n")
+        XCTAssertTrue(merging.contains("if view.execution?.state == \"QUEUED\" {")
+                      && merging.contains("Button { onQueue(view.promotionId) } label: {"),
+                      "only a merge that is still waiting opens the queue; a claimed job's phases are its own line")
+        let sheet = try appSource("Views/IntegrationQueueSheet.swift")
+        XCTAssertTrue(sheet.contains("PromotionQueueCards.jobStaleClause(job, now: now)"),
+                      "a quiet head is said in the sheet, from the served fact")
+        XCTAssertTrue(sheet.contains("await model.loadQueue(force: true)"),
+                      "the sheet re-reads the queue while it is open")
         let task = try slice(page, from: ".task(id: address) {", to: "\n        }")
         XCTAssertEqual(task.components(separatedBy: "await app.loadProjectMerge(address)").count - 1, 2,
                        "the merge is read on arrival and on every poll")

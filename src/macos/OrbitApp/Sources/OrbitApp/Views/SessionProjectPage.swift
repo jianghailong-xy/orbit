@@ -242,6 +242,7 @@ struct SessionProjectPage: View {
     @State private var sharingSession: Session?
     @State private var movingSession: Session?
     @State private var promotionReview: PromotionReviewTarget?
+    @State private var promotionQueue: PromotionQueueTarget?
     @State private var promotionReceipt: PromotionReceiptTarget?
     @State private var startSheet: StartSheet?
 
@@ -383,6 +384,13 @@ struct SessionProjectPage: View {
         // what the owner is reading. The review is the coordinator conversation's own sheet.
         .sheet(item: $promotionReview) { target in
             if let merge { PromotionReviewSheet(source: merge, promotionID: target.id) }
+        }
+        // The queue a waiting merge is in (§2.2 J1): what the card's "queued 70m 55s" meant, and
+        // who is ahead of it. Opened by tapping the landing row while the merge waits its turn.
+        .sheet(item: $promotionQueue) { _ in
+            if let merge, let view = merge.current {
+                IntegrationQueueSheet(model: merge, promotion: view)
+            }
         }
         .sheet(item: $promotionReceipt) { PromotionReceiptSheet(promotion: $0.promotion) }
         // The start card over this page, from the project page's own store, read afresh as it opens:
@@ -590,6 +598,7 @@ struct SessionProjectPage: View {
                     },
                     now: context.date,
                     onDetails: { promotionReview = PromotionReviewTarget(id: $0) },
+                    onQueue: { promotionQueue = PromotionQueueTarget(id: $0) },
                     onCoordinator: coordinator.map { coordinator in
                         { app.openProjectMember(coordinator, push: rowNavigation == .push) }
                     })
@@ -646,6 +655,8 @@ private struct ProjectMergeCardView: View {
     let landing: ProjectPage.LandingLine?
     let now: Date
     let onDetails: (String) -> Void
+    /// Opens the queue sheet, for the landing row while the merge waits its turn (J1).
+    let onQueue: (String) -> Void
     /// Opens the coordinator, for a blocked candidate; nil when the page has no coordinator row.
     let onCoordinator: (() -> Void)?
     @State private var acting = false
@@ -760,7 +771,25 @@ private struct ProjectMergeCardView: View {
     @ViewBuilder private func merging(_ view: ProjectPromotionView) -> some View {
         header(PromotionCards.pageTitle(view), symbol: "arrow.triangle.merge")
         Text(PromotionCards.mergingStatusLine(view)).font(.orbitLabel)
-        if let landing { ProjectLandingRow(line: landing) }
+        if let landing {
+            // While it waits its turn the row is a door onto the queue it waits in (§2.2 J1): the
+            // chevron is the sessions page's own mark for a row that opens something. A claimed
+            // job's row stays as it was — its phases are answered by the line itself.
+            if view.execution?.state == "QUEUED" {
+                Button { onQueue(view.promotionId) } label: {
+                    HStack(spacing: 8) {
+                        ProjectLandingRow(line: landing)
+                        Image(systemName: "chevron.right")
+                            .font(.orbitMeta.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            } else {
+                ProjectLandingRow(line: landing)
+            }
+        }
         Text(PromotionCards.pageNothingToDo).font(.orbitMeta).foregroundStyle(.secondary)
         HStack {
             Spacer()

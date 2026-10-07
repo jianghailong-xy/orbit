@@ -19,10 +19,14 @@ final class ProjectMergeModel: PromotionReviewSource {
     /// The merges already made, newest first — the timeline's rows.
     private(set) var merged: [ProjectPromotionView] = []
     private(set) var openItems: ProjectOpenItemsView?
+    /// The landing queue this project's merge waits in (§2.2 J1), as the queue sheet reads it.
+    /// Nil until the sheet's first read answers: the card below says what it knows until then.
+    private(set) var queue: ProjectIntegrationQueue?
     private var criteria: [ProjectCriteriaDocument.Item] = []
     private var mergedReadAt: Date?
     private var itemsReadAt: Date?
     private var criteriaReadAt: Date?
+    private var queueReadAt: Date?
     /// Bumped by every read and press, so an older poll that lands after a press cannot put back
     /// the state the press moved the candidate out of.
     private var generation = 0
@@ -83,6 +87,17 @@ final class ProjectMergeModel: PromotionReviewSource {
 
     func promotionStanding(_ promotionID: String) -> ProjectPromotionView? {
         current?.promotionId == promotionID ? current : nil
+    }
+
+    /// One read of the queue, for the sheet that is open on it. Not part of `load`: the queue is a
+    /// read only a reader is looking at, and polling it every four seconds on the page's own clock
+    /// would ask the control plane a question nobody has on screen.
+    func loadQueue(force: Bool = false) async {
+        if !force, let readAt = queueReadAt, Date().timeIntervalSince(readAt) < 10 { return }
+        if let read = try? await api.projectIntegrationQueue(projectID) {
+            queue = read
+            queueReadAt = Date()
+        }
     }
 
     var promotionItems: [ProjectOpenItemRow] {

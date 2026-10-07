@@ -399,6 +399,77 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
     }
 }
 
+// MARK: - GET /projects/:id/integration/queue
+
+/// The landing queue a project's integrations wait in (§2.2 J1), as the server serves it.
+///
+/// The queue belongs to the repository and the target ref, not to the project: landing claims are
+/// serialised per repository-and-ref, so the row in front of this project's merge can be another
+/// project's — which is the fact the card that says "queued" could not say before.
+public struct ProjectIntegrationQueue: Codable, Equatable, Sendable {
+    /// The ref the queue serialises on, e.g. `refs/heads/main`; nil for a project with no binding.
+    public let targetRef: String?
+    public let running: Int
+    public let waiting: Int
+    /// Claim order — the order the platform takes them, so a job's index is its position.
+    public let jobs: [ProjectIntegrationQueueJob]
+
+    public init(targetRef: String? = nil, running: Int = 0, waiting: Int = 0,
+                jobs: [ProjectIntegrationQueueJob] = []) {
+        self.targetRef = targetRef
+        self.running = running
+        self.waiting = waiting
+        self.jobs = jobs
+    }
+}
+
+/// One entry in that queue. `title` and the two ids are this account's work only: another account's
+/// projects share the queue's key, and their tasks and projects are not this reader's to see.
+public struct ProjectIntegrationQueueJob: Codable, Equatable, Sendable, Identifiable {
+    public let jobId: String
+    /// `LAND_TASK`, `LAND_PROMOTION` — `CHECK_PROMOTION` never holds a landing slot.
+    public let kind: String
+    /// `RUNNING` is the head, actually being performed; every other entry waits, `QUEUED`.
+    public let state: String
+    public let phase: String?
+    /// The task's or the project's title, for this account's work; nil for another account's.
+    public let title: String?
+    /// Whether this job is the asking owner's. False entries carry no title and no ids.
+    public let mine: Bool
+    /// A landing the project's Automatic setting confirmed rather than the owner's press (M-T11).
+    public let automatic: Bool
+    public let projectId: String?
+    public let taskId: String?
+    public let enqueuedAt: String
+    /// The claim; nil while it waits.
+    public let startedAt: String?
+    /// The claimer's last report; nil while it waits.
+    public let lastReportAt: String?
+    /// The head, claimed and silent past the claim's own lease window: it may be stuck.
+    public let stale: Bool
+
+    public var id: String { jobId }
+
+    public init(jobId: String, kind: String, state: String, phase: String? = nil, title: String? = nil,
+                mine: Bool = false, automatic: Bool = false, projectId: String? = nil,
+                taskId: String? = nil, enqueuedAt: String, startedAt: String? = nil,
+                lastReportAt: String? = nil, stale: Bool = false) {
+        self.jobId = jobId
+        self.kind = kind
+        self.state = state
+        self.phase = phase
+        self.title = title
+        self.mine = mine
+        self.automatic = automatic
+        self.projectId = projectId
+        self.taskId = taskId
+        self.enqueuedAt = enqueuedAt
+        self.startedAt = startedAt
+        self.lastReportAt = lastReportAt
+        self.stale = stale
+    }
+}
+
 // MARK: - GET /projects/:id/panorama
 
 /// Where the project's work stands, lane by lane — plus, once the project integrates, how its done

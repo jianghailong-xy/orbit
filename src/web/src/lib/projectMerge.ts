@@ -1,5 +1,12 @@
-import type { ProjectIntegrationInFlight, ProjectPromotionView } from '@orbit/shared';
+import type {
+  IntegrationQueueJob,
+  IntegrationQueueView,
+  ProjectIntegrationInFlight,
+  ProjectPromotionView,
+} from '@orbit/shared';
+import { JOB_PHASES, JOB_WORDS } from '../components/ProjectPanoramaHeader';
 import { sessionTimeSections, type GroupableSession } from './sessionGrouping';
+import { formatSpan } from './watches';
 
 /**
  * The merge into main on the project's sessions view (owner decision 2026-10-06): the card under the
@@ -275,4 +282,98 @@ export function projectTimelineSections<T extends GroupableSession>(
     title: section.title,
     items: section.sessions.map((entry) => entry.item),
   }));
+}
+
+// ── the queue a waiting merge is in (§2.2 J1) ────────────────────────────────────────────────
+//
+// The card that says "queued 70m 55s" has to say what it is queued BEHIND: a landing claim is
+// serialised per repository-and-target-ref, so the row ahead of a merge can be another project's —
+// on 2026-10-07 one was, wedged for three and a half hours, while every card on the line read
+// "nothing to do". These are the words both clients draw that list in, and `ProjectMergeCopyParityTests`
+// reads this block.
+
+/** The queue sheet's title, and the row label the web card puts it under: `Queue for main`. */
+export function queueTitle(upstreamRef: string): string {
+  return `Queue for ${shortRef(upstreamRef)}`;
+}
+/** The chip a queue row carries when it is the asking owner's own merge. */
+export const QUEUE_YOU = 'You';
+/** The chip a queue row carries when the Automatic setting confirmed it rather than a press (M-T11). */
+export const QUEUE_AUTOMATIC = 'Automatic';
+
+/** `1st`, `2nd`, `3rd`, `4th`… A position is read, not counted, so it is spelled. */
+function ordinal(n: number): string {
+  const rest = n % 100;
+  const suffix = rest >= 11 && rest <= 13 ? 'th' : (['th', 'st', 'nd', 'rd'][n % 10] ?? 'th');
+  return `${n}${suffix}`;
+}
+
+/** `1 running · 3 waiting` — the queue in two numbers. */
+export function queueSummaryLine(queue: IntegrationQueueView): string {
+  return `${queue.running} running · ${queue.waiting} waiting`;
+}
+
+/** `2nd of 4 for main` — where one job stands; null when it is not in the queue at all. */
+export function queuePositionLine(
+  queue: IntegrationQueueView,
+  jobId: string,
+): string | null {
+  const index = queue.jobs.findIndex((job) => job.jobId === jobId);
+  if (index < 0 || queue.targetRef == null) return null;
+  return `${ordinal(index + 1)} of ${queue.jobs.length} for ${shortRef(queue.targetRef)}`;
+}
+
+/** How a queue row names one job. Another account's work is not named, and says so. */
+export function queueJobTitle(job: IntegrationQueueJob): string {
+  if (job.title) return `“${job.title}”`;
+  const word = JOB_WORDS[job.kind].toLowerCase();
+  return job.mine ? `Your ${word}` : `Another account’s ${word}`;
+}
+
+/** `Merge to main · fetching` — the row's kind and what the runner is doing, or that it waits. */
+export function queueJobStatus(job: IntegrationQueueJob): string {
+  const word = JOB_WORDS[job.kind];
+  if (job.state !== 'RUNNING') return `${word} · queued`;
+  return `${word} · ${(job.phase && JOB_PHASES[job.phase]) || 'running'}`;
+}
+
+/** How long a job has been in the queue or at work: the claim for a running one, the enqueue for a waiting one. */
+export function queueJobSpan(job: IntegrationQueueJob, now: number): string {
+  const from = Date.parse(job.startedAt ?? job.enqueuedAt);
+  return Number.isFinite(from) ? formatSpan(Math.max(0, now - from)) : '—';
+}
+
+/**
+ * `no report for 2h 3m — it may be stuck`, or null for a job that is not silent. The sentence the
+ * platform would take this one away from the runner for (§2.2 J1's lease window), said in words.
+ */
+export function queueJobStaleClause(job: IntegrationQueueJob, now: number): string | null {
+  return job.stale ? `no report for ${queueJobSpan(job, now)} — it may be stuck` : null;
+}
+
+/**
+ * The one line a waiting merge's own card carries: who is ahead of it and what that one is doing —
+ * or null when nothing is ahead (this merge is the head) or the queue cannot be read.
+ *
+ * The stale head is the reason this sentence exists in two shapes: a head that has gone quiet is
+ * not "running first", and the reader is owed the difference.
+ */
+export function queueWaitLine(
+  queue: IntegrationQueueView,
+  jobId: string,
+  now: number,
+): string | null {
+  const index = queue.jobs.findIndex((job) => job.jobId === jobId);
+  const head = queue.jobs[0];
+  if (index <= 0 || !head || queue.targetRef == null) return null;
+  const into = shortRef(queue.targetRef);
+  const what = head.title
+    ? head.kind === 'LAND_TASK' ? `the landing of “${head.title}”` : `“${head.title}”`
+    : head.mine
+      ? head.kind === 'LAND_TASK' ? 'a landing' : 'a merge to main'
+      : head.kind === 'LAND_TASK' ? 'another account’s landing' : 'another account’s merge to main';
+  const stale = queueJobStaleClause(head, now);
+  return stale
+    ? `Waiting to merge: ${what} has ${stale}`
+    : `Waiting to merge: ${what} is running on ${into} first`;
 }

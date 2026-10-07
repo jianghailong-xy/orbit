@@ -19,6 +19,7 @@ import {
   type CoordinatorFuseUsage,
   type CoordinatorWakeups,
   deriveSessionLifecycleState,
+  type IntegrationQueueView,
   type ProjectListCoordinatorActivity,
   type ProjectPauseState,
   RunEventType,
@@ -164,6 +165,7 @@ import {
   readProjectCodebase,
   readProjectIntegrationLines,
 } from './project-integration-line';
+import { readIntegrationQueue } from './project-integration-queue';
 import {
   readProjectBlockers,
   resolveProjectBlocker,
@@ -2698,6 +2700,18 @@ export class ProjectsService {
         project.exceptionEscalationSeconds,
       ),
     );
+  }
+
+  /**
+   * The landing queue this project's integrations wait in, as `GET /projects/:id/integration/queue`
+   * serves it (§2.2 J1): every job queued or running on the same repository-and-ref, in claim
+   * order. Read on the same terms as the line above — the caller's own project or not found — and
+   * apart from its document, because only the queue sheet polls it and the project document has a
+   * query budget to keep.
+   */
+  async integrationQueue(ownerId: string, id: string): Promise<IntegrationQueueView<Date>> {
+    await this.assertOwned(ownerId, id);
+    return readIntegrationQueue(this.prisma, ownerId, id);
   }
 
   /**

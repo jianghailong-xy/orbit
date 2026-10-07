@@ -783,6 +783,14 @@ public final class APIClient: @unchecked Sendable {
         try await get("projects/\(projectID)/integration")
     }
 
+    /// The landing queue this project's integrations wait in (§2.2 J1): every job queued or running
+    /// on the same repository-and-ref, in the order the platform takes them. Read while a merge of
+    /// this project's is waiting its turn — the card that says "queued 70m" says what it waits behind
+    /// with this.
+    public func projectIntegrationQueue(_ projectID: String) async throws -> ProjectIntegrationQueue {
+        try await get("projects/\(projectID)/integration/queue")
+    }
+
     /// One page of the project's top-level tasks, newest first.
     public func projectTaskPage(_ projectID: String, cursor: String? = nil,
                                 limit: Int = 100) async throws -> ProjectTaskPage {

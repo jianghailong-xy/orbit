@@ -5,7 +5,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ProjectOpenItemRow, ProjectPromotionView } from '@orbit/shared';
+import type {
+  IntegrationQueueJob,
+  IntegrationQueueView,
+  ProjectOpenItemRow,
+  ProjectPromotionView,
+} from '@orbit/shared';
 import {
   BLOCKERS_DECIDED_TOO,
   CANCEL_MERGE,
@@ -25,6 +30,7 @@ import {
 } from './ProjectPromotionCard';
 import { SHORTCUT_HINT } from './CardHotkey';
 import { CriteriaDecisionCard, type PendingCriteriaDecisionRow } from './CriteriaDecisionCard';
+import { projectIntegrationQueueQuery } from '../lib/queries';
 import { FROM_ORBIT } from './ProjectProgressStatus';
 
 /**
@@ -956,6 +962,88 @@ describe('the presses', () => {
       'the card',
     );
     expect(host.textContent).toContain('project/bg-jobs');
+  });
+});
+
+describe('state B — the queue the merge waits in (§2.2 J1)', () => {
+  const QUEUED = {
+    state: 'CONFIRMED',
+    execution: { state: 'QUEUED', phase: null, startedAt: at(70 * MINUTE) },
+  } as Partial<ProjectPromotionView>;
+
+  function queueJob(over: Partial<IntegrationQueueJob> = {}): IntegrationQueueJob {
+    return {
+      jobId: 'job-1',
+      kind: 'LAND_PROMOTION',
+      state: 'QUEUED',
+      phase: null,
+      title: null,
+      mine: false,
+      automatic: false,
+      projectId: null,
+      taskId: null,
+      enqueuedAt: at(70 * MINUTE),
+      startedAt: null,
+      lastReportAt: null,
+      stale: false,
+      ...over,
+    };
+  }
+
+  function queueView(over: Partial<IntegrationQueueView> = {}): IntegrationQueueView {
+    const jobs = over.jobs ?? [
+      queueJob({ jobId: 'head', state: 'RUNNING', mine: true, title: 'Orbit Web 组件迁移',
+                 projectId: '34ODoUKJGEsfbgcJDGS4p', startedAt: at(123 * MINUTE),
+                 lastReportAt: at(123 * MINUTE), stale: true }),
+      queueJob({ jobId: 'mine', mine: true, projectId: PROJECT_ID, title: 'DeepSeek Harness' }),
+      queueJob({ jobId: 'j3', automatic: true }),
+    ];
+    return {
+      targetRef: 'refs/heads/main',
+      running: jobs.filter((job) => job.state === 'RUNNING').length,
+      waiting: jobs.filter((job) => job.state === 'QUEUED').length,
+      ...over,
+      jobs,
+    };
+  }
+
+  /** The card with the queue already in the cache: the refetch an effect would fire never runs in
+   *  static markup, which is exactly what makes this the unit under test rather than the network. */
+  function cardWithQueue(view: IntegrationQueueView | null): string {
+    const qc = client();
+    if (view) qc.setQueryData(projectIntegrationQueueQuery(PROJECT_ID).queryKey, view);
+    return renderToStaticMarkup(
+      <MemoryRouter>
+        <QueryClientProvider client={qc}>
+          <ProjectPromotionCard
+            projectId={PROJECT_ID}
+            promotion={promotion(QUEUED)}
+            item={null}
+            project={project()}
+            now={NOW}
+          />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  it('says where the merge stands, who is ahead, and every row of the line', () => {
+    const html = cardWithQueue(queueView());
+
+    expect(html).toContain('Queue for main');
+    expect(html).toContain('2nd of 3 for main · 1 running · 2 waiting');
+    expect(html).toContain('Waiting to merge: “Orbit Web 组件迁移” has no report for 2h 3m — it may be stuck');
+    expect(html).toContain('“Orbit Web 组件迁移” — Merge to main · running · no report for 2h 3m — it may be stuck');
+    expect(html).toContain('“DeepSeek Harness” — Merge to main · queued · 1h 10m');
+    expect(html).toContain('Another account’s merge to main — Merge to main · queued · 1h 10m');
+    expect(html).toContain('data-stale="true"');
+  });
+
+  it('has nothing to say before the queue has been read — and nothing invented', () => {
+    const html = cardWithQueue(null);
+
+    expect(html).not.toContain('Queue for main');
+    expect(html).toContain(NOTHING_TO_DO);
   });
 });
 

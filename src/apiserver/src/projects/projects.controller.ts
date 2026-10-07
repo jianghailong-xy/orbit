@@ -662,6 +662,20 @@ export class ProjectsController {
   }
 
   /**
+   * The landing queue this project's integrations wait in (§2.2 J1): every job queued or running on
+   * the same repository-and-ref, in claim order, each with its state and — for this owner's own
+   * work — a title and the ids to open it by.
+   *
+   * The queue belongs to the repository and the ref, not to the project: a project's merge can be
+   * waiting behind another project's landing, and this is the read that says so.
+   */
+  @PatScope('projects:read', { workspaceConfinable: false })
+  @Get(':id/integration/queue')
+  integrationQueue(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.projects.integrationQueue(user.userId, id);
+  }
+
+  /**
    * The account owner choosing this project's integration line — main or a project branch — and the
    * check run before a landing (L5). Once the project started integrating, a change that would move
    * the line is 409 `INTEGRATION_LINE_LOCKED`; the merge check can still change.

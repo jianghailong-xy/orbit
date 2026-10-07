@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { ProjectPromotionView } from '@orbit/shared';
+import type {
+  IntegrationQueueJob,
+  IntegrationQueueView,
+  ProjectPromotionView,
+} from '@orbit/shared';
 import {
   NO_LONGER_ON_OFFER,
   isMergeJob,
@@ -19,6 +23,14 @@ import {
   promotionTaskTitles,
   promotionTimelineDetail,
   promotionTimelineTitle,
+  queueJobSpan,
+  queueJobStaleClause,
+  queueJobStatus,
+  queueJobTitle,
+  queuePositionLine,
+  queueSummaryLine,
+  queueTitle,
+  queueWaitLine,
 } from './projectMerge';
 
 function candidate(overrides: Partial<ProjectPromotionView> = {}): ProjectPromotionView {
@@ -162,5 +174,112 @@ describe('the sessions view’s timeline', () => {
       [merged('m', local(1, 1) /* five days back */), candidate()], now);
     expect(sections.map((section) => section.title)).toEqual(['Today', '2–7 days ago']);
     expect(sections.flatMap((section) => section.items.map((item) => item.kind))).toEqual(['session', 'merge']);
+  });
+});
+
+// ── the queue a waiting merge is in (§2.2 J1) ────────────────────────────────────────────────
+
+const NOW_MS = Date.parse('2026-10-07T01:42:00.000Z');
+const minutesAgo = (n: number): string => new Date(NOW_MS - n * 60_000).toISOString();
+
+function queueJob(over: Partial<IntegrationQueueJob> = {}): IntegrationQueueJob {
+  return {
+    jobId: 'job-1',
+    kind: 'LAND_PROMOTION',
+    state: 'QUEUED',
+    phase: null,
+    title: null,
+    mine: false,
+    automatic: false,
+    projectId: null,
+    taskId: null,
+    enqueuedAt: minutesAgo(70),
+    startedAt: null,
+    lastReportAt: null,
+    stale: false,
+    ...over,
+  };
+}
+
+function queue(jobs: IntegrationQueueJob[]): IntegrationQueueView {
+  return {
+    targetRef: 'refs/heads/main',
+    running: jobs.filter((job) => job.state === 'RUNNING').length,
+    waiting: jobs.filter((job) => job.state === 'QUEUED').length,
+    jobs,
+  };
+}
+
+describe('the queue a waiting merge is in', () => {
+  it('spells the position rather than counting it', () => {
+    const mine = queueJob({ jobId: 'mine', mine: true, projectId: 'p1', title: 'DeepSeek' });
+    const view = queue([
+      queueJob({ jobId: 'head', state: 'RUNNING', startedAt: minutesAgo(4) }),
+      mine,
+      queueJob({ jobId: 'j3' }),
+      queueJob({ jobId: 'j4' }),
+    ]);
+
+    expect(queuePositionLine(view, 'mine')).toBe('2nd of 4 for main');
+    expect(queueSummaryLine(view)).toBe('1 running · 3 waiting');
+    expect(queueTitle('refs/heads/main')).toBe('Queue for main');
+  });
+
+  it('has no position for a job the queue does not hold', () => {
+    expect(queuePositionLine(queue([queueJob()]), 'absent')).toBeNull();
+    expect(queuePositionLine({ ...queue([]), targetRef: null }, 'absent')).toBeNull();
+  });
+
+  it('says who is ahead: a task landing, a project’s merge, or another account’s work', () => {
+    const mine = queueJob({ jobId: 'mine', mine: true, projectId: 'p1' });
+    const running = (over: Partial<IntegrationQueueJob>) =>
+      queueJob({ state: 'RUNNING', startedAt: minutesAgo(4), lastReportAt: minutesAgo(1), ...over });
+
+    expect(queueWaitLine(queue([running({ kind: 'LAND_TASK', title: '修复 D3', mine: true }),
+                                mine]), 'mine', NOW_MS))
+      .toBe('Waiting to merge: the landing of “修复 D3” is running on main first');
+    expect(queueWaitLine(queue([running({ title: 'Orbit Web 组件迁移', mine: true }), mine]),
+                         'mine', NOW_MS))
+      .toBe('Waiting to merge: “Orbit Web 组件迁移” is running on main first');
+    expect(queueWaitLine(queue([running({ kind: 'LAND_TASK' }), mine]), 'mine', NOW_MS))
+      .toBe('Waiting to merge: another account’s landing is running on main first');
+    expect(queueWaitLine(queue([running({}), mine]), 'mine', NOW_MS))
+      .toBe('Waiting to merge: another account’s merge to main is running on main first');
+  });
+
+  it('says a head that has gone quiet is not “running first”', () => {
+    const mine = queueJob({ jobId: 'mine', mine: true, projectId: 'p1' });
+    const stuck = queueJob({ state: 'RUNNING', mine: true, title: 'Orbit Web 组件迁移',
+                             startedAt: minutesAgo(123), lastReportAt: minutesAgo(123), stale: true });
+
+    expect(queueWaitLine(queue([stuck, mine]), 'mine', NOW_MS))
+      .toBe('Waiting to merge: “Orbit Web 组件迁移” has no report for 2h 3m — it may be stuck');
+    expect(queueJobStaleClause(stuck, NOW_MS)).toBe('no report for 2h 3m — it may be stuck');
+    expect(queueJobStaleClause(mine, NOW_MS)).toBeNull();
+  });
+
+  it('has nothing to wait on when the merge is the head or is not in the queue', () => {
+    const head = queueJob({ jobId: 'mine', mine: true, projectId: 'p1' });
+    // A QUEUED head is still ahead of nobody: this merge goes first.
+    expect(queueWaitLine(queue([head, queueJob({ jobId: 'other' })]), 'mine', NOW_MS)).toBeNull();
+    expect(queueWaitLine(queue([queueJob({ state: 'RUNNING' })]), 'absent', NOW_MS)).toBeNull();
+  });
+
+  it('names a row: its title, or what an unnamed row is', () => {
+    expect(queueJobTitle(queueJob({ title: 'DeepSeek Harness', mine: true })))
+      .toBe('“DeepSeek Harness”');
+    expect(queueJobTitle(queueJob({ kind: 'LAND_TASK', mine: true }))).toBe('Your landing');
+    expect(queueJobTitle(queueJob({ kind: 'LAND_TASK' })))
+      .toBe('Another account’s landing');
+    expect(queueJobTitle(queueJob({}))).toBe('Another account’s merge to main');
+  });
+
+  it('states each row: what it is doing, and for how long or how quiet', () => {
+    expect(queueJobStatus(queueJob({ state: 'RUNNING', phase: 'FETCH', kind: 'LAND_PROMOTION' })))
+      .toBe('Merge to main · fetching');
+    expect(queueJobStatus(queueJob({ state: 'RUNNING', phase: null }))).toBe('Merge to main · running');
+    expect(queueJobStatus(queueJob({ state: 'QUEUED', kind: 'LAND_TASK' }))).toBe('Landing · queued');
+    expect(queueJobSpan(queueJob({ enqueuedAt: minutesAgo(70) }), NOW_MS)).toBe('1h 10m');
+    expect(queueJobSpan(queueJob({ state: 'RUNNING', startedAt: minutesAgo(4) }), NOW_MS)).toBe('4m');
   });
 });

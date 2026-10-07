@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'antd';
 import type {
   IntegrationCheckResult,
+  IntegrationQueueView,
   ProjectOpenItemRow,
   ProjectPromotionView,
 } from '@orbit/shared';
@@ -26,14 +27,25 @@ import {
 } from '../lib/coordinatorChat';
 import { encodeId } from '../lib/idCodec';
 import {
+  projectIntegrationQueueQuery,
   projectOpenItemsQuery,
   projectPromotionQuery,
 } from '../lib/queries';
 import { ago, formatSpan } from '../lib/watches';
 import {
+  QUEUE_AUTOMATIC,
+  QUEUE_YOU,
   REVIEW,
   promotionEventLine,
   promotionReceiptLine,
+  queueJobSpan,
+  queueJobStaleClause,
+  queueJobStatus,
+  queueJobTitle,
+  queuePositionLine,
+  queueSummaryLine,
+  queueTitle,
+  queueWaitLine,
 } from '../lib/projectMerge';
 
 /**
@@ -349,12 +361,30 @@ function ReadyRows({
   );
 }
 
-/** State B's body: why it is still going, and that the reader is not the one it is waiting for. */
-function MergingRows({ promotion, now }: { promotion: ProjectPromotionView; now: number }): JSX.Element {
+/** State B's body: why it is still going, that the reader is not the one it is waiting for — and,
+ *  while it waits its turn, the queue it waits in (§2.2 J1). */
+function MergingRows({
+  promotion,
+  projectId,
+  queue,
+  now,
+}: {
+  promotion: ProjectPromotionView;
+  projectId: string;
+  /** The repository-and-ref queue, read only while this merge is QUEUED; null before it arrives. */
+  queue: IntegrationQueueView | null;
+  now: number;
+}): JSX.Element {
   const upstream = shortRef(promotion.upstreamRef);
   const execution = promotion.execution;
   const running = execution?.state === 'RUNNING';
   const rechecking = running && execution.phase === 'CHECK';
+  // This merge's own row in the queue: the landing of THIS project's branch into the target ref.
+  const myJob = queue?.jobs.find(
+    (job) => job.kind === 'LAND_PROMOTION' && job.projectId === projectId,
+  ) ?? null;
+  const position = queue && myJob ? queuePositionLine(queue, myJob.jobId) : null;
+  const wait = queue && myJob ? queueWaitLine(queue, myJob.jobId, now) : null;
   // The re-check's own numbers when the server has them, and what the row already carried when it
   // does not: a promotion re-checked before the platform counted anything still says how long it
   // has been running rather than going silent.
@@ -382,6 +412,29 @@ function MergingRows({ promotion, now }: { promotion: ProjectPromotionView; now:
               ? `${promotion.state === 'RECHECKING' ? `${upstream} moved${movedBy != null ? ` ${plural(movedBy, 'commit')}` : ''} since the check — ` : ''}re-checking the combined tree${since ? ` (${since}${typical != null ? ` of ~${formatSpan(typical)}` : ' so far'})` : ''}`
               : `confirmed — ${execution.phase && execution.phase !== 'CHECK' ? phaseStatus[execution.phase] : 'starting the merge'}`}
       </Row>
+      {/* The queue this merge waits in, while it waits: where it stands, what the head is doing,
+          and every job ahead and behind it in claim order. Absent when there is nothing to read
+          yet — the card says what it knows rather than inventing a position. */}
+      {position && queue ? (
+        <Row k={queueTitle(promotion.upstreamRef)}>
+          {`${position} · ${queueSummaryLine(queue)}`}
+          {wait ? <div className="promotion-queue-wait">{wait}</div> : null}
+          <ul className="project-promotion-tasks promotion-queue-jobs">
+            {queue.jobs.map((job) => (
+              <li key={job.jobId} data-state={job.state} data-stale={job.stale || undefined}>
+                {job.jobId === myJob?.jobId ? (
+                  <span className="promotion-queue-chip">{QUEUE_YOU}</span>
+                ) : null}
+                {job.automatic ? (
+                  <span className="promotion-queue-chip">{QUEUE_AUTOMATIC}</span>
+                ) : null}
+                {`${queueJobTitle(job)} — ${queueJobStatus(job)} · ${
+                  queueJobStaleClause(job, now) ?? queueJobSpan(job, now)}`}
+              </li>
+            ))}
+          </ul>
+        </Row>
+      ) : null}
       <Row k="You">{NOTHING_TO_DO}</Row>
     </>
   );
@@ -665,6 +718,10 @@ export function ProjectPromotionCard({
   const [reviewOpen, setReviewOpen] = useState(false);
   const navigate = useNavigate();
   const narrow = useIsMobile();
+  // The queue only while this merge waits its turn: a claimed job is described by its own phases,
+  // and a project with nothing queued should not poll the line on the card's behalf.
+  const queuedMerge = promotion.state === 'CONFIRMED' && promotion.execution?.state === 'QUEUED';
+  const queue = useQuery({ ...projectIntegrationQueueQuery(projectId), enabled: queuedMerge });
   const decide = useMutation({
     mutationFn: (door: 'confirm' | 'decline' | 'cancel') =>
       decidePromotion(projectId, promotion.promotionId, door, {
@@ -733,7 +790,7 @@ export function ProjectPromotionCard({
         {merged ? (
           <MergedRows promotion={promotion} project={project} now={now} />
         ) : merging ? (
-          <MergingRows promotion={promotion} now={now} />
+          <MergingRows promotion={promotion} projectId={projectId} queue={queuedMerge ? queue.data ?? null : null} now={now} />
         ) : blocked ? (
           <BlockedRows promotion={promotion} item={item} now={now} />
         ) : (

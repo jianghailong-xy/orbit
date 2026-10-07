@@ -315,6 +315,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     nested: ['blockerId'],
   },
   'GET /projects/:id/integration': { request: (of) => ({ params: { id: of.projectId } }) },
+  'GET /projects/:id/integration/queue': { request: (of) => ({ params: { id: of.projectId } }) },
   'PATCH /projects/:id/integration': {
     request: (of) => ({ params: { id: of.projectId }, body: { exceptionEscalationSeconds: 900 } }),
   },
