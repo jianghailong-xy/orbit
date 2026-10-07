@@ -615,3 +615,30 @@ shared client status; two-user end-to-end, independent backup restore and operat
 must update this record with actual versions, authorized test scope and observed differences. Final
 acceptance and integration follow the project's independent evidence review and project branch;
 production enablement is a separately authorized undertaking.
+
+## Implementation record: manager core
+
+Recorded 2026-10-07 for the code-track manager task. It was verified only with injected fake
+Kubernetes clients and disposable PostgreSQL databases; no cluster, kubeconfig or Ceph credential was
+used, and nothing here is evidence about a real cluster.
+
+| Area | As implemented |
+| --- | --- |
+| Switch | `ORBIT_MANAGED_RUNNERS_ENABLED`, read once through `ConfigService` by the global gate module and shared by every consumer. Values follow the table above; an unreadable value disables the feature and logs one warning. |
+| Disabled | The process builds only the gate, the read-only status facade and the guard that refuses writes. The runtime factory returns null without reading a profile or kubeconfig. No Kubernetes client, watch or timer exists. |
+| Enabled prerequisites | `ORBIT_MANAGED_RUNNERS_PROFILE` names an absolute JSON profile file; the shape is in [manager-profile.example.json](../deploy/managed-runner/manager-profile.example.json). It names the JSON kubeconfig file, context, expected API server and namespace, the storage class and capacity, a digest-pinned image, the runner's Orbit URL, resource amounts and every lifecycle budget. No budget has a default. The real client reads only that kubeconfig and only the named context. It refuses `current-context` fallback, in-cluster credentials, exec and auth-provider plugins, basic auth and disabled TLS verification. A missing or invalid profile reports `MANAGED_RUNNER_UNAVAILABLE` (writes answer 503); login and the rest of the server are unaffected. |
+| Routes | `GET /api/auth/capabilities`; `GET /api/managed-runner`; `POST /api/managed-runner/ensure` and `/retry` (202 with the status). `/wake`, `/sleep` and `/delete` exist and are guarded. While enabled they answer 409 `MANAGED_RUNNER_TRANSITION_REFUSED` without writing, because this version does not perform them. Off, every write is 401 without a login and then 404 `MANAGED_RUNNER_DISABLED`. Every write requires `idempotencyKey`; retry also requires the read `revision`. Tokens may read status (`runners:read`) but never write (`RUNNER_CONTROL`). |
+| Data | Migration 0394 adds `managed_runner` and its two enums. Additions to the proposed field list: `resourceOperationKind`, `startupDeadlineAt`, the manager lease (`leaseHolder`, `leaseExpiresAt`), `lastRequestKey` and `stateEnteredAt`. A CHECK holds `pvcName` and `podName` to the runner UUID. Unique keys cover the owner, runner, default workspace, PVC location, PVC UID and volume handle. All three foreign keys are `ON DELETE RESTRICT`, and the runner and workspace keys are composite with the owner. |
+| Manager | Moves REQUESTED → PROVISIONING (PVC, PV identity, bootstrap Secret, credential hash) → STARTING (the one Pod of the generation, until a fresh runner heartbeat after STARTING began) → READY, or FAILED with a structured cause. Each step is a compare-and-set on `revision` under a lease. A failed create is always read back by its deterministic name and compared before anything is retried. Transient failures back off with jitter up to `maxAttempts`. Identity mismatches fail immediately and are not retryable. The capacity admission hook admits everything; WAITING_CAPACITY is reserved for it. |
+| Compute release | Only an explicit retry of a mapping whose recorded Pod has terminated deletes that Pod, with a UID precondition. Nothing deletes a PVC, Secret, runner row or workspace. A vanished or replaced predecessor Pod leaves the mapping FAILED with `PREDECESSOR_STOP_UNPROVEN`, and the generation does not advance. |
+| Bootstrap credential | Observed difference from the Pod example: the runner row already exists, so the manager issues that row's credential into Secret `mr-boot-<runner-uuid>`. The Secret is mounted at `/run/orbit-bootstrap` and named by `ORBIT_RUNNER_CREDENTIAL_FILE`; the control plane stores only its hash. No enrollment token is minted and `ORBIT_RUNNER_ENROLLMENT_TOKEN_FILE` is not set. The current image entrypoint does not consume this credential yet; it stops before registering. |
+| Existing paths | `DELETE /api/runners/:id` and runner deregistration refuse a managed runner with 409 `MANAGED_RUNNER_DELETE_REFUSED`, even when the feature is off. Enrollment-token registration and device approval no longer reuse a managed runner by name. |
+
+Left to later work: generation-bound runner authentication, per-generation credentials and image
+consumption of them, the admission guard, fencing receipts and replacement (single-writer work);
+the login hook, `initialProvider` and `MODEL_UNAVAILABLE` (login work); capacity admission, wake,
+sleep and drain (wake/sleep work); the explicit deletion workflow; client rendering and realtime
+revision notices. Every real-cluster item in the verification table above remains unexecuted.
+
+The local evidence lives in `src/apiserver/src/managed-runners/*.spec.ts`, run by the unit suite, and
+in the three `*.pg.spec.ts` files there, each run with `scripts/run-pg-spec.sh <spec>`.
