@@ -1,16 +1,16 @@
 import Foundation
 
-/// Settings → Providers on iOS: where the account's models come from — the web's Providers page in
-/// its own three groups and words (`SettingsCopyParityTests` reads them back out of the web source).
+/// Settings → Providers on iOS: where the account's models come from — the web's Infrastructure page
+/// in its own three groups and words (`SettingsCopyParityTests` reads them back out of the web source).
 /// Adding or editing a key stays on the web; signing an engine in is a runner's page, which each
 /// runner row here opens; a pool's row opens the pool's page, where a shared pool is run from.
 public enum ProvidersOverview {
-    public static let onYourRunners = "On your runners"
-    public static let onYourRunnersDetail = "Use subscriptions signed in on your machines."
+    public static let onYourRunners = "Machines"
+    public static let onYourRunnersDetail = "Subscriptions signed in here are spent only by sessions on that machine."
     public static let accountPools = "Account pools"
     public static let accountPoolsDetail = "Several accounts under one name."
-    public static let apiKeys = "Your API keys"
-    public static let apiKeysDetail = "On your account and usable from every runner — billed per token."
+    public static let apiKeys = "API keys"
+    public static let apiKeysDetail = "On your account and usable from every machine — billed per token."
     public static let noKeys = "No keys yet"
     public static let editOnWeb = "Adding or changing a key happens on the web."
     /// A pool's page when the pool has gone — deleted, or left — as the web page says it.

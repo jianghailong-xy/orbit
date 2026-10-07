@@ -1,8 +1,25 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Dropdown, Popconfirm, Tag, type MenuProps } from 'antd';
-import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, LoadingOutlined, LoginOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons';
+import { App as AntdApp, Button, Dropdown, Input, Modal, Popconfirm, Tag, type MenuProps } from 'antd';
+import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, HolderOutlined, KeyOutlined, LoadingOutlined, LoginOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined, WarningFilled, WarningOutlined } from '@ant-design/icons';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
   accountToStartOn,
   withEnginePlanUsage,
@@ -35,11 +52,13 @@ import {
 } from '../lib/planUsage';
 import { formatResetTime } from '../lib/providerPools';
 import { runnersQuery } from '../lib/queries';
+import { listAttentionLine, type AttentionItem } from '../lib/runnerAttention';
 import { ago, engineVersionNumber, updateNoteOf } from '../lib/runnerEngines';
 import { ENGINE_PRESET, ENGINE_SLUGS } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 import { ProviderTile } from './ProviderGallery';
 import { ENGINE_NAME, GoogleSignInTerms, RunnerSignIn } from './RunnerSignIn';
+import { useRunnerTokenRotation } from './RunnerTokenRotation';
 import type { Runner } from './TasksSidePanel';
 
 const ENGINES = Object.keys(ENGINE_NAME) as LoginEngine[];
@@ -1006,24 +1025,67 @@ function RunnerEngineCard({
   collapsed,
   onToggle,
   focusEngine,
+  attention,
+  menuItems,
+  dragDisabled,
 }: {
   runner: Runner;
   collapsed: boolean;
   onToggle: () => void;
   /** The engine a deep link named for this runner, if this is the runner it named. */
   focusEngine?: InstallEngine | null;
+  /** What this machine needs a person for (runnerAttention), most severe first. */
+  attention: AttentionItem[];
+  /** The machine's own actions, behind its ⋯: rename it, rotate its token, delete it. */
+  menuItems: MenuProps['items'];
+  /** While a new order is being saved, the cards stay where they are. */
+  dragDisabled: boolean;
 }) {
   const [signIn, setSignIn] = useState<string | null>(null);
+  const { attributes, listeners, setActivatorNodeRef, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: runner.id, disabled: dragDisabled });
   const engines = runner.engines ?? null;
   const name = runner.displayName || runner.name;
-  const meta = [runner.hostname !== name && runner.hostname, runner.version && `v${runner.version}`]
+  // How many of its slots are taken, ahead of where it is: an offline machine takes none, and its
+  // header says Offline instead.
+  const max = runner.maxConcurrent ?? 0;
+  const active = runner.activeSessions ?? 0;
+  const busy = !!runner.online && max > 0;
+  const meta = [
+    busy && `${active} / ${max} running`,
+    runner.hostname !== name && runner.hostname,
+    runner.version && `v${runner.version}`,
+  ]
     .filter(Boolean)
     .join(' · ');
   const failed = runner.install?.status === 'failed' && runner.install.engine !== 'antigravity';
+  // Under its name, folded or not: the first two things this machine needs a person for. Nothing for
+  // an offline one, whose header already says what there is to say.
+  const attentionLine = listAttentionLine(attention);
+  const attentionTone = attention.slice(0, 2).some((item) => item.tone === 'bad') ? 'bad' : 'warn';
+  const attentionId = useId();
 
   return (
-    <div className={`re-card re-runner-card${runner.online ? '' : ' offline'}${collapsed ? ' collapsed' : ''}`}>
+    <div
+      ref={setNodeRef}
+      // Translate, not Transform: an open card is many times a folded one's height, and the scale a
+      // transform carries would stretch one into the other's slot while it is dragged past.
+      style={{ transform: CSS.Translate.toString(transform), transition, zIndex: isDragging ? 1 : undefined }}
+      className={`re-card re-runner-card${runner.online ? '' : ' offline'}${collapsed ? ' collapsed' : ''}${isDragging ? ' dragging' : ''}`}
+    >
       <div className="re-head">
+        <button
+          ref={setActivatorNodeRef}
+          type="button"
+          className="runner-drag-handle re-drag"
+          title="Drag to reorder"
+          aria-label={`Reorder ${name}`}
+          disabled={dragDisabled}
+          {...attributes}
+          {...listeners}
+        >
+          <HolderOutlined />
+        </button>
         {/* The toggle is its own button rather than the whole header: the header also holds a
             link, and a link inside a button is neither valid nor operable by keyboard. */}
         <button
@@ -1031,12 +1093,24 @@ function RunnerEngineCard({
           type="button"
           aria-expanded={!collapsed}
           aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${name}`}
+          aria-describedby={attentionLine ? attentionId : undefined}
           onClick={onToggle}
         >
           <span className={`re-dot${runner.online ? ' on' : ''}`} />
           <span className="re-runner-copy">
             <span className="re-runner">{name}</span>
             {meta && <span className="re-runner-meta">{meta}</span>}
+            {busy && (
+              <span className={`runner-util${active >= max ? ' full' : ''}`} title={`${active} of ${max} slots in use`}>
+                <span className="runner-util-fill" style={{ width: `${Math.min(100, (active / max) * 100)}%` }} />
+              </span>
+            )}
+            {attentionLine && (
+              <span id={attentionId} className={`runner-attention ${attentionTone}`}>
+                <WarningFilled />
+                <span>{attentionLine}</span>
+              </span>
+            )}
           </span>
           <span className={`re-chev${collapsed ? '' : ' open'}`} aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
@@ -1064,9 +1138,19 @@ function RunnerEngineCard({
             CLI on the machine — so its object is the runner, and this is a page about identity
             where everything else is scoped to one (runner, engine) pair. It lives behind this
             link, next to the machine's own version and slots. */}
-        <Link className="re-manage" aria-label={`Manage ${name}`} to={`/runners/${encodeId(runner.id)}`}>
-          Manage →
+        <Link className="re-manage" aria-label={`Details of ${name}`} to={`/runners/${encodeId(runner.id)}`}>
+          Details →
         </Link>
+        <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: menuItems }}>
+          <Button
+            size="small"
+            type="text"
+            className="re-machine-menu"
+            icon={<EllipsisOutlined />}
+            aria-label={`More actions for ${name}`}
+            title="More actions"
+          />
+        </Dropdown>
       </div>
       {collapsed ? null : engines ? (
         ENGINE_SLUGS.map((engine) => {
@@ -1133,8 +1217,22 @@ function RunnerEngineCard({
  * These are a different kind of identity from the API keys below — they live on one machine and
  * spend the subscription signed into there, rather than on the account and billed per token — so
  * they get their own section rather than extra rows in the same table.
+ *
+ * Each card is also the machine itself: dragged by its handle into the order every runner list uses,
+ * and renamed, its token rotated or the machine deleted from its ⋯.
+ * `head` replaces the section's own heading, and `attentionOf` puts under each machine's name what it
+ * needs a person for — an update it can't make itself among them (InfrastructurePage's Machines).
  */
-export function RunnerEngines() {
+export function RunnerEngines({
+  head,
+  attentionOf,
+}: {
+  head?: ReactNode;
+  attentionOf?: (runner: Runner) => AttentionItem[];
+} = {}) {
+  const { modal } = AntdApp.useApp();
+  const message = useToast();
+  const qc = useQueryClient();
   const [expanded, setExpanded] = useState<string[]>(readExpanded);
   const write = (next: string[]) => {
     try {
@@ -1200,19 +1298,109 @@ export function RunnerEngines() {
     0,
   );
 
+  const [renaming, setRenaming] = useState<Runner | null>(null);
+  const [renameVal, setRenameVal] = useState('');
+  const rotation = useRunnerTokenRotation();
+  const renameMut = useMutation({
+    mutationFn: ({ id, displayName }: { id: string; displayName: string }) =>
+      api(`/runners/${id}`, { method: 'PATCH', body: { displayName } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: runnersQuery().queryKey });
+      setRenaming(null);
+    },
+    onError: (e: Error) => message.error("Couldn't rename the machine", e.message),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => api(`/runners/${id}`, { method: 'DELETE' }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
+    onError: (e: Error) => message.error("Couldn't delete the machine", e.message),
+  });
+  const reorderMut = useMutation({
+    mutationFn: (ids: string[]) => api<Runner[]>('/runners/reorder', { method: 'POST', body: { ids } }),
+    // Moved at once, and put back if the server refuses: a card that waited for the round trip
+    // would jump back under the pointer first.
+    onMutate: async (ids) => {
+      await qc.cancelQueries({ queryKey: runnersQuery().queryKey });
+      const previous = qc.getQueryData<Runner[]>(runnersQuery().queryKey);
+      if (previous) {
+        const rank = new Map(ids.map((id, index) => [id, index]));
+        qc.setQueryData<Runner[]>(
+          runnersQuery().queryKey,
+          [...previous]
+            .sort(
+              (a, b) =>
+                (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+            )
+            .map((runner, position) => ({ ...runner, position })),
+        );
+      }
+      return { previous };
+    },
+    onError: (e: Error, _ids, context) => {
+      if (context?.previous) qc.setQueryData(runnersQuery().queryKey, context.previous);
+      message.error("Couldn't reorder the machines", e.message);
+    },
+    onSuccess: (data) => qc.setQueryData(runnersQuery().queryKey, data),
+    onSettled: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
+  });
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const onDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id || reorderMut.isPending) return;
+    const from = list.findIndex((runner) => runner.id === active.id);
+    const to = list.findIndex((runner) => runner.id === over.id);
+    if (from < 0 || to < 0) return;
+    reorderMut.mutate(arrayMove(list, from, to).map((runner) => runner.id));
+  };
+  const submitRename = () => {
+    if (renaming) renameMut.mutate({ id: renaming.id, displayName: renameVal.trim() });
+  };
+  const menuOf = (r: Runner): MenuProps['items'] => [
+    {
+      key: 'rename',
+      icon: <EditOutlined />,
+      label: 'Rename',
+      onClick: () => {
+        setRenameVal(r.displayName || r.name);
+        setRenaming(r);
+      },
+    },
+    { key: 'rotate', icon: <KeyOutlined />, label: 'Rotate token', onClick: () => rotation.confirmRotate(r) },
+    { type: 'divider' },
+    {
+      key: 'delete',
+      icon: <DeleteOutlined />,
+      label: 'Delete',
+      danger: true,
+      onClick: () =>
+        modal.confirm({
+          title: `Delete “${r.displayName || r.name}”?`,
+          content: 'This removes the machine from your account. Register it again to add it back.',
+          okText: 'Delete',
+          okButtonProps: { danger: true },
+          cancelText: 'Cancel',
+          onOk: () => deleteMut.mutateAsync(r.id),
+        }),
+    },
+  ];
+
   return (
     <div className="re-sec">
-      <div className="re-sec-head">
-        <h3>On your runners</h3>
-        <span className="re-sec-sub">
-          Use subscriptions signed in on your machines.
-        </span>
-        {list.length > 0 && (
-          <span className="re-sec-count">
-            {list.length} runner{list.length === 1 ? '' : 's'} · {ready} signed in
+      {head ?? (
+        <div className="re-sec-head">
+          <h3>On your runners</h3>
+          <span className="re-sec-sub">
+            Use subscriptions signed in on your machines.
           </span>
-        )}
-      </div>
+          {list.length > 0 && (
+            <span className="re-sec-count">
+              {list.length} runner{list.length === 1 ? '' : 's'} · {ready} signed in
+            </span>
+          )}
+        </div>
+      )}
       {list.length === 0 ? (
         <div className="re-empty">
           <div className="re-empty-logos">
@@ -1227,24 +1415,56 @@ export function RunnerEngines() {
           </div>
           <h4>Already pay for Claude, Codex or Kimi?</h4>
           <p>
-            Add a runner and sign its CLIs in — your workspaces then run on the subscription you
-            already have, with no API key.
+            Register a machine and sign its CLIs in — your workspaces then run on the subscription
+            you already have, with no API key.
           </p>
-          <Link to="/runners">
-            <Button>Add a runner</Button>
+          <Link to="/runners/register">
+            <Button>Register a machine</Button>
           </Link>
         </div>
       ) : (
-        list.map((runner) => (
-          <RunnerEngineCard
-            key={runner.id}
-            runner={runner}
-            collapsed={!expanded.includes(runner.id)}
-            onToggle={() => toggle(runner.id)}
-            focusEngine={runner.id === focusRunner ? focusEngine : null}
-          />
-        ))
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <SortableContext items={list.map((runner) => runner.id)} strategy={verticalListSortingStrategy}>
+            {list.map((runner) => (
+              <RunnerEngineCard
+                key={runner.id}
+                runner={runner}
+                collapsed={!expanded.includes(runner.id)}
+                onToggle={() => toggle(runner.id)}
+                focusEngine={runner.id === focusRunner ? focusEngine : null}
+                attention={attentionOf?.(runner) ?? []}
+                menuItems={menuOf(runner)}
+                dragDisabled={reorderMut.isPending}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
       )}
+
+      <Modal
+        title="Rename machine"
+        open={renaming !== null}
+        okText="Save"
+        cancelText="Cancel"
+        confirmLoading={renameMut.isPending}
+        onOk={submitRename}
+        onCancel={() => setRenaming(null)}
+        destroyOnHidden
+      >
+        <Input
+          value={renameVal}
+          onChange={(e) => setRenameVal(e.target.value)}
+          onPressEnter={submitRename}
+          placeholder={renaming?.name}
+          maxLength={60}
+          autoFocus
+        />
+        <div style={{ marginTop: 8, color: 'var(--text-3)', fontSize: 12 }}>
+          Leave empty to use the machine name{renaming ? ` (${renaming.name})` : ''}.
+        </div>
+      </Modal>
+
+      {rotation.tokenModal}
     </div>
   );
 }

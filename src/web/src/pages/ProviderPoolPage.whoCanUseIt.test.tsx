@@ -10,16 +10,16 @@ import type { CodexLogin } from '../lib/codexLogin';
 import { encodeId } from '../lib/idCodec';
 import type { ProviderPool } from '../lib/providerPools';
 import type { SharedPool, SharedPoolKey, SharedPoolPerson } from '../lib/sharedPools';
+import { InfrastructurePage } from './InfrastructurePage';
 import { ProviderPoolPage } from './ProviderPoolPage';
-import { ProvidersPage } from './ProvidersPage';
 
 /**
- * One Codex pool (scheme A, docs/mocks/account-pool-access/) on its own page and on /providers, mounted
+ * One Codex pool (scheme A, docs/mocks/account-pool-access/) on its own page and on /infrastructure, mounted
  * for real against a fake API, as its owner and as somebody they added read it: the owner's ChatGPT
  * accounts — "Everyone here" once the pool is shared, read the same way by everybody it runs the
  * sessions of (2026-10-03) — its API keys (also "Everyone here"), "Who can use it" with its two settings
  * and each person's row, what "Add account" asks first, what sharing and going back to "Just me" say
- * before they happen, and the pool's card on the Providers page. The pool and its people are the boards'
+ * before they happen, and the pool's card on the Infrastructure page. The pool and its people are the boards'
  * own: jianghailong's Codex Pool, shared with Zhang Min and Lin Wei.
  */
 
@@ -199,7 +199,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
           <MemoryRouter initialEntries={[at]}>
             <AntApp>
               <Routes>
-                <Route path="/providers" element={<ProvidersPage />} />
+                <Route path="/infrastructure" element={<InfrastructurePage />} />
                 <Route path="/providers/pools/:id" element={<ProviderPoolPage />} />
               </Routes>
             </AntApp>
@@ -571,10 +571,10 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     ]);
   });
 
-  it('heads the pool’s card on the Providers page by who reads it (03-6)', async () => {
+  it('heads the pool’s card on the Infrastructure page by who reads it (03-6)', async () => {
     const head = () => container.querySelector<HTMLElement>('.pool-sec .pool-card .re-head')!;
     asOwner([], []);
-    await mount('/providers');
+    await mount('/infrastructure');
     expect(head().querySelector('.pool-shared-chip')).toBeNull();
     expect(text(head().querySelector('.re-summary'))).toBe('Just me · 2 of 2 accounts available');
     expect(head().querySelector('.pool-people')).toBeNull();
@@ -583,7 +583,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     container.remove();
 
     asOwner([ZHANG, LIN]);
-    await mount('/providers');
+    await mount('/infrastructure');
     expect(text(head().querySelector('.pool-shared-chip'))).toBe('SHARED');
     expect(text(head().querySelector('.re-summary'))).toBe('4 of 4 accounts available');
     expect(Array.from(head().querySelectorAll('.pool-people .pool-av')).map((el) => el.textContent)).toEqual([
@@ -596,7 +596,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     container.remove();
 
     asZhang();
-    await mount('/providers');
+    await mount('/infrastructure');
     expect(text(head().querySelector('.pool-shared-chip'))).toBe('SHARED');
     expect(text(head().querySelector('.re-summary'))).toBe(
       'jianghailong’s · 4 accounts and keys you can run on',

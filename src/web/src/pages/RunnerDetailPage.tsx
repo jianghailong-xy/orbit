@@ -335,7 +335,7 @@ export function RunnerDetailPage() {
     mutationFn: () => api(`/runners/${runnerId}`, { method: 'DELETE' }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['runners'] });
-      navigate('/runners');
+      navigate('/infrastructure');
     },
     onError: (e: Error) => message.error("Couldn't delete the runner", e.message),
   });
@@ -1115,8 +1115,8 @@ export function RunnerDetailPage() {
     return (
       <div className="runners-empty">
         Runner not found —{' '}
-        <span className="rd-link" onClick={() => navigate('/runners')}>
-          back to Runners
+        <span className="rd-link" onClick={() => navigate('/infrastructure')}>
+          back to Infrastructure
         </span>
         .
       </div>
@@ -1304,8 +1304,8 @@ export function RunnerDetailPage() {
     <>
       <div className="rd-page">
       <div className="rd-head">
-        <span className="rd-back" onClick={() => navigate('/runners')}>
-          <ArrowLeftOutlined /> Runners
+        <span className="rd-back" onClick={() => navigate('/infrastructure')}>
+          <ArrowLeftOutlined /> Infrastructure
         </span>
       </div>
 

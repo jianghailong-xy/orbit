@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// Settings on iOS says what the web's Settings, Profile, Shared links, Access tokens and Providers
+/// Settings on iOS says what the web's Settings, Profile, Shared links, Access tokens and Infrastructure
 /// pages say. `SettingsCopy`, `SharedLinksList`, `AccessTokensList` and `ProvidersOverview` carry
 /// those pages' words over to the phone (and Access tokens' to the Mac's form too), and nothing in
 /// either build notices a word changed at one end only — so each one is looked up in the web source
@@ -21,7 +21,7 @@ final class SettingsCopyParityTests: XCTestCase {
     private static let accessTokens = "src/web/src/pages/AccessTokensPage.tsx"
     private static let accessTokenTable = "src/web/src/components/AccessTokenTable.tsx"
     private static let accessTokenWords = "src/web/src/lib/accessTokens.ts"
-    private static let providers = "src/web/src/pages/ProvidersPage.tsx"
+    private static let infrastructure = "src/web/src/pages/InfrastructurePage.tsx"
     private static let engines = "src/web/src/components/RunnerEngines.tsx"
     private static let pools = "src/web/src/components/AccountPools.tsx"
 
@@ -194,22 +194,22 @@ final class SettingsCopyParityTests: XCTestCase {
                    in: Self.accessTokenWords)
     }
 
-    /// Providers: the web page's three groups, their lines, and a runner card's summary.
+    /// Providers: the web Infrastructure page's three groups, their lines, and a machine card's summary.
     func testProvidersSayWhatTheWebPageSays() throws {
+        let page = try web(Self.infrastructure)
+        assertSays(page, "<h3>\(ProvidersOverview.onYourRunners)</h3>", in: Self.infrastructure)
+        assertSays(page, "re-sec-sub\"> \(ProvidersOverview.onYourRunnersDetail)", in: Self.infrastructure)
+        assertSays(page, "<h3>\(ProvidersOverview.apiKeys)</h3>", in: Self.infrastructure)
+        assertSays(page, "re-sec-sub\"> \(ProvidersOverview.apiKeysDetail)", in: Self.infrastructure)
+        assertSays(page, "<h3>\(ProvidersOverview.noKeys)</h3>", in: Self.infrastructure)
+
         let engines = try web(Self.engines)
-        assertSays(engines, "<h3>\(ProvidersOverview.onYourRunners)</h3>", in: Self.engines)
-        assertSays(engines, "re-sec-sub\"> \(ProvidersOverview.onYourRunnersDetail)", in: Self.engines)
         assertSays(engines, "return '\(ProvidersOverview.runnerSummary(try runner(engines: nil)))'", in: Self.engines)
         assertSays(engines, "'All signed in' : `${ready} of ${engines.length} signed in`", in: Self.engines)
 
         let pools = try web(Self.pools)
         assertSays(pools, "<h3>\(ProvidersOverview.accountPools)</h3>", in: Self.pools)
         assertSays(pools, "re-sec-sub\"> \(ProvidersOverview.accountPoolsDetail)", in: Self.pools)
-
-        let page = try web(Self.providers)
-        assertSays(page, "<h3>\(ProvidersOverview.apiKeys)</h3>", in: Self.providers)
-        assertSays(page, "re-sec-sub\"> \(ProvidersOverview.apiKeysDetail)", in: Self.providers)
-        assertSays(page, "<h3>\(ProvidersOverview.noKeys)</h3>", in: Self.providers)
     }
 
     private func runner(engines: String?) throws -> Runner {

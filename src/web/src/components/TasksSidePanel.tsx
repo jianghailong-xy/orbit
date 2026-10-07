@@ -144,10 +144,9 @@ const TOP: TopNavItem[] = [
   { key: 'wiki', icon: <SidebarNavIcon name="wiki" />, label: 'Wiki' },
   // No Following here: its watches are the waits agents keep for their own sessions, already shown
   // in each session's header and Watching strip, and those are what link to /following.
-  { key: 'runners', icon: <SidebarNavIcon name="runners" />, label: 'Runners' },
-  // Providers is for everyone: each user manages their own (BYOK) list; admins additionally
-  // manage the shared ones on the same page.
-  { key: 'providers', icon: <SidebarNavIcon name="providers" />, label: 'Providers' },
+  // Infrastructure is where agents run and whose quota they spend: the machines, the API keys and the
+  // account pools, each user's own — what the Runners and Providers rows used to split between them.
+  { key: 'infrastructure', icon: <SidebarNavIcon name="runners" />, label: 'Infrastructure' },
 ];
 
 // The left sidebar is user-resizable; the chosen width persists across refreshes.
@@ -159,6 +158,13 @@ const MIN_SIDEBAR_WIDTH = 200;
 const MAX_SIDEBAR_WIDTH = 480;
 const clampWidth = (w: number): number =>
   Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, w));
+
+/** Infrastructure's own page, and the pages under the Runners and Providers addresses it took over. */
+export function isInfrastructureRoute(pathname: string): boolean {
+  return ['/infrastructure', '/runners', '/providers'].some(
+    (root) => pathname === root || pathname.startsWith(`${root}/`),
+  );
+}
 
 /** The first nine Workspace rows own the matching global Cmd/Ctrl + number shortcut. */
 export function workspaceShortcutLabel(index: number, isMac = IS_MAC_PLATFORM): string | null {
@@ -399,8 +405,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   }, [onWiki, hereWorkspaceId]);
 
   // Workspace/session routes have no proxy parent in TOP: a resolved Workspace highlights its own
-  // row, while an unresolved deep link briefly leaves the fixed nav unselected. Runner management
-  // remains scoped to Runners.
+  // row, while an unresolved deep link briefly leaves the fixed nav unselected. A machine's page, a
+  // key's and a pool's are Infrastructure's, under the addresses the Runners and Providers pages gave
+  // them.
   const routeKey = projectPageKey
     ? projectPageKey
     : activeWorkspaceId
@@ -409,8 +416,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
         loc.pathname.startsWith('/sessions/') ||
         loc.pathname.startsWith('/agents/')
       ? ''
-      : loc.pathname.startsWith('/runner')
-        ? 'runners'
+      : isInfrastructureRoute(loc.pathname)
+        ? 'infrastructure'
         : loc.pathname.startsWith('/projects/')
           ? (projectRowKey ?? 'projects')
           // Every wiki route — a space, a topic, an entry's drawer, Review — is the Wiki's own

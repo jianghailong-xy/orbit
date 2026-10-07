@@ -11,7 +11,7 @@ import { RunnerRegisterGuide } from './components/RunnerRegisterGuide';
 import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
-import { ProvidersPage } from './pages/ProvidersPage';
+import { InfrastructurePage } from './pages/InfrastructurePage';
 import { ProviderConnectPage, ProviderPickPage } from './pages/ProviderConnectPage';
 import { ProviderPoolPage } from './pages/ProviderPoolPage';
 import { CliLoginPage } from './pages/CliLoginPage';
@@ -19,7 +19,6 @@ import { EnrollPage } from './pages/EnrollPage';
 import { LoginPage } from './pages/LoginPage';
 import { SetupPage } from './pages/SetupPage';
 import { RunnerDetailPage } from './pages/RunnerDetailPage';
-import { RunnersPage } from './pages/RunnersPage';
 import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedLinksPage } from './pages/SharedLinksPage';
 import { AccessTokensPage } from './pages/AccessTokensPage';
@@ -40,6 +39,16 @@ function LegacySessionRedirect() {
     to = '/';
   }
   return <Navigate to={to} replace />;
+}
+
+// The Runners and Providers pages are one page now, Infrastructure, and their addresses land on it
+// with the query they carried: older macOS/iOS clients open `/providers?runner=<id>&engine=<engine>`
+// to sign an engine in, and that card still opens on that engine. Bare `/providers` meant the keys,
+// so it lands on them.
+function InfrastructureRedirect({ keys = false }: { keys?: boolean }) {
+  const { search } = useLocation();
+  const hash = keys && !new URLSearchParams(search).has('runner') ? '#keys' : '';
+  return <Navigate to={{ pathname: '/infrastructure', search, hash }} replace />;
 }
 
 // Signed out on an in-app page: log in first, then come back to it. The page (path + query) rides
@@ -188,17 +197,19 @@ export function App() {
                 </DocView>
               }
             />
-            {/* Providers is for everyone (each user's own BYOK list). Connecting one is its own
-                two-page flow — pick a vendor, then paste a key — so "/providers/new/anthropic"
-                can be linked to directly. Keep the old admin-only path as a redirect. */}
+            {/* Machines, API keys and account pools, for everyone (each user's own). Connecting a
+                key is its own two-page flow — pick a vendor, then paste a key — so
+                "/providers/new/anthropic" can be linked to directly; the pages under /providers and
+                /runners keep their addresses. Keep the old admin-only path as a redirect. */}
             <Route
-              path="providers"
+              path="infrastructure"
               element={
                 <DocView>
-                  <ProvidersPage />
+                  <InfrastructurePage />
                 </DocView>
               }
             />
+            <Route path="providers" element={<InfrastructureRedirect keys />} />
             <Route
               path="providers/new"
               element={
@@ -401,14 +412,7 @@ export function App() {
                 </DocView>
               }
             />
-            <Route
-              path="runners"
-              element={
-                <DocView>
-                  <RunnersPage />
-                </DocView>
-              }
-            />
+            <Route path="runners" element={<InfrastructureRedirect />} />
             <Route
               path="runners/register"
               element={

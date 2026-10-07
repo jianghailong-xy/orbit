@@ -34,8 +34,8 @@ type Runtime = NonNullable<ProviderPreset['runtime']>;
 export function ProviderPickPage() {
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      <Link className="provider-back" to="/providers">
-        ‹ All providers
+      <Link className="provider-back" to="/infrastructure#keys">
+        ‹ Infrastructure
       </Link>
       <h1 className="page-title" style={{ marginTop: 8 }}>
         Add a provider
@@ -93,8 +93,8 @@ export function ProviderConnectPage() {
     if (!row) {
       return (
         <div className="provider-form">
-          <Link className="provider-back" to="/providers">
-            ‹ All providers
+          <Link className="provider-back" to="/infrastructure#keys">
+            ‹ Infrastructure
           </Link>
           <div style={{ marginTop: 16, color: 'var(--text-3)' }}>That provider no longer exists.</div>
         </div>
@@ -276,7 +276,7 @@ function ProviderForm({
       void qc.invalidateQueries({ queryKey: PROVIDERS_LIST_KEY });
       void qc.invalidateQueries({ queryKey: providersQuery().queryKey });
       message.success(editing ? 'Provider updated' : 'Provider created');
-      navigate('/providers');
+      navigate('/infrastructure#keys');
     },
     onError: (e: Error) =>
       message.error(editing ? "Couldn't save the provider" : "Couldn't connect the provider", e.message),
@@ -366,8 +366,8 @@ function ProviderForm({
 
   return (
     <div className="provider-form">
-      <Link className="provider-back" to={editing ? '/providers' : '/providers/new'}>
-        ‹ All providers
+      <Link className="provider-back" to={editing ? '/infrastructure#keys' : '/providers/new'}>
+        {editing ? '‹ Infrastructure' : '‹ All providers'}
       </Link>
       <h1 className="page-title" style={{ marginTop: 8 }}>
         {title}
@@ -677,7 +677,7 @@ function ProviderForm({
               Save anyway
             </Button>
           )}
-          <Button onClick={() => navigate('/providers')}>Cancel</Button>
+          <Button onClick={() => navigate('/infrastructure#keys')}>Cancel</Button>
           <Button
             type="primary"
             disabled={!canSave}

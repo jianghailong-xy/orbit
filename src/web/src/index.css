@@ -14370,6 +14370,23 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   font-size: 12px;
 }
+/* Infrastructure's Add: each choice says what it makes under its name. */
+.infra-add {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-width: 300px;
+  padding: 3px 0;
+  white-space: normal;
+}
+.infra-add b {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.infra-add span {
+  font-size: 12px;
+  color: var(--text-3);
+}
 .provider-gallery {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -14808,22 +14825,52 @@ button.chat-jump-start:hover {
   flex: none;
   align-items: center;
   min-height: 44px;
-  margin: 0 14px 0 8px;
+  margin: 0 4px 0 8px;
 }
 .re-runner-card .re-manage:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 3px;
   border-radius: 4px;
 }
+/* The card is the machine too: it moves by the handle at its head's start, its own actions sit behind
+   the ⋯ at the end, and under its name are how busy it is and what it needs a person for. */
+.re-runner-card.dragging {
+  position: relative;
+  box-shadow: 0 8px 24px rgba(31, 35, 41, 0.16);
+}
+.re-runner-card .re-drag {
+  margin: 0 -8px 0 6px;
+}
+.re-runner-card .re-drag + .re-toggle {
+  border-radius: 0;
+}
+.re-runner-copy .runner-util {
+  display: block;
+  margin-top: 3px;
+}
+.re-runner-copy .runner-attention {
+  margin-top: 2px;
+}
+.re-runner-card .re-machine-menu {
+  flex: none;
+  margin-right: 10px;
+}
 @container re-card (max-width: 600px) {
   .re-runner-card .re-head {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
     column-gap: 8px;
-    padding: 0 14px;
+    padding: 0 14px 0 6px;
+  }
+  .re-runner-card .re-drag {
+    grid-row: 1;
+    grid-column: 1;
+    align-self: start;
+    margin: 13px 0 0;
   }
   .re-runner-card .re-toggle {
-    grid-column: 1 / -1;
+    grid-row: 1;
+    grid-column: 2 / -1;
     align-items: flex-start;
     min-height: 54px;
     padding: 10px 0 0;
@@ -14833,11 +14880,17 @@ button.chat-jump-start:hover {
     margin-top: 8px;
   }
   .re-runner-status {
+    grid-column: 2;
     margin-left: 17px;
   }
   .re-runner-card .re-manage {
-    grid-column: 2;
+    grid-column: 3;
     margin: 0;
+  }
+  .re-runner-card .re-machine-menu {
+    grid-column: 4;
+    align-self: center;
+    margin: 0 -6px 0 0;
   }
 }
 
