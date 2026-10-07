@@ -918,8 +918,7 @@ private struct ProjectMergeTimelineRow: View {
 
 /// "Review and start" — the coordinator's request to start, opened over the project's sessions page
 /// (docs/mocks/project-start-sessions-page): the card the conversation draws, from the same request
-/// — its suggestion, its reason and Orbit's ready check — pressed at the same door with the request
-/// named. Chat about this stays the conversation's: the coordinator's row is under this sheet.
+/// — its suggestion and its reason — pressed at the same door with the request named. Chat about this stays the conversation's: the coordinator's row is under this sheet.
 ///
 /// The card keeps the request it was first drawn for, as the conversation's does, so a request that
 /// stops standing is said on the card (dimmed, Start dead) rather than replaced by a blank; and a
@@ -968,8 +967,9 @@ private struct RequestedStartProjectSheet: View {
                     ProjectCriteriaDocument.Item(id: $0.id, ordinal: $0.ordinal, text: $0.text,
                                                  satisfied: $0.satisfied)
                 },
-                plan: StartProject.planView(graph: store.graph, request: request,
-                                            fallbackCount: document.taskCount),
+                plan: StartProject.planView(graph: store.graph, fallbackCount: document.taskCount),
+                escalationSeconds: document.integration?.escalationSeconds
+                    ?? StartProject.defaultEscalationSeconds,
                 draft: draft,
                 standing: pressed ? .live : StartProject.standing(itemID: row.itemId, request: request,
                                                                   openItems: store.openItems,

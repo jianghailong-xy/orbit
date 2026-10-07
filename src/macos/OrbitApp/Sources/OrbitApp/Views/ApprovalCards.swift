@@ -2466,7 +2466,7 @@ struct StartProjectCard: View {
     /// Automatic on opens the first one, and the card says so.
     var hasCoordinator: Bool = true
     /// How long a problem waits on the coordinator before it reaches the owner.
-    var escalationSeconds: Int = 7_200
+    var escalationSeconds: Int = StartProject.defaultEscalationSeconds
     /// The settings as the owner has left them.
     let draft: StartSettingsDraft
     let standing: StartProject.Standing
@@ -2666,7 +2666,7 @@ struct StartProjectCard: View {
                 HStack(alignment: .firstTextBaseline, spacing: 7) {
                     Image(systemName: "person.fill").font(.orbitMeta).foregroundStyle(Color.blue)
                     (Text(item.text)
-                        + Text(item.detail.map { " · \($0)" } ?? "").foregroundStyle(.secondary))
+                        + Text(verbatim: item.detail.map { " · \($0)" } ?? "").foregroundStyle(.secondary))
                         .font(.orbitSubtext)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -3051,25 +3051,17 @@ private struct CriteriaChangeCardView: View {
     }
 }
 
-/// A section's head on the start and change cards: small, upper-cased, secondary — with the
-/// coordinator's mark at its trailing edge where the section is its suggestion.
+/// A section's head on the start and change cards: small, upper-cased, secondary.
 private struct StartSectionHead: View {
     let title: String
-    var aside: String? = nil
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(title)
-                .font(.orbitLabel.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-            Spacer(minLength: 4)
-            if let aside {
-                Text(aside).font(.orbitLabel).foregroundStyle(Color.blue)
-                    .lineLimit(1)
-            }
-        }
-        .padding(.top, 4)
+        Text(title)
+            .font(.orbitLabel.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .textCase(.uppercase)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 4)
     }
 }
 

@@ -2207,8 +2207,12 @@ struct OwnerStartProjectSheet: View {
                     ProjectCriteriaDocument.Item(id: $0.id, ordinal: $0.ordinal, text: $0.text,
                                                  satisfied: $0.satisfied)
                 },
-                plan: StartProject.planView(graph: store.graph, request: request,
-                                            fallbackCount: document.taskCount),
+                plan: StartProject.planView(graph: store.graph, fallbackCount: document.taskCount),
+                // A project nobody coordinates yet gets its first coordinator from a start with
+                // Automatic on, and the card says so.
+                hasCoordinator: document.coordinatorSessionId != nil,
+                escalationSeconds: document.integration?.escalationSeconds
+                    ?? StartProject.defaultEscalationSeconds,
                 draft: draft,
                 // A project started at another end meanwhile is the door's to refuse, 409, and the
                 // card says so over the door's words.

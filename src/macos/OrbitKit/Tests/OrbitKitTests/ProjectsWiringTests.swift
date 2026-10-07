@@ -328,12 +328,18 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(sheet.contains("StartProject.ownerRequest(settings: settings,"))
         XCTAssertTrue(sheet.contains("StartProject.body(request: request, draft: draft,"))
         XCTAssertTrue(sheet.contains("requestId: nil"))
+        XCTAssertTrue(sheet.contains("hasCoordinator: document.coordinatorSessionId != nil,"),
+                      "a project nobody coordinates yet is told a start with Automatic on opens one")
         XCTAssertFalse(sheet.contains("onChatAbout"), "there is no conversation to talk in over the page")
         let cards = code(try appSource("Views/ApprovalCards.swift"))
         let card = try slice(cards, from: "struct StartProjectCard: View {",
                              to: "private struct CriteriaChangeCardView: View")
-        XCTAssertTrue(card.contains("aside: asked ? StartProject.suggestedByCoordinator : nil)"))
-        XCTAssertTrue(card.contains("if asked {"), "Orbit checked the plan only where a ready check ran")
+        XCTAssertTrue(card.contains("Text(StartProject.howItRunsNote(asked: asked, suggestedOff: asked && !request.settings.automatic))"),
+                      "whose settings these are: the coordinator's suggestion, or the default rule's")
+        XCTAssertTrue(card.contains(": StartProject.nobodyAskedLine(hasCoordinator: hasCoordinator))"),
+                      "a card nobody asked for quotes nobody")
+        XCTAssertFalse(card.contains("checkedLine"),
+                       "and no card says Orbit checked the plan (the owner, 2026-10-07)")
         XCTAssertTrue(card.contains("if let onChatAbout { chatButton(onChatAbout) }"))
         let conversation = try slice(cards, from: "private struct StartProjectCardView: View {",
                                      to: "struct StartProjectCard: View {")

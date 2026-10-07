@@ -416,6 +416,10 @@ public enum StartProject {
         }
     }
 
+    /// The escalation window a project has when the read does not say
+    /// (`project.exception_escalation_seconds`'s default) — web's `DEFAULT_ESCALATION_SECONDS`.
+    public static let defaultEscalationSeconds = 7_200
+
     /// What still comes to the owner once the project starts with these settings — the consequence
     /// of the Automatic switch, listed rather than described, so flipping it shows what it costs.
     /// Web's `startComesToYou`, by the rules the server runs: an OWNER_CONFIRMED task is always the
