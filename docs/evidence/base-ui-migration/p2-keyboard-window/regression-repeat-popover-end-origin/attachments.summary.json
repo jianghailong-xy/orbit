@@ -1,0 +1,57 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2-keyboard-window/regression-repeat-popover-end-origin/<name>",
+ "files": [
+  {
+   "name": "chromium-light-desktop--popover-end-zoom-origin-matches--motion.json",
+   "bytes": 25753,
+   "sha256": "a80fc3c54d8ce4c8a5bb32a6e49442d738037ee6b1a765252904565ee7ae8d11"
+  },
+  {
+   "name": "chromium-light-desktop--popover-end-zoom-origin-matches--repeat-1--motion.json",
+   "bytes": 26608,
+   "sha256": "7ea70a75625288520b2aae4e141ce0e735db57059c2deaa7bf20309b839feb02"
+  },
+  {
+   "name": "chromium-light-desktop--popover-end-zoom-origin-matches--repeat-2--motion.json",
+   "bytes": 27120,
+   "sha256": "412a50700fa20ab7458af6d45808237e1e228eb4668ea8612db44ba3ffd53708"
+  },
+  {
+   "name": "chromium-light-desktop--popover-end-zoom-origin-matches--repeat-3--motion.json",
+   "bytes": 28340,
+   "sha256": "7b4221652df02cceaa7fe3f6b0023ac9f62077fea2cd15b88cc531a0c11b0f9f"
+  },
+  {
+   "name": "chromium-light-desktop--popover-end-zoom-origin-matches--repeat-4--motion.json",
+   "bytes": 27226,
+   "sha256": "8d24004a3e9043cd8270cd2bd9eeaa04ce56d41cf8f72dcfb7ddabede260e72a"
+  },
+  {
+   "name": "chromium-light-desktop--popover-end-zoom-origin-matches--repeat-5--motion.json",
+   "bytes": 27918,
+   "sha256": "6140c3e0529f9023437e1ede584f63ec9770fe461bd24a2c57f28fb8ebd24f17"
+  },
+  {
+   "name": "chromium-light-desktop--popover-end-zoom-origin-matches--repeat-6--motion.json",
+   "bytes": 28123,
+   "sha256": "8cbfcdd4d7a14400cabe4a0ef8a209d575b79ce55b493a4751ca3cc9ab9b6a80"
+  },
+  {
+   "name": "chromium-light-desktop--popover-end-zoom-origin-matches--repeat-7--motion.json",
+   "bytes": 26345,
+   "sha256": "7a747a3b596d5514fd3174834272c50fa74204a63573497f658d2965380992f4"
+  },
+  {
+   "name": "chromium-light-desktop--popover-end-zoom-origin-matches--repeat-8--motion.json",
+   "bytes": 27812,
+   "sha256": "e9ade58c4ee67e63dbbf32ca7cd3fb5b1ba4d8bd24bbb66668dd630ec4a95412"
+  },
+  {
+   "name": "chromium-light-desktop--popover-end-zoom-origin-matches--repeat-9--motion.json",
+   "bytes": 25134,
+   "sha256": "ddb80a2d816691ef675882bac26c6e025999992843b501682ef2f139d7ac4a82"
+  }
+ ]
+}

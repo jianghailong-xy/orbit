@@ -1,0 +1,547 @@
+{
+ "records": [
+  "2026-10-07.json",
+  "2026-10-07b.json"
+ ],
+ "before": {
+  "baseline": {
+   "commit": "b5a39dd48c1a72a96afa45edeef3926eb3dc5792",
+   "scopeHash": "ef762c2dfd107ffcc0f3b0161e33872ce425f9af0bdd524f66b837f5e4662885"
+  },
+  "owners": {
+   "KEEP": 1,
+   "P4.1": 18,
+   "P4.2": 81,
+   "P4.3a": 82,
+   "P4.3b": 33,
+   "P4.4": 50,
+   "P5.1": 28,
+   "P5.2": 11,
+   "P5.3": 90,
+   "P6": 36
+  },
+  "unowned": [],
+  "pending": [],
+  "p41": [
+   {
+    "path": "src/web/src/components/AccessTokenTable.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/NewAccessTokenDialog.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18476,
+    "kind": "antd-reference",
+    "text": "/* A card drawn without AntD, which components/ui has none of (docs/evidence/base-ui-migration/"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18478,
+    "kind": "antd-reference",
+    "text": "the AntD Card it sits beside on the profile page, from the same tokens. */"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18726,
+    "kind": "ant-class",
+    "text": ".access-token-field .ant-radio-group {"
+   },
+   {
+    "path": "src/web/src/pages/AccessTokensPage.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/AccessTokensPage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/pages/CliLoginPage.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/CliLoginPage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/pages/ProfilePage.revokeAccessTokens.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/ProfilePage.signInMethods.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/ProfilePage.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/ProfilePage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/pages/SettingsPage.accessTokens.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/SettingsPage.modelRouting.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/SettingsPage.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/SettingsPage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/pages/SetupPage.tsx",
+    "category": "production"
+   }
+  ]
+ },
+ "after": {
+  "baseline": {
+   "commit": "b0b59fa39c4ab979c01589ec424e113dc6ed5441",
+   "scopeHash": "1f004c0eaa30726566cd885bd90a8df6362e22db10b8139b7cde6e2353c6bab0"
+  },
+  "owners": {
+   "KEEP": 1,
+   "P4.2": 81,
+   "P4.3a": 82,
+   "P4.3b": 33,
+   "P4.4": 50,
+   "P5.1": 28,
+   "P5.2": 11,
+   "P5.3": 90,
+   "P6": 36
+  },
+  "unowned": [],
+  "pending": [],
+  "p41": []
+ },
+ "counts": {
+  "scannedFiles": [
+   699,
+   701
+  ],
+  "productionFiles": [
+   351,
+   351
+  ],
+  "testFiles": [
+   346,
+   348
+  ],
+  "antdProductionFiles": [
+   100,
+   93
+  ],
+  "antdTestFiles": [
+   76,
+   76
+  ],
+  "antSelectorTestFiles": [
+   62,
+   56
+  ],
+  "antClassTestFiles": [
+   69,
+   61
+  ],
+  "iconProductionFiles": [
+   99,
+   100
+  ],
+  "iconTestFiles": [
+   0,
+   0
+  ],
+  "relevantSourceFiles": [
+   287,
+   278
+  ],
+  "retirementBlockingFiles": [
+   241,
+   226
+  ]
+ },
+ "hitLines": {
+  "ant-class": [
+   457,
+   430
+  ],
+  "ant-design-support": [
+   19,
+   19
+  ],
+  "ant-selector": [
+   428,
+   404
+  ],
+  "antd-reference": [
+   351,
+   341
+  ],
+  "icon-class": [
+   77,
+   78
+  ],
+  "icon-reference": [
+   110,
+   111
+  ],
+  "imperative-confirm": [
+   22,
+   22
+  ],
+  "imperative-feedback": [
+   218,
+   218
+  ],
+  "internal-ref": [
+   5,
+   5
+  ],
+  "provider": [
+   88,
+   88
+  ],
+  "rc-support": [
+   231,
+   231
+  ],
+  "ref-focus": [
+   25,
+   25
+  ],
+  "theme": [
+   2,
+   2
+  ],
+  "use-app": [
+   16,
+   16
+  ],
+  "use-token": [
+   1,
+   1
+  ]
+ },
+ "files": {
+  "src/web/src/components/AccessTokenTable.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Popconfirm",
+     "Table",
+     "TableColumnsType",
+     "Tag"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/NewAccessTokenDialog.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert",
+     "Button",
+     "Checkbox",
+     "Input",
+     "Modal",
+     "Radio",
+     "Select"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/index.css": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 150,
+     "ant-selector": 150,
+     "antd-reference": 42,
+     "icon-class": 24
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 149,
+     "ant-selector": 149,
+     "antd-reference": 40,
+     "icon-class": 25
+    }
+   }
+  },
+  "src/web/src/pages/AccessTokensPage.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 10,
+     "ant-selector": 10
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/AccessTokensPage.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Spin"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-feedback": 4
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 4
+    }
+   }
+  },
+  "src/web/src/pages/AdminUsersPage.accessTokens.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 9,
+     "ant-selector": 9,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 4,
+     "ant-selector": 4,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   }
+  },
+  "src/web/src/pages/CliLoginPage.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 1,
+     "ant-selector": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/CliLoginPage.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert",
+     "Button",
+     "Card",
+     "Descriptions",
+     "Result",
+     "Space",
+     "Spin",
+     "Tag"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "imperative-feedback": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 1
+    }
+   }
+  },
+  "src/web/src/pages/ProfilePage.password.test.tsx": {
+   "before": null,
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/ProfilePage.revokeAccessTokens.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 2,
+     "ant-selector": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/ProfilePage.signInMethods.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 1,
+     "ant-selector": 1,
+     "antd-reference": 1,
+     "imperative-confirm": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "imperative-confirm": 1
+    }
+   }
+  },
+  "src/web/src/pages/ProfilePage.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/ProfilePage.tsx": {
+   "before": {
+    "antdImports": [
+     "Avatar",
+     "Button",
+     "Card",
+     "Checkbox",
+     "Form",
+     "Input"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "imperative-feedback": 7
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "imperative-feedback": 7
+    }
+   }
+  },
+  "src/web/src/pages/SettingsPage.accessTokens.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 2,
+     "ant-selector": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/SettingsPage.modelRouting.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 2,
+     "ant-selector": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/SettingsPage.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/SettingsPage.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Card",
+     "Segmented",
+     "Select",
+     "Switch"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "imperative-feedback": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "imperative-feedback": 2
+    }
+   }
+  },
+  "src/web/src/pages/SetupPage.test.tsx": {
+   "before": null,
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/SetupPage.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Card",
+     "Form",
+     "Input",
+     "Typography"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "imperative-feedback": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "imperative-feedback": 1
+    }
+   }
+  }
+ }
+}

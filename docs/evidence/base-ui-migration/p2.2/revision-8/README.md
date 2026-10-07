@@ -1,5 +1,11 @@
 # P2.2 第8版：吸收当前 main，解除第4代 MAIN_SYNC
 
+> **证据瘦身（2026-10-07）**：完整原件见提交 `7732f14f82d4e6b4406d7d164c4b672f63aa0f56`（瘦身前最后一个含完整文件的提交）。取回单个文件用 `git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2.2/revision-8/<路径> > <文件>`，整个目录用 `git archive 7732f14f82d4e6b4406d7d164c4b672f63aa0f56 docs/evidence/base-ui-migration/p2.2/revision-8 | tar -x -C <空目录>`。
+>
+> 本目录在瘦身中：14 份 Playwright 报告换成同目录的 `report.summary.json`，都只删附件正文；删除 6 个 trace 压缩包；1499 个逐用例 JSON（含打包的 attachments.tar.gz）换成所在目录的 `attachments.summary.json`（文件名、字节数、SHA-256 和顶层标量字段）；删除 398 张与本任务目录里保留副本逐字节相同的重复截图。下文链接若指向这些文件，按上面的命令从该提交取回；读取它们的脚本要在取回的目录里运行。
+>
+> 目录里的 SHA256SUMS 类清单（`*.sha256`、`artifact-index*.json`、`manifest.json`、各运行 `summary.json` 里的附件哈希等）保留原文件，核验的是提交 `7732f14f8` 里的文件。做法、保留理由和逐文件删除清单见 [evidence-slimming](../../evidence-slimming/README.md)。
+
 本版服务于 [P2.2 菜单、浮层与选择控件](orbit-task:34Za394q2ZEgr7TKprjkF)，范围按任务评论 `34aUP2qm3rEeeDIYquPl2` 第1步及 2026-10-06 协调更新：只把项目 tip 和最新 main 吸收进源分支，不重做已验收的菜单/浮层/选择和通知实现。项目分支合入 main 的晋升冲突（待办 `34a2dUx2kUcBlw5CZ3rMU`，同为 ToastViewport.tsx/index.css）已挂在本任务上，由本次落地一并解决。验收条目 key `1BvO6hYrlFnU60JqxQPUHt`，原文：**P2：Orbit 自有弹层、选择及反馈组件保持现有键盘、焦点、通知和确认行为。**
 
 按账号所有者 2026-10-06 的决定，本轮由 Claude Opus 5.5 执行；第1–7版由 GPT-6-Astra 完成的实现、证据和独立判定继续有效。本轮没有修改任何组件、通知实现、fixture、测试断言、超时、重试或历史基线，也没有推送或改写 main/项目 ref。

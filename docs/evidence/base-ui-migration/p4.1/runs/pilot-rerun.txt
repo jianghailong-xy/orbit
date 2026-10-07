@@ -1,0 +1,24 @@
+head: b0b59fa39c4ab979c01589ec424e113dc6ed5441
+uncommitted:
+?? docs/evidence/base-ui-migration/p4.1/
+?? src/web/ui-migration/p32-reference.config.mjs
+load: 48.50 67.31 54.30 15/4784 4031060
+argv: npx playwright test pilot.browser.mjs --config ui-migration/pilot.config.mjs --update-snapshots=all --project webkit-dark-desktop -g dependencies, inputs and comments --repeat-each=3
+P0 expected screenshots: 88 P0.2 originals, 152 main drift references, 12 accepted migration differences.
+
+Running 3 tests using 1 worker
+
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun-shots/webkit-dark-desktop/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun-shots/webkit-dark-desktop/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun-shots/webkit-dark-desktop/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun-shots/webkit-dark-desktop/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun-shots/webkit-dark-desktop/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun-shots/webkit-dark-desktop/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun-shots/webkit-dark-desktop/pilot-comment-mention.png, writing actual.
+  ✓  1 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:152:3 › task detail pilot › dependencies, inputs and comments (7.5s)
+  ✓  2 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:152:3 › task detail pilot › dependencies, inputs and comments (7.3s)
+  ✓  3 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:152:3 › task detail pilot › dependencies, inputs and comments (6.3s)
+
+  3 passed (23.2s)
+exit=0
+load: 38.11 63.32 53.33 17/4868 4034057

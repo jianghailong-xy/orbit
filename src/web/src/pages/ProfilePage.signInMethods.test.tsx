@@ -101,14 +101,14 @@ async function click(element: Element | null | undefined, what: string): Promise
   await settle();
 }
 
-const card = () =>
-  [...container.querySelectorAll<HTMLElement>('section.orbit-card')].find(
-    (section) => section.querySelector('.orbit-card-title')?.textContent === SIGN_IN_METHODS_TITLE,
-  );
+/** Every card on the page, in order: a region named by its title. */
+const cards = () => [...container.querySelectorAll<HTMLElement>('section[aria-labelledby]')];
+const titleOf = (section: HTMLElement) => document.getElementById(section.getAttribute('aria-labelledby')!)?.textContent;
+const card = () => cards().find((section) => titleOf(section) === SIGN_IN_METHODS_TITLE);
 const row = (method: 'password' | 'google') => card()?.querySelector<HTMLElement>(`[data-method="${method}"]`);
 const buttonIn = (within: ParentNode | null | undefined, label: string) =>
   [...(within?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((b) => b.textContent?.trim() === label);
-const cardTitles = () => [...container.querySelectorAll('.ant-card-head-title')].map((title) => title.textContent);
+const cardTitles = () => cards().map(titleOf);
 const confirmDialog = () => document.body.querySelector<HTMLElement>('.orbit-confirm[data-open]');
 const sent = (path: string, method: string) => requests.filter((r) => r.path === path && r.method === method);
 
@@ -122,17 +122,6 @@ beforeEach(() => {
   address = '';
   toast.success.mockClear();
   toast.error.mockClear();
-  // AntD's form grid asks for breakpoints, which jsdom does not answer.
-  vi.stubGlobal('matchMedia', (query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: () => {},
-    removeListener: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => false,
-  }));
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   const real = window.location;
   vi.stubGlobal(
@@ -268,7 +257,7 @@ describe('Profile · Sign-in methods', () => {
     server = { me: account({ password: false, google: { email: GOOGLE_EMAIL } }), google: true };
     await open();
 
-    expect(cardTitles()).toEqual(['Basic information']);
+    expect(cardTitles()).toEqual(['Basic information', SIGN_IN_METHODS_TITLE]);
     expect(row('password')?.textContent).toContain('Not set');
     expect(row('password')?.textContent).toContain('you sign in with Google');
     expect(buttonIn(row('google'), DISCONNECT_GOOGLE)?.disabled).toBe(true);
@@ -278,7 +267,7 @@ describe('Profile · Sign-in methods', () => {
   it('with a password, Change password is where it was', async () => {
     server = { me: account({ password: true, google: null }), google: true };
     await open();
-    expect(cardTitles()).toEqual(['Basic information', 'Change password']);
+    expect(cardTitles()).toEqual(['Basic information', SIGN_IN_METHODS_TITLE, 'Change password']);
   });
 
   it('until the server says whether Google sign-in is on, a linked account is shown its link, offered nothing, and not told it is off', async () => {

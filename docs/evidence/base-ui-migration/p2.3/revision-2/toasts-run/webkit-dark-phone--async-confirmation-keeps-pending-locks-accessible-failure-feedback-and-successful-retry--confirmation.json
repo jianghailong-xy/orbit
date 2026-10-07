@@ -1,9 +1,0 @@
-{
-  "requests": 2,
-  "pendingCancelDisabled": true,
-  "pendingEscapeIgnored": true,
-  "failureRetained": true,
-  "toastDismissDidNotCancel": true,
-  "retrySucceeded": true,
-  "focusReturned": true
-}

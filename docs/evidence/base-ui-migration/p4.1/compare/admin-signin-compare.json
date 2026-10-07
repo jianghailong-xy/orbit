@@ -1,0 +1,130 @@
+{
+ "chromium-dark-desktop": {
+  "differingPixels": 27714,
+  "bbox": [
+   312,
+   212,
+   952,
+   739
+  ],
+  "belowHeadShiftedUp1px_bbox": [
+   0,
+   20,
+   351,
+   700
+  ],
+  "cardBelowHeadShiftedUp1px_bbox": [
+   25,
+   314,
+   39,
+   324
+  ],
+  "leftOfCard_bbox": null
+ },
+ "chromium-dark-phone": {
+  "differingPixels": 23902,
+  "bbox": [
+   41,
+   252,
+   351,
+   833
+  ],
+  "belowHeadShiftedUp1px_bbox": null
+ },
+ "chromium-light-desktop": {
+  "differingPixels": 27978,
+  "bbox": [
+   312,
+   212,
+   952,
+   739
+  ],
+  "belowHeadShiftedUp1px_bbox": [
+   0,
+   20,
+   351,
+   700
+  ],
+  "cardBelowHeadShiftedUp1px_bbox": [
+   25,
+   314,
+   39,
+   324
+  ],
+  "leftOfCard_bbox": null
+ },
+ "chromium-light-phone": {
+  "differingPixels": 24137,
+  "bbox": [
+   41,
+   252,
+   351,
+   833
+  ],
+  "belowHeadShiftedUp1px_bbox": null
+ },
+ "webkit-dark-desktop": {
+  "differingPixels": 28110,
+  "bbox": [
+   312,
+   212,
+   952,
+   739
+  ],
+  "belowHeadShiftedUp1px_bbox": [
+   0,
+   20,
+   279,
+   700
+  ],
+  "cardBelowHeadShiftedUp1px_bbox": null,
+  "leftOfCard_bbox": null
+ },
+ "webkit-dark-phone": {
+  "differingPixels": 24176,
+  "bbox": [
+   41,
+   252,
+   390,
+   833
+  ],
+  "belowHeadShiftedUp1px_bbox": [
+   382,
+   523,
+   390,
+   529
+  ]
+ },
+ "webkit-light-desktop": {
+  "differingPixels": 28368,
+  "bbox": [
+   312,
+   212,
+   952,
+   739
+  ],
+  "belowHeadShiftedUp1px_bbox": [
+   0,
+   20,
+   279,
+   700
+  ],
+  "cardBelowHeadShiftedUp1px_bbox": null,
+  "leftOfCard_bbox": null
+ },
+ "webkit-light-phone": {
+  "differingPixels": 24400,
+  "bbox": [
+   41,
+   252,
+   390,
+   833
+  ],
+  "belowHeadShiftedUp1px_bbox": [
+   382,
+   523,
+   390,
+   529
+  ]
+ }
+}

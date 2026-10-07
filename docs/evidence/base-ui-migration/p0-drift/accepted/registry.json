@@ -1,4 +1,383 @@
 {
   "rule": "Accepted migration differences for the P0 regression. Only a P0 screenshot whose difference from its current expectation (the P0.2 original or its main drift reference) the coordinator CONFIRMed in a migration batch's evidence may be registered, after that batch landed, with the before and after originals of the batch's same-commit comparison in the P0.2 environment. Nothing else is registered here. Maintenance rules: ../README.md.",
-  "screenshots": []
+  "screenshots": [
+    {
+      "screenshot": "chromium-dark-desktop/task-share-dialog.png",
+      "sha256": "2dbf515d731728a7ee9fcccc8f37c31c5725b315b0dea0e0f330face2612c3ce",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "31621a609fbd9d82fdfe83bcacf5506a7c1efdf48b1419aaf77a9e3274fc53f3"
+      },
+      "decision": {
+        "taskId": "34Za39ACSBoCkYKc80Md8",
+        "evidenceRevision": 2,
+        "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+        "verdict": "CONFIRM",
+        "document": "p3.2/README.md"
+      },
+      "difference": "P3.2 把分享对话框换成 Orbit Dialog（P2.1 约定：打开时聚焦对话框本身）。P0 task 场景打开分享对话框后按一次 Tab：旧对话框先聚焦 Close、Tab 到 Access；Orbit 先聚焦对话框、Tab 到 Close。截图上超过抗锯齿级的差异只有焦点环的位置：before 在 Access 按钮（Anyone with the link）上，after 在右上角的 Close 按钮上；其余是每通道不超过 2 级的抗锯齿级差异（Chromium 手机上遍及对话框区域）。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-share-dialog 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "sameCommit": {
+        "before": {
+          "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+          "sha256": "31621a609fbd9d82fdfe83bcacf5506a7c1efdf48b1419aaf77a9e3274fc53f3"
+        },
+        "after": {
+          "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+          "sha256": "2dbf515d731728a7ee9fcccc8f37c31c5725b315b0dea0e0f330face2612c3ce"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
+      "screenshot": "chromium-dark-phone/task-share-dialog.png",
+      "sha256": "c017cc3caa5ff1a215de2998d9e52f413ed92cb2d8168393a060dbf7b5dfba37",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "6d1ce3bffeb87baeb167a332d61a134932b1e9960a9a67ca313763b527c50e27"
+      },
+      "decision": {
+        "taskId": "34Za39ACSBoCkYKc80Md8",
+        "evidenceRevision": 2,
+        "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+        "verdict": "CONFIRM",
+        "document": "p3.2/README.md"
+      },
+      "difference": "P3.2 把分享对话框换成 Orbit Dialog（P2.1 约定：打开时聚焦对话框本身）。P0 task 场景打开分享对话框后按一次 Tab：旧对话框先聚焦 Close、Tab 到 Access；Orbit 先聚焦对话框、Tab 到 Close。截图上超过抗锯齿级的差异只有焦点环的位置：before 在 Access 按钮（Anyone with the link）上，after 在右上角的 Close 按钮上；其余是每通道不超过 2 级的抗锯齿级差异（Chromium 手机上遍及对话框区域）。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-share-dialog 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "sameCommit": {
+        "before": {
+          "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+          "sha256": "6d1ce3bffeb87baeb167a332d61a134932b1e9960a9a67ca313763b527c50e27"
+        },
+        "after": {
+          "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+          "sha256": "c017cc3caa5ff1a215de2998d9e52f413ed92cb2d8168393a060dbf7b5dfba37"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
+      "screenshot": "chromium-light-desktop/task-action-menu.png",
+      "sha256": "82e929f91db530ce8dafc4f688a479a1942236725558465dc2df26456fa89a9a",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "a96c90d797da2516fed17d9a236df05942ccdeb16752a73aaa36de00f87de355"
+      },
+      "decision": {
+        "taskId": "34Za39ACSBoCkYKc80Md8",
+        "evidenceRevision": 2,
+        "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+        "verdict": "CONFIRM",
+        "document": "p3.2/README.md"
+      },
+      "difference": "P3.2 把任务面板的 More 菜单换成 Orbit Menu（P2.2 约定：打开后焦点移入菜单）。旧菜单打开后焦点留在 More 按钮上，所以 before 的 More 按钮有焦点环；Orbit Menu 把焦点移入菜单，after 的 More 按钮没有焦点环。菜单本身的位置、尺寸与文字与旧组件一致。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-action-menu 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "sameCommit": {
+        "before": {
+          "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+          "sha256": "a96c90d797da2516fed17d9a236df05942ccdeb16752a73aaa36de00f87de355"
+        },
+        "after": {
+          "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+          "sha256": "82e929f91db530ce8dafc4f688a479a1942236725558465dc2df26456fa89a9a"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
+      "screenshot": "chromium-light-desktop/task-share-dialog.png",
+      "sha256": "1a695d12ea388d8085d9c122eb2113603be3b9fb2e5a6fd0728a2c56aa8e9f3f",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "4e17a8be17426fb9f30176b813a601723dc34dea6fe0608c5c83c322ccc49fc8"
+      },
+      "decision": {
+        "taskId": "34Za39ACSBoCkYKc80Md8",
+        "evidenceRevision": 2,
+        "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+        "verdict": "CONFIRM",
+        "document": "p3.2/README.md"
+      },
+      "difference": "P3.2 把分享对话框换成 Orbit Dialog（P2.1 约定：打开时聚焦对话框本身）。P0 task 场景打开分享对话框后按一次 Tab：旧对话框先聚焦 Close、Tab 到 Access；Orbit 先聚焦对话框、Tab 到 Close。截图上超过抗锯齿级的差异只有焦点环的位置：before 在 Access 按钮（Anyone with the link）上，after 在右上角的 Close 按钮上；其余是每通道不超过 2 级的抗锯齿级差异（Chromium 手机上遍及对话框区域）。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-share-dialog 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "sameCommit": {
+        "before": {
+          "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+          "sha256": "4e17a8be17426fb9f30176b813a601723dc34dea6fe0608c5c83c322ccc49fc8"
+        },
+        "after": {
+          "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+          "sha256": "1a695d12ea388d8085d9c122eb2113603be3b9fb2e5a6fd0728a2c56aa8e9f3f"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
+      "screenshot": "chromium-light-phone/task-action-menu.png",
+      "sha256": "e56a4013d7ca61276147b755cd38afdb2109d0f7711b553982e096cb599e906b",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "0c3321ffc316ed378af8ec6a533bc9d0b654e920010d035d4fe1f457a8c5bc34"
+      },
+      "decision": {
+        "taskId": "34Za39ACSBoCkYKc80Md8",
+        "evidenceRevision": 2,
+        "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+        "verdict": "CONFIRM",
+        "document": "p3.2/README.md"
+      },
+      "difference": "P3.2 把任务面板的 More 菜单换成 Orbit Menu（P2.2 约定：打开后焦点移入菜单）。旧菜单打开后焦点留在 More 按钮上，所以 before 的 More 按钮有焦点环；Orbit Menu 把焦点移入菜单，after 的 More 按钮没有焦点环。菜单本身的位置、尺寸与文字与旧组件一致。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-action-menu 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "sameCommit": {
+        "before": {
+          "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+          "sha256": "0c3321ffc316ed378af8ec6a533bc9d0b654e920010d035d4fe1f457a8c5bc34"
+        },
+        "after": {
+          "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+          "sha256": "e56a4013d7ca61276147b755cd38afdb2109d0f7711b553982e096cb599e906b"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
+      "screenshot": "chromium-light-phone/task-share-dialog.png",
+      "sha256": "cef516ca7e9386056eaf81eef87ce712a73e7e50e749c42459bc5fdad3fb245b",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "0febd9470f9fca3ebaa95dad6964afd57e7c2309186de562935b3cff39aa96bf"
+      },
+      "decision": {
+        "taskId": "34Za39ACSBoCkYKc80Md8",
+        "evidenceRevision": 2,
+        "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+        "verdict": "CONFIRM",
+        "document": "p3.2/README.md"
+      },
+      "difference": "P3.2 把分享对话框换成 Orbit Dialog（P2.1 约定：打开时聚焦对话框本身）。P0 task 场景打开分享对话框后按一次 Tab：旧对话框先聚焦 Close、Tab 到 Access；Orbit 先聚焦对话框、Tab 到 Close。截图上超过抗锯齿级的差异只有焦点环的位置：before 在 Access 按钮（Anyone with the link）上，after 在右上角的 Close 按钮上；其余是每通道不超过 2 级的抗锯齿级差异（Chromium 手机上遍及对话框区域）。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-share-dialog 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "sameCommit": {
+        "before": {
+          "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+          "sha256": "0febd9470f9fca3ebaa95dad6964afd57e7c2309186de562935b3cff39aa96bf"
+        },
+        "after": {
+          "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+          "sha256": "cef516ca7e9386056eaf81eef87ce712a73e7e50e749c42459bc5fdad3fb245b"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
+      "screenshot": "webkit-dark-desktop/task-share-dialog.png",
+      "sha256": "1ac55c143850623b7f6c0c2091978bd9a97c26a26af64828bd9c1bc8c2397907",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "16239de70c56fda957b05d03c3b0dd762972620680e5c601bedf25e3220086e4"
+      },
+      "decision": {
+        "taskId": "34Za39ACSBoCkYKc80Md8",
+        "evidenceRevision": 2,
+        "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+        "verdict": "CONFIRM",
+        "document": "p3.2/README.md"
+      },
+      "difference": "P3.2 把分享对话框换成 Orbit Dialog（P2.1 约定：打开时聚焦对话框本身）。P0 task 场景打开分享对话框后按一次 Tab：旧对话框先聚焦 Close、Tab 到 Access；Orbit 先聚焦对话框、Tab 到 Close。截图上超过抗锯齿级的差异只有焦点环的位置：before 在 Access 按钮（Anyone with the link）上，after 在右上角的 Close 按钮上；其余是每通道不超过 2 级的抗锯齿级差异（Chromium 手机上遍及对话框区域）。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-share-dialog 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "sameCommit": {
+        "before": {
+          "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+          "sha256": "16239de70c56fda957b05d03c3b0dd762972620680e5c601bedf25e3220086e4"
+        },
+        "after": {
+          "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+          "sha256": "1ac55c143850623b7f6c0c2091978bd9a97c26a26af64828bd9c1bc8c2397907"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
+      "screenshot": "webkit-dark-phone/profile-validation.png",
+      "sha256": "53f9152dc1deb11916165b1d3047761e4e72d7eda934b595adf35f949759bb18",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "ce6c213d39f304c18197c2af5c35b77e85568ba7afad10dbbee18b3d9103e498"
+      },
+      "decision": {
+        "taskId": "34Za39Do3N6tkmIMP0GBP",
+        "evidenceRevision": 1,
+        "evidenceDigest": "9477611a4499f613621b9dcc7e7c99a7dce050f1caca7ffa22fd95ca60467d57",
+        "verdict": "CONFIRM",
+        "document": "p4.1/README.md"
+      },
+      "difference": "P4.1 把资料页的表单换成 Orbit 字段组件和原生表单。P0 profile 场景保存名字后截取 profile-validation：顶部“Name saved”通知胶囊在 after 中比 before 右移 4px（通知列宽 358 对 350，胶囊 x 127.14 对 123.14），差异只在胶囊及其阴影的区域。根因：lib/toast 第一次提示时往 body 末尾加读屏 live region，资料页文档从 844px 变成 845px；Linux WebKit 手机模拟里，全局 8px ::-webkit-scrollbar 让溢出之后才排版的固定定位元素按 382 宽排，之前排好的保持 390（P2.3-B1 复现过的现象）。before 的 AntD 表单在 live region 与通知列插入之间读了 4 个 .ant-form-item 的 offsetParent，这次同步布局先看到了溢出，通知列按 382 排；Orbit 的 Field 不读布局，通知列按溢出前的 390 排，与 Chromium 手机、与设置页“Setting saved”的位置一致。由测试注入一次布局读取后，after 与 P0 期望（即 before）逐像素一致。真机 iOS 用覆盖式滚动条，不受影响。协调者判定接受为本批的迁移差异，不为测试环境复刻那次布局读取。出处：p4.1/README.md「P0 页面矩阵（同提交）」profile-validation 行与「WebKit 手机 profile-validation：根因与隔离」；P4.1 第 1 版证据 compare/f-p0-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "sameCommit": {
+        "before": {
+          "commit": "a84bc61e7913b1ecae26c0a5a74d4c4887454e99",
+          "sha256": "ce6c213d39f304c18197c2af5c35b77e85568ba7afad10dbbee18b3d9103e498"
+        },
+        "after": {
+          "commit": "3aa26fb97644f24551dc9c70149021f7f7f9453f",
+          "sha256": "53f9152dc1deb11916165b1d3047761e4e72d7eda934b595adf35f949759bb18"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
+      "screenshot": "webkit-dark-phone/task-share-dialog.png",
+      "sha256": "aca1f92577e858e3dc309c07c0a4748aa568fe2ca059376d6cad0995e3676478",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "aadbd69e2cc9ddbd99231921ee84895dc912510ab63446e6541b9ef20f6a9a38"
+      },
+      "decision": {
+        "taskId": "34Za39ACSBoCkYKc80Md8",
+        "evidenceRevision": 2,
+        "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+        "verdict": "CONFIRM",
+        "document": "p3.2/README.md"
+      },
+      "difference": "P3.2 把分享对话框换成 Orbit Dialog（P2.1 约定：打开时聚焦对话框本身）。P0 task 场景打开分享对话框后按一次 Tab：旧对话框先聚焦 Close、Tab 到 Access；Orbit 先聚焦对话框、Tab 到 Close。截图上超过抗锯齿级的差异只有焦点环的位置：before 在 Access 按钮（Anyone with the link）上，after 在右上角的 Close 按钮上；其余是每通道不超过 2 级的抗锯齿级差异（Chromium 手机上遍及对话框区域）。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-share-dialog 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "sameCommit": {
+        "before": {
+          "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+          "sha256": "aadbd69e2cc9ddbd99231921ee84895dc912510ab63446e6541b9ef20f6a9a38"
+        },
+        "after": {
+          "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+          "sha256": "aca1f92577e858e3dc309c07c0a4748aa568fe2ca059376d6cad0995e3676478"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
+      "screenshot": "webkit-light-desktop/task-action-menu.png",
+      "sha256": "8379a8c00abae3054fe3891bd6ef8c46d50e4e634a29d7ae451c883681d8f679",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "36b9d7ee7bff653f16c5f96e7c2e2efaf68edf659eec5761d4578f71fb4c7194"
+      },
+      "decision": {
+        "taskId": "34Za39ACSBoCkYKc80Md8",
+        "evidenceRevision": 2,
+        "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+        "verdict": "CONFIRM",
+        "document": "p3.2/README.md"
+      },
+      "difference": "P3.2 把任务面板的 More 菜单换成 Orbit Menu（P2.2 约定：打开后焦点移入菜单）。旧菜单打开后焦点留在 More 按钮上，所以 before 的 More 按钮有焦点环；Orbit Menu 把焦点移入菜单，after 的 More 按钮没有焦点环。菜单本身的位置、尺寸与文字与旧组件一致。WebKit 另有 “Share…” 菜单项地球图标底行约 30 像素的差异：Vite 的 CSS 压缩器把行高 1.5714285714285714 写成 1.57143，WebKit 偶尔多出 1/64px 行高（「未消除的差异」第 5 条）。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-action-menu 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "sameCommit": {
+        "before": {
+          "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+          "sha256": "36b9d7ee7bff653f16c5f96e7c2e2efaf68edf659eec5761d4578f71fb4c7194"
+        },
+        "after": {
+          "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+          "sha256": "8379a8c00abae3054fe3891bd6ef8c46d50e4e634a29d7ae451c883681d8f679"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
+      "screenshot": "webkit-light-desktop/task-share-dialog.png",
+      "sha256": "4634e7383d149329a3e04748bdfead764ba32fe269f8b31f7fd0c688d9730f21",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "f5e3fec75e233fb1e63a765a39c08e6be9d40ccbae2e58c181e66b4d6a2645a9"
+      },
+      "decision": {
+        "taskId": "34Za39ACSBoCkYKc80Md8",
+        "evidenceRevision": 2,
+        "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+        "verdict": "CONFIRM",
+        "document": "p3.2/README.md"
+      },
+      "difference": "P3.2 把分享对话框换成 Orbit Dialog（P2.1 约定：打开时聚焦对话框本身）。P0 task 场景打开分享对话框后按一次 Tab：旧对话框先聚焦 Close、Tab 到 Access；Orbit 先聚焦对话框、Tab 到 Close。截图上超过抗锯齿级的差异只有焦点环的位置：before 在 Access 按钮（Anyone with the link）上，after 在右上角的 Close 按钮上；其余是每通道不超过 2 级的抗锯齿级差异（Chromium 手机上遍及对话框区域）。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-share-dialog 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "sameCommit": {
+        "before": {
+          "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+          "sha256": "f5e3fec75e233fb1e63a765a39c08e6be9d40ccbae2e58c181e66b4d6a2645a9"
+        },
+        "after": {
+          "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+          "sha256": "4634e7383d149329a3e04748bdfead764ba32fe269f8b31f7fd0c688d9730f21"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
+      "screenshot": "webkit-light-phone/profile-validation.png",
+      "sha256": "0fc4f654253d7a41ec2cb664221f70105190aafc6c9c89238ff86f7f51d328db",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "bfa643b8bbc55d3d3713d2b37eba287ee0306b74a3c93eb35d4c38c7a8d893d8"
+      },
+      "decision": {
+        "taskId": "34Za39Do3N6tkmIMP0GBP",
+        "evidenceRevision": 1,
+        "evidenceDigest": "9477611a4499f613621b9dcc7e7c99a7dce050f1caca7ffa22fd95ca60467d57",
+        "verdict": "CONFIRM",
+        "document": "p4.1/README.md"
+      },
+      "difference": "P4.1 把资料页的表单换成 Orbit 字段组件和原生表单。P0 profile 场景保存名字后截取 profile-validation：顶部“Name saved”通知胶囊在 after 中比 before 右移 4px（通知列宽 358 对 350，胶囊 x 127.14 对 123.14），差异只在胶囊及其阴影的区域。根因：lib/toast 第一次提示时往 body 末尾加读屏 live region，资料页文档从 844px 变成 845px；Linux WebKit 手机模拟里，全局 8px ::-webkit-scrollbar 让溢出之后才排版的固定定位元素按 382 宽排，之前排好的保持 390（P2.3-B1 复现过的现象）。before 的 AntD 表单在 live region 与通知列插入之间读了 4 个 .ant-form-item 的 offsetParent，这次同步布局先看到了溢出，通知列按 382 排；Orbit 的 Field 不读布局，通知列按溢出前的 390 排，与 Chromium 手机、与设置页“Setting saved”的位置一致。由测试注入一次布局读取后，after 与 P0 期望（即 before）逐像素一致。真机 iOS 用覆盖式滚动条，不受影响。协调者判定接受为本批的迁移差异，不为测试环境复刻那次布局读取。出处：p4.1/README.md「P0 页面矩阵（同提交）」profile-validation 行与「WebKit 手机 profile-validation：根因与隔离」；P4.1 第 1 版证据 compare/f-p0-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "sameCommit": {
+        "before": {
+          "commit": "a84bc61e7913b1ecae26c0a5a74d4c4887454e99",
+          "sha256": "bfa643b8bbc55d3d3713d2b37eba287ee0306b74a3c93eb35d4c38c7a8d893d8"
+        },
+        "after": {
+          "commit": "3aa26fb97644f24551dc9c70149021f7f7f9453f",
+          "sha256": "0fc4f654253d7a41ec2cb664221f70105190aafc6c9c89238ff86f7f51d328db"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
+      "screenshot": "webkit-light-phone/task-action-menu.png",
+      "sha256": "b76ada09c93876dbafd24922c0925821413b2fc37381795c68889bbe7e31e802",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "2d9968586ceced3ebd162925c124857952d3d86e4cd579dae2af860aef79085e"
+      },
+      "decision": {
+        "taskId": "34Za39ACSBoCkYKc80Md8",
+        "evidenceRevision": 2,
+        "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+        "verdict": "CONFIRM",
+        "document": "p3.2/README.md"
+      },
+      "difference": "P3.2 把任务面板的 More 菜单换成 Orbit Menu（P2.2 约定：打开后焦点移入菜单）。旧菜单打开后焦点留在 More 按钮上，所以 before 的 More 按钮有焦点环；Orbit Menu 把焦点移入菜单，after 的 More 按钮没有焦点环。菜单本身的位置、尺寸与文字与旧组件一致。WebKit 另有 “Share…” 菜单项地球图标底行约 30 像素的差异：Vite 的 CSS 压缩器把行高 1.5714285714285714 写成 1.57143，WebKit 偶尔多出 1/64px 行高（「未消除的差异」第 5 条）。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-action-menu 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "sameCommit": {
+        "before": {
+          "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+          "sha256": "2d9968586ceced3ebd162925c124857952d3d86e4cd579dae2af860aef79085e"
+        },
+        "after": {
+          "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+          "sha256": "b76ada09c93876dbafd24922c0925821413b2fc37381795c68889bbe7e31e802"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
+      "screenshot": "webkit-light-phone/task-share-dialog.png",
+      "sha256": "292b5453d2281d6cadbd81af4661ca8108ff209320bb0f1111a2495908fe06b5",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "eb49983c732ff7fe8048bd72c9d0633b4196463e0495d9ba139a8db525c4f6a3"
+      },
+      "decision": {
+        "taskId": "34Za39ACSBoCkYKc80Md8",
+        "evidenceRevision": 2,
+        "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+        "verdict": "CONFIRM",
+        "document": "p3.2/README.md"
+      },
+      "difference": "P3.2 把分享对话框换成 Orbit Dialog（P2.1 约定：打开时聚焦对话框本身）。P0 task 场景打开分享对话框后按一次 Tab：旧对话框先聚焦 Close、Tab 到 Access；Orbit 先聚焦对话框、Tab 到 Close。截图上超过抗锯齿级的差异只有焦点环的位置：before 在 Access 按钮（Anyone with the link）上，after 在右上角的 Close 按钮上；其余是每通道不超过 2 级的抗锯齿级差异（Chromium 手机上遍及对话框区域）。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-share-dialog 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "sameCommit": {
+        "before": {
+          "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+          "sha256": "eb49983c732ff7fe8048bd72c9d0633b4196463e0495d9ba139a8db525c4f6a3"
+        },
+        "after": {
+          "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+          "sha256": "292b5453d2281d6cadbd81af4661ca8108ff209320bb0f1111a2495908fe06b5"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    }
+  ]
 }
