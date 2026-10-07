@@ -14,6 +14,17 @@ import kotlinx.serialization.json.*
 internal fun wikiKey(id: String?): String = id?.let { ObjectId.canonical(it) ?: it }.orEmpty()
 internal fun sameWikiId(a: String?, b: String?) = a != null && b != null && wikiKey(a) == wikiKey(b)
 
+/** OrbitKit `PublicID.toPublic`: a UUID's 16 bytes as Base62, the spelling the deployment's own routes use. */
+internal fun wikiPublicId(id: String): String {
+    val uuid = ObjectId.canonical(id) ?: return id
+    var number = java.math.BigInteger(uuid.replace("-", ""), 16)
+    if (number.signum() == 0) return "0"
+    val alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    val out = StringBuilder(); val base = java.math.BigInteger.valueOf(62)
+    while (number.signum() > 0) { val (q, r) = number.divideAndRemainder(base); out.append(alphabet[r.toInt()]); number = q }
+    return out.reverse().toString()
+}
+
 internal fun <T> JsonElement?.lenient(serializer: KSerializer<T>): T? =
     this?.takeIf { it !is JsonNull }?.let { runCatching { Wire.json.decodeFromJsonElement(serializer, it) }.getOrNull() }
 internal fun JsonElement?.text(): String? = (this as? JsonPrimitive)?.takeIf { it.isString }?.content

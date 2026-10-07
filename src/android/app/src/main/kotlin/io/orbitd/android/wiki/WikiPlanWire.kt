@@ -103,10 +103,12 @@ data class WikiPlanSessionConditionInput(val projects: List<String>? = null, val
 
 data class WikiPlanSourcesInput(val docs: List<WikiPlanSources.DocSource>? = null, val code: List<WikiPlanSources.CodeSource>? = null,
     val contracts: List<WikiPlanSources.ContractSource>? = null, val sessions: WikiPlanSessionConditionInput? = null) {
+    /** Swift's synthesized encoding: a nil optional is left out, never sent as null. */
     fun json(): JsonObject = buildJsonObject {
-        docs?.let { put("docs", Wire.json.encodeToJsonElement(it)) }
-        code?.let { put("code", Wire.json.encodeToJsonElement(it)) }
-        contracts?.let { put("contracts", Wire.json.encodeToJsonElement(it)) }
+        docs?.let { list -> put("docs", JsonArray(list.map { d -> buildJsonObject { put("path", d.path); d.section?.let { put("section", it) } } })) }
+        code?.let { list -> put("code", JsonArray(list.map { c -> buildJsonObject {
+            put("path", c.path); c.symbols?.let { put("symbols", JsonArray(it.map(::JsonPrimitive))) } } })) }
+        contracts?.let { list -> put("contracts", JsonArray(list.map { c -> buildJsonObject { put("path", c.path) } })) }
         sessions?.let { put("sessions", it.json()) }
     }
     companion object {
@@ -114,10 +116,6 @@ data class WikiPlanSourcesInput(val docs: List<WikiPlanSources.DocSource>? = nul
             c?.get("code").lenient(kotlinx.serialization.builtins.ListSerializer(WikiPlanSources.CodeSource.serializer())),
             c?.get("contracts").lenient(kotlinx.serialization.builtins.ListSerializer(WikiPlanSources.ContractSource.serializer())),
             (c?.get("sessions") as? JsonObject)?.let(WikiPlanSessionConditionInput::read))
-        /** A read section's sources in the draft's shape: a session condition's projects by id. */
-        fun from(sources: WikiPlanSources?) = WikiPlanSourcesInput(sources?.docs, sources?.code, sources?.contracts,
-            sources?.sessions?.let { s -> WikiPlanSessionConditionInput(s.projects?.map { it.id }, s.since, s.until, s.keywords,
-                s.anchorPaths, s.entryKinds, s.topics, s.evidence) })
     }
 }
 
@@ -133,8 +131,6 @@ data class WikiPlanSectionInput(val key: String? = null, val title: String, val 
     companion object {
         fun read(c: JsonObject) = WikiPlanSectionInput(c["key"].text(), c["title"].text() ?: "", c["kind"].text() ?: "unknown",
             c["covers"].text() ?: "", c["length"].integer() ?: 0, WikiPlanSourcesInput.read(c["sources"] as? JsonObject), c["extra"] as? JsonObject)
-        fun from(section: WikiPlanSection) = WikiPlanSectionInput(section.key, section.title, section.kind, section.covers ?: "",
-            section.length ?: 0, WikiPlanSourcesInput.from(section.sources), section.extra)
     }
 }
 
@@ -145,7 +141,8 @@ data class WikiPlanDocInput(val category: String, val slug: String, val title: S
     fun json(): JsonObject = buildJsonObject {
         put("category", category); put("slug", slug); put("title", title); put("question", question)
         put("audience", JsonArray(audience.map(::JsonPrimitive))); put("scopeIn", JsonArray(scopeIn.map(::JsonPrimitive)))
-        put("scopeOut", Wire.json.encodeToJsonElement(scopeOut)); put("length", Wire.json.encodeToJsonElement(length))
+        put("scopeOut", JsonArray(scopeOut.map { o -> buildJsonObject { put("text", o.text); o.docs?.let { put("docs", JsonArray(it.map(::JsonPrimitive))) } } }))
+        put("length", buildJsonObject { put("min", length.min); put("max", length.max) })
         protected?.let { put("protected", it) }
         put("sections", JsonArray(sections.map { it.json() }))
         if (!extra.isNullOrEmpty()) put("extra", extra)
@@ -158,9 +155,6 @@ data class WikiPlanDocInput(val category: String, val slug: String, val title: S
             c["length"].lenient(WikiPlanRange.serializer()) ?: WikiPlanRange(0, 0), c["protected"].bool(),
             (c["sections"] as? JsonArray)?.filterIsInstance<JsonObject>()?.map(WikiPlanSectionInput::read) ?: emptyList(),
             c["extra"] as? JsonObject)
-        fun from(doc: WikiPlanDoc) = WikiPlanDocInput(doc.category, doc.slug, doc.title, doc.question ?: "", doc.audience.orEmpty(),
-            doc.scopeIn.orEmpty(), doc.scopeOut.orEmpty(), doc.length ?: WikiPlanRange(0, 0), doc.protected,
-            doc.sections.orEmpty().map(WikiPlanSectionInput::from), doc.extra)
     }
 }
 

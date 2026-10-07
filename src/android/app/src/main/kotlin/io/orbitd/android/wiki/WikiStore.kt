@@ -108,13 +108,13 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
     }
 
     /** The spaces, then the four reads the home page is drawn from, side by side — and each run Recently changed folds. */
-    suspend fun loadHome() = coroutineScope {
+    suspend fun loadHome() = supervisorScope {
         set { it.copy(homeState = it.homeState.begin()) }
         loadSpaces()
         val space = current.currentSpace
         if (space == null) {
             set { it.copy(home = null, homeState = if (it.spacesState.lastLoadFailed) it.homeState.fail() else it.homeState.succeed()) }
-            return@coroutineScope
+            return@supervisorScope
         }
         val document = async { client.space(space.id) }
         val entries = async { client.entries(space.id) }
@@ -124,10 +124,10 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
             val base = WikiHomeContent(document.await(), current.spaces, entries.await(), timeline.await()?.items.orEmpty(), space.pendingOps ?: 0)
             val runs = base.recentRunIds.map { id -> async { optional { client.changeset(id) } } }.mapNotNull { it.await() }
             val healthRead = health.await()
-            if (current.currentSpace?.id != space.id) return@coroutineScope
+            if (current.currentSpace?.id != space.id) return@supervisorScope
             set { it.copy(home = base.copy(runs = runs, health = healthRead), homeState = it.homeState.succeed()) }
         } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) {
-            timeline.cancel(); health.cancel()
+            document.cancel(); entries.cancel(); timeline.cancel(); health.cancel()
             if (current.currentSpace?.id == space.id) set { it.copy(homeState = it.homeState.fail()) }
         }
     }
@@ -148,11 +148,12 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
         try {
             val detail = client.entry(id)
             set { it.copy(details = it.details + (key to detail), missing = it.missing - key, failed = it.failed - key) }
-        } catch (cancel: CancellationException) { throw cancel } catch (error: ApiError) {
-            if (error.status == 404) set { it.copy(missing = it.missing + key, details = it.details - key) }
-            else if (error.status == 403) set { it.copy(failed = it.failed + key, details = it.details - key) }
+        } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) {
+            // A 404 is an entry the server will not show — deleted, or not this account's; any other failure keeps
+            // what is on screen, and says so only when there is nothing on screen (`WikiModel.loadEntry`).
+            if (error is ApiError && error.status == 404) set { it.copy(missing = it.missing + key) }
             else set { it.copy(failed = it.failed + key) }
-        } catch (_: Exception) { set { it.copy(failed = it.failed + key) } }
+        }
     }
 
     /** The space the article reads are of, forgetting what another space's pages read. */
@@ -215,7 +216,7 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
     /** The account stream said something changed, or a write landed: re-read what is loaded, once for a burst. */
     fun nudge() {
         if (nudgeJob?.isActive == true) return
-        nudgeJob = scope.launch { delay(500); if (live()) reloadLoaded() }
+        nudgeJob = scope.launch { delay(500); nudgeJob = null; if (live()) optional { reloadLoaded() } }
     }
 
     suspend fun reloadLoaded() {
@@ -264,9 +265,9 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
 
     // MARK: the plan — the owner's door only
 
-    suspend fun loadPlan() = coroutineScope {
+    suspend fun loadPlan() = supervisorScope {
         if (current.spaces.isEmpty()) loadSpaces()
-        val space = articlesSpace() ?: return@coroutineScope
+        val space = articlesSpace() ?: return@supervisorScope
         set { it.copy(planState = it.planState.begin()) }
         val versions = async { optional { client.planVersions(space.id) } }
         try {
@@ -344,14 +345,18 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
      * queue at once (`answered`), and the reads catch the queue, the drawer's count and the home page up behind it. */
     suspend fun decide(card: WikiLogic.ReviewCard, action: String, reason: String? = null,
         edited: JsonObject? = null): String? {
-        val refusal = busy {
-            try { client.decide(card.changeset.id, card.op.id, action, edited, reason); null }
-            catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { reloadAfterWrite(); wikiRefusal(error) }
-        }
+        val refusal = scope.async {
+            busy {
+                try {
+                    client.decide(card.changeset.id, card.op.id, action, edited, reason)
+                    set { it.copy(answered = it.answered + card.op.id) }
+                    null
+                } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { reloadAfterWrite(); wikiRefusal(error) }
+            }
+        }.await()
         if (refusal != null) return refusal
-        set { it.copy(answered = it.answered + card.op.id) }
         scope.launch {
-            reloadAfterWrite()
+            optional { reloadAfterWrite() }
             // Only what the server no longer lists as waiting comes off the list.
             val waiting = WikiLogic.reviewCards(current.review).map { it.op.id }.toSet()
             set { it.copy(answered = it.answered.intersect(waiting)) }
@@ -377,7 +382,10 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
     // MARK: an entry a review mode applied
 
     suspend fun confirm(entry: WikiEntry): String? = answer(entry.id) { client.confirmEntry(entry.id) }
-    suspend fun reject(entryId: String, reason: String): String? = answer(entryId) { client.rejectEntry(entryId, reason) }
+    suspend fun reject(entryId: String, reason: String): String? {
+        require(reason in WikiCopy.rejectReasons)
+        return answer(entryId) { client.rejectEntry(entryId, reason) }
+    }
     private suspend fun answer(entryId: String, write: suspend () -> Unit): String? = busy {
         try { write(); reloadAfterWrite(); loadEntry(entryId); null }
         catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { loadEntry(entryId); wikiRefusal(error) }

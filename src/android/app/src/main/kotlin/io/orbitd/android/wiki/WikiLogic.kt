@@ -28,6 +28,12 @@ internal object RelativeTime {
         return if (d < 3 && h > 0) "${d}d ${h}h" else "${d}d"
     }
     fun seconds(from: Instant, to: Instant) = (to.toEpochMilli() - from.toEpochMilli()) / 1000.0
+    /** "just now" under ten seconds, "3h 20m ago" above it (the web's `ago`); nil when unreadable. */
+    fun ago(iso: String?, now: Instant): String? {
+        val date = parse(iso) ?: return null
+        val diff = seconds(date, now)
+        return if (diff < 10) "just now" else "${span(diff)} ago"
+    }
 }
 
 /** A part of the Wiki home's status line (OrbitKit `WikiStatusPart`). */
@@ -288,7 +294,11 @@ internal object WikiLogic {
         if (changeset.sessionId != null) {
             val rationale = changeset.rationale?.trim()
             if (rationale.isNullOrEmpty()) return "a session"
-            return if (rationale.codePointCount(0, rationale.length) > 48) rationale.substring(0, rationale.offsetByCodePoints(0, 47)) + "…" else rationale
+            // Characters as a person sees them (grapheme clusters), as Swift's `count`/`prefix` are.
+            val breaks = java.text.BreakIterator.getCharacterInstance().apply { setText(rationale) }
+            var characters = 0; var cut = 0
+            while (breaks.next() != java.text.BreakIterator.DONE) { characters++; if (characters == 47) cut = breaks.current() }
+            return if (characters > 48) rationale.substring(0, cut) + "…" else rationale
         }
         return if (changeset.origin == "owner") "you" else WikiCopy.historyMaintenance
     }
@@ -345,7 +355,7 @@ internal object WikiModeLogic {
     }
     fun runWhen(iso: String, zone: ZoneId = ZoneId.systemDefault()): String {
         val at = RelativeTime.parse(iso)?.atZone(zone) ?: return ""
-        return "${months[at.monthValue - 1]} ${at.dayOfMonth}, ${"%02d".format(at.hour)}:${"%02d".format(at.minute)}"
+        return "${months[at.monthValue - 1]} ${at.dayOfMonth}, ${String.format(java.util.Locale.ROOT, "%02d:%02d", at.hour, at.minute)}"
     }
     fun workspaceLabel(name: String?, runner: String?): String {
         val named = name?.takeIf { it.isNotEmpty() } ?: "—"
@@ -462,7 +472,8 @@ internal object WikiModeLogic {
         "path" -> "path ${anchor.path ?: ""}"
         "symbol" -> "symbol ${anchor.symbol ?: ""} in ${anchor.path ?: ""}"
         "commit" -> "commit ${WikiLogic.shortSha(anchor.sha ?: "")}"
-        else -> "${anchor.type ?: "unknown"} anchor"
+        // A type this build cannot name reads as `unknown`, as Swift's closed set decodes it.
+        else -> "${anchor.type?.takeIf { it in setOf("criterion", "merge_evidence", "command", "record") } ?: "unknown"} anchor"
     }
     fun challengeRef(anchors: List<WikiAnchor>?): String? = anchors.orEmpty().mapNotNull { it.check }
         .filter { it.state == "changed" || it.state == "missing" }.sortedByDescending { it.at ?: "" }.firstOrNull()?.ref
