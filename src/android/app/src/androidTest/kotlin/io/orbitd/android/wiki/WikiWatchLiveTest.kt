@@ -36,19 +36,18 @@ import java.net.URL
 import java.time.Instant
 
 /** The refusal the app must show when the owner accepts a proposal whose entry moved on (the server records the
- * op `conflict` and applies nothing). Hardcoded here: the main session is adding it as `WikiCopy.conflictRefused`
- * in parallel, so on 1052be908 the journey that checks it is expected to fail. */
-private const val CONFLICT_REFUSED = "Nothing was applied: the entry changed after this was proposed."
+ * op `conflict` and applies nothing): "Nothing was applied: the entry changed after this was proposed." Before the
+ * review-1 fix (9095a638f) the app said "Accepted" instead. */
+private const val CONFLICT_REFUSED = WikiCopy.conflictRefused
 
-/** What the space page must say to an account the space is not theirs (being added in parallel by the main session
- * with the test tag `wiki-space-unavailable`; hardcoded for the same reason). */
-private const val SPACE_UNAVAILABLE = "That space is not available."
+/** What the space page says to an account the space is not theirs ("That space is not available."), and its tag. */
+private const val SPACE_UNAVAILABLE = WikiCopy.spaceUnavailable
 private const val SPACE_UNAVAILABLE_TAG = "wiki-space-unavailable"
 
-/** The app's own words this suite looks for (WikiCopy.decidedAccepted, WikiCopy.saved, WikiCopy.noEntrySelected). */
-private const val ACCEPTED = "Accepted"
-private const val SAVED = "Saved"
-private const val ENTRY_GONE = "That entry is no longer in this space."
+/** The app's own words this suite looks for. */
+private const val ACCEPTED = WikiCopy.decidedAccepted
+private const val SAVED = WikiCopy.saved
+private const val ENTRY_GONE = WikiCopy.noEntrySelected
 
 /**
  * A12 against a real Orbit server: the isolated stack of `src/android/scripts/a12-stack` (the apiserver of
@@ -325,7 +324,7 @@ class WikiWatchLiveTest {
     }
 
     /** Review: Accept on a proposal whose entry moved on — the server records `conflict` and applies nothing, and the
-     * app must say so rather than "Accepted". Expected red on 1052be908 (the app shows "Accepted"). */
+     * app must say so rather than "Accepted" (before the review-1 fix 9095a638f it said "Accepted"). */
     @Test fun j3OwnerAcceptsTheStaleProposalAndIsRefused() {
         val space = arg("a12Space"); val changeset = arg("a12StaleChangeset"); val op = arg("a12StaleOp"); val entry = arg("a12StaleEntry")
         journey("j3-review-accept-stale", owner, "orbit://wiki/$space") { _ ->
@@ -460,8 +459,8 @@ class WikiWatchLiveTest {
         }
     }
 
-    /** `orbit://wiki/<owner's space>` as the other account: the page says the space is not available (expected red on
-     * 1052be908, which shows the account's own space instead), and the server answers 404. */
+    /** `orbit://wiki/<owner's space>` as the other account: the page says the space is not available (before the
+     * review-1 fix 9095a638f it showed the account's own space instead), and the server answers 404. */
     @Test fun j7bOtherAccountOpensTheOwnersSpace() {
         val space = arg("a12Space")
         journey("j7b-other-owners-space", other, "orbit://wiki/$space") { _ ->

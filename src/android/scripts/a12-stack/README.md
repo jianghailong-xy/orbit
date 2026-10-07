@@ -120,8 +120,9 @@ evidence.
 | `j7cOtherAccountOpensTheOwnersWatch` | other | `orbit://watch/<owner's watch>` | Watch not found, none of the owner's titles; the server 404 |
 | `j8OwnerRevertsARun` | owner | `orbit://wiki/<space>` | Recently changed → the run → Revert run… (nothing sent before the confirmation): nothing left to revert, the run's entry no longer active |
 
-`j3` and `j7b` check copy the main session was adding in parallel (`WikiCopy.conflictRefused`, the space-unavailable
-state); the strings are hardcoded in the test, and both are expected to fail on `1052be908`.
+`j3` and `j7b` check what the review-1 fix (`9095a638f`) added: `WikiCopy.conflictRefused` and the
+`wiki-space-unavailable` page. Before it (`1052be908`) both fail: the app says Accepted while the server records
+`conflict`, and the owner's space link opens the other account's own space.
 
 ## What the stack cannot make
 
