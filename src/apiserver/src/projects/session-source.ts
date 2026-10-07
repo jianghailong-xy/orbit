@@ -4,7 +4,7 @@ import {
   ForbiddenException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, RunStatus } from '@prisma/client';
 import {
   SessionSourceSnapshot,
   SourceKind,
@@ -16,7 +16,10 @@ import {
   SOURCE_FIX_ACTIONS,
   SOURCE_REFUSAL_CODES,
 } from '@orbit/shared';
+import { retireSessionInboxGeneration } from '../common/session-inbox-fence';
+import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
+import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 // Type-only, so the two modules do not import each other at run time: the refusal this door freezes
 // onto the session is RECORDED on the task by the door's caller, in the same transaction, through
 // `recordDispatchRefusal` — and that module reads `hasResolvedSource` from this one.
@@ -429,8 +432,8 @@ export interface SourcePinOutcome extends SourcePinResponse {
  * database as well: "that SHA turned out to be unreachable" may not become "use a different SHA"
  * through any door (SR12). Substituting would make the run's result be about code it never ran.
  *
- * THE REFUSAL HALF, AND WHY IT ANSWERS A SECOND THING
- * ==================================================
+ * THE REFUSAL HALF, AND WHY IT ANSWERS TWO MORE THINGS
+ * =====================================================
  * The same compare-and-set freezes a REFUSAL: the machine that could not resolve the ref reports
  * the code, and the winner moves `SELECTED` to `REFUSED`. Until 2026-09-24 that was the whole of
  * it, and the answer was silent everywhere a person looks — the session said it, the TASK did not,
@@ -438,9 +441,14 @@ export interface SourcePinOutcome extends SourcePinResponse {
  * 2026-09-23 (project 34TsjwkAMVVkeEUwi2IAJ) it kept a session idle for 5.5 hours until somebody
  * happened to look at it. So the winner also reports WHAT to record on the task (`refused` on the
  * outcome), and its caller — `runnerApi.pinSessionSource`, in this same transaction — writes it
- * there through `recordDispatchRefusal`. The transaction is what makes the pair atomic: a failure
- * between the two would leave the session refused and the task silent, which is the state this
- * closes, and a retry cannot win the race a second time to repair it.
+ * there through `recordDispatchRefusal`, and opens the project's `SOURCE_UNRESOLVED` exception item
+ * for the ref (SR50). The transaction is what makes each pair atomic: a failure between them would
+ * leave the session refused and the task or the project silent, which is the state this closes, and
+ * a retry cannot win the race a second time to repair it.
+ *
+ * The refusal also ENDS the run, in this transaction (2026-10-07): `REFUSED` is terminal (SR34), so
+ * the run that could not start is closed as FAILED rather than left RUNNING with its claim held —
+ * see the branch's own comment for what that cost.
  *
  * The client is the caller's, and that is the point of the signature: in production it is a
  * transaction client owned by the pin door, and `source-freeze.pg.spec.ts` reaches the same
@@ -510,6 +518,7 @@ export async function freezeSessionSourcePin(
     });
     wonRace = claimed.count === 1;
   } else if (refusal) {
+    const reason = refusalReason(refusal.detail);
     const claimed = await tx.session.updateMany({
       where: { id: actor.sessionId, assignedRunnerId: actor.runnerId, sourceState: 'SELECTED' },
       data: {
@@ -524,6 +533,42 @@ export async function freezeSessionSourcePin(
       },
     });
     wonRace = claimed.count === 1;
+    // §6.1 T4's other half, written in the transaction that decided it: REFUSED is a terminal SOURCE
+    // state (SR34), and until 2026-10-07 that was the only thing this door said. The session was left
+    // RUNNING with `num_turns` 0 and a claim still held, so it read "Starting" forever, `task_start`
+    // answered 409 TASK_ALREADY_RUNNING, and nothing that watches for a sick row (`autoRunHoldOff`
+    // reads FAILED and CANCELLED only) could see it: session 2PLgNAQaH00wZ56CN8J03M sat that way
+    // from 07:45 until a person went looking. A refused run therefore ENDS here, in the columns the
+    // finalize family uses for the same purpose — the terminal status and its error line, what the
+    // dead run had running (`CLEARED_RUNNING_WORK`), and the lease generation retired rather than
+    // unset (`retireSessionInboxGeneration`; the session keeps pointing at the tombstone, which is
+    // what lets a later revive prove the prior engine is gone).
+    //
+    // `status` is the fence, not a second CAS: the compare-and-set above stays exactly as SR30
+    // states it (this function's whole job), and a row somebody already ended — a user's cancel
+    // landing between the claim and this request — is left as it is, rather than overwritten by a
+    // runner that reported a refusal about a run that is no longer live.
+    if (wonRace) {
+      const closed = await tx.session.updateMany({
+        where: { id: actor.sessionId, status: { in: OPEN_SESSION_STATUSES } },
+        data: {
+          status: RunStatus.FAILED,
+          // `<code>: <reason>` is the shape the runner writes for a checkout refusal
+          // (`readDispatchRefusal` reads it back out of the same sentence), so the run that never
+          // started reads exactly like every other refused start.
+          error: `${refusal.code}: ${reason}`,
+          finishedAt: new Date(),
+          // The claim's own markers. `run_claimed_at` is what a waiting notice counts from and the
+          // owner of the inbox lease is a process that is not coming back for this run.
+          runClaimedAt: null,
+          inboxLeaseOwner: null,
+          ...CLEARED_RUNNING_WORK,
+        },
+      });
+      // After the status write, whose predicate this reads: a generation is retired only while its
+      // session is terminal, and this is the statement that made it one.
+      if (closed.count > 0) await retireSessionInboxGeneration(tx, actor.sessionId);
+    }
     // What the caller records on the task, for the winner only: a loser changed nothing, and the
     // winner of a retried request is the first attempt, whose record is already committed with it.
     if (wonRace && before.taskId) {
@@ -540,7 +585,7 @@ export async function freezeSessionSourcePin(
           sourceRequiredContains: before.sourceRequiredContains,
         },
         code: refusal.code as SourceRefusalCode,
-        reason: refusalReason(refusal.detail),
+        reason,
       };
     }
   }
