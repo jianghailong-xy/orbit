@@ -30,7 +30,6 @@ public enum LoginFailure {
     public static let refusals: [String: String] = [
         "ACCOUNT_DISABLED": "This Orbit account is disabled. Ask an administrator to enable it again.",
         "GOOGLE_NOT_CONFIGURED": "Google sign-in is turned off on this server. Sign in with your email and password, or ask an administrator to turn it on.",
-        "GOOGLE_SIGN_IN_BUSY": "Too many Google sign-ins are in progress on this server. Try again in a few minutes.",
         "GOOGLE_FLOW_EXPIRED": "That Google sign-in expired before it finished. Continue with Google to try again.",
         "GOOGLE_CANCELLED": googleCancelled,
         "GOOGLE_EXCHANGE_FAILED": "Orbit couldn't confirm your sign-in with Google. Try again in a moment; if it keeps failing, ask an administrator to check this server's Google sign-in settings.",

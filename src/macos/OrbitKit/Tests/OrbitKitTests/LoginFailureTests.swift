@@ -112,28 +112,42 @@ final class LoginFailureTests: XCTestCase {
         XCTAssertEqual(LoginFailure.googleMessage(for: APIError.invalidResponse), LoginFailure.unexpected)
     }
 
-    /// Every code the server's Google sign-in answers with — a callback's `error`, or a refusal of
-    /// the exchange — has a sentence here, so a new one can't reach the page as a bare code or a
-    /// catch-all. Read from the server's own source.
-    func testEveryCodeTheServerSendsHasASentence() throws {
+    /// Every code the server's Google sign-in can answer the app with has a sentence here, so a new
+    /// one can't reach the page as a catch-all: a callback's `error` (`GoogleCallbackError`), the
+    /// exchange's own refusals and those of the helpers it throws, and the account resolution's
+    /// (`RESOLUTION_REFUSALS`). Read from the server's own source. Linking's codes (§5.3) are left
+    /// out: the apps don't link (§8.2).
+    func testEveryCodeTheServerSignsInWithHasASentence() throws {
         let service = try source("src/apiserver/src/auth/google-login.service.ts")
-        let controller = try source("src/apiserver/src/auth/google-auth.controller.ts")
         var codes = Set<String>()
-        let literal = try NSRegularExpression(pattern: "'(GOOGLE_[A-Z_]+)'")
-        for text in [service, controller] {
-            for match in literal.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
-                codes.insert(String(text[Range(match.range(at: 1), in: text)!]))
+        func matches(_ pattern: String, in text: String) throws -> [[String]] {
+            try NSRegularExpression(pattern: pattern).matches(in: text, range: NSRange(text.startIndex..., in: text)).map { match in
+                (1..<match.numberOfRanges).map { String(text[Range(match.range(at: $0), in: text)!]) }
             }
         }
-        let refusals = try XCTUnwrap(service.range(of: "const RESOLUTION_REFUSALS = {"), "no RESOLUTION_REFUSALS")
-        let end = try XCTUnwrap(service.range(of: "} as const;", range: refusals.upperBound..<service.endIndex))
-        for line in service[refusals.upperBound..<end.lowerBound].split(separator: "\n") {
+        func slice(from start: String, to end: String) throws -> String {
+            let lower = try XCTUnwrap(service.range(of: start), "no `\(start)`")
+            let upper = try XCTUnwrap(service.range(of: end, range: lower.upperBound..<service.endIndex), "no `\(end)` after `\(start)`")
+            return String(service[lower.upperBound..<upper.lowerBound])
+        }
+
+        let callback = try slice(from: "export type GoogleCallbackError =", to: ";")
+        codes.formUnion(try matches("'([A-Z_]+)'", in: callback).map { $0[0] })
+        let exchange = try slice(from: "  async exchange(", to: "\n  }\n")
+        codes.formUnion(try matches("'((?:GOOGLE|ACCOUNT)_[A-Z_]+)'", in: exchange).map { $0[0] })
+        for helper in try matches(#"const (\w+) = \(\) =>\s*new \w+\(\{\s*code: '([A-Z_]+)'"#, in: service)
+        where exchange.contains("\(helper[0])()") {
+            codes.insert(helper[1])
+        }
+        for line in try slice(from: "const RESOLUTION_REFUSALS = {", to: "} as const;").split(separator: "\n") {
             let key = line.trimmingCharacters(in: .whitespaces).prefix { $0 != ":" }
             if !key.isEmpty, key.allSatisfy({ $0.isUppercase || $0 == "_" }) { codes.insert(String(key)) }
         }
 
-        XCTAssertTrue(codes.isSuperset(of: ["GOOGLE_FLOW_MISMATCH", "GOOGLE_NOT_CONFIGURED", "SETUP_REQUIRED",
-                                            "GOOGLE_ACCOUNT_NOT_FOUND"]), "\(codes.sorted())")
+        XCTAssertTrue(codes.isSuperset(of: ["GOOGLE_CANCELLED", "GOOGLE_FLOW_EXPIRED", "GOOGLE_FLOW_MISMATCH",
+                                            "GOOGLE_NOT_CONFIGURED", "SETUP_REQUIRED", "GOOGLE_ACCOUNT_NOT_FOUND"]),
+                      "\(codes.sorted())")
+        XCTAssertFalse(codes.contains("GOOGLE_UNLINK_WOULD_LOCK_OUT"), "a link code read as a sign-in one")
         for code in codes.sorted() {
             XCTAssertNotNil(LoginFailure.refusals[code], "\(code) has no sentence in LoginFailure.refusals")
         }
