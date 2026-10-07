@@ -1,0 +1,163 @@
+<!doctype html>
+<!-- Design mock: Kimi Code sign-in on the web Providers page, telling kimi.com from kimi.ai. Every frame
+     is a capture of the real console (vite dev, shipped components and CSS) on synthetic REST data,
+     through the harness in harness.patch (src/web/ui-migration/kimi-region-mock.*; `git apply` it, run
+     vite, open ?frame=out|device-com|device-ai|in-com|in-ai|old-runner). "现在" is the web before the
+     site choice; "改后" is the web that ships it. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kimi sign-in · kimi.com / kimi.ai · web</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .m-sheet { width: 1976px; }
+  .cols { display: grid; grid-template-columns: 912px 912px; gap: 38px; align-items: start; }
+  .shot { position: relative; width: 912px; }
+  .shot img { display: block; width: 912px; border-radius: 10px; box-shadow: 0 1px 4px rgba(15, 23, 42, .12); }
+  .shot + .shot { margin-top: 10px; }
+  .m-cap { font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 8px 2px 0; }
+  .m-cap b { color: var(--text-1); }
+  .m-cap code, .m-notes code, .m-sub code { font-size: 11.5px; padding: 0 4px; border-radius: 4px; background: #eef0f3; }
+  .lbl { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-2); margin: 0 0 10px; }
+  .ring { position: absolute; border: 2px dashed var(--warning-solid); border-radius: 8px; pointer-events: none; }
+  .ring.grey { border-color: #5b6270; }
+  .n { position: absolute; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%;
+       background: var(--warning-solid); color: #fff; font: 700 12px/1 Inter, sans-serif; box-shadow: 0 0 0 2px #fff; }
+  .n.grey { background: #5b6270; }
+  .step { display: flex; align-items: center; gap: 8px; margin: 12px 2px 8px; font-size: 12.5px; color: var(--text-3); }
+  .step:first-child { margin-top: 0; }
+  .step b { color: var(--text-2); }
+  .none { display: flex; align-items: center; justify-content: center; height: 243px; border: 1px dashed #cfd3da; border-radius: 10px;
+          color: var(--text-3); font-size: 13px; background: #fafbfc; }
+  .notes2 { display: grid; grid-template-columns: 912px 912px; gap: 38px; align-items: start; }
+  .notes2 .m-notes { margin-top: 0; }
+  .m-notes h4 { margin: 0 0 6px; font-size: 13px; color: var(--text-1); }
+  .m-notes .sub { display: block; color: var(--text-3); }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">Kimi 登录 · 分开 kimi.com 和 kimi.ai：开始登录时先选站点</h1>
+  <p class="m-sub zh">kimi.com（中国大陆）和 kimi.ai（海外）是两套账号，登录页、API、订阅都不通。Kimi Code 2.1.1 已经支持 <code>kimi login --region mainland-cn|global</code>，但 Orbit 跑的是不带参数的 <code>kimi login</code>：首次登录由 CLI 按安装脚本写下的 <code>~/.kimi-code/region</code> 决定站点，而 Orbit 用的是 code.kimi.com 的安装脚本，所以<b>永远去 kimi.com</b>——kimi.ai 的账号在 Orbit 里登不上，登错了也换不回来。下面每张都是真实 web 控制台截图（同一套组件和样式，接口数据是造的）；「改后」是把提案写进组件后的原型截图。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 开始登录：Providers 页 → Kimi Code → Sign in</div>
+    <div class="cols">
+      <div>
+        <div class="lbl zh"><span class="m-k">现在</span>只有一个按钮</div>
+        <div class="shot">
+          <img src="01a-today-start.png" alt="">
+          <span class="ring grey" style="left:35px;top:89px;width:166px;height:42px"></span><span class="n grey" style="left:190px;top:78px">A</span>
+        </div>
+        <p class="m-cap zh"><b>A</b> 点「Sign in to Kimi Code」→ runner 跑 <code>kimi login</code>，去哪个站点由 CLI 自己定：这台机器从没登过就看安装渠道（code.kimi.com = kimi.com），登过就沿用上一次。用户没有任何地方能说「我是 kimi.ai 的账号」。</p>
+      </div>
+      <div>
+        <div class="lbl zh"><span class="m-k new">改后</span>先问用哪个 Kimi 账号</div>
+        <div class="shot">
+          <img src="01d-pick-site.png" alt="">
+          <span class="ring" style="left:33px;top:87px;width:425px;height:102px"></span><span class="n" style="left:447px;top:76px">1</span>
+        </div>
+        <p class="m-cap zh"><b>1</b> 两个选项各写域名和地区，<b>点哪个就直接在那个站点开始登录</b>（<code>kimi login --region mainland-cn</code> / <code>global</code>）。点击次数和现在一样（Sign in → 选站点）。不预选：选错的代价是到了登录页才发现账号不在，所以让用户自己点。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 设备码：打开登录页、输入一次性代码</div>
+    <div class="cols">
+      <div>
+        <div class="lbl zh"><span class="m-k">现在</span>不说是哪个站点</div>
+        <div class="shot">
+          <img src="01b-today-device.png" alt="">
+          <span class="ring grey" style="left:35px;top:89px;width:191px;height:42px"></span><span class="n grey" style="left:215px;top:78px">B</span>
+        </div>
+        <p class="m-cap zh"><b>B</b> 「Open the sign-in page」打开的其实是 auth.kimi.com。kimi.ai 的用户在那边登不上（或者登进一个空的 kimi.com 账号），回到这里也看不出原因，只能 Cancel。</p>
+      </div>
+      <div>
+        <div class="lbl zh"><span class="m-k new">改后</span>写明站点，选错一键换</div>
+        <div class="shot">
+          <img src="01e-device-kimi-ai.png" alt="">
+          <span class="ring" style="left:35px;top:89px;width:572px;height:66px"></span><span class="n" style="left:596px;top:78px">2</span>
+          <span class="ring" style="left:90px;top:239px;width:133px;height:29px"></span><span class="n" style="left:229px;top:242px">3</span>
+        </div>
+        <p class="m-cap zh"><b>2</b> 按钮和提示都带上站点：「Open the <b>kimi.ai</b> sign-in page」「Sign in with your <b>kimi.ai</b> account there」。站点从 CLI 打印出来的登录 URL 的域名读（auth.kimi.ai / auth.kimi.com），显示的就是用户马上要打开的页面，不会和实际不符。<br><b>3</b> 「Use kimi.com instead」：取消这次登录，在另一个站点重新开始——不用退回上一步。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ 登录之后：看得出是哪个站点，也能换过去</div>
+    <div class="cols">
+      <div>
+        <div class="lbl zh"><span class="m-k">现在</span>只有版本号</div>
+        <div class="shot">
+          <img src="01c-today-signed-in.png" alt="">
+          <span class="ring grey" style="left:59px;top:40px;width:138px;height:28px"></span><span class="n grey" style="left:186px;top:29px">C</span>
+        </div>
+        <p class="m-cap zh"><b>C</b> 「Signed in」看不出登的是哪个站点的账号；会话花的是那个站点的订阅。想换站点只能去机器上开终端。</p>
+      </div>
+      <div>
+        <div class="lbl zh"><span class="m-k new">改后</span>行上写站点；⋯ → Re-sign in 换站点</div>
+        <div class="step zh"><b>已登录 kimi.ai</b></div>
+        <div class="shot">
+          <img src="01f-signed-in-kimi-ai.png" alt="">
+          <span class="ring" style="left:59px;top:40px;width:181px;height:28px"></span><span class="n" style="left:229px;top:29px">4</span>
+        </div>
+        <div class="step zh"><b>已登录 kimi.com，想换成 kimi.ai</b>：⋯ 菜单里现成的 Re-sign in</div>
+        <div class="shot">
+          <img src="01g-resign-menu.png" alt="">
+          <span class="ring" style="left:711px;top:58px;width:174px;height:43px"></span><span class="n" style="left:876px;top:90px">5</span>
+        </div>
+        <div class="step zh"><b>同一个选择，当前站点标 Current</b></div>
+        <div class="shot">
+          <img src="01h-switch-site.png" alt="">
+          <span class="ring" style="left:33px;top:116px;width:425px;height:73px"></span><span class="n" style="left:447px;top:105px">6</span>
+        </div>
+        <p class="m-cap zh"><b>4</b> 版本号后面写站点：<code>2.1.1 · kimi.ai</code>。<b>5</b> 换站点不加新入口，走现有的 ⋯ → Re-sign in。<b>6</b> 打开的是同一个选择，当前站点标 <b>Current</b>；点另一个就在那边登录，CLI 会改写 config.toml 里的 Kimi provider 和模型列表，之后新会话都走新站点的订阅。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">④ 还没升级的 runner</div>
+    <div class="cols">
+      <div>
+        <div class="lbl zh"><span class="m-k">现在</span></div>
+        <div class="none zh">（现在没有这个状态：只有一个按钮，永远是 CLI 自己选站点）</div>
+      </div>
+      <div>
+        <div class="lbl zh"><span class="m-k new">改后</span>runner 不支持选站点</div>
+        <div class="shot">
+          <img src="01i-old-runner.png" alt="">
+          <span class="ring" style="left:243px;top:116px;width:215px;height:73px"></span><span class="n" style="left:447px;top:105px">7</span>
+          <span class="ring" style="left:35px;top:183px;width:458px;height:29px"></span>
+        </div>
+        <p class="m-cap zh"><b>7</b> runner 没声明 <code>kimi-login-region/v1</code>（Orbit runner 版本旧）时，它只会跑不带参数的 <code>kimi login</code>：kimi.ai 置灰，下面一句话说清楚要升级这台 runner。服务端同样拒绝给这种 runner 下发 <code>region</code>，不会悄悄登到 kimi.com。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">说明</div>
+    <div class="notes2">
+      <ul class="m-notes zh">
+        <li><h4>为什么做在「选站点」这一步，而不是别处</h4></li>
+        <li><span class="m-n">a</span><span><b>不默认、不记忆。</b>站点是账号的属性，不是偏好：猜错一次，用户就要在别人的登录页里白跑一趟。kimi.com 和 kimi.ai 两个选项并排，和 Kimi 自己的登录对话框一样（「Sign in with your kimi.com account」/「… kimi.ai account」）。</span></li>
+        <li><span class="m-n">b</span><span><b>放在面板里，不放在行上的 Sign in。</b>行上的按钮不变；面板原本那个「Sign in to Kimi Code」换成两个选项，点击数不变，Claude / Codex / Antigravity 完全不受影响。</span></li>
+        <li><span class="m-n">c</span><span><b>不选的备选方案：</b>① 默认 kimi.com、设备码页给「切到 kimi.ai」——每个 kimi.ai 用户都要先白等一次 runner 心跳（最长一分钟）；② 在 Providers 页给 Kimi 加一个全局「地区」设置——地区是每台 runner 上那个登录的事，同一个人可能两台机器登两个站点；③ 用 kimi.ai 的安装脚本重装——只影响「第一次登录」，登过一次就不再看它。</span></li>
+        <li><span class="m-n">d</span><span><b>iOS / macOS</b> 共用 <code>RunnerSignInView.swift</code>，同样改（见 02-ios）。<code>orbit doctor</code> 的终端登录也要先问站点，再跑 <code>kimi login --region …</code>。</span></li>
+      </ul>
+      <ul class="m-notes zh">
+        <li><h4>要改的地方（链路）</h4></li>
+        <li><span class="m-n">1</span><span><b>shared</b> <code>dto.ts</code>：<code>KimiRegion = 'mainland-cn' | 'global'</code>；<code>POST /runners/:id/login</code> 的 body 加 <code>region</code>（仅 kimi）；<code>RunnerEngineHealth.kimiRegion</code>（第 4、6 点读它）。</span></li>
+        <li><span class="m-n">2</span><span><b>apiserver</b>：runner 行加 <code>login_region</code>（migration 0397），随 LoginCommand 下发；<code>engine ≠ kimi</code> 带 <code>region</code> 直接 400；runner 没声明 <code>kimi-login-region/v1</code> 时，下一次心跳把这次登录标为失败并说明要升级 runner，不降级成裸登录。</span></li>
+        <li><span class="m-n">3</span><span><b>runner</b> <code>login.go</code> / <code>kimi_region.go</code>：<code>kimi login --region &lt;region&gt;</code>；先用 <code>kimi login --help</code> 确认 CLI 认识 <code>--region</code>（同 Codex 的 <code>--device-auth</code> 探测）。太旧的 Kimi 选 kimi.ai 直接失败并提示更新引擎，选 kimi.com 退回裸 <code>kimi login</code>。设备码 URL 的正则本来就不限域名，不用改。</span></li>
+        <li><span class="m-n">4</span><span><b>runner</b> 上报站点：从 <code>kimi provider list --json</code>（CLI 自己读的 config.toml）里取 <code>managed:kimi-code</code>——<code>oauthHost = auth.kimi.ai</code> 是 global，key 为 <code>oauth/kimi-code</code> 是 mainland-cn，再看 API 地址；没登过就不报（不读安装标记，免得把「从没登过」说成 kimi.com）。换了站点也会让 runner 重读模型列表。</span></li>
+        <li><span class="m-n">5</span><span><b>不用改：</b>登录状态探测（<code>kimi acp</code> authenticate）、模型列表（<code>kimi provider list --json</code>）、会话里的 KIMI_CODE_HOME overlay 都跟着 CLI 自己的 config.toml 走，登到哪个站点就用哪个站点的 API。</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+</body>
+</html>
