@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import io.orbitd.android.core.auth.AuthState
@@ -97,6 +99,27 @@ class ManagementPanelTest {
         pool("shared:${fixture.POOL}")
         await("Team Codex")
         compose.onNode(hasText("Leave pool") and hasClickAction()).performScrollTo().assertIsNotEnabled()
+    }
+
+    @Test fun editModeMovesARunnerByDraggingItsHandleAndSendsTheOrderOnce() {
+        fixture.secondRunner = true
+        val api = api()
+        compose.setContent { RunnersList(api, revision) {} }
+        await("Spare box")
+        compose.onNode(hasText("Edit") and hasClickAction()).performClick()
+        // The row merges its handle ("≡", at its right edge) into one node; the drag starts on the handle.
+        compose.onNodeWithContentDescription("Reorder Old alias").assert(hasCustomAction("Move down")).performTouchInput {
+            down(centerRight - androidx.compose.ui.geometry.Offset(8f, 0f))
+            repeat(30) { moveBy(androidx.compose.ui.geometry.Offset(0f, 20f)) }
+            up()
+        }
+        compose.waitUntil(10_000) { fixture.calls.contains("POST runners/reorder") }
+        assertEquals(listOf(fixture.RUNNER_TWO, fixture.RUNNER), fixture.runnerOrder)
+        assertEquals("One order goes out per drag", 1, fixture.calls.count { it == "POST runners/reorder" })
+    }
+
+    private fun hasCustomAction(label: String) = SemanticsMatcher("has custom action $label") { node ->
+        node.config.getOrNull(SemanticsActions.CustomActions)?.any { action -> action.label == label } == true
     }
 
     @Test fun aShareRefreshThatFailsStopsWritesAndOffersRetry() {

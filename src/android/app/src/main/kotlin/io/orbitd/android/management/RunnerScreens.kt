@@ -4,6 +4,9 @@ import android.content.Intent
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.verticalDrag
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -19,11 +22,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -36,6 +49,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
@@ -163,6 +177,10 @@ fun RunnersList(api: ManagementApi, revision: Long, openRunner: (String) -> Unit
     var editing by rememberSaveable { mutableStateOf(false) }
     var adding by rememberSaveable { mutableStateOf(false) }
     var removing by remember { mutableStateOf<JsonObject?>(null) }
+    var drag by remember { mutableStateOf<RunnerDrag?>(null) }
+    val heights = remember { mutableStateMapOf<String, Int>() }
+    val handles = remember { mutableStateMapOf<String, Rect>() }
+    var list by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val notice = remember { Notice() }
     LaunchedEffect(model, revision, resumed) { if (resumed) { model.load(); model.loadReleaseVersion() } }
     Box(Modifier.fillMaxSize()) {
@@ -188,16 +206,40 @@ fun RunnersList(api: ManagementApi, revision: Long, openRunner: (String) -> Unit
                             TextButton(onClick = { editing = !editing }) { Text(if (editing) "Done" else "Edit") }
                         }
                         FormSection {
-                            model.runners.forEachIndexed { index, runner ->
-                                if (index > 0) HorizontalDivider()
-                                RunnerRow(runner, model.workspacesOf(runner.text("id")), model.latestVersion, now, editing,
-                                    canMoveUp = index > 0, canMoveDown = index < model.runners.lastIndex,
-                                    open = { openRunner(runner.text("id")) }, remove = { removing = runner },
-                                    move = { by -> scope.launch {
-                                        val ids = model.runners.map { it.text("id") }.toMutableList()
-                                        ids.add(index + by, ids.removeAt(index))
-                                        model.reorder(ids)
-                                    } })
+                            // Edit mode moves a row by dragging its handle, as on iOS: rows trade places as it passes half
+                            // of the next one, and the order goes out once, when it is let go. The drag is measured on
+                            // the list, which stays put, not on the row, which moves with the finger.
+                            val shown = drag?.order?.mapNotNull { id -> model.runners.firstOrNull { it.text("id") == id } } ?: model.runners
+                            Column(Modifier.onPlaced { list = it }.pointerInput(editing) {
+                                if (editing) awaitEachGesture {
+                                    val down = awaitFirstDown(requireUnconsumed = false)
+                                    val id = handles.entries.firstOrNull { it.value.contains(down.position) }?.key ?: return@awaitEachGesture
+                                    drag = RunnerDrag(id, model.runners.map { it.text("id") }, 0f)
+                                    val ended = verticalDrag(down.id) { change -> drag = drag?.moved(change.positionChange().y, heights); change.consume() }
+                                    val order = drag?.order
+                                    drag = null
+                                    if (ended && order != null && order != model.runners.map { it.text("id") }) scope.launch { model.reorder(order) }
+                                }
+                            }) {
+                                shown.forEachIndexed { index, runner ->
+                                    val id = runner.text("id")
+                                    if (index > 0) HorizontalDivider()
+                                    key(id) {
+                                        val dragged = drag?.id == id
+                                        Box(Modifier.onSizeChanged { heights[id] = it.height }.zIndex(if (dragged) 1f else 0f)
+                                            .graphicsLayer { translationY = if (dragged) drag?.offset ?: 0f else 0f }) {
+                                            RunnerRow(runner, model.workspacesOf(id), model.latestVersion, now, editing,
+                                                canMoveUp = index > 0, canMoveDown = index < shown.lastIndex,
+                                                open = { openRunner(id) }, remove = { removing = runner },
+                                                move = { by -> scope.launch {
+                                                    val ids = model.runners.map { it.text("id") }.toMutableList()
+                                                    ids.add(index + by, ids.removeAt(index))
+                                                    model.reorder(ids)
+                                                } },
+                                                handle = Modifier.onGloballyPositioned { at -> list?.takeIf { it.isAttached }?.let { handles[id] = it.localBoundingBoxOf(at) } })
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -218,12 +260,32 @@ fun RunnersList(api: ManagementApi, revision: Long, openRunner: (String) -> Unit
     if (adding) AddRunnerDialog(api, onDismiss = { adding = false }) { id -> adding = false; openRunner(id) }
 }
 
+/** One drag in Edit mode: the row being moved, the order as it stands, and how far the row is from its slot. */
+internal data class RunnerDrag(val id: String, val order: List<String>, val offset: Float) {
+    /** Moved by [dy]: it takes the next row's place once past half of it, and the offset is kept relative to its new slot. */
+    fun moved(dy: Float, heights: Map<String, Int>): RunnerDrag {
+        var order = order; var offset = offset + dy
+        while (true) {
+            val at = order.indexOf(id)
+            val next = order.getOrNull(at + 1)?.let { heights[it] }
+            val previous = order.getOrNull(at - 1)?.let { heights[it] }
+            if (next != null && offset > next / 2f) { order = order.toMutableList().apply { add(at + 1, removeAt(at)) }; offset -= next }
+            else if (previous != null && offset < -previous / 2f) { order = order.toMutableList().apply { add(at - 1, removeAt(at)) }; offset += previous }
+            else return RunnerDrag(id, order, offset)
+        }
+    }
+}
+
 @Composable
 private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: String?, now: Long, editing: Boolean,
-                      canMoveUp: Boolean, canMoveDown: Boolean, open: () -> Unit, remove: () -> Unit, move: (Int) -> Unit) {
+                      canMoveUp: Boolean, canMoveDown: Boolean, open: () -> Unit, remove: () -> Unit, move: (Int) -> Unit, handle: Modifier) {
     val items = RunnerPage.attention(runner, workspaces, now, latest)
     val name = RunnerPage.displayName(runner)
-    Row(Modifier.fillMaxWidth().clickable(enabled = !editing, role = Role.Button, onClick = open).padding(vertical = 8.dp),
+    // In Edit mode the row opens nothing; TalkBack, which cannot drag, moves it by these actions instead.
+    Row(Modifier.fillMaxWidth().then(if (!editing) Modifier.clickable(role = Role.Button, onClick = open) else Modifier.semantics(mergeDescendants = true) {
+            customActions = listOfNotNull(CustomAccessibilityAction("Move up") { move(-1); true }.takeIf { canMoveUp },
+                CustomAccessibilityAction("Move down") { move(1); true }.takeIf { canMoveDown })
+        }).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         StatusDot(RunnerPage.presence(runner, now))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -241,9 +303,9 @@ private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: 
             }
         }
         if (editing) {
-            TextButton(onClick = { move(-1) }, enabled = canMoveUp, modifier = Modifier.semantics { contentDescription = "Move $name up" }) { Text("▲") }
-            TextButton(onClick = { move(1) }, enabled = canMoveDown, modifier = Modifier.semantics { contentDescription = "Move $name down" }) { Text("▼") }
             TextButton(onClick = remove) { Text("Remove", color = Ink.red) }
+            Text("≡", handle.semantics { contentDescription = "Reorder $name" }.padding(horizontal = 8.dp, vertical = 4.dp),
+                style = MaterialTheme.typography.titleLarge, color = Ink.muted)
         } else Chevron()
     }
 }

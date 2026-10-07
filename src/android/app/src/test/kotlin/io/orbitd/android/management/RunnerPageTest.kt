@@ -120,4 +120,13 @@ class RunnerPageTest {
         assertNull(planUsageSnapshot(nested, "kimi"))
         assertNull(planUsageSnapshot(nested, "opencode"))
     }
+
+    @Test fun aDraggedRowTakesTheNextPlaceOncePastHalfOfIt() {
+        val heights = mapOf("a" to 100, "b" to 100, "c" to 100)
+        val start = RunnerDrag("a", listOf("a", "b", "c"), 0f)
+        assertEquals(listOf("a", "b", "c"), start.moved(40f, heights).order)
+        start.moved(60f, heights).let { assertEquals(listOf("b", "a", "c"), it.order); assertEquals(-40f, it.offset) }
+        start.moved(160f, heights).let { assertEquals(listOf("b", "c", "a"), it.order); assertEquals(-40f, it.offset) }
+        RunnerDrag("c", listOf("a", "b", "c"), 0f).moved(-260f, heights).let { assertEquals(listOf("c", "a", "b"), it.order); assertEquals(-60f, it.offset) }
+    }
 }

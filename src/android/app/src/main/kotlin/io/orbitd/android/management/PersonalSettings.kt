@@ -10,9 +10,11 @@ import android.graphics.ImageDecoder
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -24,16 +26,32 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -53,6 +71,7 @@ import kotlinx.serialization.json.*
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.UUID
+import kotlin.math.roundToInt
 
 /** A refresh must establish authority before another write. Late reads cannot undo invalidation. */
 internal class PersonalRecord(private val fetch: suspend () -> JsonElement) {
@@ -400,11 +419,46 @@ internal fun personalDecodePhoto(resolver: ContentResolver, uri: Uri): Bitmap =
         decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
     }
 
-/** orbitAvatarJPEG: the square the sliders address, at most 512 pixels, drawn on white. */
-internal fun personalCropPhoto(source: Bitmap, zoom: Float, horizontal: Float, vertical: Float): Bitmap {
-    val side = maxOf(1, (minOf(source.width, source.height) / zoom.coerceIn(1f, 5f)).toInt())
-    val left = ((source.width - side) * horizontal.coerceIn(0f, 1f)).toInt()
-    val top = ((source.height - side) * vertical.coerceIn(0f, 1f)).toInt()
+/**
+ * AvatarCrop (OrbitKit): where a round profile photo is cut from, as the crop screen frames it. The photo covers
+ * the circle at least (zoom 1), zooms in to [maxZoom], and moves only as far as keeps the circle on the photo.
+ * Offsets are in screen pixels, from the circle's centre to the photo's.
+ */
+internal object AvatarCrop {
+    const val maxZoom = 5f
+
+    /** The photo's size on screen at zoom 1: just covering a circle of that diameter. */
+    fun fitted(image: Size, circle: Float): Size {
+        if (image.width <= 0f || image.height <= 0f) return Size.Zero
+        val k = maxOf(circle / image.width, circle / image.height)
+        return Size(image.width * k, image.height * k)
+    }
+
+    fun clampedZoom(zoom: Float) = zoom.coerceIn(1f, maxZoom)
+
+    /** The offset, moved back inside what keeps the circle on the photo at that zoom. */
+    fun clampedOffset(offset: Offset, fitted: Size, circle: Float, zoom: Float): Offset {
+        val slackX = maxOf(0f, (fitted.width * zoom - circle) / 2)
+        val slackY = maxOf(0f, (fitted.height * zoom - circle) / 2)
+        // + 0f: no movement room reads as 0, not -0 (Offset compares its bits).
+        return Offset(offset.x.coerceIn(-slackX, slackX) + 0f, offset.y.coerceIn(-slackY, slackY) + 0f)
+    }
+
+    /** The square of the photo, in the photo's own pixels, that the circle covers. */
+    fun cropRect(image: Size, circle: Float, zoom: Float, offset: Offset): Rect {
+        val fitted = fitted(image, circle)
+        if (fitted.width <= 0f) return Rect.Zero
+        val shown = Size(fitted.width * zoom, fitted.height * zoom)
+        val k = shown.width / image.width
+        return Rect(Offset((shown.width / 2 - offset.x - circle / 2) / k, (shown.height / 2 - offset.y - circle / 2) / k), Size(circle / k, circle / k))
+    }
+}
+
+/** orbitAvatarJPEG: the square the circle covers, at most 512 pixels, drawn on white. */
+internal fun personalCropPhoto(source: Bitmap, square: Rect): Bitmap {
+    val side = maxOf(1, minOf(square.width.roundToInt(), source.width, source.height))
+    val left = square.left.roundToInt().coerceIn(0, source.width - side)
+    val top = square.top.roundToInt().coerceIn(0, source.height - side)
     val out = minOf(side, 512)
     val scaled = Bitmap.createScaledBitmap(Bitmap.createBitmap(source, left, top, side, side), out, out, true)
     // Composited onto white, so a transparent image is not sent as black JPEG.
@@ -417,22 +471,58 @@ internal fun personalCropPhoto(source: Bitmap, zoom: Float, horizontal: Float, v
     return Bitmap.createBitmap(out, out, Bitmap.Config.ARGB_8888).apply { setPixels(pixels, 0, out, 0, 0, out, out) }
 }
 
+/**
+ * AvatarCropView: the photo under a round window on black, pinched and dragged into place (AvatarCrop keeps the
+ * circle covered), Cancel (×) and Save along the bottom. Save hands back the circle's square as the JPEG that is
+ * sent. TalkBack, which cannot pinch, gets Zoom in / Zoom out on the photo.
+ */
 @Composable
 private fun PersonalPhotoDialog(source: Bitmap, onDismiss: () -> Unit, onSave: (ByteArray) -> Unit) {
+    val image = remember(source) { source.asImageBitmap() }
     var zoom by remember(source) { mutableFloatStateOf(1f) }
-    var horizontal by remember(source) { mutableFloatStateOf(.5f) }
-    var vertical by remember(source) { mutableFloatStateOf(.5f) }
-    val cropped = remember(source, zoom, horizontal, vertical) { personalCropPhoto(source, zoom, horizontal, vertical) }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Crop profile photo") }, text = {
-        Column {
-            Image(cropped.asImageBitmap(), "Photo crop preview", Modifier.size(200.dp).clip(CircleShape))
-            Text("Zoom"); Slider(zoom, { zoom = it }, valueRange = 1f..5f)
-            Text("Horizontal position"); Slider(horizontal, { horizontal = it })
-            Text("Vertical position"); Slider(vertical, { vertical = it })
+    var offset by remember(source) { mutableStateOf(Offset.Zero) }
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
+            val density = LocalDensity.current
+            val circle = with(density) { maxOf(1.dp, minOf(maxWidth, maxHeight) - 88.dp).toPx() }
+            val photo = Size(source.width.toFloat(), source.height.toFloat())
+            val fitted = AvatarCrop.fitted(photo, circle)
+            fun zoomTo(value: Float) { zoom = AvatarCrop.clampedZoom(value); offset = AvatarCrop.clampedOffset(offset, fitted, circle, zoom) }
+            Box(Modifier.fillMaxSize().pointerInput(source, circle) {
+                detectTransformGestures { _, pan, change, _ ->
+                    zoom = AvatarCrop.clampedZoom(zoom * change)
+                    offset = AvatarCrop.clampedOffset(offset + pan, fitted, circle, zoom)
+                }
+            }.semantics {
+                contentDescription = "Photo crop preview"
+                customActions = listOf(CustomAccessibilityAction("Zoom in") { zoomTo(zoom * 1.25f); true },
+                    CustomAccessibilityAction("Zoom out") { zoomTo(zoom / 1.25f); true })
+            }) {
+                with(density) {
+                    Image(image, null, Modifier.align(Alignment.Center).requiredSize((fitted.width * zoom).toDp(), (fitted.height * zoom).toDp())
+                        .graphicsLayer { translationX = offset.x; translationY = offset.y }, contentScale = ContentScale.FillBounds)
+                }
+                // Everything outside the circle dimmed, and the circle's edge drawn.
+                Canvas(Modifier.fillMaxSize().graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)) {
+                    drawRect(Color.Black.copy(alpha = .6f))
+                    drawCircle(Color.Transparent, radius = circle / 2, blendMode = BlendMode.Clear)
+                    drawCircle(Color.White.copy(alpha = .7f), radius = circle / 2, style = Stroke(1.dp.toPx()))
+                }
+            }
+            Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                FilledTonalIconButton(onClick = onDismiss, Modifier.size(48.dp).semantics { contentDescription = "Cancel" }) {
+                    Text("✕", Modifier.clearAndSetSemantics { }, style = MaterialTheme.typography.titleMedium)
+                }
+                Spacer(Modifier.weight(1f))
+                FilledTonalButton(onClick = {
+                    val square = AvatarCrop.cropRect(photo, circle, zoom, offset)
+                    val out = ByteArrayOutputStream(); personalCropPhoto(source, square).compress(Bitmap.CompressFormat.JPEG, 85, out)
+                    onSave(out.toByteArray())
+                }, Modifier.height(48.dp)) { Text("Save") }
+            }
         }
-    }, confirmButton = { TextButton(onClick = {
-        val out = ByteArrayOutputStream(); cropped.compress(Bitmap.CompressFormat.JPEG, 85, out); onSave(out.toByteArray())
-    }) { Text("Save") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    }
 }
 
 internal suspend fun personalUploadAvatar(api: ManagementApi, jpeg: ByteArray) {
