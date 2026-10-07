@@ -65,7 +65,8 @@ async function open(search: string): Promise<HTMLElement> {
   const next = createRoot(container);
   root = next;
   await act(async () => next.render(<CliLoginPage />));
-  await vi.waitFor(() => expect(container!.querySelector('.ant-spin')).toBeNull());
+  // Loading shows a status spinner until the request is read.
+  await vi.waitFor(() => expect(container!.querySelector('[role="status"]')).toBeNull());
   await settle();
   return container;
 }

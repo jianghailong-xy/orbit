@@ -8,6 +8,7 @@ import { Input } from '../components/ui/Input';
 import { Radio, RadioGroup } from '../components/ui/Radio';
 import { Spinner } from '../components/ui/Spinner';
 import { Switch } from '../components/ui/Switch';
+import '../components/ui/Card.css';
 import { copyText } from '../lib/clipboard';
 import { authMethodsQuery } from '../lib/googleLink';
 import { useToast } from '../lib/toast';

@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { Alert, Button, Checkbox, Input, Modal, Radio, Select } from 'antd';
+import { useRef, useState, type RefObject } from 'react';
 import type { AccessTokenLifetime } from '../api';
 import {
   DEFAULT_EXPIRY,
@@ -11,6 +10,13 @@ import {
   fullDate,
   scopesOfPreset,
 } from '../lib/accessTokens';
+import { Alert } from './ui/Alert';
+import { Button } from './ui/Button';
+import { Checkbox } from './ui/Checkbox';
+import { Dialog } from './ui/Dialog';
+import { Input } from './ui/Input';
+import { MultiSelect } from './ui/MultiSelect';
+import { Radio, RadioGroup } from './ui/Radio';
 
 const DAY_MS = 86_400_000;
 
@@ -41,27 +47,23 @@ export function NewAccessTokenDialog({
   creating: boolean;
   workspaces: readonly { id: string; name: string }[];
 }) {
+  // The name is where typing starts.
+  const name = useRef<HTMLInputElement>(null);
   return (
-    <Modal
-      open={open}
-      onCancel={onClose}
-      title="New access token"
-      footer={null}
-      width={560}
-      destroyOnHidden
-      className="access-token-dialog"
-    >
-      <NewTokenForm onClose={onClose} onCreate={onCreate} creating={creating} workspaces={workspaces} />
-    </Modal>
+    <Dialog open={open} onClose={onClose} title="New access token" width={560} initialFocus={name} className="access-token-dialog">
+      <NewTokenForm nameRef={name} onClose={onClose} onCreate={onCreate} creating={creating} workspaces={workspaces} />
+    </Dialog>
   );
 }
 
 function NewTokenForm({
+  nameRef,
   onClose,
   onCreate,
   creating,
   workspaces,
 }: {
+  nameRef: RefObject<HTMLInputElement | null>;
   onClose: () => void;
   onCreate: (token: NewAccessToken) => void;
   creating: boolean;
@@ -98,12 +100,14 @@ function NewTokenForm({
       <label className="access-token-field">
         <span className="access-token-label">Name</span>
         <Input
+          ref={nameRef}
           value={name}
           maxLength={100}
           placeholder="What it’s for, e.g. Nightly report script"
           onChange={(event) => setName(event.target.value)}
-          onPressEnter={create}
-          autoFocus
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.repeat && !event.nativeEvent.isComposing) create();
+          }}
         />
       </label>
 
@@ -111,26 +115,23 @@ function NewTokenForm({
         <span className="access-token-label" id="access-token-access">
           Access
         </span>
-        <Radio.Group
-          aria-labelledby="access-token-access"
-          optionType="button"
-          value={preset}
-          options={SCOPE_PRESETS.map((option) => ({ value: option.value, label: option.label }))}
-          onChange={(event) => choosePreset(event.target.value as ScopePreset)}
-        />
+        <RadioGroup<ScopePreset> aria-labelledby="access-token-access" variant="button" value={preset} onValueChange={choosePreset}>
+          {SCOPE_PRESETS.map((option) => (
+            <Radio key={option.value} value={option.value}>
+              {option.label}
+            </Radio>
+          ))}
+        </RadioGroup>
         {preset === 'custom' ? (
           <div className="access-token-scopes" role="group" aria-label="Scopes">
             {SCOPE_GROUPS.map((group) => (
               <div key={group.resource} className="access-token-scope-row">
                 <span>{group.resource}</span>
-                <Checkbox checked={picked.includes(group.read)} onChange={(event) => toggle(group.read, event.target.checked)}>
+                <Checkbox checked={picked.includes(group.read)} onCheckedChange={(on) => toggle(group.read, on)}>
                   Read
                 </Checkbox>
                 {group.write ? (
-                  <Checkbox
-                    checked={picked.includes(group.write)}
-                    onChange={(event) => toggle(group.write!, event.target.checked)}
-                  >
+                  <Checkbox checked={picked.includes(group.write)} onCheckedChange={(on) => toggle(group.write!, on)}>
                     Write
                   </Checkbox>
                 ) : (
@@ -155,14 +156,12 @@ function NewTokenForm({
         <span className="access-token-label" id="access-token-workspaces">
           Workspaces
         </span>
-        <Select
+        <MultiSelect
           aria-labelledby="access-token-workspaces"
-          mode="multiple"
-          allowClear
+          clearable
           placeholder="All workspaces"
           value={workspaceIds}
-          onChange={setWorkspaceIds}
-          optionFilterProp="label"
+          onValueChange={setWorkspaceIds}
           options={workspaces.map((workspace) => ({ value: workspace.id, label: workspace.name }))}
         />
         <div className="access-token-help">
@@ -175,15 +174,15 @@ function NewTokenForm({
         <span className="access-token-label" id="access-token-expiry">
           Expires
         </span>
-        <Radio.Group
-          aria-labelledby="access-token-expiry"
-          optionType="button"
-          value={expiry}
-          options={EXPIRY_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-          onChange={(event) => setExpiry(event.target.value as string)}
-        />
+        <RadioGroup<string> aria-labelledby="access-token-expiry" variant="button" value={expiry} onValueChange={setExpiry}>
+          {EXPIRY_OPTIONS.map((option) => (
+            <Radio key={option.value} value={option.value}>
+              {option.label}
+            </Radio>
+          ))}
+        </RadioGroup>
         {lifetime === null ? (
-          <Alert type="warning" showIcon className="access-token-never-warning" message={NEVER_EXPIRES_WARNING} />
+          <Alert type="warning" className="access-token-never-warning" title={NEVER_EXPIRES_WARNING} />
         ) : (
           <div className="access-token-help">
             Stops working on {fullDate(new Date(Date.now() + lifetime * DAY_MS).toISOString())}.
@@ -193,7 +192,7 @@ function NewTokenForm({
 
       <div className="access-token-actions">
         <Button onClick={onClose}>Cancel</Button>
-        <Button type="primary" disabled={!canCreate} loading={creating} onClick={create}>
+        <Button variant="primary" disabled={!canCreate} loading={creating} onClick={create}>
           Create token
         </Button>
       </div>

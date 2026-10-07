@@ -19,6 +19,7 @@ import { Badge } from '../components/ui/Badge';
 import { Button as OrbitButton } from '../components/ui/Button';
 import { Checkbox } from '../components/ui/Checkbox';
 import { useConfirm } from '../components/ui/ConfirmDialog';
+import { OverlayScope } from '../components/ui/Overlay';
 import { fullDate } from '../lib/accessTokens';
 import { authMethodsQuery } from '../lib/googleLink';
 import type { SignInMethods } from '../lib/queries';
@@ -271,7 +272,12 @@ export function AdminUsersPage() {
         width={1120}
         destroyOnHidden
       >
-        {tokensOf && <UserAccessTokens user={tokensOf} />}
+        {/* The table's revoke question is an Orbit popover: it stays inside this dialog's focus and layer. */}
+        {tokensOf && (
+          <OverlayScope>
+            <UserAccessTokens user={tokensOf} />
+          </OverlayScope>
+        )}
       </Modal>
     </div>
   );
