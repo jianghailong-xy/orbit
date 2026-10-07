@@ -23,6 +23,7 @@ import {
   type ProjectDoneRequestDeclineBody,
   type ProjectDoneRequestDeclined,
   type ProjectDoneRequestFiled,
+  type ProjectIntegrationJob,
   type ProjectStartNotReadyBody,
   type ProjectStartRequest,
   type ProjectStartRequestBody,
@@ -72,10 +73,19 @@ import { canonicalJson } from './canonical-json';
 import {
   RetryableLandingFailureClass,
   SkippedMergeCheckRecord,
+  endTimedOutLanding,
   queueLandingRetry,
 } from './project-integration-job';
 import {
+  ProjectIntegrationView,
+  projectIntegrationView,
+  readInFlightJobs,
+  readProjectCodebase,
+  readProjectIntegrationView,
+} from './project-integration-line';
+import {
   INTEGRATION_RETRY_COORDINATOR_ONLY,
+  INTEGRATION_RETRY_IN_FLIGHT,
   INTEGRATION_RETRY_NOT_APPLICABLE,
   INTEGRATION_RETRY_NOT_THIS_PROJECT,
   INTEGRATION_RETRY_REASON_REQUIRED,
@@ -1592,6 +1602,12 @@ export class ProjectOpenItemService {
    * would refuse the second row anyway. What happens next is the line's: a landing makes those items
    * HANDLED in the coordinator's name and continues to the project branch's merge check (§3.4), and a
    * failure supersedes them with its own item, classified, for whoever the project routes it to.
+   *
+   * A TIMED-OUT LANDING (§2.2 J-T9). A RUNNING newest landing whose runner has said nothing past its
+   * limit is judged here by the read the job list draws (`readInFlightJobs`), and a retry of it first
+   * ends it as `ERROR · RUNNER_LOST` — a compare-and-set on the heartbeat it was judged from — then
+   * queues the next generation like any other rerun. The account owner may press that one without an
+   * item of theirs: nothing has opened one yet.
    */
   async retryIntegration(
     ownerId: string,
@@ -1600,6 +1616,8 @@ export class ProjectOpenItemService {
     given: { reason?: string },
     actingSessionId: string | undefined,
     requester?: { userId: string },
+    /** Refuse unless the task's newest landing is still this job — the job list's press names one. */
+    expectJobId?: string,
   ): Promise<IntegrationRetried> {
     const reason = rerunReason(given);
     const project = await this.prisma.project.findFirst({
@@ -1645,6 +1663,17 @@ export class ProjectOpenItemService {
         orderBy: [{ generation: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
         select: { id: true, generation: true, state: true, checks: true, phase: true },
       });
+      if (expectJobId && newestLanding?.id !== expectJobId) {
+        throw new ConflictException({
+          code: INTEGRATION_RETRY_NOT_APPLICABLE,
+          message: 'this task\'s landing has moved on since it was read: another generation is its newest '
+            + 'now. Read the project again.',
+        });
+      }
+      // Whether a RUNNING landing timed out, by the rule the job list draws it with (§1.6).
+      const [silent] = newestLanding?.state === 'RUNNING'
+        ? await readInFlightJobs(tx, projectId, newestLanding.id)
+        : [];
       const openItems = await tx.projectOpenItem.findMany({
         where: { projectId, taskId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN' },
         select: { id: true, kind: true, assignee: true, assigneeReason: true },
@@ -1658,11 +1687,18 @@ export class ProjectOpenItemService {
         requester: ownerRequester ? 'OWNER' : 'COORDINATOR',
         coordinatorEnabled: current.coordinatorEnabled,
         taskStatus: locked.status,
-        newestLanding,
+        newestLanding: newestLanding && { ...newestLanding, timedOut: silent?.timedOut === true },
         openItems,
         ownerBlockers,
       });
       if (!decision.ok) throw new HttpException(decision.body, decision.status);
+      if (decision.endsTimedOutJob && !(silent && await endTimedOutLanding(tx, silent))) {
+        throw new ConflictException({
+          code: INTEGRATION_RETRY_IN_FLIGHT,
+          message: 'this landing\'s runner reported again while the retry was being decided, so it has not '
+            + 'timed out any more. Read the project again.',
+        });
+      }
 
       const queued = await queueLandingRetry(tx, {
         ownerId,
@@ -1711,6 +1747,54 @@ export class ProjectOpenItemService {
     given: { reason?: string },
   ): Promise<IntegrationRetried> {
     return this.retryIntegration(ownerId, projectId, taskId, given, undefined, { userId: ownerId });
+  }
+
+  /**
+   * The account owner's Retry on a job the integration view calls timed out — the press on the landing
+   * row's job list (`POST /projects/:id/integration/jobs/:jobId/retry`, §2.2 J-T9).
+   *
+   * The job's own facts are the reason, so the server writes it; the rerun is `retryIntegration`, the
+   * same door every landing retry goes through, held to this job by id. Answers with the integration
+   * view read after it, which is what the list redraws from.
+   */
+  async retryTimedOutJobAsOwner(
+    ownerId: string,
+    projectId: string,
+    jobId: string,
+  ): Promise<ProjectIntegrationView> {
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, ownerId },
+      select: { exceptionEscalationSeconds: true },
+    });
+    if (!project) throw new NotFoundException('project not found');
+    const [job] = await readInFlightJobs(this.prisma, projectId, jobId);
+    if (!job) {
+      throw new ConflictException({
+        code: INTEGRATION_RETRY_NOT_APPLICABLE,
+        message: 'this job is not in flight any more: it finished, or a retry already replaced it. Read '
+          + 'the project again.',
+      });
+    }
+    if (!job.retryable || !job.taskId) {
+      throw new ConflictException(job.timedOut
+        ? {
+          code: INTEGRATION_RETRY_NOT_APPLICABLE,
+          message: 'only a task\'s landing can be retried after a timeout. A merge check or a merge into '
+            + 'main that stopped reporting is not retried from here.',
+        }
+        : {
+          code: INTEGRATION_RETRY_IN_FLIGHT,
+          message: `this job's runner has reported within its limit, so it is still `
+            + `${job.state === 'RUNNING' ? 'running' : 'queued'}: nothing is retried beside it.`,
+        });
+    }
+    await this.retryIntegration(
+      ownerId, projectId, job.taskId, { reason: timedOutRetryReason(job) }, undefined, { userId: ownerId }, jobId,
+    );
+    return readProjectIntegrationView(this.prisma, projectId, projectIntegrationView(
+      await readProjectCodebase(this.prisma, projectId),
+      project.exceptionEscalationSeconds,
+    ));
   }
 
   /**
@@ -2871,6 +2955,14 @@ function handlingOf(
     generation: job.generation,
     state: job.state as OpenItemHandling['state'],
   };
+}
+
+/** What a timeout retry says it reruns and why, written from the job's own facts (≤ 2000 characters). */
+function timedOutRetryReason(job: ProjectIntegrationJob<Date>, now = Date.now()): string {
+  const silent = Math.max(0, Math.floor((now - (job.heartbeatAt ?? job.startedAt).getTime()) / 60_000));
+  const runner = job.runnerName ? `runner ${job.runnerName}` : 'its runner';
+  return `Retried by the account owner after a timeout: no report from ${runner} for ${silent} minutes `
+    + `(limit ${Math.round((job.limitSeconds ?? 0) / 60)}), last step ${job.phase ?? 'none'}.`;
 }
 
 /**

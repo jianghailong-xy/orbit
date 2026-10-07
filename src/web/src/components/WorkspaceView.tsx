@@ -323,6 +323,7 @@ import {
 import { ProjectMergeStrip, ProjectMergeTimelineRow } from './ProjectMergeStrip';
 import { isMergeJob, projectTimelineSections } from '../lib/projectMerge';
 import { LandingRow, landingLine } from './ProjectPanoramaHeader';
+import { LandingJobsSheet } from './LandingJobsSheet';
 import { ProjectStartDialog } from './StartProjectCard';
 import {
   CHAT_FACTS_AS_ARMED,
@@ -1243,12 +1244,15 @@ function SessionProjectStartRow({ start, projectId }: { start: StartPageRow; pro
 
 /** The landing line inside the progress card while a task lands on the project branch (iOS
  *  `SessionProjectPage.landingLine`): the project page's own row, ticking once a second, and a press
- *  that opens the project page. A merge job's line is the merge card's (`ProjectMergeStrip`). Its own
+ *  that lists every job in flight (`LandingJobsSheet`) — or, from a server that does not list them,
+ *  opens the project page. A merge job's line is the merge card's (`ProjectMergeStrip`). Its own
  *  component, so the second hand redraws this line and not the console around it. */
 function SessionProjectLanding({ projectId, onOpen }: { projectId: string; onOpen: () => void }) {
   const integration = useQuery(projectIntegrationQuery(projectId));
   const view = integration.data && typeof integration.data === 'object' ? integration.data : null;
   const live = view?.inFlight != null && !isMergeJob(view.inFlight);
+  const listed = view?.inFlightJobs !== undefined;
+  const [jobsOpen, setJobsOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!live) return undefined;
@@ -1259,12 +1263,21 @@ function SessionProjectLanding({ projectId, onOpen }: { projectId: string; onOpe
   const line = live && view
     ? landingLine(view, now, { updatedAt: integration.dataUpdatedAt, failed: integration.isError })
     : null;
-  if (!line) return null;
   return (
-    <button type="button" className="session-project-page-landing" onClick={onOpen}>
-      <LandingRow line={line} />
-      <RightOutlined className="session-project-page-landing-chev" aria-hidden />
-    </button>
+    <>
+      {line ? (
+        <button type="button" className="session-project-page-landing" aria-haspopup={listed ? 'dialog' : undefined}
+          onClick={listed ? () => setJobsOpen(true) : onOpen}>
+          <LandingRow line={line} />
+          <RightOutlined className="session-project-page-landing-chev" aria-hidden />
+        </button>
+      ) : null}
+      {/* Portalled out of the card, and kept while open even if the line goes, so a list being read
+          does not vanish under the reader when its last job lands. */}
+      {listed || jobsOpen ? (
+        <LandingJobsSheet projectId={projectId} open={jobsOpen} onClose={() => setJobsOpen(false)} />
+      ) : null}
+    </>
   );
 }
 

@@ -807,6 +807,12 @@ public final class APIClient: @unchecked Sendable {
         try await get("projects/\(projectID)/integration")
     }
 
+    /// The owner's Retry on a job the integration view says can be retried (`retryable`): the
+    /// silent generation ends and the next one is queued. Answers the integration view read again.
+    public func retryIntegrationJob(_ projectID: String, jobID: String) async throws -> ProjectIntegrationView {
+        try await postEmpty("projects/\(projectID)/integration/jobs/\(jobID)/retry")
+    }
+
     /// One page of the project's top-level tasks, newest first.
     public func projectTaskPage(_ projectID: String, cursor: String? = nil,
                                 limit: Int = 100) async throws -> ProjectTaskPage {

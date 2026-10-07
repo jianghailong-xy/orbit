@@ -17523,6 +17523,96 @@ button.chat-jump-start:hover {
 .project-landing-state {
   margin-left: auto;
 }
+/* A job the server judged timed out (docs/mocks/landing-jobs-sheet/02-timeout-retry): a warning
+   mark that never spins in place of the ring, and the word, the state and the silence in amber.
+   "Timed out" carries the same fact without the colour. */
+.project-landing-timed-out .project-landing-ring {
+  color: var(--warning-solid);
+}
+.project-landing-timed-out .project-landing-word,
+.project-landing-timed-out .project-landing-state,
+.project-landing-timed-out .project-landing-clock {
+  color: var(--warning);
+}
+/* The landing row as a press that lists every job in flight (LandingRowButton): the row and a
+   chevron, with the row's own spacing and hairline drawn under both. */
+.project-landing-press {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0 0 14px;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.project-landing-press .project-landing {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.project-landing-press-chev,
+.landing-jobs-chev {
+  flex: none;
+  color: var(--text-4);
+  font-size: 11px;
+}
+/* The jobs the row counts, one row each (LandingJobsSheet): every row is the landing row itself, on
+   one grouped surface with hairlines between them. A task's row is a link with a chevron; a row
+   with no task is not a press, and keeps the chevron's width so the rows still line up. */
+.landing-jobs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: 10px;
+  background: var(--bg-subtle);
+}
+.landing-jobs-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+.landing-jobs-row + .landing-jobs-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.landing-jobs-open {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+div.landing-jobs-open {
+  padding-right: 19px;
+}
+.landing-jobs-body {
+  flex: 1;
+  min-width: 0;
+}
+.landing-jobs .project-landing {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.landing-jobs-detail {
+  margin-top: 6px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.landing-jobs-retry {
+  width: 100%;
+  border-radius: 999px;
+}
+.landing-jobs-error {
+  color: var(--error);
+  font-size: 12px;
+}
 .project-manual-task {
   display: -webkit-box;
   -webkit-box-orient: vertical;
