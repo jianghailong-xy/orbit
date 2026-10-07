@@ -141,7 +141,9 @@ export class AuthService {
     if (!row) throw new UnauthorizedException('invalid refresh token');
     // A disabled account (docs/google-sign-in-design.md §5.5) is told so whatever became of the token:
     // disabling it revoked every one, and a client presenting one is owed the reason, not a replay.
-    if (row.user.disabledAt) throw accountDisabled();
+    // `user` is a required relation, so a stored token always comes with one; the optional read is
+    // for stand-ins that answer with the token row alone, which the check after the claim still covers.
+    if (row.user?.disabledAt) throw accountDisabled();
     if (row.revokedAt) {
       // A consumed/revoked token replayed → treat as theft: revoke every live token for the user.
       await this.prisma.refreshToken.updateMany({
