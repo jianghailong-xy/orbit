@@ -36,6 +36,7 @@ test('P1b dsh claim requires request and persisted heartbeat declarations', asyn
     const prisma = {
       runner: { findUnique: async () => snapshot },
       session: { findMany: async () => [] }, modelProvider: { findMany: async () => [] },
+      user: { findUnique: async () => ({ role: 'ADMIN' }) },
     };
     const queue = { claimSessionForRunner: async (value: { supportedProviders: AgentProvider[] }) => {
       providers = value.supportedProviders;
@@ -64,6 +65,8 @@ test('P1b dsh provider notices distinguish native and legacy colliding identitie
   const marked: Array<{ where: unknown; data: { error: string } }> = [];
   const prisma = {
     runner: { findUnique: async () => null },
+    // An admin, for whom the configured rows on a runtime include the shared ones (usableProviderScope).
+    user: { findUnique: async () => ({ role: 'ADMIN' }) },
     modelProvider: { findMany: async ({ where }: { where: { runtime: string } }) =>
       where.runtime === 'dsh' ? [{ slug: 'harness-key' }] : [] },
     session: {

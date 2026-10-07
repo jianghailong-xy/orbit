@@ -28,6 +28,7 @@ import {
   ResolveProjectBlockerDto,
   RetryIntegrationDto,
   SendToCoordinatorDto,
+  SkipMergeCheckDto,
   UpdateProjectDto,
 } from '../projects/dto';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
@@ -543,6 +544,30 @@ export class RunnerProjectsController {
     @Body() dto: RetryIntegrationDto,
   ) {
     return this.openItems.retryIntegration(runner.ownerId, id, taskId, dto, sessionId?.trim());
+  }
+
+  /**
+   * A coordinator queueing one of its project's failed landings again with the merge check NOT RUN
+   * (`integration_skip_merge_check`, contract §2.4 J-S5) — for the red that is about the check rather
+   * than the delivery: a command that cannot pass on the machine the runner is on.
+   *
+   * Held to the route above's rules — the acting session is the authority and a missing or blank
+   * header is NOT read as the account owner — and to one more of its own: the call must name the
+   * confirmation card the account owner answered, raised by this same conversation about this same
+   * task. Without one the service refuses with `INTEGRATION_SKIP_CHECK_APPROVAL_REQUIRED` and queues
+   * nothing, so no coordinator can skip a check by saying so. The check is skipped, never passed: the
+   * generation records the reason and who approved it, the project's own check command is untouched,
+   * and the next landing runs it as before.
+   */
+  @Post('projects/:id/tasks/:taskId/integration/skip-merge-check')
+  skipIntegrationMergeCheck(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
+    @Body() dto: SkipMergeCheckDto,
+  ) {
+    return this.openItems.skipIntegrationMergeCheck(runner.ownerId, id, taskId, dto, sessionId?.trim());
   }
 
   /**

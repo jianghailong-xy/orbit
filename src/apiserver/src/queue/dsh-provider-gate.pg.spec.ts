@@ -131,6 +131,9 @@ test('P1b DeepSeek Harness provider gate on PostgreSQL', { timeout: 300_000 }, a
     const f = await fixture();
     await f.beat(CURRENT);
     for (const shared of [false, true]) {
+      // A shared provider runs an admin's sessions only (usableProviderScope); a member's is
+      // shared-provider-admin-only.pg.spec.ts's.
+      if (shared) await db.user.update({ where: { id: f.runner.ownerId }, data: { role: 'ADMIN' } });
       const configured = await f.provider('dsh', true, undefined, shared);
       const id = await f.session(configured.slug, false);
       assert.equal(await f.poll(LEGACY), null);

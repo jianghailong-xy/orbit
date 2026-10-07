@@ -21,8 +21,11 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
+import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.QueueDispatcher
+import okhttp3.mockwebserver.RecordedRequest
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -38,11 +41,17 @@ class AuthFlowDeviceTest {
         compose.waitUntil(10_000) { session.state.value !is AuthState.Restoring }
         assertTrue("Use a signed-out dedicated debug installation", session.state.value is AuthState.SignedOut)
         MockWebServer().use { server ->
-            server.enqueue(MockResponse().setBody(Wire.json.encodeToString(fixtureTokens())))
-            server.enqueue(MockResponse().setResponseCode(401))
-            server.enqueue(MockResponse().setBody(Wire.json.encodeToString(fixtureTokens(1))))
-            server.enqueue(MockResponse().setBody(Wire.json.encodeToString(fixtureTokens().user)))
-            server.enqueue(MockResponse().setBody("{\"success\":true}"))
+            // The login page also asks the typed instance what it offers; this one predates Google sign-in.
+            val queue = QueueDispatcher()
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse =
+                    if (request.path == "/api/auth/methods") MockResponse().setResponseCode(404) else queue.dispatch(request)
+            }
+            queue.enqueueResponse(MockResponse().setBody(Wire.json.encodeToString(fixtureTokens())))
+            queue.enqueueResponse(MockResponse().setResponseCode(401))
+            queue.enqueueResponse(MockResponse().setBody(Wire.json.encodeToString(fixtureTokens(1))))
+            queue.enqueueResponse(MockResponse().setBody(Wire.json.encodeToString(fixtureTokens().user)))
+            queue.enqueueResponse(MockResponse().setBody("{\"success\":true}"))
             compose.onNodeWithText("Instance address").performTextReplacement(server.url("/").toString())
             compose.onNodeWithText("Email").performTextInput("a03@example.test")
             compose.onNodeWithText("Password").performTextInput("a03-device-password")
@@ -63,7 +72,7 @@ class AuthFlowDeviceTest {
             compose.onNodeWithText("Instance address").assertIsDisplayed()
             compose.onNodeWithText("Signed in").assertDoesNotExist()
             capture("signed-out.png")
-            val requests = List(5) { server.takeRequest(5, TimeUnit.SECONDS)!! }
+            val requests = List(5) { generateSequence { server.takeRequest(5, TimeUnit.SECONDS) }.first { it.path != "/api/auth/methods" } }
             assertEquals(1, requests.count { it.path == "/api/auth/refresh" })
             assertTrue(requests.all { it.getHeader("X-Orbit-Client")?.startsWith("android/") == true })
         }

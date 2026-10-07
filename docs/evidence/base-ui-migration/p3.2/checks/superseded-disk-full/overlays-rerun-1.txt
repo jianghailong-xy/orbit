@@ -1,0 +1,37 @@
+
+Running 1 test using 1 worker
+
+  ✘  1 [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:437:1 › explicit focus, native form validation, motion and document scroll restore correctly (0ms)
+
+
+  1) [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:437:1 › explicit focus, native form validation, motion and document scroll restore correctly 
+
+    Error: browserType.launch: Target page, context or browser has been closed
+    Browser logs:
+
+    <launching> /root/.cache/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --user-data-dir=/tmp/playwright_chromiumdev_profile-BZhXLr --remote-debugging-pipe --no-startup-window
+    <launched> pid=223343
+    [pid=223343][err] [1007/025124.863189:WARNING:components/discardable_memory/service/discardable_shared_memory_manager.cc:200] Less than 64MB of free space in temporary directory for shared memory files: 0
+    [pid=223343][err] [1007/025124.867588:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+    Call log:
+      - <launching> /root/.cache/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --user-data-dir=/tmp/playwright_chromiumdev_profile-BZhXLr --remote-debugging-pipe --no-startup-window
+      - <launched> pid=223343
+      - [pid=223343][err] [1007/025124.863189:WARNING:components/discardable_memory/service/discardable_shared_memory_manager.cc:200] Less than 64MB of free space in temporary directory for shared memory files: 0
+      - [pid=223343][err] [1007/025124.867588:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+      - [pid=223343] <gracefully close start>
+      - [pid=223343] <kill>
+      - [pid=223343] <will force kill>
+      - [pid=223343] <process did exit: exitCode=null, signal=SIGTRAP>
+      - [pid=223343] starting temporary directories cleanup
+      - [pid=223343] finished temporary directories cleanup
+      - [pid=223343] <gracefully close end>
+
+
+    Error: ENOSPC: no space left on device, write
+
+    Error: ENOSPC: no space left on device, write
+
+  1 failed
+    [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:437:1 › explicit focus, native form validation, motion and document scroll restore correctly 
+Error: ENOSPC: no space left on device, write
+Error: ENOSPC: no space left on device, write

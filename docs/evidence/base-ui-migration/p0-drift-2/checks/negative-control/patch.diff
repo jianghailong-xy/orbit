@@ -1,0 +1,14 @@
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index 1a05a4792..6b68abfa8 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -22393,3 +22393,9 @@ button.agent-progress-agent:hover {
+   text-align: center;
+   text-wrap: balance;
+ }
++
++/* P0 drift batch 2 negative control (temporary commit, not delivered): 1px on newly registered screenshots.
++   The form error text moves down 1px (profile-validation, including the six rule-7 references); the Wiki
++   home's topic rows grow 1px (wiki-home and the 959/961px Wiki breakpoints). */
++.ant-form-item-explain-error { margin-top: 1px; }
++.wk-pl-doc.topic { padding-top: 1px; }

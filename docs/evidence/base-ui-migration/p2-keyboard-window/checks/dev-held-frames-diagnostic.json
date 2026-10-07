@@ -1,0 +1,13 @@
+{
+ "command": "cd /var/tmp/p2kw-c2604b/after2 && unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n 10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window/diag-held.config.mjs --project chromium-dark-desktop --reporter list' 2>&1 | grep -v 'Warning\\|trace-warnings'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_7d501d6aa216",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "4fb7ee43f",
+ "webTree": "c3c0956ee13af6c020a3de630819693c99dcd270",
+ "outputLastWritten": "2026-10-07T04:19:53.660421+00:00",
+ "exitCode": 0,
+ "outputSha256": "2f4332bdb74d5d906f555ffe8013bf1e2d9e3737393f333875b3fe3058ac9f52",
+ "outputBytes": 2746,
+ "note": "Diagnostic for dev-held-frames-1 (a throwaway script in the scratch worktree, not kept): ArrowDown then Enter on the attachment menu, with the draft's frame hold and without. Held: after ArrowDown the menu is open and focus is still on the trigger; after Enter Action is file and the menu is closed (data-closed, data-ending-style) but stays mounted, also 500 ms after the frames are released. Not held: the menu unmounts and focus returns to the trigger. Three follow-up runs of the same script (logging every requestAnimationFrame/cancelAnimationFrame) showed floating-ui's autoUpdate cancelling id -1, the draft's id for Base UI's held scheduler tick."
+}

@@ -1,0 +1,187 @@
+{
+  "motion": "no-preference",
+  "geometry": {
+    "box": {
+      "x": 20,
+      "y": 417,
+      "width": 81.359375,
+      "height": 104,
+      "top": 417,
+      "right": 101.359375,
+      "bottom": 521,
+      "left": 20
+    },
+    "inPopover": true,
+    "inDialog": true,
+    "cornersHitPopup": true,
+    "animationName": "orbit-slide-up-in"
+  },
+  "selectExit": [
+    {
+      "connected": true,
+      "opacity": 1,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 0.989693,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 0.971614,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 0.938682,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 0.909456,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 0.755704,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 0.239722,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 1,
+      "pointerEvents": "none",
+      "visible": false
+    },
+    {
+      "connected": true,
+      "opacity": 1,
+      "pointerEvents": "none",
+      "visible": false
+    },
+    {
+      "connected": true,
+      "opacity": 1,
+      "pointerEvents": "none",
+      "visible": false
+    },
+    {
+      "connected": true,
+      "opacity": 1,
+      "pointerEvents": "none",
+      "visible": false
+    }
+  ],
+  "popoverExit": [
+    {
+      "connected": true,
+      "opacity": 1,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 0.979665,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 0.911926,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 0.830948,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 0.357781,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 0.237311,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 0.143868,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 0.088082,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 0.0508,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 0.024722,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": true,
+      "opacity": 0.005295,
+      "pointerEvents": "none",
+      "visible": true
+    },
+    {
+      "connected": false,
+      "opacity": 0,
+      "pointerEvents": "",
+      "visible": false
+    },
+    {
+      "connected": false,
+      "opacity": 0,
+      "pointerEvents": "",
+      "visible": false
+    },
+    {
+      "connected": false,
+      "opacity": 0,
+      "pointerEvents": "",
+      "visible": false
+    },
+    {
+      "connected": false,
+      "opacity": 0,
+      "pointerEvents": "",
+      "visible": false
+    },
+    {
+      "connected": false,
+      "opacity": 0,
+      "pointerEvents": "",
+      "visible": false
+    }
+  ],
+  "focusReturned": true,
+  "scrollUnlocked": true
+}

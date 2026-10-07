@@ -1,0 +1,323 @@
+[WebServer] (node:1798583) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 240 tests using 1 worker
+
+(node:1799041) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓    1 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter burst sample 0 (3.3s)
+  ✓    2 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter burst sample 1 (2.7s)
+  ✓    3 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter burst sample 2 (2.6s)
+  ✓    4 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter burst sample 3 (2.6s)
+  ✓    5 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter burst sample 4 (2.6s)
+  ✓    6 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter burst sample 5 (3.0s)
+  ✓    7 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter burst sample 6 (2.6s)
+  ✓    8 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter burst sample 7 (2.6s)
+  ✓    9 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter burst sample 8 (2.6s)
+  ✓   10 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter burst sample 9 (2.7s)
+  ✓   11 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter burst sample 10 (2.5s)
+  ✓   12 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter burst sample 11 (2.5s)
+  ✓   13 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter burst sample 12 (2.6s)
+  ✓   14 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter burst sample 13 (2.6s)
+  ✓   15 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter burst sample 14 (2.7s)
+  ✓   16 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter burst sample 15 (2.6s)
+  ✓   17 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter burst sample 16 (2.5s)
+  ✓   18 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter burst sample 17 (2.6s)
+  ✓   19 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter burst sample 18 (2.6s)
+  ✓   20 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter burst sample 19 (2.6s)
+  ✓   21 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter paced sample 0 (3.5s)
+  ✓   22 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter paced sample 1 (3.5s)
+  ✓   23 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter paced sample 2 (3.6s)
+  ✓   24 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter paced sample 3 (3.6s)
+  ✓   25 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter paced sample 4 (3.5s)
+  ✓   26 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter paced sample 5 (3.7s)
+  ✓   27 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter paced sample 6 (3.4s)
+  ✓   28 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter paced sample 7 (3.8s)
+  ✓   29 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter paced sample 8 (3.8s)
+  ✓   30 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter paced sample 9 (3.7s)
+  ✓   31 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter paced sample 10 (3.4s)
+  ✓   32 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter paced sample 11 (3.6s)
+  ✓   33 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter paced sample 12 (3.7s)
+  ✓   34 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter paced sample 13 (3.6s)
+  ✓   35 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter paced sample 14 (3.6s)
+  ✓   36 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter paced sample 15 (3.5s)
+  ✓   37 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter paced sample 16 (3.5s)
+  ✓   38 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter paced sample 17 (3.6s)
+  ✓   39 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter paced sample 18 (3.8s)
+  ✓   40 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-home-enter paced sample 19 (3.7s)
+  ✓   41 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter burst sample 0 (2.6s)
+  ✓   42 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter burst sample 1 (2.6s)
+  ✓   43 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter burst sample 2 (2.7s)
+  ✓   44 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter burst sample 3 (2.6s)
+  ✓   45 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter burst sample 4 (2.6s)
+  ✓   46 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter burst sample 5 (2.7s)
+  ✓   47 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter burst sample 6 (2.6s)
+  ✓   48 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter burst sample 7 (2.6s)
+  ✓   49 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter burst sample 8 (2.5s)
+  ✓   50 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter burst sample 9 (3.1s)
+  ✓   51 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter burst sample 10 (3.4s)
+  ✓   52 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter burst sample 11 (2.8s)
+  ✓   53 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter burst sample 12 (2.6s)
+  ✓   54 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter burst sample 13 (2.5s)
+  ✓   55 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter burst sample 14 (2.6s)
+  ✓   56 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter burst sample 15 (2.6s)
+  ✓   57 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter burst sample 16 (2.6s)
+  ✓   58 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter burst sample 17 (2.7s)
+  ✓   59 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter burst sample 18 (2.6s)
+  ✓   60 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter burst sample 19 (2.6s)
+  ✓   61 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter paced sample 0 (3.6s)
+  ✓   62 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter paced sample 1 (3.5s)
+  ✓   63 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter paced sample 2 (3.7s)
+  ✓   64 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter paced sample 3 (3.7s)
+  ✓   65 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter paced sample 4 (4.0s)
+  ✓   66 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter paced sample 5 (3.7s)
+  ✓   67 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter paced sample 6 (3.7s)
+  ✓   68 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter paced sample 7 (4.0s)
+  ✓   69 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter paced sample 8 (4.3s)
+  ✓   70 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter paced sample 9 (3.9s)
+  ✓   71 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter paced sample 10 (6.2s)
+  ✓   72 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter paced sample 11 (3.7s)
+  ✓   73 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter paced sample 12 (3.9s)
+  ✓   74 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter paced sample 13 (4.0s)
+  ✓   75 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter paced sample 14 (3.8s)
+  ✓   76 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter paced sample 15 (3.6s)
+  ✓   77 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter paced sample 16 (3.5s)
+  ✓   78 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter paced sample 17 (3.6s)
+  ✓   79 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter paced sample 18 (3.5s)
+  ✓   80 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-home-enter paced sample 19 (3.8s)
+  ✓   81 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter burst sample 0 (5.9s)
+  ✓   82 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter burst sample 1 (6.7s)
+  ✓   83 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter burst sample 2 (4.5s)
+  ✓   84 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter burst sample 3 (5.5s)
+  ✓   85 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter burst sample 4 (4.7s)
+  ✓   86 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter burst sample 5 (3.4s)
+  ✓   87 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter burst sample 6 (3.2s)
+  ✓   88 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter burst sample 7 (3.5s)
+  ✓   89 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter burst sample 8 (4.0s)
+  ✓   90 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter burst sample 9 (4.2s)
+  ✓   91 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter burst sample 10 (2.8s)
+  ✓   92 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter burst sample 11 (3.9s)
+  ✓   93 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter burst sample 12 (3.6s)
+  ✓   94 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter burst sample 13 (2.8s)
+  ✓   95 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter burst sample 14 (2.8s)
+  ✓   96 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter burst sample 15 (2.9s)
+  ✓   97 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter burst sample 16 (3.2s)
+  ✓   98 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter burst sample 17 (2.9s)
+  ✓   99 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter burst sample 18 (2.9s)
+  ✓  100 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter burst sample 19 (2.8s)
+  ✓  101 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 0 (3.8s)
+  ✓  102 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 1 (4.1s)
+  ✓  103 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 2 (5.8s)
+  ✓  104 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 3 (8.8s)
+  ✓  105 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 4 (8.7s)
+  ✓  106 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 5 (5.5s)
+  ✓  107 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 6 (5.5s)
+  ✓  108 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 7 (5.7s)
+  ✓  109 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 8 (4.9s)
+  ✓  110 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 9 (4.6s)
+  ✓  111 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 10 (3.9s)
+  ✓  112 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 11 (3.8s)
+  ✓  113 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 12 (3.9s)
+  ✓  114 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 13 (4.0s)
+  ✓  115 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 14 (4.1s)
+  ✘  116 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 15 (16.1s)
+(node:1901601) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  117 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 16 (5.4s)
+  ✓  118 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 17 (3.5s)
+  ✓  119 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 18 (3.6s)
+  ✓  120 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 19 (3.5s)
+  ✓  121 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 0 (1.4s)
+  ✓  122 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 1 (1.5s)
+  ✓  123 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 2 (1.4s)
+  ✓  124 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 3 (1.4s)
+  ✓  125 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 4 (1.4s)
+  ✓  126 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 5 (1.5s)
+  ✘  127 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 6 (15.1s)
+(node:1910306) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  128 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 7 (1.7s)
+  ✓  129 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 8 (1.6s)
+  ✓  130 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 9 (1.5s)
+  ✓  131 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 10 (1.4s)
+  ✓  132 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 11 (1.4s)
+  ✓  133 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 12 (1.4s)
+  ✓  134 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 13 (1.8s)
+  ✓  135 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 14 (1.7s)
+  ✓  136 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 15 (1.5s)
+  ✓  137 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 16 (1.7s)
+  ✓  138 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 17 (1.6s)
+  ✓  139 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 18 (2.1s)
+  ✓  140 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 19 (3.0s)
+  ✓  141 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter paced sample 0 (4.7s)
+  ✓  142 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter paced sample 1 (5.7s)
+  ✓  143 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter paced sample 2 (8.7s)
+  ✓  144 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter paced sample 3 (5.7s)
+  ✓  145 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter paced sample 4 (2.5s)
+  ✓  146 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter paced sample 5 (2.4s)
+  ✓  147 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter paced sample 6 (2.4s)
+  ✓  148 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter paced sample 7 (2.3s)
+  ✓  149 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter paced sample 8 (2.4s)
+  ✓  150 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter paced sample 9 (2.4s)
+  ✓  151 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter paced sample 10 (2.4s)
+  ✓  152 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter paced sample 11 (2.4s)
+  ✓  153 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter paced sample 12 (2.3s)
+  ✓  154 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter paced sample 13 (2.4s)
+  ✓  155 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter paced sample 14 (2.4s)
+  ✓  156 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter paced sample 15 (2.3s)
+  ✓  157 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter paced sample 16 (2.4s)
+  ✓  158 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter paced sample 17 (2.4s)
+  ✓  159 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter paced sample 18 (2.5s)
+  ✓  160 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter paced sample 19 (2.4s)
+  ✓  161 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter burst sample 0 (1.4s)
+  ✓  162 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter burst sample 1 (1.4s)
+  ✓  163 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter burst sample 2 (1.4s)
+  ✓  164 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter burst sample 3 (1.5s)
+  ✓  165 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter burst sample 4 (1.4s)
+  ✓  166 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter burst sample 5 (1.5s)
+  ✓  167 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter burst sample 6 (1.3s)
+  ✓  168 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter burst sample 7 (1.5s)
+  ✓  169 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter burst sample 8 (1.6s)
+  ✓  170 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter burst sample 9 (1.5s)
+  ✓  171 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter burst sample 10 (1.5s)
+  ✓  172 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter burst sample 11 (1.5s)
+  ✓  173 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter burst sample 12 (1.4s)
+  ✓  174 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter burst sample 13 (1.5s)
+  ✓  175 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter burst sample 14 (1.4s)
+  ✓  176 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter burst sample 15 (1.4s)
+  ✓  177 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter burst sample 16 (1.4s)
+  ✓  178 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter burst sample 17 (1.4s)
+  ✓  179 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter burst sample 18 (1.4s)
+  ✓  180 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter burst sample 19 (1.3s)
+  ✓  181 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter paced sample 0 (2.2s)
+  ✓  182 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter paced sample 1 (2.2s)
+  ✓  183 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter paced sample 2 (2.2s)
+  ✓  184 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter paced sample 3 (2.3s)
+  ✓  185 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter paced sample 4 (2.3s)
+  ✓  186 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter paced sample 5 (2.3s)
+  ✓  187 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter paced sample 6 (2.2s)
+  ✓  188 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter paced sample 7 (2.3s)
+  ✓  189 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter paced sample 8 (2.4s)
+  ✓  190 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter paced sample 9 (2.3s)
+  ✓  191 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter paced sample 10 (2.4s)
+  ✓  192 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter paced sample 11 (2.8s)
+  ✓  193 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter paced sample 12 (2.4s)
+  ✓  194 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter paced sample 13 (2.4s)
+  ✓  195 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter paced sample 14 (2.3s)
+  ✓  196 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter paced sample 15 (2.3s)
+  ✓  197 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter paced sample 16 (2.3s)
+  ✓  198 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter paced sample 17 (2.3s)
+  ✓  199 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter paced sample 18 (2.4s)
+  ✓  200 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-sample select-down-end-enter paced sample 19 (2.5s)
+  ✓  201 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter burst sample 0 (1.4s)
+  ✓  202 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter burst sample 1 (1.3s)
+  ✓  203 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter burst sample 2 (1.4s)
+  ✓  204 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter burst sample 3 (1.4s)
+  ✓  205 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter burst sample 4 (1.4s)
+  ✓  206 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter burst sample 5 (1.4s)
+  ✓  207 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter burst sample 6 (1.3s)
+  ✓  208 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter burst sample 7 (1.3s)
+  ✓  209 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter burst sample 8 (1.4s)
+  ✓  210 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter burst sample 9 (1.4s)
+  ✓  211 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter burst sample 10 (1.4s)
+  ✓  212 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter burst sample 11 (1.4s)
+  ✓  213 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter burst sample 12 (1.4s)
+  ✓  214 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter burst sample 13 (1.5s)
+  ✓  215 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter burst sample 14 (1.4s)
+  ✓  216 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter burst sample 15 (1.4s)
+  ✓  217 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter burst sample 16 (1.5s)
+  ✓  218 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter burst sample 17 (1.4s)
+  ✓  219 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter burst sample 18 (1.5s)
+  ✓  220 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter burst sample 19 (1.5s)
+  ✓  221 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter paced sample 0 (2.4s)
+  ✓  222 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter paced sample 1 (2.7s)
+  ✓  223 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter paced sample 2 (2.6s)
+  ✓  224 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter paced sample 3 (2.4s)
+  ✓  225 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter paced sample 4 (2.6s)
+  ✓  226 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter paced sample 5 (3.7s)
+  ✓  227 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter paced sample 6 (4.1s)
+  ✓  228 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter paced sample 7 (2.8s)
+  ✓  229 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter paced sample 8 (2.6s)
+  ✓  230 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter paced sample 9 (2.3s)
+  ✓  231 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter paced sample 10 (2.4s)
+  ✓  232 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter paced sample 11 (2.4s)
+  ✓  233 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter paced sample 12 (2.3s)
+  ✓  234 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter paced sample 13 (2.4s)
+  ✓  235 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter paced sample 14 (2.3s)
+  ✓  236 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter paced sample 15 (2.6s)
+  ✓  237 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter paced sample 16 (2.6s)
+  ✓  238 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter paced sample 17 (2.8s)
+  ✓  239 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter paced sample 18 (3.6s)
+  ✓  240 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-end-enter paced sample 19 (4.8s)
+
+
+  1) [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 15 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator: getByTestId('theme')
+    Expected: "dark"
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toHaveText" getByTestId('theme') with timeout 15000ms
+      - waiting for getByTestId('theme')
+
+
+       99 |     const { menu } = TARGETS[target];
+      100 |     await page.goto(TARGETS[target].url);
+    > 101 |     await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);
+          |                                             ^
+      102 |     await page.evaluate(() => document.fonts.ready);
+      103 |     const field = TARGETS[target].field(page);
+      104 |     if (sequence.from === null) {
+        at /root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869/docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:101:45
+
+    Error Context: src/web/.choices-results/p2-keyboard-window/keyboard-window.browser.mj-57159--home-enter-paced-sample-15-chromium-dark-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-keyboard-window/keyboard-window.browser.mj-57159--home-enter-paced-sample-15-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-keyboard-window/keyboard-window.browser.mj-57159--home-enter-paced-sample-15-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 6 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator: getByTestId('theme')
+    Expected: "dark"
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toHaveText" getByTestId('theme') with timeout 15000ms
+      - waiting for getByTestId('theme')
+
+
+       99 |     const { menu } = TARGETS[target];
+      100 |     await page.goto(TARGETS[target].url);
+    > 101 |     await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);
+          |                                             ^
+      102 |     await page.evaluate(() => document.fonts.ready);
+      103 |     const field = TARGETS[target].field(page);
+      104 |     if (sequence.from === null) {
+        at /root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869/docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:101:45
+
+    Error Context: src/web/.choices-results/p2-keyboard-window/keyboard-window.browser.mj-08e7b-wn-end-enter-burst-sample-6-chromium-dark-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/p2-keyboard-window/keyboard-window.browser.mj-08e7b-wn-end-enter-burst-sample-6-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/p2-keyboard-window/keyboard-window.browser.mj-08e7b-wn-end-enter-burst-sample-6-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › antd-sample select-down-home-enter paced sample 15 
+    [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.browser.mjs:97:3 › orbit-field select-down-end-enter burst sample 6 
+  238 passed (12.0m)

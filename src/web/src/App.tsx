@@ -11,6 +11,7 @@ import { RunnerRegisterGuide } from './components/RunnerRegisterGuide';
 import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
+import { AdminSignInPage } from './pages/AdminSignInPage';
 import { InfrastructurePage } from './pages/InfrastructurePage';
 import { ProviderConnectPage, ProviderPickPage } from './pages/ProviderConnectPage';
 import { ProviderPoolPage } from './pages/ProviderPoolPage';
@@ -194,6 +195,15 @@ export function App() {
               element={
                 <DocView>
                   <AdminUsersPage />
+                </DocView>
+              }
+            />
+            {/* The admin area's Sign-in settings, beside its user management (docs/google-sign-in-design.md §7.1). */}
+            <Route
+              path="admin/sign-in"
+              element={
+                <DocView>
+                  <AdminSignInPage />
                 </DocView>
               }
             />

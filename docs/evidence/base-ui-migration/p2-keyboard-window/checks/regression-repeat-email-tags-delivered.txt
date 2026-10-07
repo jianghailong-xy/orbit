@@ -1,0 +1,27 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --grep email tags support --project chromium-dark-desktop --repeat-each 10
+
+
+Running 10 tests using 1 worker
+
+  ✓   1 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (1.6s)
+  ✓   2 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (1.6s)
+  ✓   3 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (1.4s)
+  ✓   4 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (1.3s)
+  ✓   5 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (1.3s)
+  ✓   6 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (1.8s)
+  ✓   7 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (1.4s)
+  ✓   8 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (1.4s)
+  ✓   9 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (2.1s)
+  ✓  10 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (1.4s)
+
+  10 passed (19.5s)

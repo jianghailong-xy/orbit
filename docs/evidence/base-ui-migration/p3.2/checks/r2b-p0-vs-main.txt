@@ -1,0 +1,1077 @@
+
+Running 112 tests using 1 worker
+
+  ✓    1 [chromium-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (8.8s)
+  ✓    2 [chromium-light-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.9s)
+  ✓    3 [chromium-light-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.5s)
+  ✓    4 [chromium-light-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.4s)
+  ✘    5 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (2.9s)
+  ✓    6 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (880ms)
+  ✓    7 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (3.6s)
+  ✘    8 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (15.6s)
+  ✓    9 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.2s)
+  ✘   10 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.2s)
+  ✓   11 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (4.8s)
+  ✓   12 [chromium-light-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline (21.2s)
+  ✓   13 [chromium-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (893ms)
+  ✓   14 [chromium-light-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (2.0s)
+  -   15 [chromium-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓   16 [chromium-light-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.6s)
+  ✓   17 [chromium-light-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.7s)
+  ✓   18 [chromium-light-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (2.1s)
+  ✘   19 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (3.4s)
+  ✓   20 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (889ms)
+  ✓   21 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (3.3s)
+  ✘   22 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (15.8s)
+  ✓   23 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (1.4s)
+  ✓   24 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.8s)
+  ✓   25 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (5.0s)
+  -   26 [chromium-light-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   27 [chromium-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (732ms)
+  ✓   28 [chromium-light-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.3s)
+  ✓   29 [chromium-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (10.1s)
+  ✓   30 [chromium-dark-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.9s)
+  ✓   31 [chromium-dark-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.2s)
+  ✓   32 [chromium-dark-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.4s)
+  ✘   33 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (3.4s)
+  ✓   34 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (920ms)
+  ✓   35 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (3.7s)
+  ✘   36 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (17.7s)
+  ✓   37 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (2.0s)
+  ✓   38 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.8s)
+  ✓   39 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (5.0s)
+  -   40 [chromium-dark-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   41 [chromium-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (796ms)
+  ✓   42 [chromium-dark-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (2.0s)
+  -   43 [chromium-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓   44 [chromium-dark-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.6s)
+  ✓   45 [chromium-dark-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.1s)
+  ✓   46 [chromium-dark-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.2s)
+  ✘   47 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (2.3s)
+  ✓   48 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (569ms)
+  ✓   49 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (2.8s)
+  ✘   50 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (15.6s)
+  ✓   51 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (1.3s)
+  ✓   52 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.2s)
+  ✓   53 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (4.3s)
+  -   54 [chromium-dark-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   55 [chromium-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (683ms)
+  ✓   56 [chromium-dark-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.2s)
+  ✓   57 [webkit-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (11.0s)
+  ✓   58 [webkit-light-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.8s)
+  ✓   59 [webkit-light-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.6s)
+  ✓   60 [webkit-light-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.5s)
+  ✘   61 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (3.0s)
+  ✓   62 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (1.1s)
+  ✓   63 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (3.9s)
+  ✘   64 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (15.8s)
+  ✘   65 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.5s)
+  ✓   66 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (2.5s)
+  ✓   67 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (5.6s)
+  -   68 [webkit-light-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   69 [webkit-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.1s)
+  ✓   70 [webkit-light-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.6s)
+  -   71 [webkit-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓   72 [webkit-light-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.4s)
+  ✓   73 [webkit-light-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.5s)
+  ✓   74 [webkit-light-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.7s)
+  ✘   75 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (2.3s)
+  ✓   76 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (849ms)
+  ✓   77 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (3.6s)
+  ✘   78 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (15.8s)
+  ✓   79 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (1.1s)
+  ✓   80 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.8s)
+  ✓   81 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (5.2s)
+  -   82 [webkit-light-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   83 [webkit-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (819ms)
+  ✓   84 [webkit-light-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.3s)
+  ✓   85 [webkit-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (7.6s)
+  ✓   86 [webkit-dark-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.7s)
+  ✓   87 [webkit-dark-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.1s)
+  ✓   88 [webkit-dark-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.2s)
+  ✘   89 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (2.7s)
+  ✓   90 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (680ms)
+  ✓   91 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (3.0s)
+  ✘   92 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (15.6s)
+  ✘   93 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.0s)
+  ✘   94 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.4s)
+  ✓   95 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (4.7s)
+  -   96 [webkit-dark-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   97 [webkit-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (850ms)
+  ✓   98 [webkit-dark-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.4s)
+  -   99 [webkit-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓  100 [webkit-dark-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.8s)
+  ✓  101 [webkit-dark-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.2s)
+  ✓  102 [webkit-dark-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.2s)
+  ✘  103 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (2.2s)
+  ✓  104 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (639ms)
+  ✓  105 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (2.9s)
+  ✘  106 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (15.6s)
+  ✘  107 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (921ms)
+  ✓  108 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.2s)
+  ✓  109 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (3.9s)
+  -  110 [webkit-dark-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓  111 [webkit-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (830ms)
+  ✓  112 [webkit-dark-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.4s)
+
+
+  1) [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task ──────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      326 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: task-action-menu.png
+
+    Call log:
+      - Expect "toHaveScreenshot(task-action-menu.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 326 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 326 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/harness.mjs:38:26)
+        at taskScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:23:3)
+
+    attachment #1: task-action-menu (image/png) ────────────────────────────────────────────────────
+    Expected: ../../../../../../var/tmp/p32r2-final/r2b-p0-shots/chromium-light-desktop/task-action-menu.png
+    Received: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-light-desktop/task-action-menu-actual.png
+    Diff:     ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-light-desktop/task-action-menu-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-light-desktop/attachments/computed-styles-and-timings-5465db2d0682a5bf89d21ce5965019ac6704a57b.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-light-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ──────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-chromium-light-desktop/attachments/computed-styles-and-timings-3582dd14b59af2899ed36d35ee8bc2f4b30392cc.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile ───────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('Name saved', { exact: true })
+    Expected: visible
+    Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:
+        1) <span class="toast-head">Name saved</span> aka getByRole('region', { name: 'Notifications' }).getByText('Name saved')
+        2) <div class="sr-only" aria-atomic="true" aria-live="polite">Name saved</div> aka getByText('Name saved').nth(1)
+
+    Call log:
+      - Expect "toBeVisible" getByText('Name saved', { exact: true }) with timeout 15000ms
+      - waiting for getByText('Name saved', { exact: true })
+
+
+       at page-scenarios.mjs:120
+
+      118 |   });
+      119 |   await save.click();
+    > 120 |   await expect(page.getByText('Name saved', { exact: true })).toBeVisible();
+          |                                                               ^
+      121 |   await expect(name).toHaveValue('Baseline Reviewer Updated');
+      122 |   await expect(save).toBeDisabled();
+      123 |   await page.getByRole('button', { name: 'Change password', exact: true }).click();
+        at profileScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:120:63)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-profile-chromium-light-desktop/attachments/computed-styles-and-timings-fe175e4ca2fb1904162638ae8b34347948c5a150.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-profile-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-profile-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-profile-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › task ────────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      422 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: task-action-menu.png
+
+    Call log:
+      - Expect "toHaveScreenshot(task-action-menu.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 422 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 422 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/harness.mjs:38:26)
+        at taskScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:23:3)
+
+    attachment #1: task-action-menu (image/png) ────────────────────────────────────────────────────
+    Expected: ../../../../../../var/tmp/p32r2-final/r2b-p0-shots/chromium-light-phone/task-action-menu.png
+    Received: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-light-phone/task-action-menu-actual.png
+    Diff:     ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-light-phone/task-action-menu-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-light-phone/attachments/computed-styles-and-timings-87b37561376b0cfe220ca73274006ca032b7d205.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-light-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-chromium-light-phone/attachments/computed-styles-and-timings-e9360d9f125b69b02405386d5ea34b30c741b610.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-chromium-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task ───────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      722 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: task-share-dialog.png
+
+    Call log:
+      - Expect "toHaveScreenshot(task-share-dialog.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 722 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 722 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/harness.mjs:38:26)
+        at taskScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:30:3)
+
+    attachment #1: task-share-dialog (image/png) ───────────────────────────────────────────────────
+    Expected: ../../../../../../var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-desktop/task-share-dialog.png
+    Received: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-dark-desktop/task-share-dialog-actual.png
+    Diff:     ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-dark-desktop/task-share-dialog-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-dark-desktop/attachments/computed-styles-and-timings-ede0f1e098149a99ece679f85c725ddf1a68620c.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-dark-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ───────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-chromium-dark-desktop/attachments/computed-styles-and-timings-bd2139736a810680864f9973d20c7092afb26d53.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-chromium-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task ─────────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      722 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: task-share-dialog.png
+
+    Call log:
+      - Expect "toHaveScreenshot(task-share-dialog.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 722 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 722 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/harness.mjs:38:26)
+        at taskScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:30:3)
+
+    attachment #1: task-share-dialog (image/png) ───────────────────────────────────────────────────
+    Expected: ../../../../../../var/tmp/p32r2-final/r2b-p0-shots/chromium-dark-phone/task-share-dialog.png
+    Received: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-dark-phone/task-share-dialog-actual.png
+    Diff:     ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-dark-phone/task-share-dialog-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-dark-phone/attachments/computed-styles-and-timings-775caef13cdaecc98466515e092ca647c83a7bea.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ─────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-chromium-dark-phone/attachments/computed-styles-and-timings-41fa119ed61f85827408485d56bb992b7099c467.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-chromium-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  10) [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task ───────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      330 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: task-action-menu.png
+
+    Call log:
+      - Expect "toHaveScreenshot(task-action-menu.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 330 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 330 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/harness.mjs:38:26)
+        at taskScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:23:3)
+
+    attachment #1: task-action-menu (image/png) ────────────────────────────────────────────────────
+    Expected: ../../../../../../var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/task-action-menu.png
+    Received: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-light-desktop/task-action-menu-actual.png
+    Diff:     ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-light-desktop/task-action-menu-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-light-desktop/attachments/computed-styles-and-timings-07dc2e90e14143762fca11beb3a39cfc0813002d.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-light-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  11) [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ───────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-webkit-light-desktop/attachments/computed-styles-and-timings-e5b728eede47425aba5291c9d15405ff1265caac.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  12) [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ───────────────────────
+
+    Error: A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/settings-saved.png.
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/harness.mjs:38:26)
+        at settingsScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:103:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-settings-webkit-light-desktop/attachments/computed-styles-and-timings-3157633e15bc08fd06bfa439b7a9bd8fdc93b5bb.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-settings-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-settings-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-settings-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  13) [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › task ─────────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      426 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: task-action-menu.png
+
+    Call log:
+      - Expect "toHaveScreenshot(task-action-menu.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 426 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 426 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/harness.mjs:38:26)
+        at taskScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:23:3)
+
+    attachment #1: task-action-menu (image/png) ────────────────────────────────────────────────────
+    Expected: ../../../../../../var/tmp/p32r2-final/r2b-p0-shots/webkit-light-phone/task-action-menu.png
+    Received: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-light-phone/task-action-menu-actual.png
+    Diff:     ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-light-phone/task-action-menu-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-light-phone/attachments/computed-styles-and-timings-71d9fb27c29436fd40ba56a3a2a34fdeff1e6ef5.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-light-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  14) [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ─────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-webkit-light-phone/attachments/computed-styles-and-timings-4068a675ae2fcc1af103b55fb5f63f2aba2ae7e2.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-webkit-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  15) [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task ────────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      706 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: task-share-dialog.png
+
+    Call log:
+      - Expect "toHaveScreenshot(task-share-dialog.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 706 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 706 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/harness.mjs:38:26)
+        at taskScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:30:3)
+
+    attachment #1: task-share-dialog (image/png) ───────────────────────────────────────────────────
+    Expected: ../../../../../../var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/task-share-dialog.png
+    Received: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-dark-desktop/task-share-dialog-actual.png
+    Diff:     ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-dark-desktop/task-share-dialog-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-dark-desktop/attachments/computed-styles-and-timings-829e186bb9c219ebc7d534837255292876aa8d0c.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-dark-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  16) [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-webkit-dark-desktop/attachments/computed-styles-and-timings-9df6abfabab44d323e5b1ec1c4a6e552024841c1.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  17) [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ────────────────────────
+
+    Error: A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/settings-saved.png.
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/harness.mjs:38:26)
+        at settingsScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:103:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-settings-webkit-dark-desktop/attachments/computed-styles-and-timings-9ddaef9cda44b30bac71ad251caad686fd2ae610.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-settings-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-settings-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-settings-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  18) [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile ─────────────────────────
+
+    Error: A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-desktop/profile-validation.png.
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/harness.mjs:38:26)
+        at profileScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:126:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-profile-webkit-dark-desktop/attachments/computed-styles-and-timings-ae48df90c20a36cc93bb63bf2b918d7dccb4de7d.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-profile-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-profile-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-profile-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  19) [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task ──────────────────────────────
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      706 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: task-share-dialog.png
+
+    Call log:
+      - Expect "toHaveScreenshot(task-share-dialog.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 706 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 706 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/harness.mjs:38:26)
+        at taskScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:30:3)
+
+    attachment #1: task-share-dialog (image/png) ───────────────────────────────────────────────────
+    Expected: ../../../../../../var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/task-share-dialog.png
+    Received: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-dark-phone/task-share-dialog-actual.png
+    Diff:     ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-dark-phone/task-share-dialog-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-dark-phone/attachments/computed-styles-and-timings-87ce1b182d8a8fdafa952078e31d911934b1e57e.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-task-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  20) [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ──────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-webkit-dark-phone/attachments/computed-styles-and-timings-c927b844f4c598e2ee09c23c10826bcc65cb35cd.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-wiki-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  21) [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings ──────────────────────────
+
+    Error: A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-dark-phone/settings-saved.png.
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/harness.mjs:38:26)
+        at settingsScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:103:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-settings-webkit-dark-phone/attachments/computed-styles-and-timings-cd00d705a262c2c1adae46eab19b65efd5d9f115.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-settings-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-settings-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0/pages.browser.mjs-settings-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  21 failed
+    [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task ───────────────────────────
+    [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ───────────────────────────
+    [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile ────────────────────────
+    [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › task ─────────────────────────────
+    [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ─────────────────────────────
+    [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task ────────────────────────────
+    [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ────────────────────────────
+    [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task ──────────────────────────────
+    [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ──────────────────────────────
+    [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task ─────────────────────────────
+    [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ─────────────────────────────
+    [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ─────────────────────────
+    [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › task ───────────────────────────────
+    [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ───────────────────────────────
+    [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task ──────────────────────────────
+    [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ──────────────────────────────
+    [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ──────────────────────────
+    [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile ───────────────────────────
+    [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task ────────────────────────────────
+    [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ────────────────────────────────
+    [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings ────────────────────────────
+  11 skipped
+  80 passed (6.7m)

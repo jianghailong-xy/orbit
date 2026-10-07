@@ -1,0 +1,160 @@
+{
+ "method": "B1_MOTION=1 (normal motion) settings scene, CDP LayerTree recorded from the first capture: every layer tree recorded while the Setting saved pill entered (compositing reasons asked while each tree was current), and the steady tree at the screenshot",
+ "trees": {
+  "verify": "drift tree + fix v2 43e1d0f44",
+  "tip": "project tip 77233e226 (hint on each card)",
+  "expE1": "project tip without any compositing hint"
+ },
+ "results": {
+  "verify/chromium-light-desktop/settings-saved.png": {
+   "duringEntrance": {
+    "div.toast-layer": [
+     "Overlap"
+    ],
+    "section.toast-viewport": [
+     "WillChangeTransform"
+    ],
+    "div.toast-slot": [
+     "ActiveOpacityAnimation",
+     "ActiveTransformAnimation"
+    ]
+   },
+   "steady": [
+    {
+     "node": "section.toast-viewport",
+     "reasons": [
+      "WillChangeTransform"
+     ],
+     "size": [
+      393,
+      102
+     ]
+    }
+   ]
+  },
+  "verify/chromium-light-phone/settings-saved.png": {
+   "duringEntrance": {
+    "div.toast-layer": [
+     "Overlap"
+    ],
+    "section.toast-viewport.toast-viewport--narrow": [
+     "WillChangeTransform"
+    ],
+    "div.toast-slot": [
+     "ActiveOpacityAnimation",
+     "ActiveTransformAnimation"
+    ]
+   },
+   "steady": [
+    {
+     "node": "section.toast-viewport.toast-viewport--narrow",
+     "reasons": [
+      "WillChangeTransform"
+     ],
+     "size": [
+      358,
+      102
+     ]
+    }
+   ]
+  },
+  "tip/chromium-light-desktop/settings-saved.png": {
+   "duringEntrance": {
+    "div.toast-layer": [
+     "Overlap"
+    ],
+    "div.toast-slot": [
+     "ActiveOpacityAnimation",
+     "ActiveTransformAnimation"
+    ],
+    "div.toast.toast--pill": [
+     "WillChangeTransform"
+    ]
+   },
+   "steady": [
+    {
+     "node": "div.toast.toast--pill",
+     "reasons": [
+      "WillChangeTransform"
+     ],
+     "size": [
+      212,
+      102
+     ]
+    }
+   ]
+  },
+  "tip/chromium-light-phone/settings-saved.png": {
+   "duringEntrance": {
+    "div.toast-layer": [
+     "Overlap"
+    ],
+    "div.toast-slot": [
+     "ActiveOpacityAnimation",
+     "ActiveTransformAnimation"
+    ],
+    "div.toast.toast--pill": [
+     "WillChangeTransform"
+    ]
+   },
+   "steady": [
+    {
+     "node": "div.toast.toast--pill",
+     "reasons": [
+      "WillChangeTransform"
+     ],
+     "size": [
+      212,
+      102
+     ]
+    }
+   ]
+  },
+  "expE1/chromium-light-desktop/settings-saved.png": {
+   "duringEntrance": {
+    "div.toast-layer": [
+     "Overlap"
+    ],
+    "div.toast-slot": [
+     "ActiveOpacityAnimation",
+     "ActiveTransformAnimation"
+    ]
+   },
+   "steady": [
+    {
+     "node": "div.toast-layer",
+     "reasons": [
+      "Overlap"
+     ],
+     "size": [
+      1297,
+      909
+     ]
+    }
+   ]
+  },
+  "expE1/chromium-light-phone/settings-saved.png": {
+   "duringEntrance": {
+    "div.toast-layer": [
+     "Overlap"
+    ],
+    "div.toast-slot": [
+     "ActiveOpacityAnimation",
+     "ActiveTransformAnimation"
+    ]
+   },
+   "steady": [
+    {
+     "node": "div.toast-layer",
+     "reasons": [
+      "Overlap"
+     ],
+     "size": [
+      390,
+      844
+     ]
+    }
+   ]
+  }
+ }
+}

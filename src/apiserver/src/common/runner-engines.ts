@@ -37,7 +37,7 @@ export function isLoginEngine(value: unknown): value is LoginEngine {
 }
 
 export function isInstallEngine(value: unknown): value is InstallEngine {
-  return isLoginEngine(value) || value === 'dsh';
+  return isLoginEngine(value) || value === 'dsh' || value === 'opencode';
 }
 
 /**
