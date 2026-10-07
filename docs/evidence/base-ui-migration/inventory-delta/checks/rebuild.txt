@@ -1,0 +1,1 @@
+build-record.py rebuilds 2026-10-07.json byte for byte

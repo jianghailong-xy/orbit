@@ -1,0 +1,1 @@
+Record 2026-10-07.json verified: 119 file entries and 73 index.css entries match the audit; 0 unowned with it; 76 gaps without it (= its new/changed), 119 without its reassignments (= reassigned); P0.1 baseline clean; 9 points awaiting the coordinator (4 questions).
