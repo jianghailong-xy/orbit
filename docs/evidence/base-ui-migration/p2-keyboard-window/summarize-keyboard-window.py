@@ -26,6 +26,12 @@ STUDIES = {
     # Base UI, AntD, the lockfile and the choices fixture and config are byte-identical to the tree above.
     'baseline-menu-up': 'delivered tree, menu-up-enter, menu-up-up-enter, menu-up-down-enter: 20 burst + 20 paced per target and sequence',
     'baseline-menu-up-rerun': 'delivered tree, the baseline-menu-up sample whose page never mounted (environmental), run again',
+    # The Menu window fix the coordinator authorized on 2026-10-07 (plan B). The tree before the fix (46a418fba, a
+    # temporary worktree) and the fixed tree (4fb7ee43f) ran the menu sequences at the same time, each in its own
+    # network namespace; each run is judged on its own, its AntD target included.
+    'fix-menu-before': 'before-fix tree 46a418fba, all menu sequences: 20 burst + 20 paced per target and sequence (A/B with fix-menu-after)',
+    'fix-menu-after': 'fixed tree 4fb7ee43f, all menu sequences: 20 burst + 20 paced per target and sequence (A/B with fix-menu-before)',
+    'fix-select-after': 'fixed tree, all select sequences: 20 burst + 20 paced per target and sequence (Select is not changed)',
 }
 # The judged data set: the studies taken together (a rerun replaces nothing; it only adds samples).
 DATASETS = {'baseline': ['baseline-menu', 'baseline-select-a', 'baseline-select-b', 'baseline-select-c',
@@ -156,18 +162,70 @@ def select_keys_burst(study):
     return rows
 
 
-for study, tree in {'regression-select-keys-burst': 'baseline tree', 'regression-select-keys-burst-delivered': 'delivered tree'}.items():
+for study, tree in {'regression-select-keys-burst': 'baseline tree', 'regression-select-keys-burst-delivered': 'delivered tree',
+                    'fix-select-keys-burst-before': 'before-fix tree 46a418fba (A/B)', 'fix-select-keys-burst-after': 'fixed tree (A/B)'}.items():
     if (HERE / study / 'summary.json').exists():
         stats = json.loads((HERE / study / 'summary.json').read_text())['stats']
         report[study] = {
             'scope': f'{tree}, the unchanged ../p2-select-keys/select-keys-burst.browser.mjs (20 burst + 3 paced per combination)',
             'playwright': {k: stats[k] for k in ['expected', 'unexpected', 'skipped', 'flaky']},
             'targets': select_keys_burst(study), 'sequences': {}}
+
+
+def before_after(before, after):
+    """Per menu sequence and target: burst samples that differ from the paced reference before and after the fix,
+    the paced references (focus already in the menu; the fix must not change them) and the hand-overs after it."""
+    rows = {}
+    for sequence, entry in report[after]['sequences'].items():
+        prior = report[before]['sequences'][sequence]
+        keys = report[after]['targets'][f'{ORBIT["menu"][0]} {sequence}']['keys']
+        # The AntD rule alone says "record, no change" for every menu sequence; the coordinator's 2026-10-07 exception
+        # covers the Menu trigger's ArrowDown/ArrowUp/Enter while the menu is open and focus has not entered it.
+        row = {'antdRule': entry['decision'], 'coordinatorException': sequence not in CONTROLS
+               and set(keys) <= {'ArrowDown', 'ArrowUp', 'Enter'}, 'keys': keys}
+        for target in ['antd-menu', *ORBIT['menu']]:
+            key = 'antd' if target == 'antd-menu' else target
+            pick = (lambda e, field: e.get(f'antd{field}')) if key == 'antd' else (lambda e, field: e[f'orbit{field}'][target])
+            row[target] = {'burstWrongBefore': pick(prior, 'BurstWrong'), 'burstWrongAfter': pick(entry, 'BurstWrong'),
+                           'pacedBefore': pick(prior, 'Paced'), 'pacedAfter': pick(entry, 'Paced')}
+            if key != 'antd':
+                row[target]['handedOverAfter'] = entry['orbitHandedOver'][target]
+        rows[sequence] = row
+    return rows
+
+
+def held_frames(study):
+    """menu-held-frames.browser.mjs: per test, the projects that passed and failed, and from each record whether the key
+    after the opener reached the trigger with the menu shown (the window) and whether a key was handed to the menu."""
+    tests = {}
+    for test in json.loads((HERE / study / 'summary.json').read_text())['tests']:
+        project, _, title = test['name'].partition('--')
+        row = tests.setdefault(title, {'passed': [], 'failed': [], 'window': 0, 'handedOver': 0})
+        row['passed' if test['status'] == 'expected' else 'failed'].append(project)
+        for artifact in test['artifacts']:
+            if not artifact['file'].endswith('--menu-held-frames.json'):
+                continue
+            log = json.loads((HERE / study / artifact['file']).read_text())['keyLog']
+            trusted = [key for key in log if key['trusted']]
+            row['window'] += len(trusted) > 1 and trusted[1]['target'] == trusted[0]['target'] and trusted[1]['menu']
+            row['handedOver'] += any(not key['trusted'] for key in log)
+    return tests
+
+
+if all(study in report for study in ['fix-menu-before', 'fix-menu-after']):
+    report['fix:menu-before-after'] = {'scope': 'fix-menu-before vs fix-menu-after (A/B)', 'playwright': {}, 'targets': {},
+                                       'sequences': before_after('fix-menu-before', 'fix-menu-after')}
+for study, tree in {'fix-held-frames-before': 'before-fix tree 46a418fba (A/B)', 'fix-held-frames-after': 'fixed tree (A/B)'}.items():
+    if (HERE / study / 'summary.json').exists():
+        stats = json.loads((HERE / study / 'summary.json').read_text())['stats']
+        report[study] = {'scope': f'{tree}, menu-held-frames.browser.mjs in all eight projects',
+                         'playwright': {k: stats[k] for k in ['expected', 'unexpected', 'skipped', 'flaky']},
+                         'targets': held_frames(study), 'sequences': {}}
 (HERE / 'keyboard-window-summary.json').write_text(json.dumps(report, indent=1, ensure_ascii=False) + '\n')
 for study, entry in report.items():
     print(study, entry['playwright'])
     for key, row in entry['targets'].items():
         print('  ', key, {k: (dict(v) if isinstance(v, collections.Counter) else v) for k, v in row.items()
-                         if k in ('paced', 'burst', 'burstWrong', 'windowHits', 'handedOver', 'results', 'differ')})
+                         if k in ('paced', 'burst', 'burstWrong', 'windowHits', 'handedOver', 'results', 'differ', 'passed', 'failed', 'window')})
     for sequence, verdict in entry['sequences'].items():
-        print('  =>', sequence, verdict['decision'])
+        print('  =>', sequence, verdict.get('decision') or {k: v for k, v in verdict.items() if k != 'keys'})
