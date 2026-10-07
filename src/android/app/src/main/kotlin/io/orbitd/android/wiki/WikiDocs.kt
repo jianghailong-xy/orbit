@@ -53,7 +53,7 @@ internal fun WikiDocScreen(store: WikiStore, route: OrbitRoute, data: DirectoryD
             else -> WikiReadingPlaceholder("wiki-doc-loading") { LoadingMessage("Loading…") }
         }
     }
-    if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Doc(slug), runnerOnline = wikiMaintenanceRunnerOnline(store.state.value.currentSpace, data), close = { contentsShown = false }) { pick -> wikiGo(pick, nav) }
+    if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Doc(slug), runnerOnline = wikiMaintenanceRunnerOnline(state.currentSpace, data), close = { contentsShown = false }) { pick -> wikiGo(pick, nav) }
 }
 
 /** How many of the plan's documents are written, for a document not written yet. */

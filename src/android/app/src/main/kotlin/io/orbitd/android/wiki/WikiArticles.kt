@@ -62,7 +62,7 @@ internal fun WikiArticleScreen(store: WikiStore, route: OrbitRoute, data: Direct
             else -> WikiReadingPlaceholder("wiki-article-loading") { LoadingMessage("Loading…") }
         }
     }
-    if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Article(address.topic, address.part), runnerOnline = wikiMaintenanceRunnerOnline(store.state.value.currentSpace, data),
+    if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Article(address.topic, address.part), runnerOnline = wikiMaintenanceRunnerOnline(state.currentSpace, data),
         close = { contentsShown = false }) { pick -> wikiGo(pick, nav) }
 }
 
@@ -96,7 +96,7 @@ internal fun WikiBrowseScreen(store: WikiStore, route: OrbitRoute, data: Directo
                 openContents = { contentsShown = true }))
         }
     }
-    if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Browse, runnerOnline = wikiMaintenanceRunnerOnline(store.state.value.currentSpace, data), close = { contentsShown = false }) { pick -> wikiGo(pick, nav) }
+    if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Browse, runnerOnline = wikiMaintenanceRunnerOnline(state.currentSpace, data), close = { contentsShown = false }) { pick -> wikiGo(pick, nav) }
 }
 
 /** The A–Z index (iOS `WikiIndexScreen`): by document once a plan is confirmed, else by article. */
@@ -124,7 +124,7 @@ internal fun WikiIndexScreen(store: WikiStore, route: OrbitRoute, data: Director
                 openContents = { contentsShown = true }))
         }
     }
-    if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Index, runnerOnline = wikiMaintenanceRunnerOnline(store.state.value.currentSpace, data), close = { contentsShown = false }) { pick -> wikiGo(pick, nav) }
+    if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Index, runnerOnline = wikiMaintenanceRunnerOnline(state.currentSpace, data), close = { contentsShown = false }) { pick -> wikiGo(pick, nav) }
 }
 
 /** A reading page's bar: no title, as iOS's (`.navigationTitle("")` on the pages, none on their placeholders), and —
