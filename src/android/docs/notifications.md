@@ -130,7 +130,9 @@ NotificationCompat.setSilent does). The one exception is the focused session's
 own approval, whose card is already on screen. An approval for another session
 also gets the notice. Swift additionally plays the approval sound in the
 foreground; Android stays silent there. "Foreground" means started: an alert that
-lands while the Activity is paused but still visible is treated as foreground.
+lands while the Activity is paused but still visible is treated as foreground. The
+account owner accepted this difference on 2026-10-07 (card 34bbkPvI56b7ZUi8cJjX4),
+given the silent tray entry above.
 
 Android 13+ shows no notification until the app is granted POST_NOTIFICATIONS.
 iOS asks at launch (`NotificationManager.configure`). A configured Android build
@@ -144,6 +146,8 @@ crashing. A refusal is final for the automatic path; asking again is the user's
 choice from `NotificationSettings` or Android settings. Builds without Firebase configuration, and API 29–32 where
 the permission is granted at install, never prompt. Token registration does not
 depend on the permission, as on iOS, so silent sync and reconciliation still run.
+The account owner accepted this automatic one-time request on 2026-10-07 (card
+34bbkPvI56b7ZUi8cJjX4).
 
 Channels: `orbit.needs-you.alert` ("Needs your reply", approvals, owner items and
 confirmation problems) is `IMPORTANCE_HIGH`, so it pops up like the iOS banner;
