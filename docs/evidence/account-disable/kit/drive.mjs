@@ -87,8 +87,8 @@ const browser = await chromium.launch({
   env: { ...process.env, FONTCONFIG_FILE: `${S}/fonts.conf` },
 });
 try {
-  // ── The deployment: the first administrator, a second one, two members. Mallory signs in on her laptop and
-  //    issues herself a personal access token for a script.
+  // ── The deployment: the first administrator, a second one, two members. Mallory signs in on a laptop and
+  //    issues a personal access token for a script.
   const owner = must(await call('POST', '/auth/bootstrap', { body: OWNER }), 201, 'bootstrap');
   const create = async (email, name) =>
     must(await call('POST', '/admin/users', { bearer: owner.accessToken, body: { email, name } }), 201, `create ${email}`);
