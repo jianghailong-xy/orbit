@@ -2,6 +2,7 @@ package io.orbitd.android
 
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.navigation.*
+import io.orbitd.android.watch.withFollowingUnder
 import io.orbitd.android.wiki.WikiNav
 import kotlinx.serialization.encodeToString
 import org.junit.Assert.*
@@ -60,6 +61,20 @@ class WikiWatchNavigationTest {
         assertEquals(listOf(Destination.WORKSPACES, Destination.SESSION, Destination.WIKI_ENTRY, Destination.WIKI_PLAN), nav.frames.map { it.destination })
         wiki.back()
         assertEquals(Destination.WIKI_ENTRY, nav.current.destination)
+    }
+
+    @Test fun aLinkedWatchHasFollowingUnderItAndBackStillReachesTheSource() {
+        val session = OrbitRoute(Destination.SESSION, uuid)
+        val watch = OrbitLinks.parse("orbit://watch/$publicId", origin = Origin.EXTERNAL)!!
+        val linked = OrbitNavigation().bindAccount("server|reader").push(session).receive(watch).withFollowingUnder(watch)
+        assertEquals(listOf(Destination.WORKSPACES, Destination.SESSION, Destination.WATCH, Destination.WATCH), linked.frames.map { it.destination })
+        assertEquals(watch, linked.current)
+        assertEquals(OrbitRoute(Destination.WATCH, origin = Origin.LINK), linked.back().current)
+        assertEquals(session, linked.back().back().current)
+        // Opened from Following, or applied twice, the stack is left as it is.
+        assertEquals(linked, linked.withFollowingUnder(watch))
+        val fromList = OrbitNavigation().bindAccount("server|reader").push(OrbitRoute(Destination.WATCH)).push(OrbitRoute(Destination.WATCH, uuid))
+        assertEquals(fromList, fromList.withFollowingUnder(OrbitRoute(Destination.WATCH, uuid)))
     }
 
     @Test fun watchPushRetainsOriginalConversationAndLogoutClearsBoth() {

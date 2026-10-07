@@ -195,7 +195,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.WIKI_ARTICLE, Destination.WIKI_DOC, Destination.WIKI_REVIEW, Destination.WIKI_SETTINGS,
                                 Destination.WIKI_RUN, Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION ->
                                     WikiDestination(app, signedIn.handle, route, data, revision, ::open) { change -> navigation = change(navigation) }
-                                Destination.WATCH -> WatchDestination(app, signedIn.handle, route, revision, ::open)
+                                Destination.WATCH -> WatchDestination(app, signedIn.handle, route, revision, ::open) { change -> navigation = change(navigation) }
                                 Destination.SETTINGS -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     AuthScreen(authState, authMessage, auth::login, auth::logout)
                                     Button(onClick = { open(OrbitRoute(Destination.BUILD)) }) { Text("Build information") }

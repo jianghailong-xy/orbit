@@ -271,6 +271,53 @@ class WikiWatchDeviceTest {
         capture("settings-automatic")
     }
 
+    // MARK: Watch
+
+    private fun watchState() = http("/__stats").getValue("watch").jsonObject.string("state")
+
+    /** A watch's link opens its record over Following: Pause and Resume are written and read back, Stop asks first,
+     * an ended watch keeps no controls, and Back lands on Following — whose row opens the record again. */
+    @Test fun aWatchLinkControlsItsRecordAndBackLandsOnFollowing() = journey("watch", { "orbit://watch/${it.string("watch")}" }) { _, ids ->
+        val watch = ids.string("watch")
+        awaitTag("watch-detail:$watch")
+        capture("watch-active")
+        press("watch:$watch:WATCH_PAUSE")
+        compose.waitUntil(15_000) { watchState() == "PAUSED" }
+        press("watch:$watch:WATCH_RESUME")
+        compose.waitUntil(15_000) { watchState() == "ACTIVE" }
+        press("watch:$watch:WATCH_CANCEL")
+        await("Stop watching?")
+        assertEquals("nothing is sent before the confirmation", "ACTIVE", watchState())
+        capture("watch-stop-confirmation")
+        press("watch-stop-confirm")
+        compose.waitUntil(15_000) { watchState() == "CANCELLED" }
+        await("Stopped")
+        compose.onNodeWithTag("watch:$watch:WATCH_PAUSE").assertDoesNotExist()
+        compose.onNodeWithTag("watch:$watch:WATCH_CANCEL").assertDoesNotExist()
+        capture("watch-stopped")
+        assertEquals(listOf("/pause", "/resume", "/cancel"), journal().filter { it.string("method") == "POST" && it.string("path").startsWith("/api/watches/") }
+            .map { "/" + it.string("path").substringAfterLast('/') })
+        compose.onNodeWithContentDescription("Back").performClick()
+        awaitTag("following-list")
+        capture("following")
+        pressIn("following-list", "following-row:$watch")
+        awaitTag("watch-detail:$watch")
+    }
+
+    /** A session's Watching strip: what it waits on, opened to its targets, and a target opening its own page over
+     * the session; Back returns to the conversation. */
+    @Test fun aSessionsWatchingStripOpensATarget() = journey("strip", { "orbit-session:${it.string("session")}" }) { _, ids ->
+        awaitTag("session-watches")
+        press("watch-strip-line")
+        awaitTag("watch-strip-list")
+        capture("strip-open")
+        press("watch-strip-target:${ids.string("watch")}:${ids.string("task")}")
+        compose.waitUntil(15_000) { journal().any { it.string("method") == "GET" && it.string("path").startsWith("/api/tasks/${ids.string("task")}") } }
+        capture("strip-target")
+        compose.onNodeWithContentDescription("Back").performClick()
+        awaitTag("session-watches")
+    }
+
     /** An entry the server cannot be reached for says so, with Retry, and reads once the connection is back. */
     @Test fun anUnreachableEntrySaysSoAndRetryReadsIt() = journey("offline", { "orbit://wiki/${it.string("space")}" }) { _, ids ->
         awaitTag("wiki-search")

@@ -17,7 +17,9 @@ import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.navigation.Destination
+import io.orbitd.android.navigation.OrbitNavigation
 import io.orbitd.android.navigation.OrbitRoute
+import io.orbitd.android.navigation.Origin
 import io.orbitd.android.wiki.PageBar
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -26,9 +28,12 @@ import java.time.Instant
  * record (iOS `WatchDetailView`) — an older or deep-linked one the list doesn't hold is fetched before it is called
  * missing. Following has no drawer row, as on iOS: it is reached through a watch's link. */
 @Composable
-fun WatchDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, revision: Long, open: (OrbitRoute) -> Unit) {
+fun WatchDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, revision: Long, open: (OrbitRoute) -> Unit,
+    navigate: ((OrbitNavigation) -> OrbitNavigation) -> Unit = {}) {
     val store = remember(handle) { WatchStore.of(app.session, handle, app.processScope) }
     if (!store.live()) return
+    // iOS's `.watch(id)` opens the Following section with the record on top: Back from a watch lands on Following.
+    if (route.id != null) LaunchedEffect(route) { navigate { it.withFollowingUnder(route) } }
     val sessionTitle = rememberSessionTitles(app, handle)
     Box(Modifier.fillMaxSize().testTag("watch-destination")) {
         val id = route.id
@@ -37,6 +42,15 @@ fun WatchDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitR
     }
     // After the page, so Following's own read on appearing is the one the 30 s floor counts from.
     WatchFeed(app, handle, store, revision)
+}
+
+/** A watch's record with Following under it, where the link was followed from below that (iOS's Following section,
+ * on the stack the link was opened on, so Back still returns to the source). A record opened from Following is left. */
+internal fun OrbitNavigation.withFollowingUnder(route: OrbitRoute): OrbitNavigation {
+    if (current != route || route.id == null) return this
+    val below = frames.getOrNull(frames.size - 2)
+    if (below?.destination == Destination.WATCH && below.id == null) return this
+    return copy(stacks = stacks + (section to (frames.dropLast(1) + OrbitRoute(Destination.WATCH, origin = Origin.LINK) + route)))
 }
 
 /** Following: the watches kept on sessions and tasks — yours and your agents' — in the sections
