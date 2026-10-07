@@ -284,6 +284,9 @@ tip 的初始 JS 里 Orbit 组件只有 Dialog（审阅对话框）与通知门�
 | `7145f084f` | 直接联动（测试）：main 新增的 `RunnerDetailPage.antigravityAccount.test.tsx` 经 antd Select 的内部类（`.ant-select-content`、`.ant-select-item-option`）打开并读取账号列表。在只含合并的 `83b908793` 上，它的 3 个用例有 2 个在断言账号之前就失败（会话作业 `bgj_e57013f9f754`，同一命令中的 Codex 账号测试全部通过）。按本批迁移 `RunnerDetailPage.codexAccount.test.tsx` 的方式改为按角色读取：combobox、listbox 中的 option、每项的名称与状态行，选择时发送完整的指针按压。期望的名称、状态行与保存的 `antigravityAccount` 都没有改。改后 9 个账号相关测试文件 247 项通过（`bgj_73e40e91b955`：两个 RunnerDetailPage 账号测试、WorkspaceView.codexAccount、RunnerEngines 的两个 Antigravity 测试、engineAccounts、planUsage、runnerAttention、sessionProviderChoices） |
 | `5ce67d6dd` | 试点对照第 9 个用例 “the Antigravity account picker”：`pilot-fixtures.mjs` 的 `antigravity` 选项只给这个用例的 runner 加两个 Antigravity 账号（其余用例的数据不变）。runner 以 Gemini key 运行 Antigravity：Default 未登录 Google（`env key · runs on your Gemini key`），Work 是已登录的 Google 账号、5 小时桶剩 4%（`gemini-5h 4% left · signed in`）。在新建工作区表单中截取账号字段（收起与展开），选 Work，Create，逐步记录 `POST /api/workspaces` 的请求体 |
 | `3c1b24f02` | 对照完成后 main 前进到 `71e644742`（Google 登录 S1–S3），再合一次（父提交 `5ce67d6dd`、`71e644742`），无冲突。它没有改 `src/web`；`src/shared` 只在 `codec.ts` 的 `PUBLIC_ID_FIELDS` 加了 `updatedById`、`linkUserId` 两个字段名，其余 29 个文件在 apiserver |
+| `2b17bae4f` | 提交证据前再核对：项目线前进到 `77233e226`（P0 漂移任务），合入（父提交 `3c1b24f02`、`77233e226`），无冲突 |
+| `9fa5fc412` | main 前进到 `86203ffb0`，合入（父提交 `2b17bae4f`、`86203ffb0`），无冲突 |
+| `6bd41335a` | 最后一次核对时 main 又前进一个提交 `db69d833b`（没有 agy 的机器跳过 agy 合同测试），合入（父提交 `e3ba1c923`、`db69d833b`），无冲突。相对 `9fa5fc412` 只多 `src/runner-go` 下 5 个 Go 测试文件。交付的最终代码；之后的提交只改本目录 |
 
 除冲突解决与上面的测试联动外，本轮没有改动业务代码。
 
@@ -294,7 +297,7 @@ tip 的初始 JS 里 Orbit 组件只有 Dialog（审阅对话框）与通知门�
 - 两边都改过的 3 个文件（`AccountSelect.tsx`、`index.css`、`TaskDetailCopyParityTests.swift`）：合并结果恰好是 main 加上本批改动的行，也恰好是本批加上 main 改动的行（双向按行核对）。
 - 本批其余 41 个文件（本证据目录除外）与 `b24209077` 逐字节相同，只有本轮有意改动的 `pilot.browser.mjs`、`pilot-fixtures.mjs` 不同；main 其余 418 个文件与 main 相同，只有上面联动的测试不同。
 - main 没有改 `components/ui` 与 `ui-migration`。`index.css` 两边改动的选择器没有交集：本批 31 个，全部在 `.tdp-`、`.share-` 下；main 168 个（含 6 个 @media/@container 前导），首个类名都属于 `access-token*`、`app-shell`、`np-list`、`session-press`/`session-project`/`session-row`、`start-card`、`wk-*`，组件 fixture 与 4 个试点源文件都不使用这些类名。
-- main 改动的 52 个 web 源文件中，只有 3 个引用本批改过的模块（含经 `components/ui` 内部引用间接到达）：`AccountSelect.tsx` 本身（冲突文件）、`RunnerDetailPage.tsx`（新增的 Antigravity 账号字段，即新试点用例与联动测试覆盖的路径）、`WorkspaceView.tsx`（main 在这里改的是 Antigravity 账号的会话路由，只用到 `AccountSelect` 的 `accountsOf`，本批没有改它；`ShareModal` 的引用与用法未变）。
+- main 改动的 52 个 web 源文件中，只有 3 个引用本批改过的模块（含经 `components/ui` 内部引用间接到达）：`AccountSelect.tsx` 本身（冲突文件）、`RunnerDetailPage.tsx`（新增的 Antigravity 账号字段，即新试点用例与联动测试覆盖的路径）、`WorkspaceView.tsx`（main 在这里的改动，如 Antigravity 账号的会话路由，只经 `accountsOf` 用到 `AccountSelect`，本批没有改它；`ShareModal` 的引用与用法未变）。
 
 ### 复验
 
@@ -336,12 +339,30 @@ tip 的初始 JS 里 Orbit 组件只有 Dialog（审阅对话框）与通知门�
 
 **组件矩阵的 5 个失败。** composer 的 “auto-size transitions match AntD; reduced motion drops them…”（Chromium 暗色手机）在失焦恢复高度时多采到一个仍在进行的 300ms 高度过渡；toasts 的 4 个（WebKit 明色手机 ×3、暗色桌面 ×1）是抽屉与对话框转移中的动效与进度采样（动画已经结束、进度计数差一步）。这几轮运行时主机 1 分钟负载在 13–70 之间（24 核；其它会话的 vLLM、Gradle、vitest 与 WebKit 运行），各矩阵耗时是第 1 版的 1.5–2 倍。5 个用例在 main 与交付上按原环境各重复 5 次：main 26/30、交付 29/30，main 失败得不比交付少；第 1 版这两套在交付上全部通过（composer 121、toasts 272）；main 没有改这些 fixture 渲染的组件。判断为负载下的时序采样，与本批及合并无关。
 
-**P0 页面矩阵（第 2 轮）。** 参照树（main `71e644742`）写截图，交付以 0 像素比较：
+**P0 页面矩阵（r2b，基点 main `71e644742`；最终基点上的结果见下一节）。** 参照树（main `71e644742`）写截图，交付以 0 像素比较：
 
 - 与 main 逐像素相同：projects、session、公开分享页、受控加载与错误重试、P2.3 生产通知各 8/8，断点 4（另 4 个按环境跳过），FOCUS-1/FOCUS-2 16/16（交付上作为普通测试通过；main 上它们仍是预期失败，旧缺陷还在），settings 5/8、profile 6/8。
 - task ×8：本批切换的场景。分类与第 1 版运行 6 相同：task-action-menu、task-share-dialog 每个环境超过 2 级的像素数与最大级数都和运行 6 一样（焦点约定与 WebKit 下 “Share…” 一行的行高精度，见上文“P0 页面矩阵”）；task-detail、task-action-hover、task-action-focus 各 5 张逐字节相同、3 张抗锯齿级；task-public-share 只在参照一侧。
 - wiki ×8：两树都在等待 `.wk-card` 时超时。main 的 Wiki 首页重构（`2f9cc095f`，drop status cards）去掉了这些卡片，P0 的 wiki 场景在 main 上已不能运行（参照同样 8/8 失败）。这是 main 相对 P0 基线的漂移，不归本批；本轮 Wiki 页因此没有视觉对照（main 与本批在 Wiki 上没有交集，见“合并范围”）。
 - settings ×3、profile ×2：正是参照自己失败的 5 个环境，即 P0 已记录的不稳定：保存后的通知文字同时匹配通知与读屏 live region，strict 模式报两个元素。参照在写出后续截图前停止，交付因此缺参照截图，或自己也碰上同一不稳定。单独重跑这 5 个环境（两树各一次，记录见上表）时主机负载在 60–70 之间，10 条全部再次碰上它；之后等负载降到 24 以下再试一次，25 分钟内负载一直在 34–47，没有运行（会话作业 `bgj_445b1723b43d`）。这 5 个环境的 settings/profile 本轮没有完成比较；其余环境中这两个场景与 main 逐像素相同。
+
+### 项目线与 main 再次前进后（最终基点）
+
+提交证据前再次核对：项目线前进到 `77233e226`，即 P0 漂移任务的交付：`ui-migration/expected-screenshots.mjs` 分层的 P0 期望截图，在 Notifications 区域内查找保存通知，并合入了 main 到 `f86211ec3`。main 前进到 `86203ffb0`：登录页 Google 登录、Runner 页的引擎额度行、Wiki 首页与客户端修正。两者与本分支、彼此之间都没有冲突（`git merge-tree`），依次合入为 `2b17bae4f` 与 `9fa5fc412`。此时“合并后的基点（不含本批）”是项目线 tip 与 main 的合并：本地参考提交 `760287474`（父提交 `77233e226`、`86203ffb0`，树为两者 `git merge-tree` 的结果），参照树检出它，只复制试点 spec 与配置。在它上面重做：
+
+| 检查 | 树 / 提交 | 结果 |
+| --- | --- | --- |
+| [r2c-merge-check](checks/r2c-merge-check.txt) | `e3ba1c923`（源码与 `9fa5fc412` 相同） | 项目合并检查：构建通过，340 个测试文件、4327 项全部通过 |
+| [r2c-merge-scope](checks/r2c-merge-scope.txt) → [r2c-merge-scope.json](r2c-merge-scope.json) | `e3ba1c923` 对 `760287474` | 16 项全部成立。两边都改过的文件此时有 5 个（多了 P0 漂移任务也改过的 `page-scenarios.mjs`、`playwright.config.mjs`），合并结果都恰为双方改动之和；基点没有改 `components/ui`，在 `ui-migration` 只改了 P0 矩阵的 `expected-screenshots.mjs`、`page-scenarios.mjs`、`playwright.config.mjs`，没有组件矩阵文件；`index.css` 两边改动的选择器仍无交集，fixture 与试点源文件不使用基点改动选择器的首类名 |
+| [r2c-ref-build](checks/r2c-ref-build.txt)、[r2c-ref-pilot](checks/r2c-ref-pilot.txt) | `760287474`（AntD 参照） | 72/72 |
+| [r2c-build](checks/r2c-build.txt)、[r2c-pilot](checks/r2c-pilot.txt) → [r2c-pilot-compare](r2c-pilot-compare.json)、[摘要](r2c-pilot-summary.json) | `e3ba1c923` | 72/72；256 张截图 **95 逐字节相同、153 仅抗锯齿级、8 超出，8 张全部是第 1 版运行 6 的同一批**（同环境、同样数量的像素超过 2 级、同样的最大级数：分享加载点 ×4、3 级阴影 ×3、提示箭头）；64 条 trace **请求逐步全部相同**；128 项计算样式差异全部是行高数值精度；账号与模型选择的 12 种截图 8 环境全部逐字节相同或抗锯齿级；Antigravity 用例只在打开与选中两步有焦点与列表差异，Create 的请求两树相同 |
+| [r2c-orbitkit-main](checks/r2c-orbitkit-main.txt)、[r2c-orbitkit](checks/r2c-orbitkit.txt) → [r2c-orbitkit-compare](checks/r2c-orbitkit-compare.txt)、[输出](r2c-orbitkit-compare.json) | `760287474` / `e3ba1c923`（git archive） | 两树各 3257 项（5 跳过），0 失败：main 已修好此前的 3 个失败用例 |
+| [r2c-ref-p0](checks/r2c-ref-p0.txt)、[r2c-p0-vs-main](checks/r2c-p0-vs-main.txt) | `760287474`（写参照截图）/ `e3ba1c923`（0 像素比较） | 参照 93 通过、8 失败（wiki）、11 跳过；交付 85 通过、16 失败（task ×8、wiki ×8）、11 跳过。projects、session、公开分享页、受控加载与错误重试、P2.3 生产通知、settings、profile 各 8/8 与参照逐像素相同，断点 4（另 4 个按环境跳过），FOCUS-1/FOCUS-2 16/16（交付上作为普通测试通过，参照上仍是预期失败）。项目线修正通知查找后，settings/profile 不再碰上 r2b 中的不稳定。wiki 两树都在等待 `.wk-card` 时超时（main 的漂移，见上） |
+| [r2c-p0-task-shots](checks/r2c-p0-task-shots.txt) → [r2c-p0-task-compare](r2c-p0-task-compare.json)、[摘要](r2c-p0-task-summary.json) | `e3ba1c923` | task 场景分类与第 1 版运行 6 完全相同：48 张中 18 逐字节相同、6 抗锯齿级、24 超出。超出的是 task-action-menu ×8、task-share-dialog ×8（每个环境超过 2 级的像素数与最大级数都与运行 6 相同），以及只在参照一侧的 task-public-share ×8 |
+
+最后一次核对时 main 又前进到 `db69d833b`，只改了 Go runner 的 5 个测试文件，合入为 `6bd41335a`。web、shared 与锁文件和 `9fa5fc412` 相同，上面的对照原样适用；项目合并检查在 `6bd41335a` 上又跑了一次（[r2d-merge-check](checks/r2d-merge-check.txt)）：构建通过，340 个测试文件、4327 项全部通过。
+
+组件矩阵与审阅对话框是在 `3c1b24f02`（基点 main `71e644742`）上跑的，没有在最终基点重跑。r2c-merge-scope 显示基点此后没有改 `components/ui` 和任何组件矩阵文件，`index.css` 新增规则的首类名也没有 fixture 使用；审阅对话框 fixture 渲染的 `ApprovalPanel`、`CoordinatorQuestionCard` 在基点中未变。
 
 ### 沿用第 1 版的部分及原因
 
@@ -350,9 +371,10 @@ tip 的初始 JS 里 Orbit 组件只有 Dialog（审阅对话框）与通知门�
 
 ### 第 2 轮的边界
 
-- 试点对照在 main `f33589b4c` 与交付 `5ce67d6dd` 上进行；对 `3c1b24f02` 的结论来自两树重新构建的 `dist/` 与对照所服务的逐字节相同，没有在 `3c1b24f02` 上再跑一次浏览器试点对照。
-- P0 的 wiki 场景在 main 上不能运行（main 的漂移），本轮 Wiki 页没有视觉对照；settings/profile 有 5 个环境因已记录的不稳定没有完成比较（两树单独重跑都碰上同一不稳定，等负载下降后的再试没能运行）。
-- composer 1 项、toasts 4 项在整轮矩阵中失败，经两树重复判为负载下的时序采样（main 失败更多）；这两套在第 2 轮没有取得一轮全绿。
+- 试点对照最终在基点 `760287474`（项目线 tip 与 main 的合并，不含本批）与交付 `e3ba1c923`（源码同 `9fa5fc412`）上完整重跑，最终代码 `6bd41335a` 相对它只多 5 个 Go 测试文件；此前在 `f33589b4c`/`5ce67d6dd` 与（以构建产物逐字节相同延伸到的）`3c1b24f02` 上的结果作为过程保留。`760287474` 是本地参考提交，没有推送。
+- P0 的 wiki 场景在 main 上不能运行（main 的 Wiki 首页重构去掉了它等待的 `.wk-card`，两树同样失败），本轮 Wiki 页没有视觉对照。settings/profile 在 r2b 有 5 个环境因已记录的不稳定没有完成比较（两树单独重跑都碰上同一不稳定，等负载下降后的再试没能运行）；最终基点上项目线已修正通知查找，8 个环境全部与参照逐像素相同。
+- 项目线的 P0 漂移任务把 P0 期望截图分成 P0.2 原图、main 漂移参考与“已接受的迁移差异”三层（[p0-drift](../p0-drift/README.md)）。本批 task 场景按设计不同的截图（task-action-menu、task-share-dialog 等）要等本证据被协调者 CONFIRM、本批落地后，才能按该任务的规则登记为已接受的迁移差异；本轮没有登记（[accepted/registry.json](../p0-drift/accepted/registry.json) 为空）。在登记之前，项目线上直接运行的 P0 矩阵（不经同提交参照）会在这些 task 截图上失败。
+- 组件矩阵与审阅对话框只在 `3c1b24f02`（基点 main `71e644742`）上跑过，没有在最终基点重跑（理由见上）。其中 composer 1 项、toasts 4 项在整轮矩阵中失败，经两树重复判为负载下的时序采样（main 失败更多）；这两套在第 2 轮没有取得一轮全绿。
 - 迁移成本、包体积、耗时与 AntD 清单沿用第 1 版，未在新基点重测。
 - 联动测试的红色（合并后、联动前）只有会话作业 `bgj_e57013f9f754` 的输出，没有写成本目录的检查记录。
 - 第 1 版“未确立的部分”（真机与读屏、正常动画逐帧、共享主机上的耗时、Menu 打开窗口）同样适用于本轮。
@@ -409,4 +431,4 @@ bash $R/final-runs.sh suite-repeat <名称> <套件> <用例> <环境> <次数> 
 python3 $R/merge-scope.py da13423d3 b24209077 <main> HEAD --round2 <本轮有意改动的文件…>
 ```
 
-`collect.py` 把运行目录中的报告、JSON 附件（打包为 `attachments.tar.gz`，解包前的 SHA-256 在 `manifest.json`）与截图复制到本目录：[pilot-reference](pilot-reference)（AntD 参照第 4 轮）与 [pilot-delivery](pilot-delivery)（交付第 6 轮，`abb4c29e7`），截图各 240 张；[p0-task-reference-shots](p0-task-reference-shots)（tip 的 P0 运行）与 [p0-task-delivery](p0-task-delivery)（交付第 6 轮）。第 2 轮同样收集：[r2-pilot-reference](r2-pilot-reference)（main `f33589b4c` 上的 AntD 参照）与 [r2-pilot-delivery](r2-pilot-delivery)（`5ce67d6dd`），截图各 256 张；[r2b-p0-task-reference-shots](r2b-p0-task-reference-shots)（main `71e644742` 的 P0 运行，task 场景截图）与 [r2b-p0-task-delivery](r2b-p0-task-delivery)（`3c1b24f02`）。
+`collect.py` 把运行目录中的报告、JSON 附件（打包为 `attachments.tar.gz`，解包前的 SHA-256 在 `manifest.json`）与截图复制到本目录：[pilot-reference](pilot-reference)（AntD 参照第 4 轮）与 [pilot-delivery](pilot-delivery)（交付第 6 轮，`abb4c29e7`），截图各 240 张；[p0-task-reference-shots](p0-task-reference-shots)（tip 的 P0 运行）与 [p0-task-delivery](p0-task-delivery)（交付第 6 轮）。第 2 轮同样收集：[r2-pilot-reference](r2-pilot-reference)（main `f33589b4c` 上的 AntD 参照）与 [r2-pilot-delivery](r2-pilot-delivery)（`5ce67d6dd`），截图各 256 张；[r2b-p0-task-reference-shots](r2b-p0-task-reference-shots)（main `71e644742` 的 P0 运行，task 场景截图）与 [r2b-p0-task-delivery](r2b-p0-task-delivery)（`3c1b24f02`）。最终基点上的一组：[r2c-pilot-reference](r2c-pilot-reference)（`760287474` 上的 AntD 参照）与 [r2c-pilot-delivery](r2c-pilot-delivery)（`e3ba1c923`），截图各 256 张；[r2c-p0-task-reference-shots](r2c-p0-task-reference-shots) 与 [r2c-p0-task-delivery](r2c-p0-task-delivery)。

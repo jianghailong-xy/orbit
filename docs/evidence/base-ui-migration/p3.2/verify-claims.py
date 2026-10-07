@@ -212,5 +212,81 @@ claim('r2b P0 task scenario: task-action-menu and task-share-dialog differ in ea
           for s in ('task-action-menu', 'task-share-dialog', 'task-public-share'))
       and all(not task2[s]['beyond'] for s in ('task-detail', 'task-action-hover', 'task-action-focus')))
 
+# Round 2c: the project line (77233e226) and main (86203ffb0) moved again; both merged (9fa5fc412) and checked
+# against their merge without this batch, 760287474, as the base.
+import subprocess
+BASE_NOW, FINAL_SRC, CHECKED = '760287474', '9fa5fc412', 'e3ba1c923'
+git = lambda *args: subprocess.run(['git', '-C', str(here.parents[3]), *args], capture_output=True, text=True)
+claim(f'{CHECKED} carries the source of {FINAL_SRC} (only this directory changed after it)',
+      git('diff', '--quiet', FINAL_SRC, CHECKED, '--', '.', ':(exclude)docs/evidence/base-ui-migration/p3.2').returncode == 0)
+claim(f'{BASE_NOW} is the merge of the project tip 77233e226 and main 86203ffb0',
+      git('rev-list', '--parents', '-n', '1', BASE_NOW).stdout.split()[1:] == [git('rev-parse', '77233e226').stdout.strip(), git('rev-parse', '86203ffb0').stdout.strip()])
+claim(f'r2c-merge-check ran clean on {CHECKED} and exited 0: 340 test files and 4327 tests passed',
+      ran('r2c-merge-check', CHECKED) and re.search(r'Test Files\s+340 passed \(340\)', plain('r2c-merge-check')) is not None
+      and re.search(r'Tests\s+4327 passed \(4327\)', plain('r2c-merge-check')) is not None)
+for name in ('r2c-merge-scope', 'r2c-build', 'r2c-pilot', 'r2c-pilot-compare', 'r2c-pilot-summary', 'r2c-orbitkit', 'r2c-orbitkit-main', 'r2c-orbitkit-compare'):
+    claim(f'{name} ran clean on {CHECKED} and exited 0', ran(name, CHECKED))
+copied = re.compile(r'^\?\? src/web/ui-migration/(pilot[\w.-]*|p32-reference\.config\.mjs|port\.config\.mjs)$')
+for name in ('r2c-ref-build', 'r2c-ref-pilot'):
+    r = record(name)
+    claim(f'{name} ran on {BASE_NOW} with only the pilot specs and configs copied in, and exited 0',
+          r['commit'].startswith(BASE_NOW) and r['exitCode'] == 0 and all(copied.match(p) for p in r['dirty']))
+scope_c = json.loads((here / 'r2c-merge-scope.json').read_text())
+claim(f"r2c merge scope: all {len(scope_c['checks'])} checks hold; {len(scope_c['changedByBoth'])} files changed by both sides",
+      all(c['holds'] for c in scope_c['checks']) and len(scope_c['checks']) == 16 and len(scope_c['changedByBoth']) == 5)
+r2c = json.loads((here / 'r2c-pilot-summary.json').read_text())
+claim('r2c pilot: 72/72 in both trees; 256 shots, 95 identical, 153 within antialiasing, 8 beyond',
+      r2c['totals']['tests'] == {'passed/passed': 72}
+      and (r2c['totals']['screenshots'], r2c['totals']['identical'], r2c['totals']['antialias'], r2c['totals']['beyondAntialias']) == (256, 95, 153, 8))
+r2c_fields = {f for test in r2c['traces'].values() for step in test.get('steps', []) for f in step['fields']}
+claim(f'r2c pilot: no trace step of the 64 differs in its requests (fields that differ: {sorted(r2c_fields)})',
+      r2c['totals']['traces'] == 64 and 'requests' not in r2c_fields)
+r2c_deltas = [(f, a, b) for capture in r2c['styles'].values() for element in capture.values() for f, (a, b) in element.items()]
+claim(f'r2c pilot: all {len(r2c_deltas)} computed-style differences are line heights within 0.0001px',
+      all(f == 'lineHeight' and abs(float(a[:-2]) - float(b[:-2])) < 0.0001 for f, a, b in r2c_deltas))
+claim(f'r2c pilot: the {len(choosing)} field, model and account picker shots are identical or within antialiasing in all 8 environments',
+      all(r2c['screenshots'][s]['environments'] == 8 and not r2c['screenshots'][s]['beyond'] for s in choosing))
+r2c_compare = json.loads((here / 'r2c-pilot-compare.json').read_text())
+r2c_beyond = {k: over(v) for k, v in r2c_compare['screenshots'].items() if not v.get('equal') and v.get('pixels') != v.get('pixelsAtMost2')}
+claim(f'r2c pilot: all {len(r2c_beyond)} shots beyond antialiasing are run 6\'s own (same environment, pixels beyond 2 and level)',
+      len(r2c_beyond) == 8 and all(k in v1 and over(v1[k]) == v for k, v in r2c_beyond.items()))
+antigravity_c = {k: v for k, v in r2c_compare['traces'].items() if 'Antigravity account picker' in k}
+claim('r2c pilot: the Antigravity case differs only at its open and pick steps; its Create step is equal in all 8',
+      len(antigravity_c) == 8 and all({d['step'] for d in v.get('differences', [])} <= {'antigravity account open', 'antigravity account Work'}
+                                      for v in antigravity_c.values()))
+ref_p0_c = record('r2c-ref-p0')
+claim(f'r2c-ref-p0 ran on {BASE_NOW} with only the pilot specs and configs copied in: 8 failed, 11 skipped, 93 passed',
+      ref_p0_c['commit'].startswith(BASE_NOW) and ref_p0_c['exitCode'] == 1 and all(copied.match(p) for p in ref_p0_c['dirty'])
+      and summary_line('r2c-ref-p0') == '8 failed 11 skipped 93 passed')
+claim(f'r2c-p0-vs-main ran clean on {CHECKED}: 16 failed, 11 skipped, 85 passed',
+      ran('r2c-p0-vs-main', CHECKED, 1) and summary_line('r2c-p0-vs-main') == '16 failed 11 skipped 85 passed')
+ref_failed_c = re.findall(r'✘\s+\d+ \[([\w-]+)\] › ui-migration/(\S+?):\d+:\d+ › (.+?) \(', plain('r2c-ref-p0'))
+del_failed_c = re.findall(r'✘\s+\d+ \[([\w-]+)\] › ui-migration/(\S+?):\d+:\d+ › (.+?) \(', plain('r2c-p0-vs-main'))
+unexpected = lambda failed: {(e, t) for e, f, t in failed if not t.startswith('P0.2-FOCUS')}
+claim('r2c P0: main fails only wiki (all 8 environments); the delivery fails only task and wiki (all 8 each); both wait in vain for .wk-card',
+      {t for _, t in unexpected(ref_failed_c)} == {'wiki'} and len(unexpected(ref_failed_c)) == 8
+      and {t for _, t in unexpected(del_failed_c)} == {'task', 'wiki'} and len(unexpected(del_failed_c)) == 16
+      and plain('r2c-ref-p0').count("Locator: locator('.wk-card').first()") == 8 and plain('r2c-p0-vs-main').count("Locator: locator('.wk-card').first()") == 8)
+for name in ('r2c-p0-task-shots', 'r2c-p0-task-compare', 'r2c-p0-task-summary'):
+    claim(f'{name} ran clean on {CHECKED} and exited 0', ran(name, CHECKED))
+task_c = json.loads((here / 'r2c-p0-task-summary.json').read_text())
+claim('r2c P0 task scenario: 18 identical, 6 within antialiasing, 24 beyond, each shot per environment as in run 6',
+      (task_c['totals']['identical'], task_c['totals']['antialias'], task_c['totals']['beyondAntialias']) == (18, 6, 24)
+      and all({e: over(v) for e, v in task_c['screenshots'][s]['beyond'].items()} == {e: over(v) for e, v in task6[s]['beyond'].items()}
+              and (task_c['screenshots'][s]['identical'], task_c['screenshots'][s]['antialias']) == (task6[s]['identical'], task6[s]['antialias'])
+              for s in task6))
+swift_c = json.loads((here / 'r2c-orbitkit-compare.json').read_text())
+claim(f"r2c OrbitKit: {BASE_NOW} and {CHECKED} both run clean ({swift_c['delivery']['summary']})",
+      swift_c['tip']['failed'] == [] and swift_c['delivery']['failed'] == [] and log('r2c-orbitkit-main').startswith('commit ' + git('rev-parse', BASE_NOW).stdout.strip())
+      and log('r2c-orbitkit').startswith('commit ' + record('r2c-orbitkit')['commit']))
+
+# Round 2d: main moved by one runner test commit (db69d833b) before the evidence; merged as 6bd41335a.
+FINAL = '6bd41335a'
+moved = git('diff', '--name-only', FINAL_SRC, FINAL, '--', '.', ':(exclude)docs/evidence/base-ui-migration/p3.2').stdout.split()
+claim(f'{FINAL} differs from {FINAL_SRC} only in {len(moved)} Go runner test files', moved and all(p.startswith('src/runner-go/') and p.endswith('_test.go') for p in moved))
+claim(f'r2d-merge-check ran clean on {FINAL} and exited 0: 340 test files and 4327 tests passed',
+      ran('r2d-merge-check', FINAL) and re.search(r'Test Files\s+340 passed \(340\)', plain('r2d-merge-check')) is not None
+      and re.search(r'Tests\s+4327 passed \(4327\)', plain('r2d-merge-check')) is not None)
+
 print(f'{sum(results)}/{len(results)} claims hold')
 sys.exit(0 if all(results) else 1)
