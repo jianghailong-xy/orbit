@@ -143,7 +143,10 @@ class WikiWatchDeviceTest {
         assertEquals(1, writes.size)
         val op = writes.single().getValue("body").jsonObject.getValue("ops").jsonArray.single().jsonObject
         assertEquals("amend", op.string("op")); assertEquals(1, op.getValue("baseRevision").jsonPrimitive.int)
-        await("Edited on Android with server readback.")
+        // The page says it landed and reads the entry again (iOS's entry page draws no summary; the lists do).
+        await("Saved")
+        val write = journal().indexOfLast { it.string("method") == "POST" && it.string("path").endsWith("/changesets") }
+        compose.waitUntil(15_000) { journal().drop(write + 1).any { it.string("method") == "GET" && it.string("path").contains("/api/wiki/entries/${ids.string("entry")}") } }
         capture("search-edit-recorded")
         // Back returns to the home, the query still in its field.
         compose.onNodeWithContentDescription("Back").performClick()
