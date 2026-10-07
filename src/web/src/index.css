@@ -260,6 +260,9 @@ body {
   width: 360px;
   max-width: calc(100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
   pointer-events: none;
+  /* One composited layer at the column's whole-pixel origin, as the body-mounted column had. A layer
+     per card starts at a pill's fractional x and rasterizes its text differently. */
+  will-change: transform;
 }
 .toast-viewport--narrow {
   top: calc(env(safe-area-inset-top, 0px) + 56px);
@@ -293,8 +296,6 @@ body {
   font-size: 14px;
   line-height: 20px;
   text-align: start;
-  /* Keep the original card's rasterization when its host enters the top layer. */
-  will-change: transform;
 }
 :root[data-theme='dark'] .toast {
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);

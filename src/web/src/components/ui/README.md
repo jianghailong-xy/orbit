@@ -60,7 +60,7 @@ return <><Button onClick={() => void remove()}>Delete</Button>{confirmation}</>;
 
 弹层以1000为根层级，每个拥有者内递增100；现有 toast 为2050。每层有自己的遮罩，Base UI 管理模态焦点、Tab/Shift+Tab、IME期间Esc和文档滚动锁。长 Dialog 由 viewport 滚动，Drawer 正文单独滚动。主题仍来自 html 的 data-theme；没有第二套主题状态。不要给 portal 宿主增加 transform 或裁切样式。
 
-通知继续使用 `useToast` / `toastFeed` / `toastStore` 和唯一的 `ToastViewport`。打开的 Orbit 弹层通过自有 ref 登记反馈挂载点，最上层接收通知，使已有通知与后到通知都留在可访问树和 Tab 范围内；关闭后回到父层或 body，keepMounted 的关闭层不接收通知。React portal 始终使用同一宿主，避免切层重建通知 DOM。宿主使用原生 `popover="manual"` 顶层绘制，逃离弹层的缩放、平移和裁切；不增加遮罩或抢焦点，也不改变原 Dialog/Drawer 动画。通知自身保留首次入场的动画起点，切层以负 delay 延续原进度，不重播或删除入场动画。样式清除 popover 的默认盒模型，保留原通知原点、字体和安全区规则。持久的 body 固定定位测量节点保留 WebKit 的滚动条预留宽度，并随通知视口卸载清理。此能力依赖浏览器的 Popover API，已在本项目固定 Chromium/WebKit 版本验证。
+通知继续使用 `useToast` / `toastFeed` / `toastStore` 和唯一的 `ToastViewport`。打开的 Orbit 弹层通过自有 ref 登记反馈挂载点，最上层接收通知，使已有通知与后到通知都留在可访问树和 Tab 范围内；关闭后回到父层或 body，keepMounted 的关闭层不接收通知。React portal 始终使用同一宿主，避免切层重建通知 DOM。宿主使用原生 `popover="manual"` 顶层绘制，逃离弹层的缩放、平移和裁切；不增加遮罩或抢焦点，也不改变原 Dialog/Drawer 动画。通知自身保留首次入场的动画起点，切层以负 delay 延续原进度，不重播或删除入场动画。样式清除 popover 的默认盒模型，保留原通知原点、字体和安全区规则。持久的 body 固定定位测量节点保留 WebKit 的滚动条预留宽度，并随通知视口卸载清理；桌面通知列始终按它定位。手机通知列在被弹层接管前不加内联宽度，沿用原 CSS 排版；接管后保持它在 body 中最后的宽度（ResizeObserver 记录；先在弹层内出现或视口宽度变化时按测量节点），直到通知清空，避免 WebKit 在弹层内或关闭过程中按另一视口宽度排版。切层时不读布局、不多提交一次。合成提示 `will-change` 放在通知列而不是每张卡片上，胶囊和卡片都按通知列的整数像素原点栅格化，与原 body 内的通知一致。此能力依赖浏览器的 Popover API，已在本项目固定 Chromium/WebKit 版本验证。
 
 悬停仍只暂停原先可悬停的结果卡片和可操作短通知。真实 mouseover 覆盖通知到达或布局移动到静止指针下的进入；mousemove 补足 WebKit 切层时遗漏的 mouseleave。清空队列后再次进入会重新确认暂停状态；鼠标静止时切层继续暂停，真正离开后才重新完整计时，未悬停的通知保留原截止时间。队列、去重和计时内核未改动，不读取库的内部 DOM。短通知及空宿主穿透点击，通知动作不关闭拥有它的弹层。
 
