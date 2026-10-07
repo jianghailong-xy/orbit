@@ -248,7 +248,7 @@ private struct AccessTokensSection: View {
                 Button(AccessTokensList.revoke + "…", role: .destructive) { pendingRevoke = token }
                     .disabled(model.accessTokens?.revokingID == token.id)
                     // On the row that asked, so only its own token's question is ever up.
-                    .confirmationDialog(AccessTokensList.revokeTitle(token), isPresented: revokeAsked(token)) {
+                    .orbitConfirmation(AccessTokensList.revokeTitle(token), isPresented: revokeAsked(token)) {
                         Button(AccessTokensList.revoke, role: .destructive) { Task { await revoke(token) } }
                         Button(SharePanelCopy.cancel, role: .cancel) {}
                     } message: {
