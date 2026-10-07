@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsage, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import { RunnerEngines, summaryOf, tildePath } from './RunnerEngines';
-import { clickRunnerMenuItem } from './RunnerEngines.test-helpers';
+import { clickRunnerMenuItem, openRunnerCards } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -89,7 +89,7 @@ afterEach(() => {
 
 /** Mount the section over these runners, their cards open, the way a user who opened them sees it. */
 function mount(runners: Runner[]) {
-  localStorage.setItem('orbit:providers-expanded-runners', JSON.stringify(runners.map((r) => r.id)));
+  openRunnerCards(runners);
   apiMock.mockImplementation(async (path: string, options?: { method?: string }) => {
     if (path === '/runners') return runners;
     if (path.endsWith('/login') && (options?.method ?? 'GET') === 'GET') {
@@ -154,7 +154,8 @@ describe('a runner with two Codex accounts', () => {
     expect(head.querySelector('.re-quota')).toBeNull();
     // It counts the accounts that could take a session now: Work, signed out, is not one.
     expect(head.querySelector('.re-meta')?.textContent).toBe('0.156.0 · 1 of 2 accounts available');
-    expect(rows(head, 'button').map(labelOf)).toEqual(['Add account']);
+    // Its one action; the head itself is the button that folds its accounts.
+    expect(rows(head, '.re-act button').map(labelOf)).toEqual(['Add account']);
 
     // The other engines are untouched rows, each still with its own tag.
     const engineRows = rows(page, '.re-row:not(.re-acct)');
