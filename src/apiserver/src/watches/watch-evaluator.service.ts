@@ -170,29 +170,33 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** The key `RealtimeService.publishForUser` publishes one account's events on: `user:<ownerId>`. */
 const OWNER_KEY = /^user:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
+/** Whose watches a hint may move: the account it was published for, or the account of the session it was published on. */
+export type WatchHintOwner = { ownerId: string } | { sessionId: string };
+
 /**
  * The exact rows an event names, or null. Only identities are taken from it — the session it was
  * published on, the task ids a task.changed lists — and nothing it says about them. A task.changed
  * that asks for a resync names no row, so it hints nothing and the sweep answers it.
  *
- * A task.changed is the control plane's own announcement, published on the account's key
- * (`publishForUser`), and its ids are matched among that account's watches only (`ownerId`). One on
- * a session's key is that session's machine speaking — a runner re-publishes every event of its
- * batches on its session — and it names nothing a watch may be woken by: least of all another
- * account's, whose task ids a machine could name.
+ * A task.changed's ids are matched among one account's watches only (`owner`): the account's own key
+ * (`publishForUser`), or the account of the session it was published on — the control plane's
+ * `publishTaskChanged`, and a runner re-publishing every event of its batches on its session. So a
+ * machine that names another account's task ids in its own session's events moves none of that
+ * account's watches.
  */
 export function watchHintFor(
   runId: string,
   event: NormalizedRunEvent,
-): { kind: WatchTargetKind; ids: string[]; ownerId?: string } | null {
+): { kind: WatchTargetKind; ids: string[]; owner?: WatchHintOwner } | null {
   if (event.type === RunEventType.TASK_CHANGED) {
     const ownerId = OWNER_KEY.exec(runId)?.[1];
-    if (!ownerId) return null;
+    const owner: WatchHintOwner | null = ownerId ? { ownerId } : UUID.test(runId) ? { sessionId: runId } : null;
+    if (!owner) return null;
     const payload = (event.payload ?? {}) as { taskId?: unknown; taskIds?: unknown };
     const ids = [...(Array.isArray(payload.taskIds) ? payload.taskIds : []), payload.taskId].filter(
       (id): id is string => typeof id === 'string' && UUID.test(id),
     );
-    return ids.length > 0 ? { kind: 'TASK', ids: [...new Set(ids)], ownerId } : null;
+    return ids.length > 0 ? { kind: 'TASK', ids: [...new Set(ids)], owner } : null;
   }
   return SESSION_HINT_EVENTS.has(event.type) && UUID.test(runId) ? { kind: 'SESSION', ids: [runId] } : null;
 }
@@ -311,7 +315,7 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
     this.loop = 'RUNNING';
     this.hints = this.realtime.localPublications().subscribe(({ runId, event }) => {
       const hint = watchHintFor(runId, event);
-      if (hint) void this.hint(hint.kind, hint.ids, hint.ownerId);
+      if (hint) void this.hint(hint.kind, hint.ids, hint.owner);
     });
     this.kick();
   }
@@ -417,9 +421,9 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** A hint, applied (see `markDue`). A hint that fails is a hint that was lost, which the sweep absorbs. */
-  async hint(kind: WatchTargetKind, resourceIds: readonly string[], ownerId?: string): Promise<number> {
+  async hint(kind: WatchTargetKind, resourceIds: readonly string[], owner?: WatchHintOwner): Promise<number> {
     try {
-      return await this.markDue(kind, resourceIds, ownerId);
+      return await this.markDue(kind, resourceIds, owner);
     } catch (error) {
       this.log.warn(`watch hint failed: ${error instanceof Error ? error.message : error}`);
       return 0;
@@ -444,7 +448,7 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
    * would only run a second evaluation beside that one. The asking stops when the loop stops, and once
    * a reconciliation period has passed, by which time the sweep has come round.
    */
-  async markDue(kind: WatchTargetKind, resourceIds: readonly string[], ownerId?: string): Promise<number> {
+  async markDue(kind: WatchTargetKind, resourceIds: readonly string[], owner?: WatchHintOwner): Promise<number> {
     if (resourceIds.length === 0) return 0;
     let asked: Prisma.Sql = Prisma.sql`
       SELECT DISTINCT "watch_id" AS "id", NULL::text AS "seen" FROM "watch_target"
@@ -458,7 +462,11 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
         WITH "asked" AS (${asked}), "hinted" AS (
           SELECT w."id", w."last_evaluated_at"::text AS "last", a."seen" FROM "watch" w JOIN "asked" a ON a."id" = w."id"
           WHERE w."state" = 'ACTIVE' AND w."next_evaluate_at" > now()
-            ${ownerId === undefined ? Prisma.empty : Prisma.sql`AND w."owner_id" = ${ownerId}::uuid`}
+            ${owner === undefined
+              ? Prisma.empty
+              : 'ownerId' in owner
+                ? Prisma.sql`AND w."owner_id" = ${owner.ownerId}::uuid`
+                : Prisma.sql`AND w."owner_id" = (SELECT "owner_id" FROM "session" WHERE "id" = ${owner.sessionId}::uuid)`}
         ), "free" AS (
           SELECT "id" FROM "watch"
           WHERE "id" IN (SELECT "id" FROM "hinted") AND "state" = 'ACTIVE' AND "next_evaluate_at" > now()
