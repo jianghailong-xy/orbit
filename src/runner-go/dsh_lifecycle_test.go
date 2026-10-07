@@ -42,9 +42,12 @@ type lcTurn struct {
 
 // lcControlPlane mirrors runner-api's dequeueTurn: control kinds jump the queue, and a
 // message is leased only while no other message is IN_FLIGHT, unless its lease expired.
+// Only the inbox lease generation activated last may lease anything, as there.
 type lcControlPlane struct {
 	mu           sync.Mutex
 	turns        []*lcTurn
+	generation   string // the current inbox lease generation; see activate
+	activations  int
 	leaseLost    bool
 	busyDelivery bool
 	drop         map[string]bool // completions that never reach the database
@@ -73,7 +76,7 @@ func (cp *lcControlPlane) serve(w http.ResponseWriter, r *http.Request) {
 	case strings.HasSuffix(r.URL.Path, "/inbox"):
 		deadline := time.Now().Add(150 * time.Millisecond)
 		for {
-			resp, status := cp.next()
+			resp, status := cp.next(r.URL.Query().Get("leaseGeneration"))
 			if status != 0 {
 				http.Error(w, "inbox lease generation is no longer current", status)
 				return
@@ -110,10 +113,10 @@ func (cp *lcControlPlane) serve(w http.ResponseWriter, r *http.Request) {
 
 func lcExecutable(kind string) bool { return kind == "message" || kind == "shell" }
 
-func (cp *lcControlPlane) next() (*RunInboxResponse, int) {
+func (cp *lcControlPlane) next(generation string) (*RunInboxResponse, int) {
 	cp.mu.Lock()
 	defer cp.mu.Unlock()
-	if cp.leaseLost {
+	if cp.leaseLost || generation != cp.generation {
 		return nil, http.StatusConflict
 	}
 	deliver := func(turn *lcTurn) *RunInboxResponse {
@@ -167,6 +170,20 @@ func (cp *lcControlPlane) redeliver(id string) {
 	}
 	cp.mu.Unlock()
 	cp.notify()
+}
+
+// activate makes a new inbox lease generation current, as session.go does through
+// activate-leases before each engine process runs. A long-poll this server still holds for
+// an earlier process, stopped or killed, is refused from then on, so it can never be handed
+// a turn meant for the process that replaced it.
+func (cp *lcControlPlane) activate() string {
+	cp.mu.Lock()
+	cp.activations++
+	cp.generation = fmt.Sprintf("lc-generation-%d", cp.activations)
+	generation := cp.generation
+	cp.mu.Unlock()
+	cp.notify()
+	return generation
 }
 
 func (cp *lcControlPlane) setLeaseLost(lost bool) {
@@ -313,11 +330,12 @@ func (h *lcHarness) startIn(job *ClaimedSession, execDir string) *lcRun {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	shutdownCtx, shutdown := context.WithCancel(context.Background())
 	run := &lcRun{done: make(chan struct{}), cancel: cancel, shutdown: shutdown}
+	generation := h.cp.activate()
 	go func() {
 		defer close(run.done)
 		run.status, run.ended, run.reload = providerRuntimeFor(runtimeProvider(job)).run(sessionProcessArgs{
 			ctx: ctx, shutdownCtx: shutdownCtx, t: NewTransport(h.cp.srv.URL, "synthetic-runner-token"), job: job,
-			leaseGeneration: "lc-generation", execDir: execDir, scratchDir: h.scratch,
+			leaseGeneration: generation, execDir: execDir, scratchDir: h.scratch,
 			emit:           func(typ string, payload map[string]interface{}) { h.events.emit("", typ, payload) },
 			emitFor:        h.events.emit,
 			setTurn:        func(string) {},
@@ -1226,7 +1244,7 @@ func TestDshLifecycleRunnerHelperProcess(t *testing.T) {
 	job.RuntimeSessionID = os.Getenv("DSH_LC_RUNTIME_ID")
 	providerRuntimeFor(providerDsh).run(sessionProcessArgs{
 		ctx: context.Background(), shutdownCtx: context.Background(), t: transport, job: job,
-		leaseGeneration: "lc-generation", execDir: h.work, scratchDir: h.scratch,
+		leaseGeneration: os.Getenv("DSH_LC_GENERATION"), execDir: h.work, scratchDir: h.scratch,
 		emit: func(string, map[string]interface{}) {}, emitFor: func(string, string, map[string]interface{}) {},
 		setTurn: func(string) {}, completeTurn: complete, waitTurnPermit: func(context.Context) bool { return true },
 		onLeaseLost: func(error) {},
@@ -1242,7 +1260,7 @@ func (h *lcHarness) startRunnerProcess(runtimeID string) *exec.Cmd {
 	}
 	cmd := exec.Command(exe, "-test.run=^TestDshLifecycleRunnerHelperProcess$")
 	cmd.Env = append(os.Environ(), "DSH_LC_RUNNER=1", "DSH_LC_DIR="+h.dir, "DSH_LC_CP="+h.cp.srv.URL+"/api",
-		"DSH_LC_KEY="+h.key, "DSH_LC_RUNTIME_ID="+runtimeID)
+		"DSH_LC_KEY="+h.key, "DSH_LC_RUNTIME_ID="+runtimeID, "DSH_LC_GENERATION="+h.cp.activate())
 	if err := cmd.Start(); err != nil {
 		h.t.Fatal(err)
 	}
@@ -1253,7 +1271,12 @@ func (h *lcHarness) startRunnerProcess(runtimeID string) *exec.Cmd {
 func TestDshLifecycleCrashRestartRecovery(t *testing.T) {
 	crash := func(t *testing.T, h *lcHarness, runner *exec.Cmd, turn, prompt string) int {
 		h.cp.add(turn, "message", prompt)
-		lcWaitFor(t, "side effect before the crash", func() bool { return len(h.notes("effect-hang")) == 1 })
+		// The engine's note says the side effect ran; the runner records the tool it opened in its
+		// ledger on its own schedule, and that record is what the next runner recovers from.
+		lcWaitFor(t, "side effect and recorded open tool before the crash", func() bool {
+			rec, _ := h.ledger().get(turn)
+			return len(h.notes("effect-hang")) == 1 && len(rec.OpenTools) == 1
+		})
 		engine := h.notes("effect-hang")[0].PID
 		if err := runner.Process.Signal(syscall.SIGKILL); err != nil {
 			t.Fatal(err)
@@ -1323,15 +1346,16 @@ func TestDshLifecycleLeaseLoss(t *testing.T) {
 	h.cp.add("t1", "message", "m1 [child]")
 	run := h.start(h.job())
 	childFile := filepath.Join(h.dir, "child")
-	lcWaitFor(t, "tool child", func() bool {
-		data, err := os.ReadFile(childFile + ".ticks")
-		return err == nil && len(data) > 0
+	// The child ticks as soon as it starts; the engine writes its pid after that and opens the
+	// tool last, which the runner records in its ledger on its own schedule.
+	child := 0
+	lcWaitFor(t, "tool child and recorded open tool", func() bool {
+		ticks, _ := os.ReadFile(childFile + ".ticks")
+		pid, _ := os.ReadFile(childFile + ".pid")
+		child, _ = strconv.Atoi(string(pid))
+		rec, _ := h.ledger().get("t1")
+		return len(ticks) > 0 && child > 0 && len(rec.OpenTools) == 1
 	})
-	pidData, err := os.ReadFile(childFile + ".pid")
-	if err != nil {
-		t.Fatal(err)
-	}
-	child, _ := strconv.Atoi(string(pidData))
 	engine := h.enginePIDs()[0]
 	h.cp.setLeaseLost(true)
 	run.wait(t)
