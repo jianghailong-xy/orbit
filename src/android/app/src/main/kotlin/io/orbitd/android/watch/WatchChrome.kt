@@ -27,6 +27,8 @@ import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import java.time.Instant
 
 /** The SF Symbols the watch pages draw, as Material icon paths (no icon library ships with this app). */
@@ -87,26 +89,22 @@ internal fun rememberWatchClock(): Instant {
     return now
 }
 
+/** The account events that can move a watch's targets: iOS `AppModel.apply` nudges the watches on these alone. */
+internal val watchMovingEvents = setOf("session.created", "session.updated", "session.ended", "approval.requested", "approval.resolved", "task.changed")
+
 /** What keeps the account's watches current while a watch surface is on screen (iOS `AppModel`'s three reads):
- * the stream reconnecting re-reads them, any account event nudges them, and the 30 s floor polls them. */
+ * the stream reconnecting re-reads them, an event that can move a target nudges them, and the 30 s floor polls them. */
 @Composable
-internal fun WatchFeed(app: OrbitApplication, handle: SessionHandle, store: WatchStore, revision: Long) {
-    var seen by remember(store) { mutableLongStateOf(revision) }
-    LaunchedEffect(store, revision) { if (revision != seen) { seen = revision; store.nudge() } }
+internal fun WatchFeed(app: OrbitApplication, handle: SessionHandle, store: WatchStore) {
+    LaunchedEffect(store) {
+        app.realtime.state.filter { it.handle === handle }.map { state -> watchMovingEvents.sumOf { state.accountEvents[it] ?: 0L } }
+            .distinctUntilChanged().drop(1).collect { store.nudge() }
+    }
     LaunchedEffect(store) {
         app.realtime.state.map { it.handle === handle && it.controlConnection == ConnectionState.CONNECTED }
             .distinctUntilChanged().collect { store.connection(it) }
     }
     LaunchedEffect(store) { while (true) { store.refreshIfDue(); delay(5_000) } }
-}
-
-/** The account's realtime revision, for the surfaces whose caller doesn't hand one over. */
-@Composable
-internal fun rememberWatchRevision(app: OrbitApplication, handle: SessionHandle): Long {
-    val revision by remember(app, handle) {
-        app.realtime.state.map { if (it.handle === handle) it.invalidationRevision else 0L }.distinctUntilChanged()
-    }.collectAsState(0L)
-    return revision
 }
 
 /** A session's title where this client holds it (iOS `model.session(id:)?.title`), from the account's directory.

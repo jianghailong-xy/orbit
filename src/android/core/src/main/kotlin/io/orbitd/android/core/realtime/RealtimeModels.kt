@@ -101,6 +101,11 @@ data class RealtimeState(
     /** Changes on every control reconnect and non-ping event, including empty sessionId events.
      * Business pages use it to re-read their own authoritative REST state. */
     val invalidationRevision: Long = 0,
+    /** How many account events of each type this handle's stream has delivered, and how many times the stream has
+     * (re)connected. A page that owns a model re-reads it on the event types that concern it (iOS `AppModel.apply`)
+     * and on every connect, which replays nothing; counts only grow, so no event is lost to a conflated read. */
+    val accountEvents: Map<String, Long> = emptyMap(),
+    val controlConnects: Long = 0,
 )
 
 class ReconnectPolicy(private val jitter: () -> Double = { Math.random() }) {

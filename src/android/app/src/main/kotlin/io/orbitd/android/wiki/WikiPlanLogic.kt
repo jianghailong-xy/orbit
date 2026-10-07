@@ -107,6 +107,10 @@ internal object WikiPlanCopy {
     fun confirmed(version: Int) = "Plan v$version confirmed"
     fun changeAdded(version: Int) = "Change added to draft v$version"
     fun draftSaved(version: Int) = "Draft v$version saved"
+    fun acceptedNotConfirmed(version: Int, why: String) = "Accepted into draft v$version, but it was not confirmed: $why"
+    /** The Edit sheet's TalkBack actions, standing in for the drag a screen reader cannot make. */
+    const val moveUp = "Move up"
+    const val moveDown = "Move down"
     fun protectedKept(numbers: List<String>) = "Protected, kept as they are: ${numbers.joinToString(" · ")}"
     fun time(since: String?, until: String?) = if (since == null && until == null) "any time" else "${since ?: "the start"} → ${until ?: "now"}"
     fun redraftNote(provider: String?, from: Pair<Int, Boolean>?): String {

@@ -214,10 +214,10 @@ internal fun WikiMaintenanceForm(workspaces: List<WikiPickerOption>, providers: 
     val scope = rememberCoroutineScope()
     // The providers offered: the one the space names stays listed even when it is not configured yet.
     val providerOptions = if (providers.any { it.id == choice.provider }) providers else listOf(WikiPickerOption(choice.provider, choice.provider)) + providers
-    ModalBottomSheet(onDismissRequest = close, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        modifier = Modifier.testTag("wiki-settings-form")) {
+    WikiSheet(saving, close, Modifier.testTag("wiki-settings-form")) {
         SheetBar(WikiModeCopy.setUpTitle, WikiModeCopy.cancel, if (enabled) WikiModeCopy.save else WikiModeCopy.turnOn,
-            confirmEnabled = !saving && !busy && choice.workspaceId != null, confirmTag = "wiki-settings-form-submit", cancel = close) {
+            confirmEnabled = !saving && !busy && choice.workspaceId != null, confirmTag = "wiki-settings-form-submit", cancel = close,
+            cancelEnabled = !saving) {
             saving = true
             val chosen = choice
             scope.launch { val landed = submit(chosen); saving = false; if (landed) close() }

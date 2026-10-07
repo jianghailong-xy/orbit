@@ -22,6 +22,9 @@ data class OrbitRoute(
     val wikiPart: Int = 0,
     val wikiSection: String? = null,
     val wikiVersion: Int? = null,
+    /** Which arrival of a link this frame is, for the Wiki and Watch pages a link opens: each arrival is a page of its
+     * own, whose state starts afresh even where an equal page is on the stack already. 0 for every other route. */
+    val entry: Long = 0,
 )
 
 @Serializable
@@ -40,7 +43,10 @@ data class OrbitNavigation(
     fun back(): OrbitNavigation = if (!canGoBack) this else copy(stacks = stacks + (section to frames.dropLast(1)))
     fun select(key: String, root: OrbitRoute): OrbitNavigation = copy(section = key,
         stacks = stacks + (key to (stacks[key] ?: listOf(root))))
-    fun receive(route: OrbitRoute): OrbitNavigation = if (account == null) copy(pending = route) else push(route)
+    fun receive(route: OrbitRoute): OrbitNavigation {
+        val arrived = route.arrived()
+        return if (account == null) copy(pending = arrived) else push(arrived)
+    }
 
     /** No previous account's paths survive logout/switch. Cold-start links survive the login screen. */
     fun bindAccount(key: String?): OrbitNavigation {
@@ -48,6 +54,17 @@ data class OrbitNavigation(
         val next = OrbitNavigation(account = key, pending = if (account == null) pending else null)
         return if (key != null && next.pending != null) next.copy(pending = null).push(next.pending) else next
     }
+}
+
+/** The Wiki and Watch pages, whose state is the frame's own (MainActivity drops it once the frame left every stack). */
+val OrbitRoute.isWikiOrWatch get() = destination == Destination.WATCH || destination.name.startsWith("WIKI")
+
+/** A link to a Wiki or Watch page arrives as a page of its own ([OrbitRoute.entry]); any other route as it is. */
+internal fun OrbitRoute.arrived(): OrbitRoute = if (isWikiOrWatch) copy(entry = OrbitArrivals.next()) else this
+
+internal object OrbitArrivals {
+    /** Distinct across process restarts too: a restored stack's entries are never handed out again. */
+    @Volatile var next: () -> Long = { kotlin.random.Random.nextLong(1, Long.MAX_VALUE) }
 }
 
 object ObjectId {

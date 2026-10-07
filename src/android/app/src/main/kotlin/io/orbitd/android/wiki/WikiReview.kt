@@ -132,11 +132,10 @@ private fun WikiChallengeAmendForm(entry: WikiEntry, close: () -> Unit, submit: 
     val newTitle = title.trim(); val newSummary = summary.trim()
     val changedTitle = newTitle.takeIf { it != (entry.title ?: "").trim() }
     val changedSummary = newSummary.takeIf { it != (entry.summary ?: "").trim() }
-    ModalBottomSheet(onDismissRequest = close, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        modifier = Modifier.testTag("wiki-amend-form")) {
+    WikiSheet(saving, close, Modifier.testTag("wiki-amend-form")) {
         SheetBar(WikiModeCopy.amend, WikiModeCopy.cancel, WikiModeCopy.amend,
             confirmEnabled = !saving && (changedTitle != null || changedSummary != null) && newTitle.isNotEmpty(),
-            confirmTag = "wiki-amend-form-save", cancel = close) {
+            confirmTag = "wiki-amend-form-save", cancel = close, cancelEnabled = !saving) {
             saving = true
             val edited = entryChanges(changedTitle, changedSummary)
             scope.launch { val landed = submit(edited); saving = false; if (landed) close() }
@@ -174,10 +173,9 @@ private fun WikiProposalForm(card: WikiLogic.ReviewCard, entry: WikiEntry?, clos
             (proposed["anchors"] as? JsonArray)?.let { anchors -> put("anchors", JsonArray(anchors.map(WikiLogic::anchorInput))) }
         }
     }
-    ModalBottomSheet(onDismissRequest = close, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        modifier = Modifier.testTag("wiki-proposal-form")) {
+    WikiSheet(saving, close, Modifier.testTag("wiki-proposal-form")) {
         SheetBar(WikiCopy.reviewEdit, "Cancel", WikiCopy.accept, confirmEnabled = !saving && title.isNotBlank(),
-            confirmTag = "wiki-proposal-form-save", cancel = close) {
+            confirmTag = "wiki-proposal-form-save", cancel = close, cancelEnabled = !saving) {
             saving = true
             val version = edited()
             scope.launch { val landed = submit(version); saving = false; if (landed) close() }

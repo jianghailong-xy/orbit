@@ -1,5 +1,10 @@
 package io.orbitd.android.watch
 
+import io.orbitd.android.core.realtime.EventTransport
+import io.orbitd.android.core.realtime.SseFrame
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.channels.Channel
+
 import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.protocol.Wire
@@ -144,6 +149,17 @@ internal class FakeWatchServer {
     /** A gate a request waits at before it is answered, to land two requests in a chosen order. */
     @Volatile var hold: (Call) -> CompletableDeferred<Unit>? = { null }
 
+    /** The account stream: each (re)connect opens and takes the events [event] queued; a session's stream stays quiet. */
+    private val frames = Channel<String>(Channel.UNLIMITED)
+    fun event(type: String) { frames.trySend("""{"type":"$type","sessionId":"","data":{}}""") }
+    private val events = object : EventTransport {
+        override suspend fun stream(request: HttpRequest, onOpen: suspend () -> Unit, onFrame: suspend (SseFrame) -> Unit) {
+            if (request.api.path != listOf("events")) awaitCancellation()
+            onOpen()
+            for (frame in frames) onFrame(SseFrame(frame, null, null))
+        }
+    }
+
     val auth = AuthSession(HttpTransport { request ->
         val api = request.api
         if (api.path == listOf("auth", "login")) return@HttpTransport ApiResponse(200,
@@ -167,7 +183,7 @@ internal class FakeWatchServer {
         override suspend fun read(account: AccountKey, kind: DataKind, key: String): ByteArray? = null
         override suspend fun write(account: AccountKey, kind: DataKind, key: String, bytes: ByteArray) {}
         override suspend fun clearAll() {}
-    }, "test", dispatcher = Dispatchers.Unconfined)
+    }, "test", dispatcher = Dispatchers.Unconfined, eventTransport = events)
 
     suspend fun signIn(): SessionHandle = auth.login(ServerAddress.parse("https://fixture.test"), "a@example.test", "fixture-password")
 

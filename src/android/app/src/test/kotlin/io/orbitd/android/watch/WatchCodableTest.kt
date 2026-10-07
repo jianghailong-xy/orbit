@@ -163,12 +163,17 @@ class WatchCodableTest {
 
     /** One row this build can't use leaves the rest of the list standing: a row with no id is left out, and a field
      * the decoder can't read takes its empty value. */
-    @Test fun aRowWithoutAnIdIsLeftOutAndMissingFieldsReadEmpty() {
+    @Test fun aRowWithoutAnIdOrAFieldTheServerAlwaysSendsIsLeftOut() {
         assertNull(Watch.decode(Wire.json.parseToJsonElement("""{"state":"ACTIVE"}""")))
         assertNull(Watch.decode(Wire.json.parseToJsonElement("""["W1"]""")))
-        val bare = WatchFixture.server("""{"id":"W1","state":"PAUSED","targets":[{"targetKind":"TASK","state":"OBSERVED","targetStatus":{"running":true}}]}""")
+        // Once read empty and drawn as a watch out of defaults; now not a watch at all (WatchStrictDecodeTest has every field).
+        assertNull(Watch.decode(Wire.json.parseToJsonElement("""{"id":"W1","state":"PAUSED","targets":[{"targetKind":"TASK","state":"OBSERVED","targetStatus":{"running":true}}]}""")))
+    }
+
+    @Test fun aTargetMissingItsIdOrStandingReadsEmptyAndOpensNothing() {
+        val bare = WatchFixture.watch(state = "PAUSED", targets = listOf(buildJsonObject {
+            put("targetKind", "TASK"); put("state", "OBSERVED"); put("targetStatus", buildJsonObject { put("running", true) }) }))
         assertEquals(WatchState.PAUSED, bare.state)
-        assertEquals(WatchPredicate.Unknown(""), bare.predicate)
         assertEquals("", bare.targets.single().targetResourceId)
         assertNull("a standing with no status is no standing", bare.targets.single().targetStatus)
         assertNull("a target with no id opens nothing", watchTargetRoute(bare.targets.single()))
