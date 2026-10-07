@@ -85,6 +85,23 @@ describe('RunnerSignIn on a runner with an earlier sign-in on record', () => {
     expect(html).toContain('ZXHO-K06HC');
     expect(html).toContain('href="https://auth.openai.com/codex/device"');
   });
+
+  // The code comes first, and the one press both copies it and opens the page it goes into (VS Code's
+  // "Copy & Continue to GitHub"), so all that is left over there is a paste.
+  it('puts the one-time code first, above the press that copies it and opens its page', () => {
+    const html = open(
+      loginState({
+        status: 'awaiting_approval',
+        engine: 'codex',
+        url: 'https://auth.openai.com/codex/device',
+        userCode: 'ZXHO-K06HC',
+      }),
+    );
+
+    expect(html).toContain('Enter this one-time code on the sign-in page:');
+    expect(html.indexOf('ZXHO-K06HC')).toBeGreaterThan(-1);
+    expect(html.indexOf('ZXHO-K06HC')).toBeLessThan(html.indexOf('Copy Code &amp; Open Sign-In Page'));
+  });
 });
 
 // What ends the wait for the runner to re-report after a sign-in lands. Getting this wrong is

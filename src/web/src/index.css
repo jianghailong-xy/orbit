@@ -15318,6 +15318,9 @@ button.chat-jump-start:hover {
   font-size: 11.5px;
   color: var(--text-3);
 }
+.re-dup.re-expiring {
+  color: var(--warning-text, var(--warning-solid));
+}
 .re-dup b {
   color: var(--text-2);
   font-weight: 600;

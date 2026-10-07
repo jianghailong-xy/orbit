@@ -36,7 +36,8 @@ import {
 } from '../lib/planUsage';
 import { formatResetTime } from '../lib/providerPools';
 import { runnersQuery } from '../lib/queries';
-import { runnerEngineNext } from '../lib/runnerCopy';
+import { RUNNER_ENGINE_RENEW, runnerEngineNext } from '../lib/runnerCopy';
+import { loginExpiresLine, signedOutNote } from '../lib/accountLogin';
 import { ago, engineVersionNumber, updateNoteOf } from '../lib/runnerEngines';
 import { ENGINE_PRESET, ENGINE_SLUGS } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
@@ -631,6 +632,21 @@ function EngineRow({
         )}
       </div>
 
+      {/* The engine's one account says what an account row says: a login about to lapse, and what
+          being signed out costs — here, the engine on this machine. */}
+      {!grouped && single && !envKey && loginExpiresLine(single, now) && (
+        <div className="re-dup re-expiring">
+          <span>{loginExpiresLine(single, now)}</span>
+          <button className="re-link" type="button" disabled={offline} onClick={() => onSignIn(signIn === engine ? null : engine)}>
+            {RUNNER_ENGINE_RENEW}
+          </button>
+        </div>
+      )}
+      {!grouped && kind === 'out' && !loginHint && (
+        <div className="re-dup">
+          <span>{signedOutNote(ENGINE_NAME[engine], true)}</span>
+        </div>
+      )}
       {loginHint && <div className="re-panel-hint re-login-note">{loginHint}</div>}
       {googleLogin === 'available' && signIn !== engine && <div className="re-login-note"><GoogleSignInTerms /></div>}
 
@@ -886,6 +902,7 @@ function AccountRow({
   const snapshot = accountPlanUsage(withEnginePlanUsage(runner.planUsage, runner.engines), engine, account.id);
   const quota = quotaOf(kind, snapshot, !!runner.online, now);
   const toggle = () => onSignIn(signIn === panel ? null : panel);
+  const expiring = envKey ? null : loginExpiresLine(account, now);
   // Removing deletes the slot's sign-in from the machine, and only signing in again brings it back:
   // asked first, wherever it is offered.
   const confirmRemove = (trigger: ReactNode, open?: boolean) => (
@@ -966,6 +983,22 @@ function AccountRow({
               Remove
             </button>,
           )}
+        </div>
+      )}
+      {/* A login about to lapse, said before it does the way Claude Code says it, with the way to
+          renew it right there: the row's own sign-in, into the same account. */}
+      {expiring && !removing && (
+        <div className="re-dup re-expiring">
+          <span>{expiring}</span>
+          <button className="re-link" type="button" disabled={!runner.online} onClick={toggle}>
+            {RUNNER_ENGINE_RENEW}
+          </button>
+        </div>
+      )}
+      {/* What its being signed out costs, under its Sign in. */}
+      {kind === 'out' && !removing && (
+        <div className="re-dup">
+          <span>{signedOutNote(ENGINE_NAME[engine], false)}</span>
         </div>
       )}
       {/* The machine would not do it, and its reason is the only thing that can explain why: a

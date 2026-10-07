@@ -197,6 +197,10 @@ type EngineAccountReport struct {
 	// cxa1_ and the first 8 hex digits of the account's fingerprint, when this runner has read
 	// one for it; omitted otherwise. Codex only.
 	FingerprintPrefix string `json:"fingerprintPrefix,omitempty"`
+	// When a signed-in account's login lapses, RFC 3339: the CLI's own expiry for it, which the
+	// clients warn about ahead of time as Claude Code does. Omitted where the CLI recorded none.
+	// Claude only.
+	LoginExpiresAt string `json:"loginExpiresAt,omitempty"`
 }
 
 // EngineUpdateReport is the updater's last word on one engine, carried alongside that engine's
