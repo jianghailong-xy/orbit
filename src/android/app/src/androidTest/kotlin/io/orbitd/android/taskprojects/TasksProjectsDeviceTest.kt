@@ -139,7 +139,11 @@ class TasksProjectsDeviceTest {
     }
     private fun journey(name: String, block: () -> Unit) {
         try { block(); File(output, "$name-result.txt").writeText("PASS\n") }
-        catch (error: Throwable) { capture("$name-failed"); trees(name); throw error }
+        catch (error: Throwable) {
+            // Kept beside the screenshot: a crash while the Activity is torn down can replace the test's own report.
+            runCatching { File(output, "$name-error.txt").writeText(error.stackTraceToString()) }
+            capture("$name-failed"); trees(name); throw error
+        }
         finally {
             runCatching { http("/__control", """{"streamDown":false}""") }
             File(output, "$name-journal.json").writeText(http("/__stats").toString()); runBlocking { app.session.logout() }
@@ -572,22 +576,21 @@ class TasksProjectsDeviceTest {
         compose.onNode(share).assertIsNotEnabled()
     }
 
-    /** P3: a comment the server took is not offered again on its page, returned to after another page covered it. */
+    /** P3: a comment the server took is not offered again by its page's saved state (the page was left — here the
+     * Activity recreated, as P2-2 — while the comment was out). */
     @Test fun regressionP3_aSentCommentIsNotOfferedAgain() = journey("p3-comment-sent-after-leaving") {
         login(); http("/__control", """{"delays":{"POST /api/tasks/$taskId/comments":3000}}""")
-        open("orbit-session:$sessionId"); awaitTag("composer-input")
         open("orbit-task:$taskId"); awaitIn("task-detail", "A11 task checklist")
         val mark = journal().size
         compose.onNodeWithTag("task-comment").performTextInput("Sent once only")
         tap("task-post-comment")
-        open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch")
+        compose.activityRule.scenario.recreate(); awaitIn("task-detail", "A11 task checklist")
         compose.waitUntil(20_000) { journal().drop(mark).any { it.text("path") == "/api/tasks/$taskId/comments" && it["status"]?.toString() == "200" } }
-        SystemClock.sleep(1_000)
-        back(); awaitIn("task-detail", "A11 task checklist"); capture("p3-comment-box-after-return")
+        SystemClock.sleep(1_000); capture("p3-comment-box-after-it-was-taken")
         compose.onNodeWithTag("task-comment").assert(hasText("Sent once only", substring = true).not())
     }
 
-    /** P3: a bulk action leaves no selection behind on its page, returned to after another page covered it. */
+    /** P3: a bulk action leaves no selection behind in its page's saved state (the Activity recreated while it was out). */
     @Test fun regressionP3_aBulkActionLeavesNoSelectionBehind() = journey("p3-bulk-selection") {
         login(); http("/__control", """{"delays":{"POST /api/tasks/batch-delete":3000}}""")
         drawer("Tasks"); awaitTag("tasks-list"); awaitText("A11 task checklist")
@@ -596,10 +599,9 @@ class TasksProjectsDeviceTest {
         tap("task:$taskId", "tasks-list")
         compose.onNode(hasText(TaskListCopy.delete) and hasAnyAncestor(hasTestTag("tasks-bulk-bar"))).performClick()
         awaitTag("tasks-bulk-confirm"); tap("tasks-bulk-confirm")
-        open("orbit-task:$prerequisiteId"); awaitIn("task-detail", "A11 prerequisite")
+        compose.activityRule.scenario.recreate(); awaitTag("tasks-list")
         compose.waitUntil(20_000) { journal().drop(mark).any { it.text("path") == "/api/tasks/batch-delete" && it["status"]?.toString() == "200" } }
-        SystemClock.sleep(1_000)
-        back(); awaitTag("tasks-list"); capture("p3-tasks-after-bulk")
+        SystemClock.sleep(1_000); capture("p3-tasks-after-bulk")
         compose.onAllNodesWithTag("tasks-bulk-bar").assertCountEquals(0)
     }
 
