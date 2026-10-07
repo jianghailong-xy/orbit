@@ -271,9 +271,10 @@ private fun DocReviewBanner(doc: WikiDoc, nextMarked: () -> Unit) {
                 append(" · ")
                 append(WikiDocLogic.needsReviewText(doc))
             }, style = WikiType.subtext)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
+                itemVerticalAlignment = Alignment.CenterVertically) {
                 WikiDocLogic.legend(doc).forEach { item ->
-                    Row(Modifier.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         WikiDocMarkLabel(item.mark)
                         Text(WikiArticleCopy.count(item.count), style = WikiType.label, color = WikiPalette.secondary)
                     }

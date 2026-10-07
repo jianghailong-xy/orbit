@@ -125,11 +125,11 @@ internal fun WikiIndexScreen(store: WikiStore, route: OrbitRoute, nav: WikiNav) 
     if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Index, runnerOnline = null, close = { contentsShown = false }) { pick -> wikiGo(pick, nav) }
 }
 
-/** A reading page's bar while the page is up: iOS's `.navigationTitle("")` and its one toolbar button, Contents. A
- * placeholder has neither, and the shell's own title stands. */
+/** A reading page's bar: no title, as iOS's (`.navigationTitle("")` on the pages, none on their placeholders), and —
+ * while the page, not a placeholder, is up — its one toolbar button, Contents. */
 @Composable
 internal fun WikiReadingBar(route: OrbitRoute, page: Boolean, openContents: () -> Unit) {
-    PageBar.Bind(route, title = if (page) "" else null, actions = if (!page) null else ({
+    PageBar.Bind(route, title = "", actions = if (!page) null else ({
         BarIcon(R.drawable.ic_contents, WikiArticleCopy.contents, "wiki-bar-contents", onClick = openContents)
     }))
 }

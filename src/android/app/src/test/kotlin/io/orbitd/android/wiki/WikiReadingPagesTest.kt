@@ -128,6 +128,30 @@ class WikiReadingPagesTest {
         assertEquals(listOf(OrbitRoute(Destination.WIKI_ENTRY, "e1")), record.pushed)
     }
 
+    @Test fun anArticlesCitedEntryOpensThroughTheWikiNav() {
+        val store = wikiTestStore { path ->
+            when {
+                path.drop(3) == listOf("articles", "database") -> 200 to WikiArticlesContractTest.ARTICLE
+                path == listOf("wiki", "entries", "34WEntryA") -> 200 to """{"id":"34WEntryA","kind":"pitfall","title":"会话写入前要登记写入清单",
+                    "status":"active","trust":"owner","anchorState":"verified","anchorCheckedRef":"1588c3bd26383b0b56244e975f8403b15b88a42d",
+                    "sources":[{"id":"s1","kind":"turn","ref":"sess1","locator":{"turnId":"t1"}},{"id":"s2","kind":"commit","ref":"abc"}]}"""
+                else -> 404 to "{}"
+            }
+        }
+        val record = WikiNavRecord()
+        show { WikiArticleScreen(store, OrbitRoute(Destination.WIKI_ARTICLE, "database"), record.nav) }
+        compose.onNodeWithTag("wiki-article-block:0").performFirstLinkClick(link("note:1"))
+        // The card read the entry: what backs it, and where its anchor was last checked.
+        compose.onNode(hasText(WikiArticleCopy.sourcesLine(2, 1)) and inside("wiki-footnote-card")).assertExists()
+        compose.onNode(hasText("1588c3b") and inside("wiki-footnote-card")).assertExists()
+        press("wiki-footnote-card-open")
+        compose.waitForIdle()
+        assertEquals(listOf(OrbitRoute(Destination.WIKI_ENTRY, "34WEntryA")), record.pushed)
+        compose.onNodeWithTag("wiki-article-list").performScrollToNode(hasTestTag("wiki-footnote:1"))
+        press("wiki-footnote:1")
+        assertEquals(2, record.pushed.size)
+    }
+
     @Test fun anArticleThatCouldNotBeReadOffersRetry() {
         var status = 500
         val store = wikiTestStore { path ->

@@ -53,9 +53,7 @@ internal class WikiArticleActions(
 )
 
 /** A footnote number the reader opened, and the sentence it hangs off (iOS `WikiOpenNote`). */
-internal data class WikiOpenNote(val n: Int, val block: Int, val sentence: Int) {
-    val id: String get() = "$block.$sentence.$n"
-}
+internal data class WikiOpenNote(val n: Int, val block: Int, val sentence: Int)
 
 private val openNoteSaver = Saver<WikiOpenNote?, IntArray>(
     save = { note -> note?.let { intArrayOf(it.n, it.block, it.sentence) } },
