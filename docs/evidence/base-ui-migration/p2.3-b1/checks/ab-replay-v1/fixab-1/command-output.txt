@@ -1,0 +1,84 @@
+# tree /var/tmp/p23b1/trees/fixab commit 83d17f1ca8936f98185e9443883cfcaa5d2e1f8f status: ?? src/web/ui-migration/race.config.mjs ?? src/web/ui-migration/toasts-race.diag.mjs 
+# argv: NO_COLOR=1 npm run test:ui-toasts -w @orbit/web -- --project=webkit-dark-desktop --project=webkit-light-desktop -g notification card stays fixed through Bottom drawer --repeat-each=10
+# started 2026-10-07T00:16:14Z
+
+> @orbit/web@0.1.0 pretest:ui-toasts
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-toasts
+> playwright test --config ui-migration/toasts.config.mjs --project=webkit-dark-desktop --project=webkit-light-desktop -g notification card stays fixed through Bottom drawer --repeat-each=10
+
+[WebServer] (node:2568410) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 131 P0.2 originals, 121 main drift references, 0 accepted migration differences.
+
+Running 20 tests using 1 worker
+
+(node:2568674) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (6.6s)
+(node:2570106) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   2 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (4.5s)
+(node:2571197) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   3 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.9s)
+(node:2571972) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   4 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (4.6s)
+(node:2572704) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   5 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (5.5s)
+(node:2573531) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   6 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.7s)
+(node:2574181) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   7 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (14.1s)
+(node:2575625) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   8 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (4.3s)
+(node:2576252) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   9 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (4.1s)
+(node:2576936) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  10 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (4.6s)
+(node:2577853) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  11 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (4.3s)
+(node:2579162) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  12 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (4.5s)
+(node:2580041) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  13 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (5.2s)
+(node:2581209) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  14 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (4.4s)
+(node:2581723) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  15 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (4.5s)
+(node:2582394) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  16 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (4.9s)
+(node:2583584) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  17 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.6s)
+(node:2584282) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  18 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.5s)
+(node:2584830) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  19 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (4.0s)
+(node:2585401) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  20 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.0s)
+
+  20 passed (2.0m)
+# finished 2026-10-07T00:18:14Z exit 0

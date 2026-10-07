@@ -16,7 +16,17 @@ import { PrismaService } from '../prisma/prisma.service';
 import { codexPoolUnavailableReason } from '../providers/codex-login';
 import { loginCanRun, loginPoolResumesAt, loginRunsAgainAt, type LoginAccount } from '../providers/pool-login-select';
 import { choosePoolCredential } from '../providers/pool-credential-select';
-import { accountPoolRuntime, isBuiltinProvider, openCodeKeyRows, resolveProviderExec, runsOnOpenCode, type ModelProviderRow } from '../providers/custom-provider';
+import {
+  accountPoolRuntime,
+  adminOnlyProviderRefusal,
+  isBuiltinProvider,
+  openCodeKeyRows,
+  resolveProviderExec,
+  runsOnOpenCode,
+  usableProviderScope,
+  usableProviderSql,
+  type ModelProviderRow,
+} from '../providers/custom-provider';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { isPoolCandidate, poolUnavailableReason } from '../providers/pool-admission';
 import { keyCanRun, keyRunsAgainAt, poolKeysResumeAt } from '../providers/pool-key-select';
@@ -55,6 +65,7 @@ import {
   treeCeiling,
 } from '../common/session-tree-sql';
 import {
+  ADMIN_ONLY_PROVIDER_ERROR,
   ANTIGRAVITY_RUNNER_UPGRADE_ERROR,
   DSH_NOT_INSTALLED_ERROR,
   DSH_PLATFORM_UNSUPPORTED_ERROR,
@@ -187,6 +198,9 @@ export class QueueService {
       let until = runner ? sessionAccountPausedUntil(session, session.workspace, runner, now) : null;
       const engine = session.provider;
       let unavailable = false;
+      // What an unavailable session waits with: a member's session on a shared provider is told who can
+      // run it (ADMIN_ONLY_PROVIDER_ERROR) rather than to check a configuration that is not theirs.
+      let unavailableError = PROVIDER_UNAVAILABLE_ERROR;
       let dshHeld = !!dshUnavailable && session.providerBuiltin && engine === AgentProvider.DSH;
       if (until && runner && isAccountEngine(engine)) {
         const canMove = runner.capabilities.includes(ACCOUNT_MOVE_CAPABILITY[engine]);
@@ -198,12 +212,15 @@ export class QueueService {
       }
       if (!isBuiltinProvider(engine, session.providerBuiltin) && engine) {
         const provider = await this.prisma.modelProvider.findFirst({
-          where: { slug: engine, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
+          where: { slug: engine, ...(await usableProviderScope(this.prisma, session.ownerId)) },
           select: { enabled: true, runtime: true },
         });
         unavailable = provider
           ? !provider.enabled || !['claude', 'codex', 'kimi', 'antigravity', 'dsh'].includes(provider.runtime)
           : !await accountPoolRuntime(this.prisma, session.ownerId, engine);
+        if (unavailable && !provider && await adminOnlyProviderRefusal(this.prisma, session.ownerId, engine)) {
+          unavailableError = ADMIN_ONLY_PROVIDER_ERROR;
+        }
         dshHeld = !!dshUnavailable && provider?.runtime === AgentProvider.DSH;
         // A Wiki maintenance session is not held for it by a runner that declares wiki-maintenance-run/v1: the
         // claim hands it over with its refusal (wiki/wiki-maintenance-session.ts), which that runner ends FAILED
@@ -223,15 +240,18 @@ export class QueueService {
       const openCodeKey = engine === AgentProvider.OPENCODE ? openCodeKeyOf(session.model) : null;
       if (openCodeKey) {
         const row = await this.prisma.modelProvider.findFirst({
-          where: { slug: openCodeKey.slug, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
+          where: { slug: openCodeKey.slug, ...(await usableProviderScope(this.prisma, session.ownerId)) },
           select: { enabled: true, runtime: true, apiKeyEnc: true },
         });
         unavailable = !row || !runsOnOpenCode(row);
+        if (!row && await adminOnlyProviderRefusal(this.prisma, session.ownerId, openCodeKey.slug)) {
+          unavailableError = ADMIN_ONLY_PROVIDER_ERROR;
+        }
       }
       if (!until && !unavailable && !dshHeld) continue;
       blocked.push(session.id);
       const error = unavailable
-        ? PROVIDER_UNAVAILABLE_ERROR
+        ? unavailableError
         : until ? `Account paused until ${until.toISOString()}` : dshUnavailable!;
       if (session.error !== error) {
         const updated = await this.prisma.session.updateMany({
@@ -307,6 +327,7 @@ export class QueueService {
               ${DSH_PLATFORM_UNSUPPORTED_ERROR},
               ${DSH_VERSION_INCOMPATIBLE_ERROR},
               ${PROVIDER_UNAVAILABLE_ERROR},
+              ${ADMIN_ONLY_PROVIDER_ERROR},
               ${SOURCE_PROTOCOL_UNSUPPORTED_ERROR}
             ) OR error LIKE 'Account paused until %' THEN NULL
             ELSE error
@@ -337,7 +358,8 @@ export class QueueService {
             AND s."assigned_runner_id" = ${runnerId}
             -- An unresolved/disabled configured identity must never become a Claude job. A Wiki maintenance
             -- session does not become one: a runner that declares wiki-maintenance-run/v1 is handed it with its
-            -- refusal and no provider (buildSession), and ends it FAILED without starting any engine.
+            -- refusal and no provider (buildSession), and ends it FAILED without starting any engine. A shared
+            -- provider resolves for an admin's session only (usableProviderScope): a member's is never claimed.
             AND (
               COALESCE(s.provider, 'claude') IN ('claude', 'codex', 'opencode', 'antigravity')
               OR (s."provider_builtin" AND s.provider IN ('kimi', 'dsh'))
@@ -346,7 +368,7 @@ export class QueueService {
                   SELECT 1 FROM "model_provider" mp
                   WHERE mp.slug = s.provider AND mp.enabled
                     AND mp.runtime IN ('claude', 'codex', 'kimi', 'antigravity', 'dsh')
-                    AND (mp.owner_id IS NULL OR mp.owner_id = s.owner_id)
+                    AND ${usableProviderSql('mp', Prisma.raw('s.owner_id'))}
                 ) OR EXISTS (
                   SELECT 1 FROM "provider_pool" pp
                   WHERE pp.slug = s.provider AND (
@@ -366,7 +388,7 @@ export class QueueService {
               NOT ((s.provider = 'dsh' AND s."provider_builtin") OR EXISTS (
                 SELECT 1 FROM "model_provider" mp
                 WHERE NOT s."provider_builtin" AND mp.slug = s.provider AND mp.runtime = 'dsh'
-                  AND (mp.owner_id IS NULL OR mp.owner_id = s.owner_id)
+                  AND ${usableProviderSql('mp', Prisma.raw('s.owner_id'))}
               )) OR (${supportsDsh} AND EXISTS (
                 SELECT 1 FROM "runner" r WHERE r.id = ${runnerId}
                   AND r."capabilities_reported_at" IS NOT NULL
@@ -388,8 +410,9 @@ export class QueueService {
             )
             -- …and for a configured provider that borrows Antigravity (a Gemini key): the slug is
             -- the row's own, but the runner is handed an antigravity job all the same. The rows
-            -- dispatch resolves, an enabled one of the session's owner or a shared one
-            -- (providerSlugsOn); migration 0372's trigger asks the same.
+            -- dispatch resolves, an enabled one the session's owner may use (providerSlugsOn);
+            -- migration 0372's trigger still counts every shared row, which can only refuse a
+            -- claim this statement never makes.
             AND (
               ${supportsAntigravity}
               OR NOT EXISTS (
@@ -398,7 +421,7 @@ export class QueueService {
                   AND mp."runtime" = 'antigravity'
                   AND NOT (s.provider = 'dsh' AND s."provider_builtin")
                   AND mp."enabled"
-                  AND (mp."owner_id" IS NULL OR mp."owner_id" = s."owner_id")
+                  AND ${usableProviderSql('mp', Prisma.raw('s."owner_id"'))}
               )
             )
             -- A runner may only ever drive sessions owned by its own owner.
@@ -722,7 +745,8 @@ export class QueueService {
     // built-in provider, model, and process env (baseUrl + decrypted key injected)
     // here, so the runner receives a plain claude/codex job and needs no changes. Ownership
     // scope: a personal (BYOK) provider resolves only for its owner's sessions — otherwise a
-    // user could burn another tenant's key by naming their slug. A slug no provider holds may be one
+    // user could burn another tenant's key by naming their slug — and a shared one only for an
+    // admin's (usableProviderScope). A slug no provider holds may be one
     // of the owner's account pools, which dispatches as the member chosen for this claim — or, for a Codex
     // pool of their own, through the pool gateway on the ChatGPT login it holds — or a shared pool the
     // owner is in, which dispatches through the pool gateway; each on a token minted for this claim.
@@ -731,7 +755,7 @@ export class QueueService {
     const customRow = declaredIsBuiltin
       ? null
       : ((await this.prisma.modelProvider.findFirst({
-          where: { slug: declared!, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
+          where: { slug: declared!, ...(await usableProviderScope(this.prisma, session.ownerId)) },
         })) ??
         (maintenance
           ? null

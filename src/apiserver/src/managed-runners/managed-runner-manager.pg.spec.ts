@@ -108,7 +108,9 @@ test('managed runner manager: unique mapping and idempotent reconciliation again
   function world(lifecycle: Partial<ManagedRunnerProfile['lifecycle']> = {}) {
     const profile = testManagedRunnerProfile({ lifecycle });
     const cluster = new FakeKubeCluster(profile.kubernetes.namespace);
-    const clock = { ms: Date.parse('2026-10-07T08:00:00.000Z') };
+    // Starting at the real time: the owner-facing status read judges heartbeat freshness on the real
+    // clock, so a fixed start made (1)'s READY read unusable once that moment was 90 seconds past.
+    const clock = { ms: Date.now() };
     const now = () => new Date(clock.ms);
     const manager = (holder: string, delayMs = 0) =>
       new ManagedRunnerManager(prisma, cluster.client({ delayMs }), profile, { holder, now, random: () => 0.5, log: quiet });

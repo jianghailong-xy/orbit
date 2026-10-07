@@ -1,0 +1,371 @@
+
+Running 40 tests using 1 worker
+
+  ✓   1 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.9s)
+  ✓   2 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.3s)
+  ✓   3 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.5s)
+  ✘   4 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (16.5s)
+  ✓   5 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.4s)
+  ✓   6 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.5s)
+  ✓   7 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.5s)
+  ✓   8 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.4s)
+  ✘   9 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (16.4s)
+  ✓  10 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.6s)
+  ✓  11 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.5s)
+  ✓  12 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.5s)
+  ✓  13 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.6s)
+  ✓  14 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.6s)
+  ✓  15 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.4s)
+  ✘  16 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (16.5s)
+  ✓  17 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.5s)
+  ✓  18 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.4s)
+  ✓  19 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.4s)
+  ✓  20 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.5s)
+  ✓  21 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.4s)
+  ✓  22 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.5s)
+  ✓  23 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.4s)
+  ✓  24 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.4s)
+  ✓  25 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.4s)
+  ✓  26 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.4s)
+  ✘  27 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (16.4s)
+  ✓  28 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.5s)
+  ✓  29 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.4s)
+  ✘  30 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (16.5s)
+  ✘  31 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (16.5s)
+  ✓  32 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.4s)
+  ✘  33 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (16.4s)
+  ✘  34 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (16.6s)
+  ✓  35 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.4s)
+  ✓  36 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.4s)
+  ✘  37 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (16.5s)
+  ✓  38 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.6s)
+  ✓  39 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.5s)
+  ✓  40 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.5s)
+
+
+  1) [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Row actions', exact: true })
+    Expected: "2"
+    Received: "1"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Row actions', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Row actions', exact: true })
+        34 × locator resolved to <output aria-label="Row actions">1</output>
+           - unexpected value "1"
+
+
+      622 |   await page.keyboard.press('ArrowDown');
+      623 |   await page.keyboard.press('Enter');
+    > 624 |   await expect(page.getByRole('status', { name: 'Row actions', exact: true })).toHaveText('2');
+          |                                                                                ^
+      625 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('0');
+      626 |   await page.getByRole('button', { name: 'Open row', exact: true }).click();
+      627 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('1');
+        at /root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/ui-migration/choices.browser.mjs:624:80
+
+    Error Context: ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat3/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat3/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat3/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Row actions', exact: true })
+    Expected: "2"
+    Received: "1"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Row actions', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Row actions', exact: true })
+        34 × locator resolved to <output aria-label="Row actions">1</output>
+           - unexpected value "1"
+
+
+      622 |   await page.keyboard.press('ArrowDown');
+      623 |   await page.keyboard.press('Enter');
+    > 624 |   await expect(page.getByRole('status', { name: 'Row actions', exact: true })).toHaveText('2');
+          |                                                                                ^
+      625 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('0');
+      626 |   await page.getByRole('button', { name: 'Open row', exact: true }).click();
+      627 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('1');
+        at /root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/ui-migration/choices.browser.mjs:624:80
+
+    Error Context: ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat8/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat8/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat8/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Row actions', exact: true })
+    Expected: "2"
+    Received: "1"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Row actions', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Row actions', exact: true })
+        34 × locator resolved to <output aria-label="Row actions">1</output>
+           - unexpected value "1"
+
+
+      622 |   await page.keyboard.press('ArrowDown');
+      623 |   await page.keyboard.press('Enter');
+    > 624 |   await expect(page.getByRole('status', { name: 'Row actions', exact: true })).toHaveText('2');
+          |                                                                                ^
+      625 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('0');
+      626 |   await page.getByRole('button', { name: 'Open row', exact: true }).click();
+      627 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('1');
+        at /root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/ui-migration/choices.browser.mjs:624:80
+
+    Error Context: ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat15/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat15/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat15/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Row actions', exact: true })
+    Expected: "2"
+    Received: "1"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Row actions', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Row actions', exact: true })
+        34 × locator resolved to <output aria-label="Row actions">1</output>
+           - unexpected value "1"
+
+
+      622 |   await page.keyboard.press('ArrowDown');
+      623 |   await page.keyboard.press('Enter');
+    > 624 |   await expect(page.getByRole('status', { name: 'Row actions', exact: true })).toHaveText('2');
+          |                                                                                ^
+      625 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('0');
+      626 |   await page.getByRole('button', { name: 'Open row', exact: true }).click();
+      627 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('1');
+        at /root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/ui-migration/choices.browser.mjs:624:80
+
+    Error Context: ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat26/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat26/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat26/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Row actions', exact: true })
+    Expected: "2"
+    Received: "1"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Row actions', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Row actions', exact: true })
+        34 × locator resolved to <output aria-label="Row actions">1</output>
+           - unexpected value "1"
+
+
+      622 |   await page.keyboard.press('ArrowDown');
+      623 |   await page.keyboard.press('Enter');
+    > 624 |   await expect(page.getByRole('status', { name: 'Row actions', exact: true })).toHaveText('2');
+          |                                                                                ^
+      625 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('0');
+      626 |   await page.getByRole('button', { name: 'Open row', exact: true }).click();
+      627 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('1');
+        at /root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/ui-migration/choices.browser.mjs:624:80
+
+    Error Context: ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat29/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat29/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat29/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Row actions', exact: true })
+    Expected: "2"
+    Received: "1"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Row actions', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Row actions', exact: true })
+        34 × locator resolved to <output aria-label="Row actions">1</output>
+           - unexpected value "1"
+
+
+      622 |   await page.keyboard.press('ArrowDown');
+      623 |   await page.keyboard.press('Enter');
+    > 624 |   await expect(page.getByRole('status', { name: 'Row actions', exact: true })).toHaveText('2');
+          |                                                                                ^
+      625 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('0');
+      626 |   await page.getByRole('button', { name: 'Open row', exact: true }).click();
+      627 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('1');
+        at /root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/ui-migration/choices.browser.mjs:624:80
+
+    Error Context: ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat30/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat30/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat30/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Row actions', exact: true })
+    Expected: "2"
+    Received: "1"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Row actions', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Row actions', exact: true })
+        34 × locator resolved to <output aria-label="Row actions">1</output>
+           - unexpected value "1"
+
+
+      622 |   await page.keyboard.press('ArrowDown');
+      623 |   await page.keyboard.press('Enter');
+    > 624 |   await expect(page.getByRole('status', { name: 'Row actions', exact: true })).toHaveText('2');
+          |                                                                                ^
+      625 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('0');
+      626 |   await page.getByRole('button', { name: 'Open row', exact: true }).click();
+      627 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('1');
+        at /root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/ui-migration/choices.browser.mjs:624:80
+
+    Error Context: ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat32/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat32/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat32/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Row actions', exact: true })
+    Expected: "2"
+    Received: "1"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Row actions', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Row actions', exact: true })
+        34 × locator resolved to <output aria-label="Row actions">1</output>
+           - unexpected value "1"
+
+
+      622 |   await page.keyboard.press('ArrowDown');
+      623 |   await page.keyboard.press('Enter');
+    > 624 |   await expect(page.getByRole('status', { name: 'Row actions', exact: true })).toHaveText('2');
+          |                                                                                ^
+      625 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('0');
+      626 |   await page.getByRole('button', { name: 'Open row', exact: true }).click();
+      627 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('1');
+        at /root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/ui-migration/choices.browser.mjs:624:80
+
+    Error Context: ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat33/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat33/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat33/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Row actions', exact: true })
+    Expected: "2"
+    Received: "1"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Row actions', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Row actions', exact: true })
+        34 × locator resolved to <output aria-label="Row actions">1</output>
+           - unexpected value "1"
+
+
+      622 |   await page.keyboard.press('ArrowDown');
+      623 |   await page.keyboard.press('Enter');
+    > 624 |   await expect(page.getByRole('status', { name: 'Row actions', exact: true })).toHaveText('2');
+          |                                                                                ^
+      625 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('0');
+      626 |   await page.getByRole('button', { name: 'Open row', exact: true }).click();
+      627 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('1');
+        at /root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/ui-migration/choices.browser.mjs:624:80
+
+    Error Context: ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat36/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat36/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32-final/multi-dialog-repeat/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat36/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9 failed
+    [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+    [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+    [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+    [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+    [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+    [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+    [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+    [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+    [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+  31 passed (3.4m)

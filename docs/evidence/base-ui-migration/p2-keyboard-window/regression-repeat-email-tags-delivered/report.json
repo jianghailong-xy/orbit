@@ -1,0 +1,611 @@
+{
+  "config": {
+    "argv": [
+      "/usr/local/bin/node",
+      "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/node_modules/.bin/playwright",
+      "test",
+      "--config",
+      "ui-migration/choices.config.mjs",
+      "--grep",
+      "email tags support",
+      "--project",
+      "chromium-dark-desktop",
+      "--repeat-each",
+      "10"
+    ],
+    "configFile": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration/choices.config.mjs",
+    "rootDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration/environment.mjs",
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/.choices-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-light-desktop",
+        "name": "chromium-light-desktop",
+        "testDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration",
+        "testIgnore": [],
+        "testMatch": [
+          "choices*.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/.choices-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-light-phone",
+        "name": "chromium-light-phone",
+        "testDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration",
+        "testIgnore": [],
+        "testMatch": [
+          "choices*.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/.choices-results",
+        "repeatEach": 10,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-dark-desktop",
+        "name": "chromium-dark-desktop",
+        "testDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration",
+        "testIgnore": [],
+        "testMatch": [
+          "choices*.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/.choices-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-dark-phone",
+        "name": "chromium-dark-phone",
+        "testDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration",
+        "testIgnore": [],
+        "testMatch": [
+          "choices*.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/.choices-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-light-desktop",
+        "name": "webkit-light-desktop",
+        "testDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration",
+        "testIgnore": [],
+        "testMatch": [
+          "choices*.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/.choices-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-light-phone",
+        "name": "webkit-light-phone",
+        "testDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration",
+        "testIgnore": [],
+        "testMatch": [
+          "choices*.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/.choices-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-dark-desktop",
+        "name": "webkit-dark-desktop",
+        "testDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration",
+        "testIgnore": [],
+        "testMatch": [
+          "choices*.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/.choices-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-dark-phone",
+        "name": "webkit-dark-phone",
+        "testDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration",
+        "testIgnore": [],
+        "testMatch": [
+          "choices*.browser.mjs"
+        ],
+        "timeout": 90000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/.choices-results/report.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "none",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": {
+      "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+      "cwd": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/",
+      "url": "http://127.0.0.1:4177",
+      "reuseExistingServer": false,
+      "timeout": 30000
+    }
+  },
+  "suites": [
+    {
+      "title": "choices.browser.mjs",
+      "file": "choices.browser.mjs",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1569,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-06T23:46:29.015Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "email-tags",
+                      "contentType": "application/json",
+                      "body": "ewogICJjb250cm9sbGVkUXVlcnkiOiB0cnVlLAogICJjb21tYVNwYWNlIjogdHJ1ZSwKICAiZW50ZXIiOiB0cnVlLAogICJibHVyQ29tbWl0cyI6IHRydWUsCiAgInN5bnRoZXRpY0NvbXBvc2l0aW9uIjogdHJ1ZSwKICAiYmFja3NwYWNlIjogdHJ1ZSwKICAicmVtb3ZlIjogdHJ1ZSwKICAiZGVkdXBsaWNhdGVkIjogdHJ1ZSwKICAia2V5Ym9hcmRDbGVhciI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-62b93e6aa4379a1b1f26",
+          "file": "choices.browser.mjs",
+          "line": 552,
+          "column": 1
+        },
+        {
+          "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1554,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-06T23:46:30.915Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "email-tags",
+                      "contentType": "application/json",
+                      "body": "ewogICJjb250cm9sbGVkUXVlcnkiOiB0cnVlLAogICJjb21tYVNwYWNlIjogdHJ1ZSwKICAiZW50ZXIiOiB0cnVlLAogICJibHVyQ29tbWl0cyI6IHRydWUsCiAgInN5bnRoZXRpY0NvbXBvc2l0aW9uIjogdHJ1ZSwKICAiYmFja3NwYWNlIjogdHJ1ZSwKICAicmVtb3ZlIjogdHJ1ZSwKICAiZGVkdXBsaWNhdGVkIjogdHJ1ZSwKICAia2V5Ym9hcmRDbGVhciI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-2d97340d09c8a547b5b1",
+          "file": "choices.browser.mjs",
+          "line": 552,
+          "column": 1
+        },
+        {
+          "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1389,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-06T23:46:32.815Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "email-tags",
+                      "contentType": "application/json",
+                      "body": "ewogICJjb250cm9sbGVkUXVlcnkiOiB0cnVlLAogICJjb21tYVNwYWNlIjogdHJ1ZSwKICAiZW50ZXIiOiB0cnVlLAogICJibHVyQ29tbWl0cyI6IHRydWUsCiAgInN5bnRoZXRpY0NvbXBvc2l0aW9uIjogdHJ1ZSwKICAiYmFja3NwYWNlIjogdHJ1ZSwKICAicmVtb3ZlIjogdHJ1ZSwKICAiZGVkdXBsaWNhdGVkIjogdHJ1ZSwKICAia2V5Ym9hcmRDbGVhciI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-fda02d24d33cefb130b2",
+          "file": "choices.browser.mjs",
+          "line": 552,
+          "column": 1
+        },
+        {
+          "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1326,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-06T23:46:34.509Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "email-tags",
+                      "contentType": "application/json",
+                      "body": "ewogICJjb250cm9sbGVkUXVlcnkiOiB0cnVlLAogICJjb21tYVNwYWNlIjogdHJ1ZSwKICAiZW50ZXIiOiB0cnVlLAogICJibHVyQ29tbWl0cyI6IHRydWUsCiAgInN5bnRoZXRpY0NvbXBvc2l0aW9uIjogdHJ1ZSwKICAiYmFja3NwYWNlIjogdHJ1ZSwKICAicmVtb3ZlIjogdHJ1ZSwKICAiZGVkdXBsaWNhdGVkIjogdHJ1ZSwKICAia2V5Ym9hcmRDbGVhciI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-deb81651051d45a05b8d",
+          "file": "choices.browser.mjs",
+          "line": 552,
+          "column": 1
+        },
+        {
+          "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 4,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1314,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-06T23:46:36.145Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "email-tags",
+                      "contentType": "application/json",
+                      "body": "ewogICJjb250cm9sbGVkUXVlcnkiOiB0cnVlLAogICJjb21tYVNwYWNlIjogdHJ1ZSwKICAiZW50ZXIiOiB0cnVlLAogICJibHVyQ29tbWl0cyI6IHRydWUsCiAgInN5bnRoZXRpY0NvbXBvc2l0aW9uIjogdHJ1ZSwKICAiYmFja3NwYWNlIjogdHJ1ZSwKICAicmVtb3ZlIjogdHJ1ZSwKICAiZGVkdXBsaWNhdGVkIjogdHJ1ZSwKICAia2V5Ym9hcmRDbGVhciI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-aa8cf512e876cd045d76",
+          "file": "choices.browser.mjs",
+          "line": 552,
+          "column": 1
+        },
+        {
+          "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 5,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1791,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-06T23:46:37.776Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "email-tags",
+                      "contentType": "application/json",
+                      "body": "ewogICJjb250cm9sbGVkUXVlcnkiOiB0cnVlLAogICJjb21tYVNwYWNlIjogdHJ1ZSwKICAiZW50ZXIiOiB0cnVlLAogICJibHVyQ29tbWl0cyI6IHRydWUsCiAgInN5bnRoZXRpY0NvbXBvc2l0aW9uIjogdHJ1ZSwKICAiYmFja3NwYWNlIjogdHJ1ZSwKICAicmVtb3ZlIjogdHJ1ZSwKICAiZGVkdXBsaWNhdGVkIjogdHJ1ZSwKICAia2V5Ym9hcmRDbGVhciI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-6e6238c85b26defaf0e1",
+          "file": "choices.browser.mjs",
+          "line": 552,
+          "column": 1
+        },
+        {
+          "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 6,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1427,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-06T23:46:39.943Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "email-tags",
+                      "contentType": "application/json",
+                      "body": "ewogICJjb250cm9sbGVkUXVlcnkiOiB0cnVlLAogICJjb21tYVNwYWNlIjogdHJ1ZSwKICAiZW50ZXIiOiB0cnVlLAogICJibHVyQ29tbWl0cyI6IHRydWUsCiAgInN5bnRoZXRpY0NvbXBvc2l0aW9uIjogdHJ1ZSwKICAiYmFja3NwYWNlIjogdHJ1ZSwKICAicmVtb3ZlIjogdHJ1ZSwKICAiZGVkdXBsaWNhdGVkIjogdHJ1ZSwKICAia2V5Ym9hcmRDbGVhciI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-2c98339dd6791817623f",
+          "file": "choices.browser.mjs",
+          "line": 552,
+          "column": 1
+        },
+        {
+          "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 7,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1368,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-06T23:46:41.686Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "email-tags",
+                      "contentType": "application/json",
+                      "body": "ewogICJjb250cm9sbGVkUXVlcnkiOiB0cnVlLAogICJjb21tYVNwYWNlIjogdHJ1ZSwKICAiZW50ZXIiOiB0cnVlLAogICJibHVyQ29tbWl0cyI6IHRydWUsCiAgInN5bnRoZXRpY0NvbXBvc2l0aW9uIjogdHJ1ZSwKICAiYmFja3NwYWNlIjogdHJ1ZSwKICAicmVtb3ZlIjogdHJ1ZSwKICAiZGVkdXBsaWNhdGVkIjogdHJ1ZSwKICAia2V5Ym9hcmRDbGVhciI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-22f379bd807830e4deeb",
+          "file": "choices.browser.mjs",
+          "line": 552,
+          "column": 1
+        },
+        {
+          "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 8,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2132,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-06T23:46:43.373Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "email-tags",
+                      "contentType": "application/json",
+                      "body": "ewogICJjb250cm9sbGVkUXVlcnkiOiB0cnVlLAogICJjb21tYVNwYWNlIjogdHJ1ZSwKICAiZW50ZXIiOiB0cnVlLAogICJibHVyQ29tbWl0cyI6IHRydWUsCiAgInN5bnRoZXRpY0NvbXBvc2l0aW9uIjogdHJ1ZSwKICAiYmFja3NwYWNlIjogdHJ1ZSwKICAicmVtb3ZlIjogdHJ1ZSwKICAiZGVkdXBsaWNhdGVkIjogdHJ1ZSwKICAia2V5Ym9hcmRDbGVhciI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-28342264dd200e45db68",
+          "file": "choices.browser.mjs",
+          "line": 552,
+          "column": 1
+        },
+        {
+          "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 9,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1445,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-06T23:46:45.952Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "email-tags",
+                      "contentType": "application/json",
+                      "body": "ewogICJjb250cm9sbGVkUXVlcnkiOiB0cnVlLAogICJjb21tYVNwYWNlIjogdHJ1ZSwKICAiZW50ZXIiOiB0cnVlLAogICJibHVyQ29tbWl0cyI6IHRydWUsCiAgInN5bnRoZXRpY0NvbXBvc2l0aW9uIjogdHJ1ZSwKICAiYmFja3NwYWNlIjogdHJ1ZSwKICAicmVtb3ZlIjogdHJ1ZSwKICAiZGVkdXBsaWNhdGVkIjogdHJ1ZSwKICAia2V5Ym9hcmRDbGVhciI6IHRydWUKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3a792d852a32503923ba-ceba2b12151351caa8a4",
+          "file": "choices.browser.mjs",
+          "line": 552,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-06T23:46:28.172Z",
+    "duration": 19464.467999999997,
+    "expected": 10,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

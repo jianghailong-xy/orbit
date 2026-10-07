@@ -49,6 +49,42 @@ public struct SetupStatus: Codable, Sendable {
     public let needsSetup: Bool
 }
 
+/// `GET /auth/methods` (docs/google-sign-in-design.md §6): the ways a server signs people in. The
+/// login page offers Google only when `google` is true, and says Google opens new accounts only
+/// when `googleSignup` is.
+public struct SignInMethods: Codable, Equatable, Sendable {
+    public let password: Bool
+    public let google: Bool
+    public let googleSignup: Bool
+
+    /// Every server from before Google sign-in, and any server that has it switched off.
+    public static let passwordOnly = SignInMethods(password: true, google: false, googleSignup: false)
+
+    public init(password: Bool, google: Bool, googleSignup: Bool) {
+        self.password = password
+        self.google = google
+        self.googleSignup = googleSignup
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        password = try c.decodeIfPresent(Bool.self, forKey: .password) ?? true
+        google = try c.decodeIfPresent(Bool.self, forKey: .google) ?? false
+        googleSignup = try c.decodeIfPresent(Bool.self, forKey: .googleSignup) ?? false
+    }
+}
+
+/// `POST /auth/google/exchange` (§4.3): the ticket the callback brought back, and the PKCE verifier
+/// only the app that started the sign-in holds.
+public struct GoogleExchangeRequest: Codable, Sendable {
+    public let ticket: String
+    public let codeVerifier: String
+    public init(ticket: String, codeVerifier: String) {
+        self.ticket = ticket
+        self.codeVerifier = codeVerifier
+    }
+}
+
 public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let name: String

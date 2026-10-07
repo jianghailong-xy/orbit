@@ -1,0 +1,26 @@
+{
+  "keys": [
+    "ArrowDown",
+    "Enter"
+  ],
+  "heldFrames": 3,
+  "keyLog": [
+    {
+      "key": "ArrowDown",
+      "target": "button:Row actions",
+      "trusted": true,
+      "focused": "button:Row actions",
+      "menu": false,
+      "highlighted": null
+    },
+    {
+      "key": "Enter",
+      "target": "button:Row actions",
+      "trusted": true,
+      "focused": "button:Row actions",
+      "menu": true,
+      "highlighted": "Run action"
+    }
+  ],
+  "focused": "Row actions"
+}

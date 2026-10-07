@@ -164,7 +164,7 @@ func TestProjectCLIHelpAndUnknownCommand(t *testing.T) {
 	// family does not route to is text nobody can read.
 	for _, action := range []string{
 		"get", "create", "update", "delete",
-		"crossings", "merge-evidence", "resolve-blocker", "request-start", "request-done",
+		"crossings", "merge-evidence", "resolve-blocker", "request-start", "request-done", "skip-merge-check",
 	} {
 		out.Reset()
 		if err := cmdProjectCLI([]string{action, "--help"}, strings.NewReader(""), &out); err != nil {
@@ -334,7 +334,7 @@ func TestProjectCommandsArePreApprovedForAgents(t *testing.T) {
 	// readers can see them.
 	// TestEveryAdvertisedCapabilityIsPreApproved walks the specs themselves and reddens the moment
 	// this list and that one fall out of step, which is how the three came to be added here.
-	for _, action := range []string{"get", "create", "update", "delete", "crossings", "resolve-blocker", "merge-evidence", "request-start", "request-done"} {
+	for _, action := range []string{"get", "create", "update", "delete", "crossings", "resolve-blocker", "merge-evidence", "request-start", "request-done", "skip-merge-check"} {
 		if !strings.Contains(rules, "Bash(/usr/local/bin/orbit project "+action+" *)") {
 			t.Fatalf("project %s is not pre-approved: %q", action, rules)
 		}

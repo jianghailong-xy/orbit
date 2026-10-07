@@ -1977,6 +1977,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // column and every constraint stay as they were; no task, project, acceptance or DONE fence
       // object, function, trigger or type is named, and no row is written or backfilled.
       '0392_user_password_hash_nullable',
+      // Skipping one landing's merge check (0393): four `ADD COLUMN`s on `project_integration_job`
+      // (one BOOLEAN NOT NULL DEFAULT false, one TEXT, two UUID) and three CHECKs, one of them the
+      // all-or-none rule that keeps a skip from being written without its reason and its approver.
+      // No function, trigger, type, index or foreign key is created, replaced or dropped, so it is
+      // not another writer of the DONE fence and names none of the six preserved objects;
+      // `project_integration_job` was created by 0281 and is not a preserved relation, and no
+      // `task`, `session`, `project`, `session_merge_receipt` or `project_acceptance_*` object is
+      // named. No INSERT, UPDATE or DELETE: no stored row is read, locked, backfilled or rewritten —
+      // the columns are catalog-only, and every existing row keeps the flag false.
+      '0393_integration_job_skip_merge_check',
       // Managed runners (0394): two new enum types and one new table, managed_runner, with its own
       // unique indexes, CHECKs and three ON DELETE RESTRICT foreign keys — to `user`, and composite
       // with owner_id to `runner` (0231's runner_id_owner_id_key) and `workspace` (0307's

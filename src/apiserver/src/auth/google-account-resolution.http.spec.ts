@@ -192,12 +192,13 @@ function memoryPrisma(db: Tables, beforeInsert?: BeforeInsert) {
         assert.equal(
           statement,
           'DELETE FROM "oauth_login_flow" WHERE "ticket_hash" = ? AND "status" = \'AUTHENTICATED\' '
-            + 'RETURNING "intent", "client_challenge" AS "clientChallenge", "ticket_expires_at" AS "ticketExpiresAt", "claims"',
+            + 'RETURNING "intent", "client_challenge" AS "clientChallenge", "ticket_expires_at" AS "ticketExpiresAt", "claims", '
+          + '"link_user_id" AS "linkUserId"',
         );
         const index = db.flows.findIndex((flow) => flow.ticketHash === values[0] && flow.status === 'AUTHENTICATED');
         if (index < 0) return [];
         const [flow] = db.flows.splice(index, 1);
-        return [{ intent: flow.intent, clientChallenge: flow.clientChallenge, ticketExpiresAt: flow.ticketExpiresAt, claims: structuredClone(flow.claims) }];
+        return [{ intent: flow.intent, clientChallenge: flow.clientChallenge, ticketExpiresAt: flow.ticketExpiresAt, claims: structuredClone(flow.claims), linkUserId: flow.linkUserId ?? null }];
       }
       // §5.2 cases 3 and 4: the accounts with the email in any letter case.
       assert.equal(

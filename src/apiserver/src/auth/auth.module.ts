@@ -65,7 +65,8 @@ import { SignInProvidersService } from './sign-in-providers.service';
     { provide: APP_INTERCEPTOR, useClass: PatRefusalInterceptor },
   ],
   // PatService and PatRequestAudit are exported because JwtAuthGuard is instantiated in every module that uses it,
-  // and PatService also because admin/* lists and revokes a user's tokens.
-  exports: [JwtAuthGuard, JwtModule, PatService, PatRequestAudit],
+  // PatService also because admin/* lists and revokes a user's tokens, and GoogleLoginService because
+  // admin/* unlinks a user's Google account.
+  exports: [JwtAuthGuard, JwtModule, PatService, PatRequestAudit, GoogleLoginService],
 })
 export class AuthModule {}

@@ -1,0 +1,1900 @@
+{
+ "toasts": "runs/toasts-expE1/collected",
+ "production": [
+  {
+   "project": "chromium-dark-desktop",
+   "box": [
+    892,
+    4,
+    1276,
+    174
+   ],
+   "notificationAndShadowVsP02": {
+    "pixels": 65280,
+    "differentPixels": 89,
+    "maxChannelDelta": 2
+   },
+   "fullPageVsTaskStart": {
+    "pixels": 1152000,
+    "differentPixels": 89,
+    "maxChannelDelta": 2
+   },
+   "fullPageVsP02": {
+    "pixels": 1152000,
+    "differentPixels": 727,
+    "maxChannelDelta": 161
+   }
+  },
+  {
+   "project": "chromium-dark-phone",
+   "box": [
+    4,
+    44,
+    386,
+    230
+   ],
+   "notificationAndShadowVsP02": {
+    "pixels": 71052,
+    "differentPixels": 73,
+    "maxChannelDelta": 2
+   },
+   "fullPageVsTaskStart": {
+    "pixels": 329160,
+    "differentPixels": 73,
+    "maxChannelDelta": 2
+   },
+   "fullPageVsP02": {
+    "pixels": 329160,
+    "differentPixels": 73,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "project": "chromium-light-desktop",
+   "box": [
+    892,
+    4,
+    1276,
+    174
+   ],
+   "notificationAndShadowVsP02": {
+    "pixels": 65280,
+    "differentPixels": 129,
+    "maxChannelDelta": 3
+   },
+   "fullPageVsTaskStart": {
+    "pixels": 1152000,
+    "differentPixels": 129,
+    "maxChannelDelta": 3
+   },
+   "fullPageVsP02": {
+    "pixels": 1152000,
+    "differentPixels": 762,
+    "maxChannelDelta": 214
+   }
+  },
+  {
+   "project": "chromium-light-phone",
+   "box": [
+    4,
+    44,
+    386,
+    230
+   ],
+   "notificationAndShadowVsP02": {
+    "pixels": 71052,
+    "differentPixels": 120,
+    "maxChannelDelta": 3
+   },
+   "fullPageVsTaskStart": {
+    "pixels": 329160,
+    "differentPixels": 120,
+    "maxChannelDelta": 3
+   },
+   "fullPageVsP02": {
+    "pixels": 329160,
+    "differentPixels": 120,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "box": [
+    884,
+    4,
+    1268,
+    174
+   ],
+   "notificationAndShadowVsP02": {
+    "pixels": 65280,
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   "fullPageVsTaskStart": {
+    "pixels": 1152000,
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   "fullPageVsP02": {
+    "pixels": 1152000,
+    "differentPixels": 642,
+    "maxChannelDelta": 159
+   }
+  },
+  {
+   "project": "webkit-dark-phone",
+   "box": [
+    4,
+    44,
+    386,
+    230
+   ],
+   "notificationAndShadowVsP02": {
+    "pixels": 71052,
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   "fullPageVsTaskStart": {
+    "pixels": 329160,
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   "fullPageVsP02": {
+    "pixels": 329160,
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  },
+  {
+   "project": "webkit-light-desktop",
+   "box": [
+    884,
+    4,
+    1268,
+    174
+   ],
+   "notificationAndShadowVsP02": {
+    "pixels": 65280,
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   "fullPageVsTaskStart": {
+    "pixels": 1152000,
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   "fullPageVsP02": {
+    "pixels": 1152000,
+    "differentPixels": 648,
+    "maxChannelDelta": 214
+   }
+  },
+  {
+   "project": "webkit-light-phone",
+   "box": [
+    4,
+    44,
+    386,
+    230
+   ],
+   "notificationAndShadowVsP02": {
+    "pixels": 71052,
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   "fullPageVsTaskStart": {
+    "pixels": 329160,
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   },
+   "fullPageVsP02": {
+    "pixels": 329160,
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  }
+ ],
+ "summary": {
+  "settled": {
+   "cases": 12,
+   "geometryAndStylesEqual": 12,
+   "pngZeroDiff": 0,
+   "notEqual": [
+    "chromium-dark-desktop/Bottom-drawer",
+    "chromium-dark-desktop/Dialog",
+    "chromium-dark-desktop/Drawer",
+    "chromium-dark-phone/Bottom-drawer",
+    "chromium-dark-phone/Dialog",
+    "chromium-dark-phone/Drawer",
+    "chromium-light-desktop/Bottom-drawer",
+    "chromium-light-desktop/Dialog",
+    "chromium-light-desktop/Drawer",
+    "chromium-light-phone/Bottom-drawer",
+    "chromium-light-phone/Dialog",
+    "chromium-light-phone/Drawer"
+   ]
+  },
+  "midpoints": {
+   "pairs": 160,
+   "zeroDiff": 0,
+   "missing": [
+    "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+    "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+    "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+    "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+    "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+    "webkit-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+    "webkit-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+    "webkit-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+    "webkit-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+    "webkit-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+    "webkit-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+    "webkit-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+    "webkit-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+    "webkit-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+    "webkit-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+    "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+    "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+    "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+    "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+    "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+    "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+    "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+    "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+    "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+    "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+    "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+    "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+    "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+    "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+    "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+    "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+    "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+    "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+    "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+    "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+    "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+    "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+    "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+    "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+    "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+    "webkit-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+    "webkit-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+    "webkit-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+    "webkit-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+    "webkit-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+    "webkit-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+    "webkit-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+    "webkit-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+    "webkit-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+    "webkit-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+    "webkit-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+    "webkit-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+    "webkit-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+    "webkit-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+    "webkit-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+    "webkit-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+    "webkit-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+    "webkit-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+    "webkit-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+    "webkit-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+    "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+    "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+    "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+    "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+    "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+    "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+    "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+    "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+    "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+    "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+    "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+    "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+    "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+    "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+    "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+    "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+    "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+    "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+    "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+    "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png"
+   ],
+   "nonZero": [
+    "chromium-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+    "chromium-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+    "chromium-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+    "chromium-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+    "chromium-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+    "chromium-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+    "chromium-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+    "chromium-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+    "chromium-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+    "chromium-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+    "chromium-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+    "chromium-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+    "chromium-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+    "chromium-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+    "chromium-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+    "chromium-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+    "chromium-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+    "chromium-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+    "chromium-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+    "chromium-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+    "chromium-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+    "chromium-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+    "chromium-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+    "chromium-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+    "chromium-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+    "chromium-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+    "chromium-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+    "chromium-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+    "chromium-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+    "chromium-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+    "chromium-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+    "chromium-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+    "chromium-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+    "chromium-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+    "chromium-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+    "chromium-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+    "chromium-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+    "chromium-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+    "chromium-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+    "chromium-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+    "chromium-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+    "chromium-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+    "chromium-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+    "chromium-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+    "chromium-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+    "chromium-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+    "chromium-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+    "chromium-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+    "chromium-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+    "chromium-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+    "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+    "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+    "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+    "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+    "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+    "chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+    "chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+    "chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+    "chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+    "chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+    "chromium-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+    "chromium-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+    "chromium-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+    "chromium-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+    "chromium-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+    "chromium-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+    "chromium-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+    "chromium-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+    "chromium-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+    "chromium-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+    "chromium-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+    "chromium-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+    "chromium-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+    "chromium-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+    "chromium-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+    "chromium-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+    "chromium-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+    "chromium-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+    "chromium-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+    "chromium-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png"
+   ]
+  },
+  "production": {
+   "cases": 8,
+   "notificationRegionZeroDiffVsP02": 4,
+   "fullPageZeroDiffVsTaskStart": 4
+  },
+  "continuousMotion": {
+   "cases": 12,
+   "changedFrames": 0,
+   "sampledFrames": 1239
+  },
+  "nativeTimers": {
+   "cases": 4,
+   "gone": 4
+  },
+  "stationaryHover": {
+   "cases": 4,
+   "ok": 4
+  },
+  "stationaryLayout": {
+   "cases": 4,
+   "ok": 4
+  },
+  "stationaryReplacement": {
+   "cases": 4,
+   "ok": 4
+  },
+  "stationaryArrivalPixels": {
+   "pairs": 8,
+   "zeroDiff": 0
+  }
+ },
+ "toastsStats": {
+  "startTime": "2026-10-07T00:43:31.145Z",
+  "duration": 381697.44299999997,
+  "expected": 136,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ },
+ "productionStats": {
+  "startTime": "2026-10-07T00:42:22.596Z",
+  "duration": 39191.81,
+  "expected": 8,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ },
+ "settled": [
+  {
+   "project": "chromium-dark-desktop",
+   "kind": "Bottom-drawer",
+   "beforeEqual": true,
+   "afterEqual": true,
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "kind": "Dialog",
+   "beforeEqual": true,
+   "afterEqual": true,
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "kind": "Drawer",
+   "beforeEqual": true,
+   "afterEqual": true,
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "project": "chromium-dark-phone",
+   "kind": "Bottom-drawer",
+   "beforeEqual": true,
+   "afterEqual": true,
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "project": "chromium-dark-phone",
+   "kind": "Dialog",
+   "beforeEqual": true,
+   "afterEqual": true,
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "project": "chromium-dark-phone",
+   "kind": "Drawer",
+   "beforeEqual": true,
+   "afterEqual": true,
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "project": "chromium-light-desktop",
+   "kind": "Bottom-drawer",
+   "beforeEqual": true,
+   "afterEqual": true,
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "project": "chromium-light-desktop",
+   "kind": "Dialog",
+   "beforeEqual": true,
+   "afterEqual": true,
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "project": "chromium-light-desktop",
+   "kind": "Drawer",
+   "beforeEqual": true,
+   "afterEqual": true,
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "project": "chromium-light-phone",
+   "kind": "Bottom-drawer",
+   "beforeEqual": true,
+   "afterEqual": true,
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "project": "chromium-light-phone",
+   "kind": "Dialog",
+   "beforeEqual": true,
+   "afterEqual": true,
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "project": "chromium-light-phone",
+   "kind": "Drawer",
+   "beforeEqual": true,
+   "afterEqual": true,
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  }
+ ],
+ "midpoints": [
+  {
+   "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+   "png": {
+    "pixels": 1152000,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+   "png": {
+    "pixels": 1152000,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+   "png": {
+    "pixels": 1152000,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+   "png": {
+    "pixels": 1152000,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+   "png": {
+    "pixels": 1152000,
+    "differentPixels": 548,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+   "png": {
+    "pixels": 1152000,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+   "png": {
+    "pixels": 1152000,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+   "png": {
+    "pixels": 1152000,
+    "differentPixels": 91,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+   "png": {
+    "pixels": 329160,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+   "png": {
+    "pixels": 329160,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+   "png": {
+    "pixels": 329160,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+   "png": {
+    "pixels": 329160,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+   "png": {
+    "pixels": 329160,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+   "png": {
+    "pixels": 329160,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+   "png": {
+    "pixels": 329160,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+   "png": {
+    "pixels": 329160,
+    "differentPixels": 70,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+   "png": {
+    "pixels": 1152000,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+   "png": {
+    "pixels": 1152000,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+   "png": {
+    "pixels": 1152000,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+   "png": {
+    "pixels": 1152000,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+   "png": {
+    "pixels": 1152000,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+   "png": {
+    "pixels": 1152000,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+   "png": {
+    "pixels": 1152000,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+   "png": {
+    "pixels": 46080,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+   "png": {
+    "pixels": 1152000,
+    "differentPixels": 132,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+   "png": {
+    "pixels": 329160,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+   "png": {
+    "pixels": 329160,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+   "png": {
+    "pixels": 329160,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+   "png": {
+    "pixels": 329160,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+   "png": {
+    "pixels": 329160,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+   "png": {
+    "pixels": 329160,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+   "png": {
+    "pixels": 329160,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+   "png": {
+    "pixels": 51552,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+   "png": {
+    "pixels": 329160,
+    "differentPixels": 119,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+   "png": {
+    "missing": true
+   }
+  }
+ ],
+ "continuousMotion": [
+  {
+   "file": "chromium-dark-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "sampledFrames": 103,
+   "changedFrames": 0
+  },
+  {
+   "file": "chromium-dark-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "sampledFrames": 95,
+   "changedFrames": 0
+  },
+  {
+   "file": "chromium-dark-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "sampledFrames": 112,
+   "changedFrames": 0
+  },
+  {
+   "file": "chromium-dark-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "sampledFrames": 108,
+   "changedFrames": 0
+  },
+  {
+   "file": "chromium-dark-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "sampledFrames": 94,
+   "changedFrames": 0
+  },
+  {
+   "file": "chromium-dark-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "sampledFrames": 104,
+   "changedFrames": 0
+  },
+  {
+   "file": "chromium-light-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "sampledFrames": 109,
+   "changedFrames": 0
+  },
+  {
+   "file": "chromium-light-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "sampledFrames": 92,
+   "changedFrames": 0
+  },
+  {
+   "file": "chromium-light-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "sampledFrames": 106,
+   "changedFrames": 0
+  },
+  {
+   "file": "chromium-light-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "sampledFrames": 109,
+   "changedFrames": 0
+  },
+  {
+   "file": "chromium-light-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "sampledFrames": 101,
+   "changedFrames": 0
+  },
+  {
+   "file": "chromium-light-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+   "sampledFrames": 106,
+   "changedFrames": 0
+  }
+ ],
+ "nativeTimers": [
+  {
+   "file": "chromium-dark-desktop--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+   "elapsedMs": 6324,
+   "count": 0
+  },
+  {
+   "file": "chromium-dark-phone--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+   "elapsedMs": 6335,
+   "count": 0
+  },
+  {
+   "file": "chromium-light-desktop--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+   "elapsedMs": 6322,
+   "count": 0
+  },
+  {
+   "file": "chromium-light-phone--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+   "elapsedMs": 6320,
+   "count": 0
+  }
+ ],
+ "stationaryHover": [
+  {
+   "file": "chromium-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "held": true,
+   "mouseover": true,
+   "noMousemove": true,
+   "released": true,
+   "releaseRecorded": true
+  },
+  {
+   "file": "chromium-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "held": true,
+   "mouseover": true,
+   "noMousemove": true,
+   "released": true,
+   "releaseRecorded": true
+  },
+  {
+   "file": "chromium-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "held": true,
+   "mouseover": true,
+   "noMousemove": true,
+   "released": true,
+   "releaseRecorded": true
+  },
+  {
+   "file": "chromium-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "held": true,
+   "mouseover": true,
+   "noMousemove": true,
+   "released": true,
+   "releaseRecorded": true
+  }
+ ],
+ "stationaryLayout": [
+  {
+   "file": "chromium-dark-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "ok": true
+  },
+  {
+   "file": "chromium-dark-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "ok": true
+  },
+  {
+   "file": "chromium-light-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "ok": true
+  },
+  {
+   "file": "chromium-light-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "ok": true
+  }
+ ],
+ "stationaryReplacement": [
+  {
+   "file": "chromium-dark-desktop--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+   "ok": true
+  },
+  {
+   "file": "chromium-dark-phone--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+   "ok": true
+  },
+  {
+   "file": "chromium-light-desktop--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+   "ok": true
+  },
+  {
+   "file": "chromium-light-phone--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+   "ok": true
+  }
+ ],
+ "stationaryArrivalPixels": [
+  {
+   "file": "chromium-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+   "png": {
+    "pixels": 1152000,
+    "differentPixels": 172,
+    "maxChannelDelta": 1
+   }
+  },
+  {
+   "file": "chromium-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+   "png": {
+    "pixels": 329160,
+    "differentPixels": 171,
+    "maxChannelDelta": 1
+   }
+  },
+  {
+   "file": "chromium-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+   "png": {
+    "pixels": 1152000,
+    "differentPixels": 47,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "chromium-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+   "png": {
+    "pixels": 329160,
+    "differentPixels": 46,
+    "maxChannelDelta": 3
+   }
+  },
+  {
+   "file": "webkit-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+   "png": {
+    "missing": true
+   }
+  },
+  {
+   "file": "webkit-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+   "png": {
+    "missing": true
+   }
+  }
+ ]
+}

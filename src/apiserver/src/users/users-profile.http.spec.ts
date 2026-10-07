@@ -37,6 +37,8 @@ const prisma = {
         preferences: {},
         role: 'MEMBER',
         avatar: null,
+        passwordHash: 'scrypt-hash',
+        identities: [],
       };
     },
   },

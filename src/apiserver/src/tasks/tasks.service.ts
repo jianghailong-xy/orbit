@@ -277,7 +277,13 @@ import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { ACCOUNT_CHOICE, accountEnvVar } from '../providers/account';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { readOwnerConfirmationRows } from './owner-confirmation-read';
-import { accountPoolRuntime, isBuiltinProvider } from '../providers/custom-provider';
+import {
+  accountPoolRuntime,
+  adminOnlyProviderRefusal,
+  isBuiltinProvider,
+  usableProviderScope,
+  usableProviderSql,
+} from '../providers/custom-provider';
 import {
   criterionNeedsProjectRefusal,
   deriveTaskCompletionStatus,
@@ -2419,12 +2425,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!provider) return;
     if (Object.values(AgentProvider).includes(provider as AgentProvider)) return;
     const configured = await this.prisma.modelProvider.findFirst({
-      where: { slug: provider, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
+      where: { slug: provider, enabled: true, ...(await usableProviderScope(this.prisma, ownerId)) },
       select: { slug: true },
     });
     if (configured) return;
     if (!(await accountPoolRuntime(this.prisma, ownerId, provider))) {
-      throw new BadRequestException('provider not available');
+      throw new BadRequestException(
+        (await adminOnlyProviderRefusal(this.prisma, ownerId, provider)) ?? 'provider not available',
+      );
     }
     const refusal = await this.sessions.accountPoolRefusal(ownerId, provider);
     if (refusal) throw new BadRequestException(refusal);
@@ -2796,11 +2804,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   private async preLockCreatorSessions(
     tx: Prisma.TransactionClient,
+    ownerId: string,
     sessionIds: ReadonlyArray<string | null | undefined>,
     taskIds: ReadonlyArray<string | null | undefined> = [],
   ): Promise<void> {
-    const fromTasks = await creatorSessionsOf(tx, taskIds);
-    await lockCreatorSessions(tx, [...sessionIds, ...fromTasks]);
+    const fromTasks = await creatorSessionsOf(tx, ownerId, taskIds);
+    await lockCreatorSessions(tx, ownerId, [...sessionIds, ...fromTasks]);
   }
 
   /**
@@ -3321,10 +3330,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   private async lockTaskForSupersessionWrite(
     tx: Prisma.TransactionClient,
+    ownerId: string,
     taskId: string,
   ): Promise<void> {
     try {
-      await tx.$queryRaw`SELECT 1 FROM "task" WHERE "id" = ${taskId}::uuid FOR UPDATE NOWAIT`;
+      // The caller's own task only: a predecessor named from another account is not taken — not even
+      // for the moment before the read that refuses it — and is refused as not found below.
+      await tx.$queryRaw`SELECT 1 FROM "task" WHERE "id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE NOWAIT`;
     } catch (error) {
       // 55P03 from either side of the fence: this statement's own NOWAIT, or 0130's
       // `task_supersession_project_lock_order` refusing because the project is being reconciled.
@@ -3379,7 +3391,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     now: Date,
   ): Promise<void> {
     // NOWAIT, then read. See `lockTaskForSupersessionWrite` for the cycle this refuses to join.
-    await this.lockTaskForSupersessionWrite(tx, predecessorId);
+    await this.lockTaskForSupersessionWrite(tx, ownerId, predecessorId);
     const [predecessor] = await tx.$queryRaw<Array<{
       id: string; status: string; projectId: string | null;
       supersededByTaskId: string | null; terminalReason: string | null;
@@ -3811,7 +3823,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           // same ordered rank-30 statement (lock-order.ts, I2): a task row written twice in one
           // transaction re-runs `task_creator_session_id_fkey` and takes FOR KEY SHARE on it.
           await lockTaskLists(tx, [dto.listId]);
-          await this.preLockCreatorSessions(tx, [sessionId], [dto.supersedesTaskId]);
+          await this.preLockCreatorSessions(tx, ownerId, [sessionId], [dto.supersedesTaskId]);
           // §13.6 SU7 + AE6-a's lock order, stated rather than left to the triggers.
           //
           // Two things in this transaction reach `project_acceptance_reopen`, and both take the
@@ -4894,6 +4906,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await lockTaskLists(tx, items.map((item) => item.listId));
       await this.preLockCreatorSessions(
         tx,
+        ownerId,
         [sessionId],
         items.map((item) => item.supersedesTaskId),
       );
@@ -6665,10 +6678,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           })
         : Promise.resolve([]),
       providerSlugs.length
-        ? this.prisma.modelProvider.findMany({
-            where: { slug: { in: providerSlugs }, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
+        ? usableProviderScope(this.prisma, ownerId).then((usable) => this.prisma.modelProvider.findMany({
+            where: { slug: { in: providerSlugs }, enabled: true, ...usable },
             select: { slug: true },
-          })
+          }))
         : Promise.resolve([]),
     ]);
     const facts: PlanFacts = {
@@ -6875,7 +6888,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await tx.$queryRaw`
         SELECT "id" FROM "model_provider"
         WHERE "slug" = ANY(${slugs}::text[])
-          AND ("owner_id" IS NULL OR "owner_id" = ${ownerId}::uuid)
+          AND ${usableProviderSql('"model_provider"', Prisma.sql`${ownerId}::uuid`)}
         ORDER BY "id"
         FOR SHARE`;
     }
@@ -6940,7 +6953,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         where: {
           slug: { in: snapshot.providerSlugs },
           enabled: true,
-          OR: [{ ownerId: null }, { ownerId }],
+          ...(await usableProviderScope(tx, ownerId)),
         },
         select: { slug: true },
       });
@@ -9895,7 +9908,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // writes the task row and the supersession statement writes it a second time, which
             // re-runs every one of its foreign keys.
             await lockTaskLists(tx, [dto.listId]);
-            if (rewritesTaskRow) await this.preLockCreatorSessions(tx, [], [id]);
+            if (rewritesTaskRow) await this.preLockCreatorSessions(tx, ownerId, [], [id]);
             // Compatibility pre-lock for the task/acceptance triggers retired by 0178. It remains
             // during the rolling-upgrade window and preserves the established rank-40 ordering,
             // but it no longer expresses acceptance semantics: no task column below enters the
@@ -9975,7 +9988,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // this row with an ordinary blocking lock, so a move that skipped this would hold two
             // projects and then WAIT for a task — the cycle, assembled out of the very locks taken
             // to avoid it.
-            if (supersession || movesProject) await this.lockTaskForSupersessionWrite(tx, id);
+            if (supersession || movesProject) await this.lockTaskForSupersessionWrite(tx, ownerId, id);
             // A verifier request decides two Task rows: its own verdict carrier and its subject.
             // Lock both at rank 50 in UUID order before reading the rank-60 request, so concurrent
             // verdicts and evidence supersession cannot take the same pair backwards.
@@ -9993,10 +10006,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                  FOR UPDATE`;
             }
             if (consumesVerificationRequest && verifiesTaskId) {
+              // The caller's own rows: a subject named from another account is not waited for or
+              // held here — the hierarchy check below refuses it as not found.
               const taskIds = orderedIds([id, verifiesTaskId]);
               await tx.$queryRaw`
                 SELECT "id" FROM "task"
-                 WHERE "id" = ANY(${taskIds}::uuid[])
+                 WHERE "id" = ANY(${taskIds}::uuid[]) AND "owner_id" = ${ownerId}::uuid
                  ORDER BY "id" FOR UPDATE`;
             }
             if (attachesVerifier) {
@@ -13543,11 +13558,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const configured = await this.prisma.modelProvider.findFirst({
         where: {
           slug: seed.provider, enabled: true,
-          OR: [{ ownerId: null }, { ownerId: delivery.ownerId }],
+          ...(await usableProviderScope(this.prisma, delivery.ownerId)),
         },
         select: { slug: true },
       });
       const usable = configured ?? (await accountPoolRuntime(this.prisma, delivery.ownerId, seed.provider));
+      // A shared provider runs an admin's sessions only: answered on it, the comment would hand its key to
+      // this agent's runner. Promoted, or moved onto a provider of their own, the mention delivers itself.
+      if (!usable && (await adminOnlyProviderRefusal(this.prisma, delivery.ownerId, seed.provider))) {
+        throw new MentionUndeliverable(
+          'PROVIDER_UNAVAILABLE',
+          `this agent runs on "${seed.provider}", which is available to admins only`,
+          true,
+          'ask an admin to add you to a shared pool, or point this agent at a provider of your own; ' +
+            'the mention then delivers itself',
+        );
+      }
       if (!usable) {
         throw new MentionUndeliverable(
           'PROVIDER_UNAVAILABLE',

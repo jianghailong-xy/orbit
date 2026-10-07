@@ -36,6 +36,7 @@ import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from '../tasks/task-criterio
 import { MAX_BLOCKER_RESOLUTION_REASON_CHARS } from './project-blocker-resolution';
 import { MAX_OPEN_ITEM_RESOLUTION_NOTE, MAX_QUESTION_CHARS } from './project-open-item';
 import { MAX_INTEGRATION_RETRY_REASON } from './project-integration-retry';
+import { MAX_INTEGRATION_SKIP_REASON } from './project-integration-skip-check';
 import { MAX_START_REQUEST_WHY } from './project-start-request';
 import {
   MAX_DONE_REQUEST_EVIDENCE_REF,
@@ -185,8 +186,11 @@ const BRANCH_REF = /^refs\/heads\/\S+$/;
 /**
  * `PATCH /projects/:id/integration`, and `integration` on a project update: the account owner's
  * choice of where this project's finished tasks land and what is checked before they do
- * (`docs/project-integration-line-contract.md` L5). Only the owner's — a request carrying an
- * acting session is refused whole — and each field is written only when sent.
+ * (`docs/project-integration-line-contract.md` L5). Each field is written only when sent, and on
+ * the update route they are not all the owner's in the same way: the line is, whole, while the
+ * merge check is a session's to propose and the owner's to allow on a card
+ * (`project-integration-approval.ts`). `PATCH /projects/:id/integration` is the owner's own door
+ * and is unaffected — it carries no acting session, so no card is asked for.
  */
 export class UpdateProjectIntegrationDto implements IntegrationSettings {
   /** `MAIN` lands finished tasks straight on the upstream; `PROJECT_BRANCH` on the project's own
@@ -320,8 +324,10 @@ export class UpdateProjectDto {
    * automatic-only, so a project is settled by whoever writes this column and by nothing else. */
   @IsOptional() @IsIn(PROJECT_STATUSES) status?: ProjectStatus;
 
-  /** This project's integration line and merge check (`UpdateProjectIntegrationDto`). The account
-   *  owner's to set: like `status`, a request carrying an acting session is refused whole. */
+  /** This project's integration line and merge check (`UpdateProjectIntegrationDto`). The line is
+   *  the account owner's alone, refused whole to a request carrying an acting session. The merge
+   *  check may be changed from a session, but only on a confirmation card the owner has answered
+   *  for this project and exactly this change (`project-integration-approval.ts`). */
   @IsOptional() @ValidateNested() @Type(() => UpdateProjectIntegrationDto)
   integration?: UpdateProjectIntegrationDto;
 
@@ -718,6 +724,31 @@ export class HandOverOpenItemDto {
  */
 export class RetryIntegrationDto {
   @IsString() @MinLength(1) @MaxLength(MAX_INTEGRATION_RETRY_REASON) reason!: string;
+}
+
+/**
+ * One landing queued again with its merge check NOT RUN (`integration_skip_merge_check`, contract
+ * §2.4 J-S5). The reason is the rerun's — the sentence that says why this check was not the
+ * delivery's to fail — and the card is the account owner's answer to it: the id of the confirmation
+ * the runner filed before calling here, required on the coordinator channel and refused by the
+ * service when it names nothing, names a card nobody has answered, or names one raised about another
+ * landing. The account owner's own door needs no card (they are the person it would ask) and reads
+ * none.
+ */
+export class SkipMergeCheckDto {
+  @IsString() @MinLength(1) @MaxLength(MAX_INTEGRATION_SKIP_REASON) reason!: string;
+  /** The card's own id, in either spelling: the runner hands back the uuid its own create answered
+   *  with, and a client that read the card off a public list may paste the short form. */
+  @IsOptional() @IsPublicId() approvalId?: string;
+}
+
+/**
+ * The account owner's own skip: the reason alone. Deliberately not the DTO above with its card field
+ * omitted — the owner needs no card because they are the person one would ask, and a body that could
+ * name one would suggest a confirmation had been checked that this door never reads.
+ */
+export class SkipMergeCheckAsOwnerDto {
+  @IsString() @MinLength(1) @MaxLength(MAX_INTEGRATION_SKIP_REASON) reason!: string;
 }
 
 export class RecordMergeEvidenceDto {

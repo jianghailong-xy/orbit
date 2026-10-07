@@ -1,0 +1,35 @@
+{
+  "keys": [
+    "Enter",
+    "ArrowDown",
+    "Enter"
+  ],
+  "heldFrames": 3,
+  "keyLog": [
+    {
+      "key": "Enter",
+      "target": "button:Add attachment",
+      "trusted": true,
+      "focused": "button:Add attachment",
+      "menu": false,
+      "highlighted": null
+    },
+    {
+      "key": "ArrowDown",
+      "target": "button:Add attachment",
+      "trusted": true,
+      "focused": "button:Add attachment",
+      "menu": true,
+      "highlighted": "File"
+    },
+    {
+      "key": "Enter",
+      "target": "button:Add attachment",
+      "trusted": true,
+      "focused": "button:Add attachment",
+      "menu": true,
+      "highlighted": "File"
+    }
+  ],
+  "focused": "Add attachment"
+}

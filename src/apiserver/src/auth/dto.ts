@@ -118,10 +118,10 @@ export class BootstrapDto {
 }
 
 /**
- * `POST /auth/google/exchange` (docs/google-sign-in-design.md §4.3): the ticket the callback handed
- * the client, and the PKCE verifier only that client holds. Both only have to be strings here: the
- * ticket is spent by this request whatever the verifier, and a verifier of the wrong shape is refused
- * after that, as a wrong one is.
+ * `POST /auth/google/exchange` (docs/google-sign-in-design.md §4.3), and `POST /auth/google/link/confirm`
+ * (§5.3): the ticket the callback handed the client, and the PKCE verifier only that client holds.
+ * Both only have to be strings here: the ticket is spent by this request whatever the verifier, and a
+ * verifier of the wrong shape is refused after that, as a wrong one is.
  */
 export class GoogleExchangeDto {
   @IsString()
@@ -129,6 +129,15 @@ export class GoogleExchangeDto {
 
   @IsString()
   codeVerifier!: string;
+}
+
+/**
+ * `POST /auth/google/link` (docs/google-sign-in-design.md §5.3): the S256 challenge of the verifier the
+ * profile page keeps for the confirmation. Its shape is the service's to check, as /start's is.
+ */
+export class GoogleLinkDto {
+  @IsString()
+  codeChallenge!: string;
 }
 
 /** `PUT /admin/sign-in/google` (docs/google-sign-in-design.md §6, §7.1): the whole setting. */

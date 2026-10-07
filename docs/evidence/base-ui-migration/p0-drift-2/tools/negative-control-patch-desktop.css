@@ -1,0 +1,4 @@
+
+/* P0 drift batch 2 negative control 2 (temporary commit, not delivered): 1px on the desktop Wiki home, whose
+   topic rows get their padding from the min-width 961px rule (wiki-home on desktops, breakpoint-961-wiki). */
+@media (min-width: 961px) { .wk-home .wk-pl-doc.phone.topic { padding-top: 11px; } }
