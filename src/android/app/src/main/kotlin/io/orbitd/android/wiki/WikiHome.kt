@@ -62,7 +62,7 @@ internal fun rememberMinuteClock(): Instant {
 /** The Wiki section's root: the home page of the space the owner last picked (iOS `WikiHomeView`). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: DirectoryData, open: (OrbitRoute) -> Unit, openSession: (String) -> Unit) {
+internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: DirectoryData, nav: WikiNav) {
     val state by store.state.collectAsState()
     val scope = rememberCoroutineScope()
     val now = rememberMinuteClock()
@@ -81,7 +81,7 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
     }
     PageBar.Bind(route, title = "") {
         BarIcon(R.drawable.ic_contents, WikiArticleCopy.contents, "wiki-bar-contents") { contentsShown = true }
-        BarIcon(R.drawable.ic_settings, WikiModeCopy.settings, "wiki-bar-settings") { open(OrbitRoute(Destination.WIKI_SETTINGS)) }
+        BarIcon(R.drawable.ic_settings, WikiModeCopy.settings, "wiki-bar-settings") { nav.open(OrbitRoute(Destination.WIKI_SETTINGS)) }
     }
     val runnerOnline = wikiMaintenanceRunnerOnline(state.currentSpace, data)
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = {
@@ -94,7 +94,7 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
                 val docs = state.docsDirectory?.takeIf { it.plan != null }?.docs?.let { it.written to it.total }
                 WikiPlanLogic.banner(look, p, now, docs, runnerOnline)
             } }
-            WikiHomePage(home, now, banner, store, open, openSession, openSettings = { open(OrbitRoute(Destination.WIKI_SETTINGS)) }) { slug ->
+            WikiHomePage(home, now, banner, store, nav, openSettings = { nav.open(OrbitRoute(Destination.WIKI_SETTINGS)) }) { slug ->
                 store.select(slug)
                 // iOS reloads only the home here; the plan banner and the docs counts are read again too, so they never speak for the old space.
                 scope.launch { store.loadHome(); store.loadPlan(); store.loadDocsDirectory() }
@@ -103,7 +103,7 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
     }
     if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Home, runnerOnline, close = { contentsShown = false }) { pick ->
         // The home is where the reader already is; the rest open as pages.
-        if (pick != WikiContentsPick.Home) wikiGo(pick, open) {}
+        if (pick != WikiContentsPick.Home) wikiGo(pick, nav)
     }
 }
 
@@ -121,7 +121,7 @@ private fun WikiHomePlaceholder(state: WikiState, retry: () -> Unit) {
 
 @Composable
 private fun WikiHomePage(content: WikiHomeContent, now: Instant, planBanner: WikiPlanLogic.Banner?, store: WikiStore,
-    open: (OrbitRoute) -> Unit, openSession: (String) -> Unit, openSettings: () -> Unit, pickSpace: (String) -> Unit) {
+    nav: WikiNav, openSettings: () -> Unit, pickSpace: (String) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     var hits by remember { mutableStateOf<List<WikiSearchHit>>(emptyList()) }
     var searched by rememberSaveable { mutableStateOf("") }
@@ -134,17 +134,17 @@ private fun WikiHomePage(content: WikiHomeContent, now: Instant, planBanner: Wik
         val found = try { store.search(text) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { emptyList() }
         hits = found; searched = text
     }
-    fun openEntry(id: String) = open(OrbitRoute(Destination.WIKI_ENTRY, id))
+    fun openEntry(id: String) = nav.entry(id)
     LazyColumn(Modifier.fillMaxSize().testTag("wiki-home-list")) {
-        item(key = "header") { HomeHeader(content, now, openSettings, { content.health?.maintenance?.lastRun?.sessionId?.let(openSession) }, pickSpace) }
+        item(key = "header") { HomeHeader(content, now, openSettings, { content.health?.maintenance?.lastRun?.sessionId?.let(nav::session) }, pickSpace) }
         item(key = "search") { SearchField(query) { query = it } }
         if (!searching) {
             if (content.proposals > 0) item(key = "review-banner") {
-                HomeBanner(WikiCopy.proposalsToReview(content.proposals), amber = true, tag = "wiki-review-banner") { open(OrbitRoute(Destination.WIKI_REVIEW)) }
+                HomeBanner(WikiCopy.proposalsToReview(content.proposals), amber = true, tag = "wiki-review-banner") { nav.open(OrbitRoute(Destination.WIKI_REVIEW)) }
             }
             if (planBanner != null) item(key = "plan-banner") {
                 HomeBanner(planBanner.text, amber = planBanner.amber, tag = "wiki-plan-banner") {
-                    open(OrbitRoute(if (planBanner.toSettings) Destination.WIKI_SETTINGS else Destination.WIKI_PLAN))
+                    nav.open(OrbitRoute(if (planBanner.toSettings) Destination.WIKI_SETTINGS else Destination.WIKI_PLAN))
                 }
             }
             item(key = "principles") {
@@ -173,7 +173,7 @@ private fun WikiHomePage(content: WikiHomeContent, now: Instant, planBanner: Wik
                         val summary = content.run(row.changesetId)?.let(WikiModeLogic::runSummary)
                         val line = (listOf(WikiModeCopy.appliedChanges(summary?.applied ?: row.items.size)) +
                             (summary?.let(WikiModeLogic::runCounts) ?: emptyList())).joinToString(" · ")
-                        WikiRowButton("wiki-run:${row.changesetId}", onClick = { open(OrbitRoute(Destination.WIKI_RUN, row.changesetId)) }) {
+                        WikiRowButton("wiki-run:${row.changesetId}", onClick = { nav.open(OrbitRoute(Destination.WIKI_RUN, row.changesetId)) }) {
                             WikiRowLabel(WikiModeCopy.originWord(row.origin), WikiDate.relative(row.at, now), line)
                         }
                     }

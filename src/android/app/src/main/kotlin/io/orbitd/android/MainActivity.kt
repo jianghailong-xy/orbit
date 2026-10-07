@@ -29,6 +29,7 @@ import io.orbitd.android.auth.AuthViewModel
 import io.orbitd.android.core.BuildIdentity
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.reader.SessionReader
+import io.orbitd.android.wiki.PageBar
 import io.orbitd.android.wiki.WikiDestination
 import io.orbitd.android.watch.WatchDestination
 import io.orbitd.android.composer.NewSessionComposer
@@ -167,12 +168,13 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                 }
             }) {
             Scaffold(topBar = {
-                TopAppBar(title = { Text(routeTitle(route, data), maxLines = 2, style = MaterialTheme.typography.titleMedium) },
+                TopAppBar(title = { Text(PageBar.title(route) ?: routeTitle(route, data), maxLines = 2, style = MaterialTheme.typography.titleMedium) },
                     navigationIcon = {
                         IconButton(onClick = { if (navigation.canGoBack) navigation = navigation.back() else scope.launch { focus.clearFocus(); drawer.open() } }) {
                             Icon(painterResource(if (navigation.canGoBack) R.drawable.ic_back else R.drawable.ic_menu), if (navigation.canGoBack) "Back" else "Open navigation")
                         }
                     }, actions = {
+                        PageBar.Actions(route, this)
                         if (navigation.canGoBack) IconButton(onClick = { scope.launch { focus.clearFocus(); drawer.open() } }) { Icon(painterResource(R.drawable.ic_menu), "Open navigation") }
                         IconButton(onClick = { app.realtime.refreshDirectory() }) { Icon(painterResource(R.drawable.ic_refresh), "Refresh directory") }
                     })
@@ -190,7 +192,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.WIKI, Destination.WIKI_ENTRY, Destination.WIKI_BROWSE, Destination.WIKI_INDEX,
                                 Destination.WIKI_ARTICLE, Destination.WIKI_DOC, Destination.WIKI_REVIEW, Destination.WIKI_SETTINGS,
                                 Destination.WIKI_RUN, Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION ->
-                                    WikiDestination(app, signedIn.handle, route, revision, ::open)
+                                    WikiDestination(app, signedIn.handle, route, data, revision, ::open) { change -> navigation = change(navigation) }
                                 Destination.WATCH -> WatchDestination(app, signedIn.handle, route, revision, ::open)
                                 Destination.SETTINGS -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     AuthScreen(authState, authMessage, auth::login, auth::logout)

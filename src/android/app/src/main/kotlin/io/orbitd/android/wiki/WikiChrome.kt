@@ -75,13 +75,13 @@ internal sealed interface WikiContentsPick {
 }
 
 /** The article and document pages push what they open onto the section's stack; Contents' Home goes back to the root. */
-internal fun wikiGo(pick: WikiContentsPick, open: (OrbitRoute) -> Unit, home: () -> Unit) = when (pick) {
-    WikiContentsPick.Home -> home()
-    WikiContentsPick.Browse -> open(OrbitRoute(Destination.WIKI_BROWSE))
-    WikiContentsPick.Index -> open(OrbitRoute(Destination.WIKI_INDEX))
-    WikiContentsPick.Plan -> open(OrbitRoute(Destination.WIKI_PLAN))
-    is WikiContentsPick.Article -> open(OrbitRoute(Destination.WIKI_ARTICLE, pick.topic, wikiPart = pick.part))
-    is WikiContentsPick.Doc -> open(OrbitRoute(Destination.WIKI_DOC, pick.slug, wikiSection = pick.section))
+internal fun wikiGo(pick: WikiContentsPick, nav: WikiNav) = when (pick) {
+    WikiContentsPick.Home -> nav.home()
+    WikiContentsPick.Browse -> nav.open(OrbitRoute(Destination.WIKI_BROWSE))
+    WikiContentsPick.Index -> nav.open(OrbitRoute(Destination.WIKI_INDEX))
+    WikiContentsPick.Plan -> nav.open(OrbitRoute(Destination.WIKI_PLAN))
+    is WikiContentsPick.Article -> nav.open(OrbitRoute(Destination.WIKI_ARTICLE, pick.topic, wikiPart = pick.part))
+    is WikiContentsPick.Doc -> nav.open(OrbitRoute(Destination.WIKI_DOC, pick.slug, wikiSection = pick.section))
 }
 
 /** The directory as a sheet (iOS `WikiContentsScreen` + `WikiContentsSheet`): Home, Browse by category, the A–Z

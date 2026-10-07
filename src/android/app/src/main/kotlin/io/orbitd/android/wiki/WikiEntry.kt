@@ -41,8 +41,7 @@ import java.time.Instant
 /** One entry's page, and the three forms its actions open (iOS `WikiEntryView` over `WikiEntryPage`). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun WikiEntryScreen(store: WikiStore, route: OrbitRoute, data: DirectoryData, server: String,
-    openSession: (String) -> Unit, openTask: (String) -> Unit) {
+internal fun WikiEntryScreen(store: WikiStore, route: OrbitRoute, data: DirectoryData, nav: WikiNav) {
     val entryId = requireNotNull(route.id)
     val state by store.state.collectAsState()
     val scope = rememberCoroutineScope()
@@ -75,7 +74,7 @@ internal fun WikiEntryScreen(store: WikiStore, route: OrbitRoute, data: Director
                     // The entry's page on the web — `/wiki/<space>/e/<id>` — the drawer's own Copy link.
                     val slug = state.spaces.firstOrNull { sameWikiId(it.id, detail.entry.spaceId) }?.slug ?: state.currentSpace?.slug
                     if (!slug.isNullOrEmpty()) {
-                        clipboard.setText(AnnotatedString("${server.trimEnd('/')}/wiki/$slug/e/${wikiPublicId(detail.entry.id)}"))
+                        clipboard.setText(AnnotatedString("${nav.server.trimEnd('/')}/wiki/$slug/e/${wikiPublicId(detail.entry.id)}"))
                         WikiToast.show(WikiCopy.linkCopied)
                     }
                 })
@@ -88,7 +87,7 @@ internal fun WikiEntryScreen(store: WikiStore, route: OrbitRoute, data: Director
         when {
             detail != null -> WikiEntryPage(detail, now, state.busy, sessionTitle = { id ->
                 data.sessions.values.flatten().firstOrNull { ObjectId.same(it.id, id) }?.name
-            }, openSession = openSession, openTask = openTask,
+            }, openSession = nav::session, openTask = nav::task,
                 confirm = { scope.launch { finish(store.confirm(detail.entry), WikiModeCopy.confirmed) } },
                 reject = { why -> scope.launch { finish(store.reject(detail.entry.id, why), WikiModeCopy.rejected) } })
             state.isMissing(entryId) -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { StatusMessage(WikiCopy.noEntrySelected, "") }
