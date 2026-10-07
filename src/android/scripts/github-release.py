@@ -148,8 +148,10 @@ def manifest(args):
     }
     (output / MANIFEST).write_text(json.dumps(update, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
     body = [notes, '', '| | |', '| --- | --- |']
+    push = (f"On (Firebase project {identity['firebaseProjectId']})" if identity.get('pushConfigured')
+            else 'Off (no Firebase client configuration)')
     rows = [('Package', update['applicationId']), ('Version', f"{name} (versionCode {code})"),
-            ('Android', f"10+ (minSdk {update['minSdk']})"), ('APK SHA-256', f"`{actual}`"),
+            ('Android', f"10+ (minSdk {update['minSdk']})"), ('Push notifications', push), ('APK SHA-256', f"`{actual}`"),
             ('Signing certificate SHA-256', f"`{update['certSha256']}`"), ('Source', f"`{update['sourceSha']}`"),
             ('Built by', args.run_url)]
     body += [f'| {key} | {value} |' for key, value in rows]

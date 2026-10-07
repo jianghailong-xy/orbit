@@ -62,6 +62,20 @@ read it. Never regenerate or replace the key to make an update pass: installed
 apps accept only updates signed by the same certificate, and losing the key
 means users must uninstall to move on.
 
+## Push notification client values (Firebase)
+
+Firebase client values are public app configuration, not credentials. The release
+build reads them from optional `android-internal` environment variables
+`ANDROID_FIREBASE_APP_ID`, `ANDROID_FIREBASE_API_KEY`, `ANDROID_FIREBASE_PROJECT_ID`,
+`ANDROID_FIREBASE_SENDER_ID` and `ANDROID_FIREBASE_ANDROID_PACKAGE` (A10's
+`ORBIT_ANDROID_FIREBASE_*` build inputs, see `notifications.md`). Set all five or
+none: `build-release.sh` refuses a partial set or a package other than the
+application ID, checks the values reached `BuildConfig`, and records
+`pushConfigured` in `identity.json`; the release notes say whether push is on.
+With none set, push notifications stay off. Leave them unset until the released
+source contains A10's notification-channel migration. A Firebase service account
+belongs only to the backend; never put it in this repository, a workflow or the app.
+
 For a local signed build (for example a rehearsal with a disposable key), export
 `ORBIT_ANDROID_APPLICATION_ID`, `ORBIT_ANDROID_VERSION_NAME`,
 `ORBIT_ANDROID_VERSION_CODE`, `ORBIT_ANDROID_CERT_SHA256`,

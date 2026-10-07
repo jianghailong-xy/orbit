@@ -33,7 +33,11 @@ tags, with no required reviewers (pushing the tag is the release decision):
 - secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_STORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
   `ANDROID_KEY_PASSWORD`;
 - variables `ANDROID_APPLICATION_ID` (`io.orbitd.android`) and
-  `ANDROID_CERT_SHA256` (the approved certificate fingerprint).
+  `ANDROID_CERT_SHA256` (the approved certificate fingerprint);
+- optional variables `ANDROID_FIREBASE_APP_ID`, `ANDROID_FIREBASE_API_KEY`,
+  `ANDROID_FIREBASE_PROJECT_ID`, `ANDROID_FIREBASE_SENDER_ID`,
+  `ANDROID_FIREBASE_ANDROID_PACKAGE`: non-secret Firebase client values, all or
+  none (none keeps push off). No service account is read anywhere in this workflow.
 
 `apk` (environment `android-internal`, `contents: read`) first checks the tag
 against `orbitVersionName`/`orbitVersionCode` in `src/android/gradle.properties`

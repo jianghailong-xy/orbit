@@ -23,6 +23,18 @@ done
 [[ $ORBIT_ANDROID_APPLICATION_ID =~ ^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$ ]] || {
   echo 'Invalid application ID' >&2; exit 2;
 }
+# Firebase client values are not secrets; all five or none (none keeps push notifications off).
+firebase_values=0
+for name in APP_ID API_KEY PROJECT_ID SENDER_ID ANDROID_PACKAGE; do
+  variable="ORBIT_ANDROID_FIREBASE_$name"
+  [[ -z ${!variable:-} ]] || firebase_values=$((firebase_values + 1))
+done
+[[ $firebase_values == 0 || $firebase_values == 5 ]] || {
+  echo 'Set all five ORBIT_ANDROID_FIREBASE_* client values or none (push stays off without them)' >&2; exit 2;
+}
+[[ $firebase_values == 0 || $ORBIT_ANDROID_FIREBASE_ANDROID_PACKAGE == "$ORBIT_ANDROID_APPLICATION_ID" ]] || {
+  echo 'ORBIT_ANDROID_FIREBASE_ANDROID_PACKAGE must equal the application ID' >&2; exit 2;
+}
 [[ -f $ORBIT_ANDROID_KEYSTORE_PATH && $ORBIT_ANDROID_KEYSTORE_PATH == /* ]] || {
   echo 'Keystore must be an existing absolute path outside the repository' >&2; exit 2;
 }
@@ -71,13 +83,18 @@ source = (p / 'source-sha.txt').read_text().strip()
 config = (p / 'BuildConfig.java').read_text()
 assert f'SOURCE_SHA = "{source}"' in config and 'SOURCE_DIRTY = false' in config
 assert f'VERSION_NAME = "{version}"' in config and f'VERSION_CODE = {code};' in config
+firebase = {name: os.environ.get(f'ORBIT_ANDROID_FIREBASE_{name}', '') for name in
+            ('APP_ID', 'API_KEY', 'PROJECT_ID', 'SENDER_ID', 'ANDROID_PACKAGE')}
+for name, value in firebase.items():
+    assert f'FIREBASE_{name} = "{value}"' in config, f'BuildConfig.FIREBASE_{name} differs from the supplied value'
 with zipfile.ZipFile(p / 'app-release.apk') as apk:
     assert any(source.encode() in apk.read(n) for n in apk.namelist() if re.fullmatch(r'classes\d*\.dex', n)), 'Source SHA absent from packaged DEX'
 identity = dict(applicationId=app_id, versionName=version, versionCode=int(code), minSdk=29, targetSdk=36,
                 buildType='release', debuggable=False, sourceSha=source, sourceDirty=False,
                 apkSha256=hashlib.sha256((p / 'app-release.apk').read_bytes()).hexdigest(),
                 certificateSha256=certs[0], signingPurpose=os.environ['ORBIT_ANDROID_SIGNING_PURPOSE'],
-                distributionSignature=os.environ['ORBIT_ANDROID_SIGNING_PURPOSE'] == 'release')
+                distributionSignature=os.environ['ORBIT_ANDROID_SIGNING_PURPOSE'] == 'release',
+                pushConfigured=all(firebase.values()), firebaseProjectId=firebase['PROJECT_ID'] or None)
 (p / 'identity.json').write_text(json.dumps(identity, indent=2) + '\n')
 print(json.dumps(identity, indent=2))
 PY

@@ -6,6 +6,8 @@
 # Signing comes only from the android-internal environment (owner-configured; android-v* tags only):
 #   secrets   ANDROID_KEYSTORE_BASE64, ANDROID_STORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
 #   variables ANDROID_APPLICATION_ID, ANDROID_CERT_SHA256
+#   optional  ANDROID_FIREBASE_{APP_ID,API_KEY,PROJECT_ID,SENDER_ID,ANDROID_PACKAGE}: non-secret Firebase
+#             client values, all or none; unset keeps push notifications off. No service account here.
 # The tag must equal android-v + orbitVersionName from src/android/gradle.properties at the tagged
 # commit, and orbitVersionCode must exceed every published android-v* release of that package.
 name: Android internal release
@@ -68,6 +70,11 @@ jobs:
           ORBIT_ANDROID_VERSION_NAME: ${{ steps.version.outputs.version_name }}
           ORBIT_ANDROID_VERSION_CODE: ${{ steps.version.outputs.version_code }}
           ORBIT_ANDROID_SIGNING_PURPOSE: release
+          ORBIT_ANDROID_FIREBASE_APP_ID: ${{ vars.ANDROID_FIREBASE_APP_ID }}
+          ORBIT_ANDROID_FIREBASE_API_KEY: ${{ vars.ANDROID_FIREBASE_API_KEY }}
+          ORBIT_ANDROID_FIREBASE_PROJECT_ID: ${{ vars.ANDROID_FIREBASE_PROJECT_ID }}
+          ORBIT_ANDROID_FIREBASE_SENDER_ID: ${{ vars.ANDROID_FIREBASE_SENDER_ID }}
+          ORBIT_ANDROID_FIREBASE_ANDROID_PACKAGE: ${{ vars.ANDROID_FIREBASE_ANDROID_PACKAGE }}
         run: |
           set -euo pipefail
           umask 077

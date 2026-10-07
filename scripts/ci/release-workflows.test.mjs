@@ -231,6 +231,11 @@ test('Android signing is protected, read-only, and scoped to the build step', ()
   assert.match(signing, /^          ORBIT_ANDROID_APPLICATION_ID: \$\{\{ vars\.ANDROID_APPLICATION_ID \}\}$/m);
   assert.match(signing, /^          ORBIT_ANDROID_CERT_SHA256: \$\{\{ vars\.ANDROID_CERT_SHA256 \}\}$/m);
   assert.match(signing, /^          ORBIT_ANDROID_SIGNING_PURPOSE: release$/m);
+  // Firebase client values are public configuration: variables, never secrets, never a service account.
+  for (const name of ['APP_ID', 'API_KEY', 'PROJECT_ID', 'SENDER_ID', 'ANDROID_PACKAGE']) {
+    assert.match(signing, new RegExp(`^          ORBIT_ANDROID_FIREBASE_${name}: \\$\\{\\{ vars\\.ANDROID_FIREBASE_${name} \\}\\}$`, 'm'));
+  }
+  assert.doesNotMatch(android, /service[_-]?account|GOOGLE_APPLICATION_CREDENTIALS|FIREBASE_TOKEN|private_key/i);
   assert.match(signing, /umask 077/);
   assert.match(signing, /trap 'rm -f "\$ORBIT_ANDROID_KEYSTORE_PATH"' EXIT/);
   assert.match(android, /- name: Remove signing material\n        if: always\(\)/);
