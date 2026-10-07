@@ -1031,8 +1031,9 @@ export interface CodexRateLimitResetResultRefusal {
  */
 export type LoginEngine = 'claude' | 'codex' | 'kimi' | 'antigravity';
 
-/** Engines with an install action in Providers: every engine a runner signs in with. */
-export type InstallEngine = LoginEngine | 'dsh';
+/** Engines with an install action in Providers: every engine a runner signs in with, plus `dsh` and
+ *  OpenCode, which are installed without one — the relay needs an install command, not a way in. */
+export type InstallEngine = LoginEngine | 'opencode' | 'dsh';
 
 /**
  * Every engine CLI a runner reports on, which is a wider set than the ones it can sign into:

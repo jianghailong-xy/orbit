@@ -62,7 +62,9 @@ export const decliningPrefix = (toolName: string | null | undefined): string =>
     ? 'Leaving the graph alone: '
     : toolName === 'orbit_blocker_resolve'
       ? 'Leaving this open: '
-      : 'Not creating: ';
+      : toolName === 'orbit_integration_skip_merge_check'
+        ? 'Checking it after all: '
+        : 'Not creating: ';
 
 /** What the empty composer asks for while a decline is armed. */
 export const DECLINE_PLACEHOLDER = 'Say what to do instead…';
@@ -177,6 +179,39 @@ export const createFoldNoun = (input: CreateInput): string => (input.isProject ?
 const isBlockerResolve = (a: ApprovalInfo): boolean => a.toolName === 'orbit_blocker_resolve';
 
 /**
+ * Orbit's ask before one landing runs WITHOUT its merge check (§2.4 J-S5). The fourth of the
+ * coordinator's asks, and the one whose subject is a command: what the owner decides is whether that
+ * command — shown verbatim — gets to hold up this landing, so the card leads with the command and
+ * the red it produced, not with the word "skip".
+ */
+const isSkipMergeCheck = (a: ApprovalInfo): boolean => a.toolName === 'orbit_integration_skip_merge_check';
+
+interface SkipMergeCheckInput {
+  projectTitle: string;
+  /** The DONE task whose landing this is. */
+  taskTitle: string;
+  /** The check command that will NOT run, as the project has it configured. */
+  checkCommand: string;
+  /** What that check said the last time, in the landing read's own words. */
+  failure: string;
+  /** Why the coordinator says this red is the check's rather than the delivery's. */
+  reason: string;
+}
+
+function skipMergeCheckInput(a: ApprovalInfo): SkipMergeCheckInput | null {
+  if (!isSkipMergeCheck(a)) return null;
+  const obj = (a.input ?? {}) as Record<string, unknown>;
+  const text = (v: unknown): string => (typeof v === 'string' ? v : '');
+  return {
+    projectTitle: text(obj.projectTitle),
+    taskTitle: text(obj.taskTitle),
+    checkCommand: text(obj.checkCommand),
+    failure: text(obj.failure),
+    reason: text(obj.reason),
+  };
+}
+
+/**
  * Orbit's asks before a provider write: one of the owner's own providers created, changed or removed.
  * Drawn as the plain card — its body is the provider as it would be written, the key reduced to the
  * fact that one is being set — but, like every ask Orbit raises for itself, never waived by a rule.
@@ -269,7 +304,11 @@ function rememberRulesFor(a: ApprovalInfo): PermissionRule[] {
   // blocker — "always let this session clear whatever stops its project" is the one rule that would
   // make every card after it a formality. Nor a provider write, which would be a standing yes to
   // whatever endpoint and key the next one names.
-  if (isTaskCreate(a) || isProjectCreate(a) || isBlockerResolve(a) || isProviderWrite(a)) return [];
+  // Nor a skip: "always let this conversation land past the check" is every later landing unchecked,
+  // which is the project's setting and not a rule this card may leave behind.
+  if (isTaskCreate(a) || isProjectCreate(a) || isBlockerResolve(a) || isProviderWrite(a) || isSkipMergeCheck(a)) {
+    return [];
+  }
   if (a.toolName === 'Bash') {
     const cmd =
       a.input && typeof a.input === 'object'
@@ -368,6 +407,7 @@ export function ApprovalPanel({
   const batch = isBatch(approval) ? batchPreview(approval.input) : null;
   const create = createInput(approval);
   const blocker = blockerResolveInput(approval);
+  const skipCheck = skipMergeCheckInput(approval);
   // What the composer's bar would name as the thing not being done: the proposal's own subject, and
   // never the tool's name, which says nothing about what is not being created. Null for everything
   // that is not one of Orbit's own asks — a plan, a tool call — which keeps its one-press Reject.
@@ -379,7 +419,9 @@ export function ApprovalPanel({
         ? create.title
         : blocker
           ? (blocker.subjectTitle || blocker.kind || 'this blocker')
-          : null;
+          : skipCheck
+            ? (skipCheck.taskTitle || 'this landing')
+            : null;
   const heading = isPlan(approval)
           ? '📋 Confirm: exit plan mode and proceed with this plan?'
           : dag
@@ -394,7 +436,9 @@ export function ApprovalPanel({
                   : '📝 Confirm: create 1 task?'
                 : blocker
                   ? `🚧 Confirm: this no longer blocks ${blocker.projectTitle || 'the project'}?`
-                  : `🔓 Approve tool call: ${approval.toolName}`;
+                  : skipCheck
+                    ? `⏭ Confirm: land ${skipCheck.taskTitle || 'this task'} without the merge check?`
+                    : `🔓 Approve tool call: ${approval.toolName}`;
   return (
     <ReviewCard enabled={compact} title={heading}
       summary={markdownToPlainLines(plan || create?.prose || '')}
@@ -405,7 +449,7 @@ export function ApprovalPanel({
         {heading}
       </div>
       {/* A create is read top to bottom like a plan, so it grows instead of scrolling. */}
-      <div className={`approval-body${plan || create || blocker ? ' is-plan' : ''}`}>
+      <div className={`approval-body${plan || create || blocker || skipCheck ? ' is-plan' : ''}`}>
         {plan ? (
           <Markdown
             remarkPlugins={[remarkGfm]}
@@ -422,6 +466,8 @@ export function ApprovalPanel({
           <CreateBody input={create} />
         ) : blocker ? (
           <BlockerResolveBody input={blocker} />
+        ) : skipCheck ? (
+          <SkipMergeCheckBody input={skipCheck} />
         ) : (
           <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
         )}
@@ -445,7 +491,9 @@ export function ApprovalPanel({
                   ? 'Create it'
                   : blocker
                     ? 'Resolve it'
-                    : 'Approve'}
+                    : skipCheck
+                      ? 'Land it without the check'
+                      : 'Approve'}
           {keys && <span className="approval-kbd">{ENTER_HINT}</span>}
         </CardActionButton>
         {rules.length > 0 && (
@@ -516,6 +564,38 @@ function BlockerResolveBody({ input }: { input: BlockerResolveInput }): JSX.Elem
       >
         {input.reason}
       </Markdown>
+    </div>
+  );
+}
+
+/**
+ * What is being skipped, and what the coordinator says is the matter with it.
+ *
+ * Three sentences in the order the decision is made in: what this is about (the landing, named by the
+ * task it delivers), the command that would not run — verbatim, on its own line, because the whole
+ * question is whether THAT command should hold up THAT landing — and then the agent's claim that the
+ * red is the check's rather than the work's, marked as the agent's for the same reason the blocker
+ * card marks its own. The command is shown and not run: nothing here proves it would fail.
+ */
+function SkipMergeCheckBody({ input }: { input: SkipMergeCheckInput }): JSX.Element {
+  return (
+    <div className="dag-approval">
+      {input.projectTitle && <p className="dag-approval-caption">In {input.projectTitle}</p>}
+      <p className="dag-approval-caption">This landing runs without the merge check</p>
+      <pre className="approval-input">{input.checkCommand}</pre>
+      {input.failure && <p className="dag-approval-foot">{input.failure}</p>}
+      <p className="dag-approval-caption">The agent says this red is the check&rsquo;s, not the work&rsquo;s</p>
+      <Markdown
+        remarkPlugins={[remarkGfm]}
+        urlTransform={referenceUrlTransform}
+        components={{ a: ReferenceLink }}
+      >
+        {input.reason}
+      </Markdown>
+      <p className="create-criteria-note">
+        Once, and only this landing: the project&rsquo;s check command is unchanged, and the next
+        landing and every merge into main are checked as before.
+      </p>
     </div>
   );
 }

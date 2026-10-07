@@ -814,6 +814,48 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			"like any landing; if it fails, a new item reaches you on its own and these are marked "+
 			"superseded.\n"+prettyJSON(raw), false)
 
+	case "integration_skip_merge_check":
+		id := getString(args, "projectId")
+		taskID := getString(args, "taskId")
+		if id == "" || taskID == "" {
+			return toolResult("projectId and taskId are required: the landing whose merge check is to "+
+				"be skipped is one DONE task's landing onto this project's own branch", true)
+		}
+		reason := strings.TrimSpace(getString(args, "reason"))
+		if reason == "" {
+			return toolResult("reason is required: say why this check should not hold up this landing. "+
+				"It is what the account owner decides on, and it stays on the generation that skips the "+
+				"check and on every record of it", true)
+		}
+		// The facts first, before anybody is interrupted: which project and which landing this is,
+		// what stopped, and the check command that would be skipped. A card that asked "skip the red
+		// check?" would be unanswerable, and an id that names no failed check is refused here rather
+		// than in front of a person.
+		facts, err := skipMergeCheckFacts(s.t, id, taskID, reason)
+		if err != nil {
+			return toolResult(err.Error(), true)
+		}
+		// The card, and nothing else: the account owner's yes is what makes a skip legitimate, and a
+		// decline is an answer — the landing stands as it failed and nothing is queued.
+		approvalID, declined, err := askForSkipMergeCheck(s.t, s.sessionID, facts)
+		if err != nil {
+			return toolResult(err.Error(), true)
+		}
+		if declined != "" {
+			return toolResult("the human did not approve skipping this check, and nothing was queued: "+
+				declined, false)
+		}
+		raw, err := s.t.skipIntegrationMergeCheck(s.sessionID, id, taskID, reason, approvalID)
+		if err != nil {
+			return toolResult("skip merge check failed: "+err.Error(), true)
+		}
+		return toolResult("One landing is queued again with this project's merge check NOT run — skipped, "+
+			"not passed: the generation records the check it skipped, your reason and the card the "+
+			"account owner approved it on, and any item it goes on to open carries the same. Nothing "+
+			"else changed: the project's own merge check command is untouched, and the next landing and "+
+			"every merge into main are checked exactly as before. Your open items about the failed "+
+			"check are now being handled: they stay open until it lands.\n"+prettyJSON(raw), false)
+
 	case "task_dependency_graph":
 		id, ok := s.resolveTaskID(args)
 		if !ok {
@@ -1527,10 +1569,20 @@ const (
 // tool cannot be reached without one.
 const blockerResolveApprovalToolName = "orbit_blocker_resolve"
 
+// integrationSkipMergeCheckApprovalToolName keys the card that lets ONE landing run without its
+// merge check (docs/project-integration-line-contract.md §2.4 J-S5).
+//
+// A different question from every other card here: nothing is created and no wait is ended. What the
+// account owner answers is whether this one landing may go on with the check that just failed taken
+// off it — and the server reads the card back by id when the skip is asked for, so a card filed
+// under any other name opens nothing, and neither does one raised about another task.
+const integrationSkipMergeCheckApprovalToolName = "orbit_integration_skip_merge_check"
+
 // ownerWaitTools are the calls that put a card in front of the owner and block until it is answered.
 var ownerWaitTools = map[string]bool{
 	"task_create": true, "task_create_batch": true, "project_create": true, "project_blocker_resolve": true,
 	"tasklist_propose_dag": true, "provider_create": true, "provider_update": true, "provider_delete": true,
+	"integration_skip_merge_check": true,
 }
 
 func waitsForTheOwner(name string, args map[string]interface{}) bool {
@@ -1797,6 +1849,141 @@ func resolveBlockerWithApproval(t *Transport, sessionID, projectID, blockerID, r
 	}
 	raw, err = t.resolveProjectBlocker(projectID, blockerID, map[string]interface{}{"reason": reason})
 	return raw, "", err
+}
+
+// skipMergeCheckFacts reads what the skip card is decided on, before any card is filed: the project
+// and the landing it names, what that landing stopped on, and the check command that would be
+// skipped. The project read carries the check (`integration.mergeCheckCommand`) and the task read
+// carries the landing's own sentence (`integration.blockingReason.summary`), which is where both are
+// written for a person already.
+//
+// It refuses here — without interrupting anybody — when the landing is not one this door answers: a
+// task that is not DONE, one whose newest landing never failed, or one that stopped on something
+// other than a check. That is not a substitute for the server's own decision (the server re-reads
+// every fact under the task's row lock); it is so that a person is never shown a card for a skip
+// that cannot be queued.
+func skipMergeCheckFacts(t *Transport, projectID, taskID, reason string) (map[string]interface{}, error) {
+	projectRaw, err := t.getProject(projectID)
+	if err != nil {
+		return nil, fmt.Errorf("read project %s: %w", projectID, err)
+	}
+	var project struct {
+		Title       string `json:"title"`
+		Integration struct {
+			MergeCheckCommand string `json:"mergeCheckCommand"`
+		} `json:"integration"`
+	}
+	if err := json.Unmarshal(projectRaw, &project); err != nil {
+		return nil, fmt.Errorf("read project %s: %w", projectID, err)
+	}
+	taskRaw, err := t.getTask(taskID)
+	if err != nil {
+		return nil, fmt.Errorf("read task %s: %w", taskID, err)
+	}
+	var task struct {
+		Title       string `json:"title"`
+		Status      string `json:"status"`
+		ProjectID   string `json:"projectId"`
+		Integration struct {
+			State  string `json:"state"`
+			LandTask *struct {
+				State           string `json:"state"`
+				Phase           string `json:"phase"`
+				Generation      string `json:"generation"`
+				BlockingReason  *struct {
+					Code    string `json:"code"`
+					Summary string `json:"summary"`
+				} `json:"blockingReason"`
+			} `json:"landTask"`
+		} `json:"integration"`
+	}
+	if err := json.Unmarshal(taskRaw, &task); err != nil {
+		return nil, fmt.Errorf("read task %s: %w", taskID, err)
+	}
+	if task.ProjectID != "" && task.ProjectID != projectID {
+		return nil, fmt.Errorf("task %s is not filed under project %s: a project's coordinator skips a "+
+			"check on its own project's landings", taskID, projectID)
+	}
+	if task.Status != "DONE" {
+		return nil, fmt.Errorf("task %s is %s, not DONE: a landing delivers a finished task's work, so "+
+			"there is no finished delivery whose check could be taken off", taskID, task.Status)
+	}
+	// A check that ran out of its budget is the same state from here: the runner records it as
+	// CHECK_FAILED with `timedOut` on the check it killed, so one state covers both and the class the
+	// server decides on is read off that column there.
+	landing := task.Integration.LandTask
+	if landing == nil || landing.State != "CHECK_FAILED" {
+		what := "no landing on this project's integration line"
+		if landing != nil {
+			what = fmt.Sprintf("its newest landing is %s", landing.State)
+		}
+		if landing != nil && landing.State == "ERROR" {
+			return nil, fmt.Errorf("task %s: %s. The integration machinery stopped rather than a check "+
+				"disagreeing, and there is no check to skip: run the landing again with integration_retry "+
+				"and say what changed", taskID, what)
+		}
+		return nil, fmt.Errorf("task %s: %s. A merge check is skipped only where a check RAN and its "+
+			"result is not accepted, so there is nothing for this door to take off: read the landing's "+
+			"own item, or the project's integration read", taskID, what)
+	}
+	if project.Integration.MergeCheckCommand == "" {
+		return nil, fmt.Errorf("project %s has no merge check command, so this landing was never stopped "+
+			"by one and there is nothing to skip", projectID)
+	}
+	summary := ""
+	if landing.BlockingReason != nil {
+		summary = landing.BlockingReason.Summary
+	}
+	return map[string]interface{}{
+		"projectId":    projectID,
+		"projectTitle": project.Title,
+		"taskId":       taskID,
+		"taskTitle":    task.Title,
+		// The command that would NOT run, verbatim: the decision is about that command, and a card
+		// that paraphrased it would be asking about something nobody can see.
+		"checkCommand": project.Integration.MergeCheckCommand,
+		"failure":      summary,
+		"generation":   landing.Generation,
+		"reason":       reason,
+	}, nil
+}
+
+// askForSkipMergeCheck files the skip card and returns its id once the account owner has answered it,
+// with declined != "" when the answer was no.
+//
+// The id is the whole reason this does not go through askBeforeCreate, which answers only yes or no:
+// the card IS the approval as far as the server is concerned — the skip is refused unless it names an
+// ALLOWED card raised by this same conversation about this same landing — so the id has to travel
+// with the call. Headless there is no session and nobody to ask, and it returns empty: that caller is
+// the owner operating their own machine, and their own door takes no card (see the CLI).
+func askForSkipMergeCheck(t *Transport, sessionID string, facts map[string]interface{}) (approvalID, declined string, err error) {
+	if sessionID == "" {
+		return "", "", nil
+	}
+	body := map[string]interface{}{
+		"toolName": integrationSkipMergeCheckApprovalToolName,
+		"input":    facts,
+	}
+	// As for every other card: a runner-hosted job outlives the turn it was raised in, and the server
+	// must know that when it decides whether the card still has a reader.
+	if jobID := strings.TrimSpace(os.Getenv(envBgJobID)); jobID != "" {
+		body["backgroundJobId"] = jobID
+	}
+	id, err := t.createApproval(context.Background(), sessionID, body)
+	if err != nil {
+		return "", "", fmt.Errorf("could not register approval: %w", err)
+	}
+	dec, err := awaitApprovalDecision(context.Background(), t, sessionID, id)
+	if err != nil {
+		return "", "", fmt.Errorf("approval poll failed: %w", err)
+	}
+	if dec.Status == "ALLOWED" {
+		return id, "", nil
+	}
+	if dec.Message != "" {
+		return id, dec.Message, nil
+	}
+	return id, "denied by the user", nil
 }
 
 // openBlockerFacts finds one still-open blocker in the project read, by the id spelling that read
@@ -3371,6 +3558,47 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"one. Up to 2000 characters; it stays on the new job and on every item it handles.",
 				},
 			}, "projectId", "reason"),
+		},
+		{
+			"name": "integration_skip_merge_check",
+			"description": "Queue ONE landing of a DONE task again with the project's merge check NOT " +
+				"RUN — skipped, never passed — and only with the account owner's yes on a confirmation " +
+				"card. Use it when the check is what is red rather than the delivery: a command that " +
+				"cannot pass where the runner runs it (a shell without GNU timeout or bash 4, a missing " +
+				"tool, a baseline the machine does not have). Every other door is wrong for that red: " +
+				"integration_retry runs the same command against the same machine and is red again by " +
+				"construction, task_reopen sends back work that is not at fault, and the check COMMAND " +
+				"is the account owner's to change — which is the decision this card puts in front of " +
+				"them. What it does: reads the project, the task and the failed landing first, raises " +
+				"the card (the project, the task, the check command verbatim, what stopped, and your " +
+				"reason), and queues exactly one LAND_TASK generation only if they answer yes; a decline " +
+				"queues nothing and the landing stands as it failed. ONCE: the project's mergeCheckCommand " +
+				"setting is untouched, the next landing and every merge into main are checked as before, " +
+				"and the generation this queues records the check it skipped, your reason and the card " +
+				"the owner approved it on — as does any item that landing goes on to open. Refused for " +
+				"anything but a landing that stopped on a check (CHECK_FAILED, including a check that ran " +
+				"out of its budget): a CONFLICT is the branch's, an ERROR is the machinery's (use " +
+				"integration_retry), and a landing already in flight refuses — and the same three " +
+				"refusals integration_retry has apply (a failure whose item is the account owner's, a " +
+				"project that is not Automatic, a task of another project). Only the conversation the " +
+				"project is coordinated from may call it.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project you coordinate, as shown in its web UI URL (/projects/<id>).",
+				},
+				"taskId": map[string]interface{}{
+					"type": "string",
+					"description": "The DONE task whose failed landing should go on without the project's " +
+						"merge check. Its newest landing must have ended CHECK_FAILED.",
+				},
+				"reason": map[string]interface{}{
+					"type": "string",
+					"description": "Why this check should not hold up this landing — what makes it red " +
+						"about the check rather than the work. Up to 2000 characters; the owner decides " +
+						"on it, and it stays on the generation and on every record of it.",
+				},
+			}, "projectId", "taskId", "reason"),
 		},
 		{
 			"name": "project_delete",

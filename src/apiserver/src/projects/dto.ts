@@ -36,6 +36,7 @@ import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from '../tasks/task-criterio
 import { MAX_BLOCKER_RESOLUTION_REASON_CHARS } from './project-blocker-resolution';
 import { MAX_OPEN_ITEM_RESOLUTION_NOTE, MAX_QUESTION_CHARS } from './project-open-item';
 import { MAX_INTEGRATION_RETRY_REASON } from './project-integration-retry';
+import { MAX_INTEGRATION_SKIP_REASON } from './project-integration-skip-check';
 import { MAX_START_REQUEST_WHY } from './project-start-request';
 import {
   MAX_DONE_REQUEST_EVIDENCE_REF,
@@ -718,6 +719,31 @@ export class HandOverOpenItemDto {
  */
 export class RetryIntegrationDto {
   @IsString() @MinLength(1) @MaxLength(MAX_INTEGRATION_RETRY_REASON) reason!: string;
+}
+
+/**
+ * One landing queued again with its merge check NOT RUN (`integration_skip_merge_check`, contract
+ * §2.4 J-S5). The reason is the rerun's — the sentence that says why this check was not the
+ * delivery's to fail — and the card is the account owner's answer to it: the id of the confirmation
+ * the runner filed before calling here, required on the coordinator channel and refused by the
+ * service when it names nothing, names a card nobody has answered, or names one raised about another
+ * landing. The account owner's own door needs no card (they are the person it would ask) and reads
+ * none.
+ */
+export class SkipMergeCheckDto {
+  @IsString() @MinLength(1) @MaxLength(MAX_INTEGRATION_SKIP_REASON) reason!: string;
+  /** The card's own id, in either spelling: the runner hands back the uuid its own create answered
+   *  with, and a client that read the card off a public list may paste the short form. */
+  @IsOptional() @IsPublicId() approvalId?: string;
+}
+
+/**
+ * The account owner's own skip: the reason alone. Deliberately not the DTO above with its card field
+ * omitted — the owner needs no card because they are the person one would ask, and a body that could
+ * name one would suggest a confirmation had been checked that this door never reads.
+ */
+export class SkipMergeCheckAsOwnerDto {
+  @IsString() @MinLength(1) @MaxLength(MAX_INTEGRATION_SKIP_REASON) reason!: string;
 }
 
 export class RecordMergeEvidenceDto {

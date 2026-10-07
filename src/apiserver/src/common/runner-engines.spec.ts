@@ -214,7 +214,10 @@ test('Antigravity keeps its display order when dsh is reported, and accounts lik
   assert.equal(isReportedEngine('antigravity'), true);
   assert.deepEqual(LOGIN_ENGINES, ['claude', 'codex', 'kimi', 'antigravity']);
   assert.deepEqual(REPORTED_ENGINES, ['claude', 'codex', 'kimi', 'opencode', 'antigravity', 'dsh']);
-  assert.equal(isInstallEngine('opencode'), false);
+  // Reportable and installable, never signable-in: the install relay needs a command, the sign-in
+  // relay a flow, and OpenCode only has the former.
+  assert.equal(isInstallEngine('opencode'), true);
+  assert.equal(isLoginEngine('opencode'), false);
 });
 
 /** The `/usage` buckets as step 1's runner reports them (docs/antigravity-runtime-contract.md §16.6). */
