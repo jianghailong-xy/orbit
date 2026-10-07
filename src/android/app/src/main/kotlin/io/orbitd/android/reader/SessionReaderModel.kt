@@ -73,7 +73,7 @@ internal class SessionReaderModel(private val auth: AuthSession, private val han
                 } else {
                     val old = mutable.value
                     val restoring = !old.window.seeded && old.targetSeq != null
-                    val window = if (previousEvents !== s.transcript.events && !old.loading && !restoring) old.window.live(s.transcript, following) else old.window
+                    val window = if ((previousEvents !== s.transcript.events || !old.window.seeded && s.transcript.seeded) && !old.loading && !restoring) old.window.live(s.transcript, following) else old.window
                     previousEvents = if (!old.loading) s.transcript.events else previousEvents
                     mutable.value = old.copy(window = window, session = s, denied = false)
                 }

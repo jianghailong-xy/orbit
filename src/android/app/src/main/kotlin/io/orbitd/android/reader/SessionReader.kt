@@ -10,14 +10,17 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.cards.SessionCards
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.protocol.Wire
@@ -37,11 +40,26 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         app.realtime, route.id!!, app.processScope, route.recordId, recordOpened) }
     DisposableEffect(model) { onDispose { model.close() } }
     val state by model.state.collectAsState()
+    val composer = remember(app, handle, route.id) { app.composer(handle, route.id!!) }
+    val composerState by composer.state.collectAsState()
+    var composeFocus by remember(handle, route.id) { mutableIntStateOf(0) }
+    var composerFocused by remember(handle, route.id) { mutableStateOf(false) }
     LaunchedEffect(state.window.seeded, state.loading, state.targetSeq) {
         if (route.recordId != null && state.window.seeded && !state.loading && state.targetSeq != null) recordOpened = true
     }
     val rows = remember(state.window.events) { transcriptRows(state.window.events) }
-    val resources = remember(handle, route.id) { ReaderResources(app.session, handle, route.id) }
+    val readable by rememberUpdatedState(!state.denied)
+    val attachmentMetadata by rememberUpdatedState(state.window.events.flatMap { event ->
+        (event.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
+    }.associateBy { ObjectId.canonical(it.string("id").orEmpty()) })
+    val resources = remember(handle, route.id) { ReaderResources(app.session, handle, route.id,
+        available = { readable }, metadata = { source ->
+            attachmentMetadata[ObjectId.canonical(source.removePrefix("orbit-attachment:"))]?.let {
+                (it.string("name") ?: it.string("fileName") ?: "Attachment") to
+                    (it.string("mime") ?: it.string("mimeType") ?: "application/octet-stream")
+            }
+        }, images = { attachmentMetadata.values.filter { (it.string("mime") ?: it.string("mimeType"))?.startsWith("image/") == true }
+            .mapNotNull { it.string("id")?.let { id -> "orbit-attachment:$id" } } }) }
     val openLink = rememberReaderLinkHandler(resources) { next ->
         if (next.destination == Destination.SESSION && ObjectId.same(next.id, route.id) &&
             next.recordId != null && next.recordId == route.recordId) model.openRecord(next.recordId)
@@ -96,12 +114,16 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         }
     }
     CompositionLocalProvider(LocalReaderResources provides resources) {
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+        val otherInputHasKeyboard = WindowInsets.ime.getBottom(LocalDensity.current) > 0 && !composerFocused
+        val composerHeight = if (otherInputHasKeyboard) 0.dp else if (maxHeight < 320.dp) maxHeight else maxHeight * 0.65f
         Column(Modifier.fillMaxSize()) {
             val session = state.session
             val detail = session?.snapshot?.detail
             if (state.denied) {
                 StatusMessage("Session unavailable", if (session?.error?.httpStatus == 403) "You don't have permission to access this item." else "This item is no longer available.", model::retry)
             } else {
+                Column(Modifier.weight(1f).fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { details = true }, enabled = detail != null) { Text(detail?.string("title") ?: "Session details") }
@@ -122,7 +144,6 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                             .then(if (reconnecting) Modifier else Modifier.clearAndSetSemantics { })) { Text("Retry") }
                 }
                 state.error?.let { StatusMessage("Couldn't load messages", it, model::retry) }
-                if (!state.window.seeded) LoadingMessage("Loading messages…")
                 // Capture all lazy intervals in this composition, preserving A05's measurement fix.
                 val displayedRows = rows
                 val displayedWindow = state.window
@@ -135,6 +156,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     awaitEachGesture { awaitFirstDown(requireUnconsumed = false); follow = false }
                 }.testTag("transcript-list"), state = list,
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    if (!displayedWindow.seeded) item(key = "loading") { LoadingMessage("Loading messages…") }
                     item(key = "older") {
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
                     }
@@ -151,7 +173,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         }
                     }
                     item(key = "newer") { if (displayedWindow.newerAfter != null) TextButton(enabled = !displayedLoading, onClick = model::newer) { Text("Load newer messages") } }
-                    item(key = "interaction-cards") { SessionCards(openLink) }
+                    item(key = "interaction-cards") { SessionCards(openLink, discuss = if (!composerState.loaded) null else { context ->
+                        val prior = composer.state.value.draft.text
+                        val text = prior + (if (prior.isBlank()) "" else "\n\n") + context
+                        composer.edit(text, text.length, text.length)
+                        composerFocused = true
+                        composeFocus++
+                    }) }
                     item(key = "tail") { Spacer(Modifier.height(1.dp).testTag("transcript-tail")) }
                 }
                 if (!follow || state.window.newerAfter != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -161,7 +189,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     }, enabled = rows.any { it.event.type == "user" }) { Text("Last question") }
                     TextButton(onClick = { follow = true; model.latest() }) { Text("Jump to latest") }
                 }
+                }
+                // Keep the composer and its activity-result launchers alive while card forms use the IME.
+                Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
+                    focusRequest = composeFocus, inputFocusChanged = { composerFocused = it }) }
             }
+        }
         }
         if (details && !state.denied) SessionDetails(state.session, api, openLink) { details = false }
         action?.let { DirectoryActionDialog(it, api, data.copy(fresh = data.fresh && state.session?.fresh == true), { action = it }) {

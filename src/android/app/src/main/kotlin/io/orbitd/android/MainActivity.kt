@@ -29,6 +29,7 @@ import io.orbitd.android.auth.AuthViewModel
 import io.orbitd.android.core.BuildIdentity
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.reader.SessionReader
+import io.orbitd.android.composer.NewSessionComposer
 import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.text.ReaderResources
 import kotlinx.coroutines.flow.map
@@ -38,6 +39,7 @@ import io.orbitd.android.directory.*
 import io.orbitd.android.navigation.*
 import io.orbitd.android.ui.OrbitTheme
 import io.orbitd.android.ui.LocalOrbitColors
+import io.orbitd.android.push.PushNoticeHost
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 
@@ -49,7 +51,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         if (savedInstanceState == null) acceptIntent(intent)
         val auth = ViewModelProvider(this, ViewModelProvider.AndroidViewModelFactory(application))[AuthViewModel::class.java]
-        setContent { OrbitTheme { OrbitShell(auth, application as OrbitApplication, incoming) } }
+        setContent { OrbitTheme { PushNoticeHost((application as OrbitApplication).push) { OrbitShell(auth, application as OrbitApplication, incoming) } } }
     }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); acceptIntent(intent) }
     private fun acceptIntent(intent: Intent) {
@@ -183,6 +185,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.WORKSPACE, Destination.FOLDER -> DirectoryScreen(route, data, api, ::open) { app.realtime.refreshDirectory() }
                                 Destination.SEARCH -> SearchScreen(api, ::open)
                                 Destination.SESSION -> SessionReader(app, signedIn.handle, route, api, data, ::open)
+                                Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open)
                                 Destination.SETTINGS -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     AuthScreen(authState, authMessage, auth::login, auth::logout)
                                     Button(onClick = { open(OrbitRoute(Destination.BUILD)) }) { Text("Build information") }

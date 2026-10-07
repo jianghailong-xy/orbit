@@ -2,4 +2,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- The on-device HTTP fixture also needs permission on Android 10. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <application android:label="A07 receiver">
+        <activity android:name="io.orbitd.android.composer.ShareReceiver" android:exported="true" android:label="A07 receiver">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+    </application>
 </manifest>

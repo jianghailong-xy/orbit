@@ -20,7 +20,8 @@ import kotlinx.coroutines.launch
 enum class AuthMessage { INVALID_ADDRESS, INVALID_CREDENTIALS, NETWORK, STORAGE, SERVER }
 
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
-    private val session = (application as OrbitApplication).session
+    private val app = application as OrbitApplication
+    private val session = app.session
     val state = session.state
     private val mutableMessage = MutableStateFlow<AuthMessage?>(null)
     val message = mutableMessage.asStateFlow()
@@ -44,6 +45,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val server = ServerAddress.parse(address, allowLoopbackHttp = BuildConfig.DEBUG)
+                app.push.beforeSignOut()
+                if (mine != attempt) return@launch
                 session.login(server, email.trim(), password)
             } catch (_: CancellationException) { /* Superseded or cancelled. */ }
             catch (error: Exception) { if (mine == attempt) mutableMessage.value = messageFor(error) }
@@ -51,10 +54,13 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun logout() {
-        ++attempt
+        val mine = ++attempt
         mutableMessage.value = null
         viewModelScope.launch {
-            try { session.logout() } catch (error: Exception) { mutableMessage.value = messageFor(error) }
+            try {
+                app.push.beforeSignOut()
+                if (mine == attempt) session.logout()
+            } catch (error: Exception) { if (mine == attempt) mutableMessage.value = messageFor(error) }
         }
     }
 
