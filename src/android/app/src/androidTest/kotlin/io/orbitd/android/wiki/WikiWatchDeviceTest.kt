@@ -208,6 +208,29 @@ class WikiWatchDeviceTest {
         capture("run-reverted")
     }
 
+    /** The confirmed plan's document from Contents; a footnote's source opens the session at the quoted record (the
+     * deep link a footnote rests on), and Back returns to the same document, where the reader was. */
+    @Test fun aDocumentsFootnoteOpensTheQuotedRecordAndBackReturns() = journey("doc-source", { "orbit://wiki/${it.string("space")}" }) { _, ids ->
+        press("wiki-bar-contents")
+        awaitTag("wiki-contents-sheet")
+        press("wiki-contents-doc:session-runtime")
+        awaitTag("wiki-doc-list")
+        capture("doc-page")
+        // Footnote 30 quotes a turn of the inherited session (the fixture points it at A06's record).
+        pressIn("wiki-doc-list", "wiki-doc-footnote:30")
+        awaitTag("wiki-doc-footnote-sheet")
+        capture("doc-footnote-sheet")
+        press("wiki-doc-source-open")
+        compose.waitUntil(20_000) { app.realtime.state.value.session?.id == ids.string("session") }
+        compose.waitUntil(20_000) { journal().any { it.string("path").contains("/events/page") && it.string("path").contains("around=") } }
+        await("Jump to latest")
+        capture("doc-source-record")
+        compose.onNodeWithContentDescription("Back").performClick()
+        awaitTag("wiki-doc-list")
+        compose.onNodeWithTag("wiki-doc-footnote:30").assertExists()
+        capture("doc-returned")
+    }
+
     /** An entry the server cannot be reached for says so, with Retry, and reads once the connection is back. */
     @Test fun anUnreachableEntrySaysSoAndRetryReadsIt() = journey("offline", { "orbit://wiki/${it.string("space")}" }) { _, ids ->
         awaitTag("wiki-search")
