@@ -1,4 +1,4 @@
--- 0394 — the managed runner mapping (docs/managed-runner-design.md, "Identity and durable mapping").
+-- 0399 — the managed runner mapping (docs/managed-runner-design.md, "Identity and durable mapping").
 --
 -- One row per user who has a managed runner: the owner, the stable runner row and default workspace
 -- created with it, and the one data PVC's location (cluster key, namespace, `mr-data-<runner uuid>`)
@@ -13,10 +13,11 @@
 -- `owner_id` (0231's `runner_id_owner_id_key` and 0307's `workspace_id_owner_id_key`), so the mapping
 -- cannot disagree with either about whose it is.
 --
--- 0394: the first number free on every ref and every local worktree on 2026-10-07 (0393 is held by
--- an unlanded branch). Every statement can run twice: IF NOT EXISTS, and types and constraints inside
--- a `duplicate_object` guard. No existing table, column, constraint, function, trigger or type is
--- altered or dropped, and no row is written: a deployment without the feature has an empty table.
+-- 0399: the first number free on every ref and every local worktree on 2026-10-07 (first written as
+-- 0394, which main then took; 0396 and 0398 are held by unlanded branches). Every statement can run
+-- twice: IF NOT EXISTS, and types and constraints inside a `duplicate_object` guard. No existing
+-- table, column, constraint, function, trigger or type is altered or dropped, and no row is written:
+-- a deployment without the feature has an empty table.
 
 DO $$ BEGIN
   CREATE TYPE "managed_runner_desired_state" AS ENUM ('RUNNING', 'SLEEPING', 'DELETED');

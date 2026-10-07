@@ -1317,7 +1317,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'None inside.',
     answer: 'Typed 503 from the global boundary.',
   },
-  // ── Managed runners (migration 0394, docs/managed-runner-design.md). Only two units own a
+  // ── Managed runners (migration 0399, docs/managed-runner-design.md). Only two units own a
   //    transaction; every other managed write is a compare-and-set statement below. Kubernetes is
   //    never called inside either closure: the manager calls it between them.
   {
@@ -2225,7 +2225,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: 'wiki/wiki-plan-job.ts#progressWikiPlanBuild', class: 'ONE_ROW_CAS', statements: 1, note: 'How far a build\'s run has got (contract `plan.jobs.progress`): the documents it went through and the one it writes now, on its row by id while it is made and a build; a later report overwrites it. A job ended meanwhile is not matched, and the door answers WIKI_PLAN_NO_JOB.' },
   { at: 'wiki/wiki-plan-job.ts#finishWikiPlanJob', class: 'ONE_ROW_CAS', statements: 1, note: 'How a job\'s run ended (contract `plan.jobs.finish`): its row by id while it is made, ended with the outcome, the version or the gate\'s errors, the report and the last draft. A job ended already is not matched, so a second end keeps the first.' },
   { at: 'wiki/wiki-plan.ts#propose', class: 'INSERT', statements: 1, note: 'A maintenance run\'s proposed change to the plan (contracts/wiki.contract.json `plan.proposals`): one INSERT, pending, after the gate passed it against the confirmed version. Outside a transaction on purpose: it changes no version, and the owner\'s acceptance gates it again against the plan as it stands then.' },
-  // Managed runners (migration 0394): the lease and the compare-and-set every manager step commits
+  // Managed runners (migration 0399): the lease and the compare-and-set every manager step commits
   // with, and the owner's retry. One row each, by id, under a predicate; none is retried here.
   { at: 'managed-runners/managed-runner-manager.ts#acquireLease', class: 'ONE_ROW_CAS', statements: 1, note: 'Take or keep the mapping\'s lease: its row by id, only while the lease is free, expired or already this replica\'s. Losing it is the answer LEASED_ELSEWHERE, not a conflict. The lease coordinates reconcilers; it never authorizes a writer of the volume.' },
   { at: 'managed-runners/managed-runner-manager.ts#releaseLease', class: 'ONE_ROW_CAS', statements: 1, note: 'Give the lease back after a pass: its row by id, only while this replica holds it. A lease taken over meanwhile is not matched; one that is not released expires.' },

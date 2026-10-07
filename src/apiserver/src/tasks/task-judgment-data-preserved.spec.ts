@@ -1987,13 +1987,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // named. No INSERT, UPDATE or DELETE: no stored row is read, locked, backfilled or rewritten —
       // the columns are catalog-only, and every existing row keeps the flag false.
       '0393_integration_job_skip_merge_check',
-      // Managed runners (0394): two new enum types and one new table, managed_runner, with its own
+      // Managed runners (0399): two new enum types and one new table, managed_runner, with its own
       // unique indexes, CHECKs and three ON DELETE RESTRICT foreign keys — to `user`, and composite
       // with owner_id to `runner` (0231's runner_id_owner_id_key) and `workspace` (0307's
       // workspace_id_owner_id_key). No existing table, column, constraint, function, trigger or type
       // is altered or dropped; no task, project, acceptance or DONE fence object is named, and no
       // row is written.
-      '0394_managed_runner'],
+      '0399_managed_runner'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

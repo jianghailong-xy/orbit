@@ -350,7 +350,7 @@ model User {
   /// account through its space.
   wikiSpaces       WikiSpace[]
 
-  /// The account's one managed runner mapping, when it has one (migration 0394).
+  /// The account's one managed runner mapping, when it has one (migration 0399).
   managedRunner    ManagedRunner?
 
   @@map("user")
@@ -808,7 +808,7 @@ model Runner {
   authoritativeForCodebases ProjectCodebase[]
   /// Codex earned rate-limit resets confirmed against this machine's default Codex account.
   codexRateLimitResetOperations CodexRateLimitResetOperation[]
-  /// Set when this runner is a managed runner (migration 0394). Restrict on delete, like the
+  /// Set when this runner is a managed runner (migration 0399). Restrict on delete, like the
   /// codebase authority above: deleting the row would cascade to its workspaces and lose the
   /// mapping's storage record, so compute removal never deletes it.
   managedRunner ManagedRunner?
@@ -1032,7 +1032,7 @@ model Workspace {
   wikiSpaceBindings WikiSpaceWorkspace[]
   /// The folders this workspace's sessions can be filed in (see SessionFolder).
   sessionFolders SessionFolder[]
-  /// Set when this is a managed runner's default workspace (migration 0394).
+  /// Set when this is a managed runner's default workspace (migration 0399).
   managedRunnerDefault ManagedRunner? @relation("ManagedRunnerDefaultWorkspace")
 
   /// The key a wiki binding's composite foreign key names (migration 0307), so a space can only be
@@ -1073,7 +1073,7 @@ enum ManagedRunnerManagementState {
 }
 
 /// One user's managed runner: the durable mapping from the owner to a stable runner row, a stable
-/// default workspace and one data PVC in one configured cluster namespace (migration 0394,
+/// default workspace and one data PVC in one configured cluster namespace (migration 0399,
 /// docs/managed-runner-design.md "Identity and durable mapping"). Created with the runner and the
 /// workspace in one transaction; the manager reconciles Kubernetes towards `desiredState` and
 /// records what it observed. Absence of a row is the read state NOT_PROVISIONED.
