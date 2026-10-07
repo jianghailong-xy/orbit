@@ -90,12 +90,14 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // an address a reader follows to the job, the session or the item.
   'retryOfJobId',
   'retryRequestedBySessionId',
+  'retryRequestedByUserId',
   'handlingItemIds',
   // How the coordinator handled an item (migration 0368): the job its rerun queued, the conversation
   // that asked, and the job whose terminal state ended the item. Addresses a reader follows to the
   // job or the session — history with no foreign key, never a fence.
   'handlingJobId',
   'handlingSessionId',
+  'handlingUserId',
   'resolvedByJobId',
   // What a promotion is made of (migration 0285). Every one of them is an address a reader of the
   // card follows: the tasks the merge would carry, the two jobs that checked and landed it, the
@@ -117,12 +119,21 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'signedById',
   'coordinatorSessionId',
   'workspaceId',
+  // The workspaces a personal access token is confined to (migration 0383): addresses its owner
+  // picks when issuing it and reads back in the token list — never a fence.
+  'workspaceIds',
+  // The personal access token an activity row was written through (migration 0384): the same id
+  // the token list hands out and its revoke takes back — an address, never a fence.
+  'credentialId',
   'foremanWorkspaceId',
   'coordinatorWorkspaceId',
   'runnerId',
   'assignedRunnerId',
   'targetRunnerId',
   'taskId',
+  // A concrete repair task's exception item (migration 0379), an address the task/open-item
+  // readers hand back to the task or project routes.
+  'fixesOpenItemId',
   'dependsOnTaskId',
   // The dependency graph's computed fields. They name tasks exactly as `taskId` does, but they are
   // not columns, so `public-id-coverage.spec.ts` — which walks the schema — never asked about
@@ -264,6 +275,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'requestedBySessionId',
   'decidedByUserId',
   'appliedTaskId',
+  // A move request's target criterion (0386): the definition row `criterionDefinitionId` names on
+  // a task, here as what the moved task WILL declare. An address for the same reason.
+  'requestedCriterionDefinitionId',
   // The account owner who resolved a project blocker (0269), named exactly as `decidedByUserId` is.
   'resolvedByUserId',
   // And the one who resumed a paused coordinator (0280), which is the same kind of name.
@@ -386,6 +400,11 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'createdById',
   'approvedById',
   'decidedById',
+  // The administrator who last saved a sign-in provider (`sign_in_provider`, migration 0390): a user,
+  // named the way `createdById` names one.
+  'updatedById',
+  // The signed-in user a Google LINK flow would link to (`oauth_login_flow`, migration 0391).
+  'linkUserId',
   'actorId',
   'mentions',
   // Wire-only aggregates: no column of their own, but they carry the same ids in request and
@@ -551,6 +570,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
  *  server interpolates them into raw SQL as `::uuid`. Translating one breaks the fence silently,
  *  so neither direction may touch them — they are not addresses, they are equality tokens. */
 export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
+  // An open-item handover records the coordinator session that made the decision.  It is
+  // provenance for the audit trail, not a caller-addressable session reference.
+  'handedOverBySessionId',
   // The coordination workspace a project's DERIVED coordinator identity was derived FROM
   // (`project_runtime`, migration 0114). It names a workspace row, but it is not an address: it is
   // the value `project_coordinator_reconcile` compares the seated agent against, byte-for-byte, to

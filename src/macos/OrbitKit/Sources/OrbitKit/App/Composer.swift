@@ -22,9 +22,11 @@ public enum ComposerLogic {
     /// shows that model (docs/model-routing-design.md §9): it marks the model chip ✦ and opens its
     /// menu on why. A model changed here is this run's own, a session opened by hand has no route,
     /// and a run on an Agent without smart selection has one that was not applied — all three keep
-    /// the chip as it always was (web parity: `smartRoute` in WorkspaceView.tsx).
-    public static func smartRoute(taskID: String?, route: TaskRunRoute?, modelID: String) -> TaskRunRoute? {
-        guard let taskID, !taskID.isEmpty, let route, route.applied,
+    /// the chip as it always was (web parity: `smartRoute` in WorkspaceView.tsx). So does every run
+    /// while the account's switch (`UserPreferences.smartModelSelection`) is off, the default.
+    public static func smartRoute(taskID: String?, route: TaskRunRoute?, modelID: String,
+                                  smartSelection: Bool) -> TaskRunRoute? {
+        guard smartSelection, let taskID, !taskID.isEmpty, let route, route.applied,
               let level = route.level, !level.isEmpty, route.model == modelID else { return nil }
         return route
     }
@@ -294,10 +296,12 @@ public enum ComposerLogic {
     }
 
     /// The human sentence out of a Nest error body (`{"message": "…"}`, or an array of them for a
-    /// validation failure); the raw body when it isn't one, nil when there's nothing to show.
+    /// validation failure); the raw body when it isn't one, nil when there's nothing to show. A page
+    /// of markup is nothing to show: what a proxy in front of the server answers a 502 with is a whole
+    /// HTML document, and the project's sessions page once drew every line of it.
     static func serverMessage(_ body: String?) -> String? {
         let trimmed = body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !trimmed.isEmpty else { return nil }
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("<") else { return nil }
         guard let data = trimmed.data(using: .utf8),
               let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
             return trimmed
@@ -506,7 +510,8 @@ public enum ComposerSlash {
     }
 
     /// Restrict runtime-owned slash assets to the active runtime. Older runners omit `provider`
-    /// for Claude entries, so nil remains Claude-compatible. Codex, OpenCode and Antigravity take
+    /// for Claude entries, so nil remains Claude-compatible. Codex, OpenCode, Antigravity and DeepSeek
+    /// Harness take
     /// slash-prefixed text as runtime input and have no slash registry (agy is started with
     /// `--disable-slash-commands`, since its own command handler ends a stream-json session), so
     /// they keep only Orbit's local commands; local commands are available under every provider.
@@ -514,7 +519,7 @@ public enum ComposerSlash {
         items.filter { item in
             if item.type == "local" { return true }
             switch provider {
-            case "codex", "opencode", "antigravity": return false
+            case "codex", "opencode", "antigravity", "dsh": return false
             case "kimi":  return item.provider == "kimi"
             default:      return item.provider == nil || item.provider == "claude"
             }

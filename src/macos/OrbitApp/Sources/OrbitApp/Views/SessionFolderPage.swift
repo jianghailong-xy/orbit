@@ -118,18 +118,60 @@ struct SessionFolderPage: View {
     /// The Pinned section's fold, shared with the workspace list's by its storage key: folding it on
     /// one list folds it on both, which is what "the same list" means here.
     @AppStorage("sessionList.pinnedCollapsed") private var pinnedCollapsed = false
+    /// The last grouping drawn and its inputs (see `list(agent:)`).
+    @State private var listingMemo = SessionListingMemo<SessionListGrouping>()
 
     private var agent: Agent? { app.agents?.agent(address.agentID) }
     private var folder: SessionFolder? { app.sessionFolders.first { $0.id == address.folderID } }
+    /// What the page's grouping is computed from, read off the models each pass (see the
+    /// workspace list's `listInputs`).
+    private var listInputs: SessionListInputs {
+        SessionListInputs(workspaceID: address.agentID, sessions: app.agents?.agentSessions ?? [],
+                          folderID: address.folderID, accountSessions: app.sessions,
+                          allSessions: app.agents?.allSessions ?? [], folders: app.sessionFolders,
+                          projects: app.projects?.sidebarProjects ?? [], watches: app.watches?.summaries ?? [:],
+                          view: address.view, searching: isSearching,
+                          runnerOffline: app.agents?.runnerIsOffline(agent?.runnerId) ?? false)
+    }
+    /// The whole grouping, from its inputs alone (see the workspace list's).
+    private static func grouping(_ inputs: SessionListInputs, _ lines: SessionLineCache) -> SessionListGrouping {
+        let projectListing = Self.projectListing(inputs, lines)
+        let sessions = Self.sessions(projectListing, inputs)
+        let projectRows = Dictionary(uniqueKeysWithValues: projectListing.projects.map { ($0.id, $0) })
+        return SessionListGrouping(projectListing: projectListing,
+                                   folderListing: SessionFolderListing(folders: [], sessions: sessions),
+                                   timeSections: Self.timeSections(sessions, inputs), projectRows: projectRows)
+    }
     /// The folder's sessions, in the list's order — the page's own list, and what the Move panel
     /// counts its folders over.
-    private var sessions: [Session] {
-        guard let agents = app.agents else { return [] }
-        return SessionFolderGrouping.sessions(agents.agentSessions, inFolder: address.folderID,
-                                              view: address.view)
+    private static func sessions(_ projectListing: SessionProjectListing, _ inputs: SessionListInputs) -> [Session] {
+        let ungrouped = SessionFolderGrouping.sessions(inputs.sessions, inFolder: inputs.folderID ?? "",
+                                                      view: inputs.view)
+        guard SessionProjectGrouping.listShowsProjects(view: inputs.view, byTag: false) else { return ungrouped }
+        return projectListing.entries.map(\.timeGroupingSession)
     }
-    private var timeSections: [SessionTimeSection] {
-        SessionTimeGrouping.sections(sessions, pinnedFirst: address.view == .open)
+    private static func projectListing(_ inputs: SessionListInputs, _ lines: SessionLineCache) -> SessionProjectListing {
+        // The grouping reads only the coordinators out of these, so only they are copied out of the
+        // account's lists — not several hundred sessions each, concatenated whole on every pass.
+        let isCoordinator = { (session: Session) in session.projectMembership?.role == .coordinator }
+        let coordinators = inputs.allSessions.filter(isCoordinator) + inputs.accountSessions.filter(isCoordinator)
+        // Only the sessions the grouping looks a watch up for — the folder's workspace list and the
+        // projects' coordinators — not every session of the account (see the workspace list's).
+        let watched = inputs.sessions + coordinators
+        return SessionProjectGrouping.listing(inputs.sessions,
+                                      folders: inputs.workspaceFolders,
+                                      projects: inputs.projects, view: inputs.view,
+                                      byTag: false, searching: inputs.searching, folderID: inputs.folderID,
+                                      runnerOffline: inputs.runnerOffline,
+                                      coordinators: coordinators,
+                                      contentSessions: inputs.view == .open ? inputs.accountSessions : inputs.allSessions,
+                                      watching: Dictionary(watched.compactMap { session in
+                                          inputs.watch(for: session.id).map { (session.id, $0) }
+                                      }, uniquingKeysWith: { _, latest in latest }),
+                                      line: { lines.line(for: $0, watching: inputs.watch(for: $0.id)) })
+    }
+    private static func timeSections(_ sessions: [Session], _ inputs: SessionListInputs) -> [SessionTimeSection] {
+        SessionTimeGrouping.sections(sessions, pinnedFirst: inputs.view == .open)
     }
     private var query: String {
         searchQuery?.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -181,8 +223,8 @@ struct SessionFolderPage: View {
             }
         }
         .sheet(item: $movingSession) { s in
-            if let agent {
-                SessionMoveSheet(session: s, workspace: agent, listed: sessions).environment(app)
+            if let workspace = app.agents?.agent(s.agent?.id ?? s.agentId ?? address.agentID) {
+                SessionMoveSheet(session: s, workspace: workspace, listed: app.agents?.allSessions ?? []).environment(app)
             }
         }
         // Keep the page's rows fresh while it is the page on screen: pushing it cancels the list
@@ -191,6 +233,7 @@ struct SessionFolderPage: View {
         // enough there.
         .task(id: "\(address.agentID)|\(address.view.rawValue)") {
             await app.agents?.loadSessions(agentID: address.agentID, view: address.view)
+            await app.projects?.load()
             guard address.view != .open else { return }
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 4_000_000_000)
@@ -205,6 +248,12 @@ struct SessionFolderPage: View {
     /// rows as every other list draws them (see `sessionRow`), and the same pull-to-refresh.
     private func list(agent: Agent) -> some View {
         @Bindable var app = app
+        // One grouping, regrouped only when its inputs change, which the list's closures and its
+        // empty state share (see the workspace list's `body`).
+        let grouping = listingMemo.value(for: listInputs, compute: Self.grouping)
+        let sessions = grouping.folderListing.sessions
+        let timeSections = grouping.timeSections
+        let projectRows = grouping.projectRows
         return List(selection: rowNavigation == .selection ? $app.selectedAgentSessionID : nil) {
             if isSearching {
                 searchResults
@@ -215,22 +264,22 @@ struct SessionFolderPage: View {
                         // (the first row drops its top separator with the title).
                         ForEach(section.sessions) { session in
                             if session.id == section.sessions.first?.id {
-                                sessionRow(session).listRowSeparator(.hidden, edges: .top)
+                                listRow(session, projects: projectRows).listRowSeparator(.hidden, edges: .top)
                             } else {
-                                sessionRow(session)
+                                listRow(session, projects: projectRows)
                             }
                         }
                     } else if section.title == "Pinned" {
                         Section {
                             if !pinnedCollapsed {
-                                ForEach(section.sessions) { sessionRow($0) }
+                                ForEach(section.sessions) { listRow($0, projects: projectRows) }
                             }
                         } header: {
                             pinnedSectionHeader(section.title)
                         }
                     } else {
                         Section {
-                            ForEach(section.sessions) { sessionRow($0) }
+                            ForEach(section.sessions) { listRow($0, projects: projectRows) }
                         } header: {
                             Text(section.title).textCase(nil)
                         }
@@ -297,6 +346,14 @@ struct SessionFolderPage: View {
 
     /// One row, wrapped for the container it is in — the workspace list's own arrangement, repeated
     /// here so a folder's page and the list outside behave identically (see `AgentPanes.sessionRow`).
+    @ViewBuilder private func listRow(_ s: Session, projects: [String: SessionProjectRow]) -> some View {
+        if let project = projects[s.id] {
+            projectRow(project)
+        } else {
+            sessionRow(s)
+        }
+    }
+
     @ViewBuilder private func sessionRow(_ s: Session) -> some View {
         let row = AgentSessionRow(session: s, deleted: address.view == .trash, showsPin: address.view == .open)
         switch rowNavigation {
@@ -311,6 +368,23 @@ struct SessionFolderPage: View {
             .sessionRowActions(s, scope: address.view, onTag: { taggingSession = s },
                                onShare: { sharingSession = s }, onMove: { movingSession = s })
         }
+    }
+
+    private func projectRow(_ row: SessionProjectRow) -> some View {
+        let projectAddress = SessionProjectAddress(projectID: row.projectId, agentID: address.agentID, view: address.view)
+        let onOpen = {
+            switch row.target {
+            case .session(let id):
+                if let session = (app.sessions + (app.agents?.allSessions ?? [])).first(where: { $0.id == id }) {
+                    app.openProjectMember(session, push: rowNavigation == .push)
+                }
+            case .project: app.openProjectSessions(projectAddress)
+            }
+        }
+        return SessionProjectRowView(row: row, onOpen: { app.openProjectSessions(projectAddress) })
+        .sessionProjectRowActions(row, onOpen: onOpen, onSessions: { app.openProjectSessions(projectAddress) }, onProject: {
+            app.openProject(row.projectId)
+        }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })
     }
 
     /// The Pinned section's header: its title, and a chevron that points down while the rows show
@@ -403,7 +477,7 @@ private struct SessionFolderManagement: ViewModifier {
             .onChange(of: renaming) { _, folder in
                 if let folder { draft = folder.name }
             }
-            .confirmationDialog(deleteTitle, isPresented: deletingPresented, titleVisibility: .visible) {
+            .orbitConfirmation(deleteTitle, isPresented: deletingPresented) {
                 Button(SessionFolderCopy.deleteConfirm, role: .destructive) { delete() }
                 Button(SessionFolderCopy.cancel, role: .cancel) {}
             } message: {

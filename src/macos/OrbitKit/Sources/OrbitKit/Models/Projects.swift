@@ -79,6 +79,7 @@ public enum CoordinatorLeadKind: String, Codable, Sendable, CaseIterable {
     case integrationCheckFailed = "INTEGRATION_CHECK_FAILED"
     case integrationError = "INTEGRATION_ERROR"
     case taskFailed = "TASK_FAILED"
+    case deliveryReview = "DELIVERY_REVIEW"
     /// Forward-compatibility floor: the chip then says only that the coordinator is on something.
     case unknown = "UNKNOWN"
 
@@ -142,6 +143,17 @@ public struct ProjectListStartRequest: Codable, Equatable, Sendable {
     }
 }
 
+/// The coordinator's open request to record an OPEN project done (`DONE_REQUEST`), as the index
+/// carries it: only since when it has been asking. The request itself is the open-items read's
+/// (`ProjectOpenItemsView.doneRequest`).
+public struct ProjectListDoneRequest: Codable, Equatable, Sendable {
+    public let waitingSince: String
+
+    public init(waitingSince: String) {
+        self.waitingSince = waitingSince
+    }
+}
+
 /// Who must act on a project, and how long they have had to (`ProjectListAttention`).
 public struct ProjectListAttention: Codable, Equatable, Sendable {
     public let userBlockers: Int
@@ -157,12 +169,17 @@ public struct ProjectListAttention: Codable, Equatable, Sendable {
     /// is none of those four: nothing escalated, and nothing pushes. Nil from a server that
     /// predates start requests, and for a project nobody asked to start.
     public let startRequest: ProjectListStartRequest?
+    /// The coordinator asking its owner to record this OPEN project done — what the row names as
+    /// waiting on the owner ("Needs you · Ready to close"), apart from `ownerItems` for the reason
+    /// `startRequest` is. Nil from a server that predates done requests, and while nobody asked.
+    public let doneRequest: ProjectListDoneRequest?
 
     public init(userBlockers: Int = 0, coordinatorBlockers: Int = 0, systemBlockers: Int = 0,
                 maxSeverity: ProjectAttentionSeverity? = nil, attentionSinceAt: String? = nil,
                 nextCheckAt: String? = nil, ownerItems: [ProjectListOwnerItem] = [],
                 coordinatorItems: ProjectListCoordinatorItems? = nil,
-                startRequest: ProjectListStartRequest? = nil) {
+                startRequest: ProjectListStartRequest? = nil,
+                doneRequest: ProjectListDoneRequest? = nil) {
         self.userBlockers = userBlockers
         self.coordinatorBlockers = coordinatorBlockers
         self.systemBlockers = systemBlockers
@@ -172,6 +189,7 @@ public struct ProjectListAttention: Codable, Equatable, Sendable {
         self.ownerItems = ownerItems
         self.coordinatorItems = coordinatorItems
         self.startRequest = startRequest
+        self.doneRequest = doneRequest
     }
 
     public init(from decoder: Decoder) throws {
@@ -188,6 +206,7 @@ public struct ProjectListAttention: Codable, Equatable, Sendable {
         // Read with `try?`: a request this build cannot read is a row that names none, rather than
         // an index that fails to load.
         startRequest = (try? c.decodeIfPresent(ProjectListStartRequest.self, forKey: .startRequest)) ?? nil
+        doneRequest = (try? c.decodeIfPresent(ProjectListDoneRequest.self, forKey: .doneRequest)) ?? nil
     }
 }
 
@@ -210,15 +229,33 @@ public struct ProjectListIntegration: Codable, Equatable, Sendable {
     public let ref: String
     /// Queued or running landing, merge and check jobs; nil on older servers.
     public let activeJobCount: Int?
+    /// The job the project page's landing line would describe; nil when nothing is in flight and
+    /// on older servers. The session list's project row states it.
+    public let inFlight: ProjectIntegrationInFlight?
 
-    public init(line: IntegrationLine, ref: String, activeJobCount: Int? = nil) {
+    public init(line: IntegrationLine, ref: String, activeJobCount: Int? = nil,
+                inFlight: ProjectIntegrationInFlight? = nil) {
         self.line = line
         self.ref = ref
         self.activeJobCount = activeJobCount
+        self.inFlight = inFlight
     }
 }
 
-/// One row of `GET /projects`.
+/// Stored task progress from `GET /projects/sidebar`, excluding CANCELLED from the total.
+public struct ProjectSidebarTaskCounts: Codable, Equatable, Sendable {
+    public let done: Int
+    public let failed: Int
+    public let total: Int
+
+    public init(done: Int, failed: Int, total: Int) {
+        self.done = done
+        self.failed = failed
+        self.total = total
+    }
+}
+
+/// One row of `GET /projects` or the slimmer `GET /projects/sidebar` read.
 public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let title: String
@@ -236,12 +273,33 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
     /// Nil when nobody has decided a line and nothing has integrated yet.
     public let integration: ProjectListIntegration?
     public let coordinatorActivity: ProjectCoordinatorPulse?
+    /// Stored task progress from `GET /projects/sidebar`; absent on older servers and the index.
+    public let taskCounts: ProjectSidebarTaskCounts?
+    /// Who recorded a DONE project done, and the gaps they accepted — what its row says beside the
+    /// status (`ProjectDone.provenance`). Nil and empty on an open project and from an older server.
+    public let doneBy: ProjectDoneBy?
+    public let acceptedGaps: [AcceptedGap]
+    /// When the project was started, or nil for one nobody has started — `GET /projects/sidebar`
+    /// carries it; the index and older servers do not.
+    public let startedAt: String?
+    /// Whether the read carried `startedAt` at all, which is what separates "never started" (a
+    /// null) from "this read did not say" (no key) — the two answers `started` must not merge.
+    public let startedAtRead: Bool
+
+    /// Whether the project has been started, read off `startedAt` as ``ProjectDocument/started``
+    /// is. Nil for a read that did not carry the field, which no condition reads as either answer.
+    public var started: Bool? {
+        startedAtRead ? startedAt != nil : nil
+    }
 
     public init(id: String, title: String, status: ProjectStatus = .open, goal: String? = nil,
                 createdAt: String = "", updatedAt: String? = nil, taskCount: Int = 0,
                 buckets: ProjectBuckets = ProjectBuckets(), lastActivityAt: String? = nil,
                 attention: ProjectListAttention? = nil, integration: ProjectListIntegration? = nil,
-                coordinatorActivity: ProjectCoordinatorPulse? = nil) {
+                coordinatorActivity: ProjectCoordinatorPulse? = nil,
+                taskCounts: ProjectSidebarTaskCounts? = nil, doneBy: ProjectDoneBy? = nil,
+                acceptedGaps: [AcceptedGap] = [],
+                startedAt: String? = nil, startedAtRead: Bool = false) {
         self.id = id
         self.title = title
         self.status = status
@@ -254,6 +312,11 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
         self.attention = attention
         self.integration = integration
         self.coordinatorActivity = coordinatorActivity
+        self.taskCounts = taskCounts
+        self.doneBy = doneBy
+        self.acceptedGaps = acceptedGaps
+        self.startedAt = startedAt
+        self.startedAtRead = startedAtRead || startedAt != nil
     }
 
     private struct Counts: Codable {
@@ -262,7 +325,7 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, status, goal, createdAt, updatedAt, buckets, lastActivityAt, attention,
-             integration, coordinatorActivity
+             integration, coordinatorActivity, taskCounts, doneBy, acceptedGaps, startedAt
         case counts = "_count"
     }
 
@@ -280,6 +343,11 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
         attention = try c.decodeIfPresent(ProjectListAttention.self, forKey: .attention)
         integration = try c.decodeIfPresent(ProjectListIntegration.self, forKey: .integration)
         coordinatorActivity = try c.decodeIfPresent(ProjectCoordinatorPulse.self, forKey: .coordinatorActivity)
+        taskCounts = try c.decodeIfPresent(ProjectSidebarTaskCounts.self, forKey: .taskCounts)
+        doneBy = try? c.decodeIfPresent(ProjectDoneBy.self, forKey: .doneBy)
+        acceptedGaps = ((try? c.decodeIfPresent([AcceptedGap].self, forKey: .acceptedGaps)) ?? nil) ?? []
+        startedAtRead = c.contains(.startedAt)
+        startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -296,5 +364,15 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
         try c.encodeIfPresent(attention, forKey: .attention)
         try c.encodeIfPresent(integration, forKey: .integration)
         try c.encodeIfPresent(coordinatorActivity, forKey: .coordinatorActivity)
+        try c.encodeIfPresent(taskCounts, forKey: .taskCounts)
+        try c.encodeIfPresent(doneBy, forKey: .doneBy)
+        if !acceptedGaps.isEmpty { try c.encode(acceptedGaps, forKey: .acceptedGaps) }
+        if startedAtRead { try c.encode(startedAt, forKey: .startedAt) }
+    }
+
+    /// What a DONE project's row says beside its status — who recorded it, and the gaps accepted —
+    /// or nil for any other project. Web's `doneProvenance` on the projects list.
+    public var doneProvenance: String? {
+        status == .done ? ProjectDone.provenance(doneBy: doneBy, acceptedGaps: acceptedGaps.count) : nil
     }
 }

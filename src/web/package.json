@@ -15,7 +15,13 @@
     "test:ui-controls": "playwright test --config ui-migration/controls.config.mjs",
     "pretest:ui-controls": "npm run build -w @orbit/shared",
     "test:ui-overlays": "playwright test --config ui-migration/overlays.config.mjs",
-    "pretest:ui-overlays": "npm run build -w @orbit/shared"
+    "pretest:ui-overlays": "npm run build -w @orbit/shared",
+    "test:ui-choices": "playwright test --config ui-migration/choices.config.mjs",
+    "pretest:ui-choices": "npm run build -w @orbit/shared",
+    "test:ui-toasts": "playwright test --config ui-migration/toasts.config.mjs",
+    "pretest:ui-toasts": "npm run build -w @orbit/shared",
+    "test:ui-composer": "playwright test --config ui-migration/composer.config.mjs",
+    "pretest:ui-composer": "npm run build -w @orbit/shared"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.4",

@@ -9,8 +9,10 @@ extension View {
     /// iPad's column, the field keeps the drawer under the navigation bar (see `AgentContentColumn`
     /// for why that drawer is `.always`).
     @ViewBuilder
-    func sessionListSearch(text: Binding<String>, fromBottom: Bool) -> some View {
-        if #available(iOS 26.0, *), fromBottom {
+    func sessionListSearch(text: Binding<String>, fromBottom: Bool, isEnabled: Bool = true) -> some View {
+        if !isEnabled {
+            self
+        } else if #available(iOS 26.0, *), fromBottom {
             searchable(text: text, prompt: "Search sessions")
                 .toolbar { DefaultToolbarItem(kind: .search, placement: .bottomBar) }
         } else {

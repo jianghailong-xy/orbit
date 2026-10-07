@@ -92,8 +92,8 @@ final class Phase4LogicTests: XCTestCase {
         XCTAssertTrue(plist.contains("<string>/Users/me/.orbit/bin/orbit</string>"))
         XCTAssertTrue(plist.contains("<string>run</string>"))
         XCTAssertTrue(plist.contains("<key>ORBIT_HOME</key><string>/Users/me/.orbit</string>"))
-        // Self-update disabled: the app bundles + re-syncs the runner, so its version tracks the app.
-        XCTAssertTrue(plist.contains("<key>ORBIT_NO_SELFUPDATE</key><string>1</string>"))
+        // Self-update on: the app downloads the runner once at enrollment, the runner keeps it current.
+        XCTAssertFalse(plist.contains("ORBIT_NO_SELFUPDATE"))
         XCTAssertTrue(plist.contains("<key>RunAtLoad</key><true/>"))
         XCTAssertTrue(plist.contains("<key>KeepAlive</key><true/>"))
         XCTAssertTrue(plist.contains("<key>StandardOutPath</key><string>/Users/me/.orbit/runner.log</string>"))

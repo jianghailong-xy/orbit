@@ -33,6 +33,8 @@ final class ConsoleRegistry {
     @ObservationIgnored var accountDefaultPermissionMode: () -> String? = { nil }
     @ObservationIgnored var rememberDefaultPermissionMode: (String) -> Void = { _ in }
     @ObservationIgnored var accountDefaultModels: () -> [String: String] = { [:] }
+    /// Apply the app's cached session and catalog before a new console can be rendered.
+    @ObservationIgnored var seedSessionContext: (ConsoleModel) -> Void = { _ in }
 
     private var models: [String: ConsoleModel] = [:]
     /// The one session whose SSE stream is currently running (at most one), or nil when no console is
@@ -108,7 +110,13 @@ final class ConsoleRegistry {
                                  modelCatalog: modelCatalog, accountDefaultEffort: accountDefaultEffort,
                                  folderID: folderID,
                                  baseURL: baseURL, tokenStore: tokenStore, attachments: attachments)
-        model.onSessionCreated = onCreated
+        model.onSessionCreated = { [weak self, weak model] session in
+            if let self, let model {
+                self.model(for: session.id, agentID: agent.id)
+                    .adoptCreatedSession(session, from: model)
+            }
+            onCreated(session)
+        }
         model.onToast = { [weak self] request in self?.onToast(request, nil) }
         wireAccountDefaults(model)
         return model
@@ -123,6 +131,11 @@ final class ConsoleRegistry {
         } else {
             pendingRecords[sessionID] = record
         }
+    }
+
+    /// A pinned merge-conflict card can resolve from any page, even after its console was evicted.
+    func resolveInSession(sessionID: String, branch: String, target: String) async {
+        await model(for: sessionID).worktree.resolveInSession(branch: branch, target: target)
     }
 
     /// Non-mutating lookup, safe inside a view `body`. Non-nil once `model(for:)` has run (the
@@ -207,6 +220,7 @@ final class ConsoleRegistry {
             self.report(settled, detail)
         }
         wireAccountDefaults(model)
+        seedSessionContext(model)
         if let record = pendingRecords.removeValue(forKey: sessionID) { model.openRecord(record) }
         return model
     }

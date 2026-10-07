@@ -1,0 +1,31 @@
+[WebServer] (node:767535) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 8 tests using 1 worker
+
+(node:767641) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium-light-desktop] › src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.7s)
+(node:768013) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 [chromium-light-phone] › src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.6s)
+(node:768275) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  3 [chromium-dark-desktop] › src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.6s)
+(node:768465) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  4 [chromium-dark-phone] › src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.5s)
+(node:768828) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  5 [webkit-light-desktop] › src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.5s)
+(node:769125) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  6 [webkit-light-phone] › src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.2s)
+(node:769400) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  7 [webkit-dark-desktop] › src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.3s)
+(node:769629) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  8 [webkit-dark-phone] › src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.2s)
+
+  8 passed (27.2s)

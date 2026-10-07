@@ -126,8 +126,7 @@ struct WatchWakeCardView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .confirmationDialog(WatchWakeQueue.confirmTitle, isPresented: $confirmingWithdraw,
-                            titleVisibility: .visible) {
+        .orbitConfirmation(WatchWakeQueue.confirmTitle, isPresented: $confirmingWithdraw) {
             Button(WatchWakeQueue.withdraw, role: .destructive) { withdraw() }
             Button(WatchWakeQueue.keep, role: .cancel) {}
         } message: {

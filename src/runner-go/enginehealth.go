@@ -51,6 +51,16 @@ func probeEngineHealth() []EngineHealthReport {
 	return probeEngines(engineSpecs, serviceLoginPath())
 }
 
+// probeEngineHealthOf is probeEngineHealth for one engine: empty when no spec names it.
+func probeEngineHealthOf(engine string) []EngineHealthReport {
+	for _, spec := range engineSpecs {
+		if spec.bin == engine {
+			return probeEngines([]engineSpec{spec}, serviceLoginPath())
+		}
+	}
+	return nil
+}
+
 func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
 	// What the updater last managed to do here, read fresh each probe: the update loop and
 	// `orbit engine-update` both write it, and neither can reach into this snapshot.
@@ -59,12 +69,17 @@ func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
 	for _, spec := range specs {
 		h := checkEngine(spec, servicePath)
 		report := EngineHealthReport{
-			Engine:     spec.bin,
-			Installed:  h.installed,
-			Version:    h.version,
-			Auth:       authWord(h.auth),
-			AuthSource: h.authSource,
-			PlanUsage:  h.planUsage,
+			Engine:            spec.bin,
+			Installed:         h.installed,
+			Version:           h.version,
+			Auth:              authWord(h.auth),
+			AuthSource:        h.authSource,
+			PlanUsage:         h.planUsage,
+			InstallationError: h.installError,
+		}
+		if spec.bin == providerDsh {
+			report.Auth = "unknown"
+			report.Dsh = dshRuntimeHealth(h.version, false, h.installed && h.installError == "" && dshCatalogReadable())
 		}
 		// An engine that isn't here has no update state worth reporting — the record is about
 		// a binary, and a stale one left by an uninstall would describe something gone.
@@ -74,7 +89,17 @@ func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
 		// An engine whose CLI keeps a login per directory reports one entry per account: the one
 		// the user added, and Default. The engines without accounts simply say nothing here.
 		if kind, ok := accountSlotKindFor(spec.bin); ok && h.installed {
-			report.Accounts = accountHealth(kind, h.path, h.auth)
+			defaultAuth := h.auth
+			// Antigravity's Default account is the runner's Google sign-in. A runner that runs agy on
+			// its own GEMINI_API_KEY is signed in as an engine, but that account is not.
+			if spec.bin == providerAntigravity && h.authSource != "google" {
+				defaultAuth = authNo
+			}
+			var usage map[string]*PlanUsage
+			report.Accounts, usage = accountHealthWithUsage(kind, h.path, defaultAuth)
+			if len(usage) > 0 {
+				report.PlanUsage = withAccountUsage(report.PlanUsage, spec.bin, usage)
+			}
 		}
 		out = append(out, report)
 	}
@@ -87,15 +112,34 @@ func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
 // is what selects Default — so its answer is reused instead of asked twice. Nil when the slots can't
 // be listed: the report then reads as the one account it was before.
 func accountHealth(kind accountSlotKind, binPath string, defaultAuth authState) []EngineAccountReport {
+	out, _ := accountHealthWithUsage(kind, binPath, defaultAuth)
+	return out
+}
+
+// accountHealthWithUsage is accountHealth plus, for a kind whose status question reads quota too
+// (usageStatus), each added account's own quota by slot id. Default's is the engine probe's own.
+func accountHealthWithUsage(kind accountSlotKind, binPath string, defaultAuth authState) ([]EngineAccountReport, map[string]*PlanUsage) {
 	slots, err := kind.list()
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	out := make([]EngineAccountReport, 0, len(slots))
+	var usage map[string]*PlanUsage
 	for _, slot := range slots {
 		auth := defaultAuth
 		if slot.ID != accountSlotDefaultID {
-			auth = accountLoginStatus(kind, binPath, slot.Dir)
+			if kind.usageStatus != nil {
+				var read *PlanUsage
+				auth, read = accountUsageStatus(kind, binPath, slot.Dir)
+				if read != nil {
+					if usage == nil {
+						usage = map[string]*PlanUsage{}
+					}
+					usage[slot.ID] = read
+				}
+			} else {
+				auth = accountLoginStatus(kind, binPath, slot.Dir)
+			}
 		}
 		out = append(out, EngineAccountReport{
 			ID:        slot.ID,
@@ -105,6 +149,19 @@ func accountHealth(kind accountSlotKind, binPath string, defaultAuth authState) 
 			Auth:      authWord(auth),
 		})
 	}
+	return out, usage
+}
+
+// withAccountUsage files each added account's own quota under the engine snapshot's accounts, the
+// way Codex and Claude report theirs (PlanUsage.Accounts): the buckets beside them stay Default's,
+// and a snapshot is made for them when Default has none of its own to report.
+func withAccountUsage(own *PlanUsage, engine string, accounts map[string]*PlanUsage) *PlanUsage {
+	out := &PlanUsage{Provider: engine}
+	if own != nil {
+		copied := *own
+		out = &copied
+	}
+	out.Accounts = accounts
 	return out
 }
 
@@ -117,6 +174,12 @@ func accountLoginStatus(kind accountSlotKind, binPath, dir string) authState {
 	ctx, cancel := context.WithTimeout(context.Background(), accountLoginStatusTimeout)
 	defer cancel()
 	return kind.loginStatus(ctx, binPath, dir)
+}
+
+func accountUsageStatus(kind accountSlotKind, binPath, dir string) (authState, *PlanUsage) {
+	ctx, cancel := context.WithTimeout(context.Background(), accountLoginStatusTimeout)
+	defer cancel()
+	return kind.usageStatus(ctx, binPath, dir)
 }
 
 // codexHomeOf repeats a Codex account's directory under the historical field name. The control
@@ -208,6 +271,8 @@ type engineHealthProbe struct {
 	refreshMu sync.Mutex
 	// What a refresh runs: probeEngineHealth, unless a test stands in for the machine's CLIs.
 	probe func() []EngineHealthReport
+	// What refreshEngine runs: probeEngineHealthOf, unless a test stands in for the machine's CLIs.
+	probeOne func(engine string) []EngineHealthReport
 	// Told when a refresh finds an engine signed in that the probe last found signed out. A
 	// signed-out engine can be empty in the model catalog (readModelCatalog), so without this the
 	// models of an engine someone just signed into would stay out of the picker until the hourly
@@ -222,6 +287,10 @@ type engineHealthProbe struct {
 func (p *engineHealthProbe) refresh() {
 	p.refreshMu.Lock()
 	defer p.refreshMu.Unlock()
+	p.refreshLocked()
+}
+
+func (p *engineHealthProbe) refreshLocked() {
 	probe := p.probe
 	if probe == nil {
 		probe = probeEngineHealth
@@ -232,6 +301,46 @@ func (p *engineHealthProbe) refresh() {
 	p.mu.Unlock()
 	// Only now, so the refresh this asks for already reads the engine as signed in.
 	if p.signedInSinceLastProbe(next) && p.onSignIn != nil {
+		p.onSignIn()
+	}
+}
+
+// refreshEngine re-probes one engine and puts its answer in place of the one the snapshot had,
+// leaving every other engine's as it was. A sign-in that just landed changes one engine, and a full
+// refresh asks every CLI on the machine one after another — seconds, more on a loaded box — before
+// the heartbeat can say the engine is signed in. Serialised with refresh, for the reason given there.
+// Before the first full probe there is nothing to put it into, so that one runs instead.
+func (p *engineHealthProbe) refreshEngine(engine string) {
+	p.refreshMu.Lock()
+	defer p.refreshMu.Unlock()
+	probeOne := p.probeOne
+	if probeOne == nil {
+		probeOne = probeEngineHealthOf
+	}
+	p.mu.Lock()
+	known := false
+	for _, r := range p.snapshot {
+		known = known || r.Engine == engine
+	}
+	p.mu.Unlock()
+	if !known {
+		p.refreshLocked()
+		return
+	}
+	reports := probeOne(engine)
+	if len(reports) != 1 || reports[0].Engine != engine {
+		return
+	}
+	p.mu.Lock()
+	next := append([]EngineHealthReport(nil), p.snapshot...)
+	for i := range next {
+		if next[i].Engine == engine {
+			next[i] = reports[0]
+		}
+	}
+	p.snapshot = next
+	p.mu.Unlock()
+	if p.signedInSinceLastProbe(reports) && p.onSignIn != nil {
 		p.onSignIn()
 	}
 }

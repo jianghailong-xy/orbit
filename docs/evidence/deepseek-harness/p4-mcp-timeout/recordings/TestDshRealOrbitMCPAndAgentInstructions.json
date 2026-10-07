@@ -1,0 +1,372 @@
+{
+  "approvalCards": [
+    {
+      "ID": "approval-1",
+      "Body": {
+        "backgroundJobId": "bgj_2b1c40f6f8c0",
+        "input": {
+          "acceptanceCriteria": "synthetic",
+          "assigneeId": "p4-agent",
+          "completionCriterion": "EVIDENCE_JUDGMENT",
+          "description": "synthetic",
+          "title": "P4 isolated task"
+        },
+        "toolName": "orbit_task_create"
+      },
+      "Status": "ALLOWED",
+      "Polls": 1,
+      "LatePoll": false
+    }
+  ],
+  "controlPlane": [
+    {
+      "agent": "",
+      "body": {
+        "backgroundJobId": "bgj_2b1c40f6f8c0",
+        "input": {
+          "acceptanceCriteria": "synthetic",
+          "assigneeId": "p4-agent",
+          "completionCriterion": "EVIDENCE_JUDGMENT",
+          "description": "synthetic",
+          "title": "P4 isolated task"
+        },
+        "toolName": "orbit_task_create"
+      },
+      "method": "POST",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "p4-agent",
+      "body": {
+        "acceptanceCriteria": "synthetic",
+        "assigneeId": "p4-agent",
+        "completionCriterion": "EVIDENCE_JUDGMENT",
+        "description": "synthetic",
+        "title": "P4 isolated task"
+      },
+      "method": "POST",
+      "path": "/api/runner/tasks",
+      "session": "p4-orbit-session"
+    },
+    {
+      "agent": "p4-agent",
+      "body": {
+        "body": "P4 synthetic comment"
+      },
+      "method": "POST",
+      "path": "/api/runner/tasks/p4-task/comments",
+      "session": ""
+    }
+  ],
+  "facts": {
+    "agentsAndSkillsInContext": true,
+    "commentsOnDouble": 1,
+    "literalAppend": "P4_ORBIT_APPEND {{p4_literal_braces}}",
+    "systemHasHarnessIdentity": true,
+    "tasksCreatedOnDouble": 1,
+    "tools": {
+      "bash": true,
+      "create_goal": true,
+      "edit": true,
+      "exit_plan_mode": true,
+      "get_goal": true,
+      "glob": true,
+      "grep": true,
+      "job_kill": true,
+      "job_list": true,
+      "job_output": true,
+      "list_mcp_resource_templates": true,
+      "list_mcp_resources": true,
+      "mcp__orbit__ask_owner": true,
+      "mcp__orbit__bg_kill": true,
+      "mcp__orbit__bg_list": true,
+      "mcp__orbit__bg_output": true,
+      "mcp__orbit__bg_run": true,
+      "mcp__orbit__integration_retry": true,
+      "mcp__orbit__merge_receipt": true,
+      "mcp__orbit__merge_receipts": true,
+      "mcp__orbit__notify": true,
+      "mcp__orbit__open_item_hand_over": true,
+      "mcp__orbit__open_item_resolve": true,
+      "mcp__orbit__project_blocker_resolve": true,
+      "mcp__orbit__project_create": true,
+      "mcp__orbit__project_crossings": true,
+      "mcp__orbit__project_delete": true,
+      "mcp__orbit__project_get": true,
+      "mcp__orbit__project_merge_evidence": true,
+      "mcp__orbit__project_request_done": true,
+      "mcp__orbit__project_request_start": true,
+      "mcp__orbit__project_update": true,
+      "mcp__orbit__provider_create": true,
+      "mcp__orbit__provider_delete": true,
+      "mcp__orbit__provider_list": true,
+      "mcp__orbit__provider_update": true,
+      "mcp__orbit__schedule_wakeup": true,
+      "mcp__orbit__task_attribution": true,
+      "mcp__orbit__task_await": true,
+      "mcp__orbit__task_batch_pin": true,
+      "mcp__orbit__task_comment": true,
+      "mcp__orbit__task_confirmation_return": true,
+      "mcp__orbit__task_confirmation_review": true,
+      "mcp__orbit__task_create": true,
+      "mcp__orbit__task_create_batch": true,
+      "mcp__orbit__task_delete": true,
+      "mcp__orbit__task_dependency_add": true,
+      "mcp__orbit__task_dependency_graph": true,
+      "mcp__orbit__task_dependency_remove": true,
+      "mcp__orbit__task_evidence_decide": true,
+      "mcp__orbit__task_evidence_list": true,
+      "mcp__orbit__task_evidence_submit": true,
+      "mcp__orbit__task_get": true,
+      "mcp__orbit__task_labels": true,
+      "mcp__orbit__task_list": true,
+      "mcp__orbit__task_progress_report": true,
+      "mcp__orbit__task_reopen": true,
+      "mcp__orbit__task_request_confirmation": true,
+      "mcp__orbit__task_start": true,
+      "mcp__orbit__task_update": true,
+      "mcp__orbit__tasklist_create": true,
+      "mcp__orbit__tasklist_delete": true,
+      "mcp__orbit__tasklist_get": true,
+      "mcp__orbit__tasklist_list": true,
+      "mcp__orbit__tasklist_propose_dag": true,
+      "mcp__orbit__tasklist_update": true,
+      "mcp__orbit__watch_cancel": true,
+      "mcp__orbit__watch_create": true,
+      "mcp__orbit__watch_get": true,
+      "mcp__orbit__watch_list": true,
+      "mcp__orbit__watch_update": true,
+      "mcp__orbit__wiki_get": true,
+      "mcp__orbit__wiki_propose": true,
+      "mcp__orbit__wiki_search": true,
+      "read": true,
+      "read_image": true,
+      "read_mcp_resource": true,
+      "skill": true,
+      "todo_write": true,
+      "update_goal": true,
+      "web_fetch": true,
+      "web_search": true,
+      "write": true
+    }
+  },
+  "modelRequests": 4,
+  "orbitEvents": [
+    {
+      "payload": {
+        "argv": [
+          "--profile",
+          "acp",
+          "--patch",
+          "/tmp/orbit-dsh-mcp-timeout-cDupKT/TestDshRealOrbitMCPAndAgentInstructions1966518488/001/dsh-home/orbit.patch.json",
+          "--patch",
+          "/tmp/orbit-dsh-mcp-timeout-cDupKT/TestDshRealOrbitMCPAndAgentInstructions1966518488/001/dsh-home/orbit-agent.patch.json"
+        ],
+        "cliVersion": "0.2.0-rc.2",
+        "configHash": "b374a3c29ad43c78f180225ae13d9434963b2a1d06b4cc451374bb0e1d70b149",
+        "dshHome": "/tmp/orbit-dsh-mcp-timeout-cDupKT/TestDshRealOrbitMCPAndAgentInstructions1966518488/001/dsh-home",
+        "executable": "/tmp/orbit-dsh-mcp-timeout-cDupKT/install/node_modules/.bin/dsh",
+        "provider": "dsh",
+        "runtime": "acp",
+        "subtype": "launch"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "cliVersion": "0.2.0-rc.2",
+        "provider": "dsh",
+        "resumed": false,
+        "runtime": "acp",
+        "runtimeSessionId": "5c574c42-1983-496f-b7fb-61e126521f6f",
+        "sessionId": "5c574c42-1983-496f-b7fb-61e126521f6f",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "runtimeSessionId": "5c574c42-1983-496f-b7fb-61e126521f6f",
+        "text": "Use Orbit MCP to file and comment."
+      },
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "payload": {
+        "contextTokens": 46282,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "5c574c42-1983-496f-b7fb-61e126521f6f",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_1",
+        "input": {
+          "acceptanceCriteria": "synthetic",
+          "completionCriterion": "EVIDENCE_JUDGMENT",
+          "description": "synthetic",
+          "title": "P4 isolated task"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "mcpServer": "orbit",
+        "mcpTool": "task_create",
+        "name": "mcp__orbit__task_create",
+        "runtimeSessionId": "5c574c42-1983-496f-b7fb-61e126521f6f",
+        "status": "in_progress",
+        "toolCallId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "Not done yet — handed to runner-hosted job bgj_2b1c40f6f8c0. task_create waits for the owner's confirmation, which can take longer than this engine lets a tool call run (1m0s), so that job asks them and waits instead of this call. Nothing is written unless the owner confirms; if they do, the job performs the write itself. Do not call task_create again for the same thing. When the owner answers, the job exits and Orbit wakes this session with its output: the JSON-RPC reply carrying exactly what this call would have returned (what was created, or the refusal). If there is nothing else to do, end your turn; bg_output reads the job at any time.\n{\n  \"jobId\": \"bgj_2b1c40f6f8c0\",\n  \"shellId\": \"bgj_2b1c40f6f8c0\",\n  \"kind\": \"watch\",\n  \"command\": \"{ rm -f '/tmp/orbit-dsh-mcp-timeout-cDupKT/orbit-mcp-handoff-2518177118.json' \\u0026\\u0026 ORBIT_AGENT_ID='p4-agent' ORBIT_TASK_ID='p4-task' ORBIT_ALLOW_ORCHESTRATION=0 ORBIT_MCP_TOOLS='task_create' ORBIT_MCP_CALL_TIMEOUT_SECONDS= '/tmp/orbit-dsh-mcp-timeout-cDupKT/go-build3177946360/b001/orbit.test' mcp; } \\u003c '/tmp/orbit-dsh-mcp-timeout-cDupKT/orbit-mcp-handoff-2518177118.json'\",\n  \"description\": \"Orbit task_create: waiting for the owner's confirmation\",\n  \"status\": \"running\",\n  \"pid\": 3862908,\n  \"exitCode\": null,\n  \"outputPath\": \"/tmp/orbit-dsh-mcp-timeout-cDupKT/TestDshRealOrbitMCPAndAgentInstructions1966518488/002/bgj_2b1c40f6f8c0.output\",\n  \"startedAt\": \"2026-10-05T14:42:38Z\",\n  \"holdsWorktree\": true,\n  \"wakeOnExit\": true\n}",
+        "isError": false,
+        "localTurnId": "t1",
+        "runtimeSessionId": "5c574c42-1983-496f-b7fb-61e126521f6f",
+        "status": "completed",
+        "toolCallId": "call_p4_1",
+        "toolUseId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "contextTokens": 46685,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "5c574c42-1983-496f-b7fb-61e126521f6f",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_2",
+        "input": {
+          "body": "P4 synthetic comment"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "mcpServer": "orbit",
+        "mcpTool": "task_comment",
+        "name": "mcp__orbit__task_comment",
+        "runtimeSessionId": "5c574c42-1983-496f-b7fb-61e126521f6f",
+        "status": "in_progress",
+        "toolCallId": "call_p4_2"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "{\n  \"id\": \"p4-double-comment\"\n}",
+        "isError": false,
+        "localTurnId": "t1",
+        "runtimeSessionId": "5c574c42-1983-496f-b7fb-61e126521f6f",
+        "status": "completed",
+        "toolCallId": "call_p4_2",
+        "toolUseId": "call_p4_2"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "contextTokens": 46730,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "5c574c42-1983-496f-b7fb-61e126521f6f",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_3",
+        "input": {
+          "description": "delegate",
+          "prompt": "write a file",
+          "run_in_background": false
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "name": "subagent",
+        "runtimeSessionId": "5c574c42-1983-496f-b7fb-61e126521f6f",
+        "status": "in_progress",
+        "toolCallId": "call_p4_3"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "Error: unknown tool \"subagent\"",
+        "isError": true,
+        "localTurnId": "t1",
+        "runtimeSessionId": "5c574c42-1983-496f-b7fb-61e126521f6f",
+        "status": "failed",
+        "toolCallId": "call_p4_3",
+        "toolUseId": "call_p4_3"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "messageId": "8af8cb0c-953b-4a91-af53-e79799647433",
+        "runtimeSessionId": "5c574c42-1983-496f-b7fb-61e126521f6f",
+        "text": "P4 Orbit MCP answer"
+      },
+      "turn": "t1",
+      "type": "assistant"
+    },
+    {
+      "payload": {
+        "contextTokens": 46759,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "5c574c42-1983-496f-b7fb-61e126521f6f",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "contextTokens": 46759,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "numTurns": 1,
+        "runtimeSessionId": "5c574c42-1983-496f-b7fb-61e126521f6f",
+        "stopReason": "end_turn",
+        "subtype": "completed"
+      },
+      "turn": "t1",
+      "type": "turn_end"
+    }
+  ],
+  "permissionMode": "default",
+  "scenario": "TestDshRealOrbitMCPAndAgentInstructions"
+}

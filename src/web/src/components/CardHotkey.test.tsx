@@ -195,6 +195,41 @@ describe('the keyboard yields to text entry', () => {
   });
 });
 
+describe('the keyboard yields to a focused role that answers Enter', () => {
+  /** A focusable element whose `role` promises Enter — a nav row drawn as `role="link"`, a
+   *  transcript row's head drawn as `role="button"` — the same case as a native button, spelled as
+   *  ARIA rather than a tag. */
+  function focusRole(role: string): HTMLElement {
+    const el = document.createElement('div');
+    el.setAttribute('role', role);
+    el.tabIndex = 0;
+    document.body.appendChild(el);
+    el.focus();
+    return el;
+  }
+
+  it.each(['link', 'button'])('leaves the bare key to a focused role="%s" element, not the card', async (role) => {
+    const confirm = vi.fn();
+    const chat = vi.fn();
+    await mount(<Card onConfirm={confirm} onChatAbout={chat} />);
+    focusRole(role);
+
+    key();
+    expect(confirm, `a role="${role}" element’s own Enter answers it, not the card`).not.toHaveBeenCalled();
+    expect(chat).not.toHaveBeenCalled();
+  });
+
+  it('still presses a chord card over a focused role element — the chord is no element’s own', async () => {
+    const press = vi.fn();
+    await mount(<Chord onPress={press} />);
+    focusRole('link');
+
+    key(HINT);
+    key(CTRL);
+    expect(press, 'the chord stays the card’s over a role element').toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('several cards asking at once', () => {
   it('gives the keys to the card drawn highest, and walks them down once it stops asking', async () => {
     const first = vi.fn();

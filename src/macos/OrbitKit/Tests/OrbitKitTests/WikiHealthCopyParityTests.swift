@@ -124,8 +124,7 @@ final class WikiHealthCopyParityTests: XCTestCase {
             XCTAssertEqual(WikiHealthLogic.text(parts), one.text, one.name)
             // The whole line under the title: every active entry the read counts — not the entries the
             // home read, which stop at 200 — the anchors, then the maintenance part.
-            let home = WikiHomeContent(space: space, spaces: [space], entries: [], timeline: [],
-                                       proposals: shared.space.pendingOps, health: one.health)
+            let home = WikiHomeContent(space: space, spaces: [space], entries: [], timeline: [], health: one.health)
             XCTAssertEqual(home.statusLine(now: now), one.line, "\(one.name): the line under the title")
             XCTAssertEqual(one.health.entries, shared.entries)
         }
@@ -143,14 +142,14 @@ final class WikiHealthCopyParityTests: XCTestCase {
         let shared = try fixture()
         let now = try now(shared)
         let space = WikiSpace(id: shared.space.id, slug: shared.space.slug, rootCommitSha: shared.space.rootCommitSha)
-        let bare = WikiHomeContent(space: space, spaces: [space], entries: [], timeline: [], proposals: 0)
+        let bare = WikiHomeContent(space: space, spaces: [space], entries: [], timeline: [])
         XCTAssertEqual(bare.statusLine(now: now), "0 entries · Anchors verified at 1588c3b")
         let data = Data(#"{"spaceId":"s","entries":3,"maintenance":{"look":"paused","enabled":true}}"#.utf8)
         let later = try JSONDecoder().decode(WikiSpaceHealth.self, from: data)
         XCTAssertEqual(later.maintenance.look, .unknown)
         XCTAssertEqual(later.maintenance.backlog, 0, "a key a server one release apart left out reads as its default")
         XCTAssertEqual(WikiHealthLogic.parts(later.maintenance, now: now), [])
-        let home = WikiHomeContent(space: space, spaces: [space], entries: [], timeline: [], proposals: 0, health: later)
+        let home = WikiHomeContent(space: space, spaces: [space], entries: [], timeline: [], health: later)
         XCTAssertEqual(home.statusLine(now: now), "3 entries · Anchors verified at 1588c3b")
     }
 
@@ -274,12 +273,14 @@ final class WikiHealthCopyParityTests: XCTestCase {
                             "WikiCopy.anchorsVerified(", "WikiHealthLogic.parts(health.maintenance, now: now)"],
                     "the native line's parts")
 
-        let view = try swift(Self.app + "Views/WikiView.swift")
-        let header = try slice(view, from: "private var header: some View {", to: "private var spacePicker: some View {")
-        XCTAssertTrue(header.contains("Text(wikiStatusText(content.statusParts(now: now)))"))
-        assertOrder(header, ["case wikiStatusSettingsURL:", "actions.openSettings()", "case wikiStatusRunURL:",
-                             "content.health?.maintenance.lastRun?.sessionId", "actions.openSession(session)"],
+        // The line is Activity's now (design §12.3.2): the home says what the space holds instead.
+        let activity = try swift(Self.app + "Views/WikiActivityView.swift")
+        let line = try slice(activity, from: "private var statusLine: some View {", to: "private struct WikiActivityBannerRow: View {")
+        XCTAssertTrue(line.contains("Text(wikiStatusText(content.statusParts(now: now)))"))
+        assertOrder(line, ["case wikiStatusSettingsURL:", "actions.openSettings()", "case wikiStatusRunURL:",
+                           "content.health?.maintenance.lastRun?.sessionId", "actions.openSession(session)"],
                     "the native line's links")
+        let view = try swift(Self.app + "Views/WikiView.swift")
         let text = try slice(view, from: "func wikiStatusText(_ parts: [WikiStatusPart]) -> AttributedString {",
                              to: "private func wikiStatusColour(")
         for piece in ["AttributedString(\" · \")", "AttributedString(\"●\\u{00A0}\")", "AttributedString(\"\\u{00A0}✓\")",
@@ -290,10 +291,9 @@ final class WikiHealthCopyParityTests: XCTestCase {
         XCTAssertTrue(colours.contains("case .warn: return Color.orange"), "amber while a run waits")
         XCTAssertTrue(colours.contains("case .error: return Color.red"), "red when it broke")
 
-        let screens = try swift(Self.app + "Views/WikiScreens.swift")
-        XCTAssertTrue(screens.contains("openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) }"))
+        XCTAssertTrue(activity.contains("openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) }"))
         let model = try swift(Self.app + "WikiModel.swift")
-        XCTAssertTrue(model.contains("async let healthRead = api.wikiHealth(spaceID: space.id)"))
-        XCTAssertTrue(model.contains("health: health)"), "the home is drawn with the health it read")
+        XCTAssertTrue(model.contains("let healthRead = Task { try await api.wikiHealth(spaceID: space.id) }"))
+        XCTAssertTrue(model.contains("health: health)"), "Activity is drawn with the health it read")
     }
 }

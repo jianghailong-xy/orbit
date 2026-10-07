@@ -524,12 +524,16 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         /// Whether the WORK serving this criterion has met it. Absent when the read declined to
         /// answer, which is a third state and never merged with "no".
         public let satisfied: Bool?
+        /// The criterion's `key`, which a gap names it by (`AcceptedGap.criterionKey`).
+        public let key: String?
 
-        public init(id: String, ordinal: Int, text: String, satisfied: Bool? = nil) {
+        public init(id: String, ordinal: Int, text: String, satisfied: Bool? = nil,
+                    key: String? = nil) {
             self.id = id
             self.ordinal = ordinal
             self.text = text
             self.satisfied = satisfied
+            self.key = key
         }
     }
 
@@ -554,6 +558,27 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
     public let startedAtRead: Bool
     /// The endpoint's own `_count`, decoded under the name the other payloads give it.
     public let counts: ProjectTaskCounts?
+    /// The projection of the project's committed facts, and its done record — what the settlement
+    /// cards in a coordinator conversation are drawn from (`ProjectDone.swift`). Nil, nil, nil and
+    /// empty from a server that predates them.
+    public let derivedDone: ProjectDerivedDone?
+    public let doneBy: ProjectDoneBy?
+    public let doneAt: String?
+    public let acceptedGaps: [AcceptedGap]
+    /// How many tasks hold each status — what "Why is this project not done?" reads "no task is
+    /// IN_PROGRESS" off (`ProjectDone.slot`). Nil from a server that predates it.
+    public let tasksByStatus: [String: Int]?
+
+    /// What the done cards read off this document.
+    public var doneSubject: ProjectDoneSubject {
+        ProjectDoneSubject(title: title ?? id, status: status,
+                           criteria: (acceptanceCriteriaItems ?? []).map {
+                               ProjectDoneSubject.Criterion(id: $0.id, key: $0.key, ordinal: $0.ordinal,
+                                                            text: $0.text)
+                           },
+                           derivedDone: derivedDone, doneBy: doneBy, doneAt: doneAt,
+                           acceptedGaps: acceptedGaps, tasksByStatus: tasksByStatus)
+    }
     /// How many tasks the project holds — what the confirmation card's condition asks before it
     /// offers to start anything, because "Start the project" is a verb and this is its object.
     /// `_count.tasks` is everything filed under the project, settled work included: whether any of
@@ -577,7 +602,10 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
     public init(id: String, acceptanceCriteriaItems: [Item]? = nil,
                 title: String? = nil, status: String? = nil,
                 coordinatorEnabled: Bool? = nil, counts: ProjectTaskCounts? = nil,
-                startedAt: String? = nil, startedAtRead: Bool = false) {
+                startedAt: String? = nil, startedAtRead: Bool = false,
+                derivedDone: ProjectDerivedDone? = nil, doneBy: ProjectDoneBy? = nil,
+                doneAt: String? = nil, acceptedGaps: [AcceptedGap] = [],
+                tasksByStatus: [String: Int]? = nil) {
         self.id = id
         self.acceptanceCriteriaItems = acceptanceCriteriaItems
         self.title = title
@@ -586,6 +614,11 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         self.counts = counts
         self.startedAt = startedAt
         self.startedAtRead = startedAtRead || startedAt != nil
+        self.derivedDone = derivedDone
+        self.doneBy = doneBy
+        self.doneAt = doneAt
+        self.acceptedGaps = acceptedGaps
+        self.tasksByStatus = tasksByStatus
     }
 
     public init(from decoder: Decoder) throws {
@@ -598,6 +631,13 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         counts = try c.decodeIfPresent(ProjectTaskCounts.self, forKey: .counts)
         startedAtRead = c.contains(.startedAt)
         startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt)
+        // Read with `try?`: a projection or a record this build cannot read draws no done card,
+        // rather than failing the read the confirmation cards are drawn from too.
+        derivedDone = try? c.decodeIfPresent(ProjectDerivedDone.self, forKey: .derivedDone)
+        doneBy = try? c.decodeIfPresent(ProjectDoneBy.self, forKey: .doneBy)
+        doneAt = try? c.decodeIfPresent(String.self, forKey: .doneAt)
+        acceptedGaps = ((try? c.decodeIfPresent([AcceptedGap].self, forKey: .acceptedGaps)) ?? nil) ?? []
+        tasksByStatus = try? c.decodeIfPresent([String: Int].self, forKey: .tasksByStatus)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -609,10 +649,16 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         try c.encodeIfPresent(coordinatorEnabled, forKey: .coordinatorEnabled)
         try c.encodeIfPresent(counts, forKey: .counts)
         if startedAtRead { try c.encode(startedAt, forKey: .startedAt) }
+        try c.encodeIfPresent(derivedDone, forKey: .derivedDone)
+        try c.encodeIfPresent(doneBy, forKey: .doneBy)
+        try c.encodeIfPresent(doneAt, forKey: .doneAt)
+        if !acceptedGaps.isEmpty { try c.encode(acceptedGaps, forKey: .acceptedGaps) }
+        try c.encodeIfPresent(tasksByStatus, forKey: .tasksByStatus)
     }
 
     enum CodingKeys: String, CodingKey {
         case id, acceptanceCriteriaItems, title, status, coordinatorEnabled, startedAt
+        case derivedDone, doneBy, doneAt, acceptedGaps, tasksByStatus
         case counts = "_count"
     }
 }

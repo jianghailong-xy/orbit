@@ -29,9 +29,10 @@ final class GeminiEntryParityTests: XCTestCase {
         XCTAssertTrue(web.contains("antigravityBlocker"))
         let native = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/AgentsView.swift")
         XCTAssertTrue(native.contains("agent.antigravityKeyAvailableByRunner?[draft.runnerID"))
-        XCTAssertTrue(native.contains("Text(detail)"), "the hero renders the choice's small label")
-        let rows = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/AgentIdentity.swift")
-        XCTAssertTrue(rows.contains("choice.labelDetail"), "picker rows render the same small label")
+        // How Antigravity signs in is the provider's to say, in the composer's Provider menu — the
+        // hero names the engine alone.
+        let composer = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/ComposerView.swift")
+        XCTAssertTrue(composer.contains("[choice.label, choice.labelDetail]"), "the Provider menu renders the choice's small label")
     }
 
     func testRepairCopyMatchesWeb() throws {

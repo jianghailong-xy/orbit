@@ -1,0 +1,13 @@
+{
+  "command": "node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2.2/revision-8/attention-link.config.mjs",
+  "runner": "mcp__orbit__bg_run",
+  "bgJobId": "bgj_2c6376696b5b",
+  "cwd": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2",
+  "commit": "8a29e349324e7aaca83827a52148b540c118b992",
+  "webTree": "9aa3a0b96d7c1e3fd473995798774d4f20144885",
+  "started": "2026-10-06T06:32:02Z",
+  "outputLastWritten": "2026-10-06T06:32:29.421031+00:00",
+  "exitCode": 0,
+  "outputSha256": "d7e8f387f07e529d166d95f6bbd4f973f5e9a76f6714d89ac938cb09530e8cfa",
+  "outputBytes": 3447
+}

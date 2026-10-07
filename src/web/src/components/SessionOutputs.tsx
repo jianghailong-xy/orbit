@@ -168,6 +168,11 @@ export function SessionOutputs({
   if (iso !== 'worktree' || !detail?.branch) return wedge;
 
   const branch = detail.branch;
+  // A coordinator's bar names the project's integration line while its worktree actions keep
+  // using the session branch underneath. Task bars continue to show their own isolated branch.
+  const displayBranch = detail.projectMembership?.role === 'COORDINATOR'
+    ? (detail.projectIntegrationRef ?? branch)
+    : branch;
   const mergeTargetName = detail.mergeTarget || 'main';
   // By-hand equivalent of the runner's rebase merge, as two commands because they run in two
   // places: Orbit's layout has the branch checked out in the session's worktree and the target in
@@ -224,11 +229,11 @@ export function SessionOutputs({
           title="Copy branch name"
           onClick={(e) => {
             e.stopPropagation();
-            copy(branch, 'branch');
+            copy(displayBranch, 'branch');
           }}
         >
           <span className="wt-branch-ico">⎇</span>
-          <BranchLabel branch={branch} />
+          <BranchLabel branch={displayBranch} />
         </button>
         <span className="wt-stat">
           <span className="wt-add">+{add}</span>
@@ -329,7 +334,7 @@ export function SessionOutputs({
       <WorktreeDiffDrawer
         sessionId={detail.id}
         files={files}
-        branch={branch}
+        branch={displayBranch}
         committed={committed}
         openPath={openFile}
         onSelect={setOpenFile}
@@ -443,8 +448,9 @@ function AdoptButton({
   );
 }
 
-/** Compact "Merge to main" control on the worktree bar — a split button once the work is
- *  committed: the left segment merges into the default target (main, else master), and a caret
+/** Compact Merge control on the worktree bar — a split button once the work is committed: the
+ *  left segment merges into the server-resolved target (a project integration line for code tasks,
+ *  otherwise the workspace/runner default), and a caret
  *  opens a dropdown of the repo's other branches (mergeTargets) to merge into instead. Drives
  *  off the server-reported mergeStatus: idle → the split button; pending → "Merging…"; merged →
  *  a ✓ chip (naming the target); conflict → "Resolve in session" (resume so the workspace rebases the
@@ -471,11 +477,11 @@ function MergeButton({
   busy?: boolean;
   /** Candidate target branches reported by the runner (empty for older runners). */
   targets: string[];
-  /** The branch the last merge targeted (null = the auto-detected default). */
+  /** The server-resolved merge target: an explicit target, project integration line, or workspace
+   *  default. */
   mergeTarget?: string | null;
-  /** The workspace's remembered default target (set when the user last switched in the dropdown).
-   *  Wins over main/master as the left-segment default — but only while it's still a reported
-   *  target, so a renamed/deleted branch falls back cleanly. */
+  /** The workspace's remembered target (set when the user last switched in the dropdown), used
+   *  when the server has no resolved session/project target. */
   workspaceDefaultTarget?: string | null;
   /** The branch tip is already in the default target (the runner's is-ancestor check). With no
    *  Orbit merge in flight (idle status) this shows a quiet "✓ In main" chip instead of a Merge
@@ -516,13 +522,12 @@ function MergeButton({
       </span>
     );
   }
-  // The left-segment default: the workspace's remembered target if it's still on offer, else main,
-  // else master, else the first reported branch; undefined means "let the runner auto-detect"
-  // (the original behavior, and the older-runner case where `targets` is empty). Retry re-runs
-  // the SAME target that failed; a fresh merge uses the default.
+  // The server's resolved target includes a project task's integration line. Fall back to the
+  // workspace's remembered target and the runner's historical main/master order for old servers.
+  // Retry re-runs the SAME target that failed; a fresh merge uses the resolved default.
   const remembered = workspaceDefaultTarget && targets.includes(workspaceDefaultTarget) ? workspaceDefaultTarget : undefined;
   const defaultTarget =
-    remembered ?? (targets.includes('main') ? 'main' : targets.includes('master') ? 'master' : targets[0]);
+    mergeTarget ?? remembered ?? (targets.includes('main') ? 'main' : targets.includes('master') ? 'master' : targets[0]);
   const failed = status === 'conflict' || status === 'error';
   // The reason a failed merge shows on hover: the runner's precondition message for an 'error'
   // (e.g. "develop has uncommitted changes…"), or a fixed note for a 'conflict' (mirroring the

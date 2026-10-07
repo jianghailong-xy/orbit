@@ -1,0 +1,14 @@
+[
+ {
+  "before": "45bb56928225bbe6d00800180ebcc73f26250fd4",
+  "after": "38947755e48ac979362db36f82bfcf966b527a75",
+  "changedSelectors": 172,
+  "selectorsWhoseEveryClassAppearsInThoseSources": []
+ },
+ {
+  "before": "38947755e48ac979362db36f82bfcf966b527a75",
+  "after": "8a29e349324e7aaca83827a52148b540c118b992",
+  "changedSelectors": 37,
+  "selectorsWhoseEveryClassAppearsInThoseSources": []
+ }
+]

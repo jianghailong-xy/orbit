@@ -32,6 +32,11 @@ import { MERGED_HEADING, RESOLVING } from './ProjectPromotionCard';
  * A blocked candidate is the one that is still LIVE there — the row says who is on it and for how
  * long — so it is the card itself, rebuilt on every poll, where the merge leaves a read-only
  * receipt. The strip keeps what is asking (READY) and what is under way (CONFIRMED, RECHECKING).
+ *
+ * AS ONE LINE (owner decision 2026-10-06). The merge's card lives on the project's sessions view;
+ * the conversation keeps, at each of these places, one line that says the card's state and opens
+ * the card itself as its review. What is asserted below is where the LINE sits, and what the card
+ * it opens says.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -126,7 +131,7 @@ function merged(over: Partial<ProjectPromotionView> = {}): ProjectPromotionView 
     recheckedAt: null,
     recheck: null,
     decidedAt: MERGED_AT,
-    merged: { sha: MERGED_SHA, byUserId: 'user-1', at: MERGED_AT },
+    merged: { sha: MERGED_SHA, byUserId: 'user-1', at: MERGED_AT, automatic: false, revert: null },
     ...over,
   };
 }
@@ -217,14 +222,20 @@ const mounted = (): HTMLDivElement => {
   return container;
 };
 const count = (selector: string): number => mounted().querySelectorAll(selector).length;
+/** The merge's record in the conversation: its line, which is the row drawn in the flow. */
 const record = (): HTMLElement | null =>
-  mounted().querySelector<HTMLElement>('.project-promotion-receipt');
-/** The blocked card, wherever it was drawn — the transcript's, or the strip's. */
-const blockedCard = (): HTMLElement | null =>
-  mounted().querySelector<HTMLElement>('.project-promotion[data-state="BLOCKED"]');
-/** Every promotion card drawn anywhere, by state: the strip's question and the transcript's record. */
+  mounted().querySelector<HTMLElement>('[id^="promotion-receipt-"]');
+/** How many records the conversation draws — lines, since the receipt is the review each opens. */
+const recordLines = (): number => count('.promotion-line.is-receipt');
+/** The receipt a record's line opens, kept mounted behind it. */
+const receiptOpened = (): HTMLElement | null =>
+  document.querySelector<HTMLElement>('.project-promotion-receipt');
+/** The candidate's line in the conversation; the full card is the review it opens. */
+const promotionPreview = (): HTMLElement | null =>
+  mounted().querySelector<HTMLElement>(`#promotion-${NEXT_PROMOTION_ID}`);
+/** Every promotion form or receipt, including the form opened from a compact preview. */
 const cardsOfState = (state: string): number =>
-  mounted().querySelectorAll(`.project-promotion[data-state="${state}"]`).length;
+  document.querySelectorAll(`.project-promotion[data-state="${state}"]`).length;
 
 const waitForUi = async (assertion: () => void): Promise<void> => {
   // The act environment is off while the window is waited out, as RTL's own asyncWrapper
@@ -246,6 +257,27 @@ const waitForUi = async (assertion: () => void): Promise<void> => {
   // keeps that, without the freeze that made the wait itself blind.
   await act(async () => {});
 };
+
+/** The candidate's line, pressed: the conversation draws one line on every width, and the card it
+ *  stands for is the review that line opens. */
+async function openPromotion(state: ProjectPromotionView['state']): Promise<HTMLElement> {
+  const selector = `.project-promotion[data-state="${state}"]`;
+  const opened = (): HTMLElement | null =>
+    document.querySelector<HTMLElement>(`.review-card-dialog[data-open] ${selector}`);
+  await waitForUi(() => {
+    expect(count(`.review-card#promotion-${NEXT_PROMOTION_ID}`)).toBe(1);
+    // A re-offer moves this id from the blocked transcript line to the strip's new mount.
+    expect(promotionPreview()!.querySelector('.review-card-preview.promotion-line')).not.toBeNull();
+    // The line's own state, not the one before it: a re-offer redraws the same id.
+    expect(document.querySelector(selector), `no ${state} candidate stands behind the line`).not.toBeNull();
+  });
+  expect(promotionPreview()!.querySelector(selector), 'the card was drawn whole in the conversation').toBeNull();
+  await act(async () => promotionPreview()!.querySelector<HTMLButtonElement>('.promotion-line')!.click());
+  await waitForUi(() => {
+    expect(opened(), 'the line did not open the card').not.toBeNull();
+  });
+  return opened()!;
+}
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -421,7 +453,7 @@ describe('the record a merge leaves, in the conversation it happened in', { time
     mergesOnRecord = [merged()];
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
-      expect(count('.project-promotion-receipt')).toBe(1);
+      expect(recordLines()).toBe(1);
     });
     // A merge is not a question, so the strip that holds the questions draws nothing for it.
     expect(count('.project-promotion-actions'), 'the receipt was drawn with the merge button').toBe(0);
@@ -430,6 +462,7 @@ describe('the record a merge leaves, in the conversation it happened in', { time
     const receipt = record()!;
     expect(receipt.textContent, 'the record is not the merge that happened').toContain(MERGED_HEADING);
     expect(receipt.textContent, 'the record does not name the commit it put on main').toContain(MERGED_SHA.slice(0, 7));
+    expect(receiptOpened()?.getAttribute('data-state'), 'the line opens no receipt').toBe('MERGED');
 
     // It is IN the flow: the thing after it is an event of the conversation, not the strip.
     expect(receipt.nextElementSibling?.hasAttribute('data-seq')).toBe(true);
@@ -445,31 +478,32 @@ describe('the record a merge leaves, in the conversation it happened in', { time
     mergesOnRecord = [merged()];
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
-      expect(count('.project-promotion-receipt')).toBe(1);
+      expect(recordLines()).toBe(1);
     });
 
     // The next candidate is offered: `/promotions/current` moves on to a different commit, which is
     // exactly the moment the old card used to start describing a merge that had not happened.
     currentPromotion = candidate();
     await rereadProject([() => currentReads, () => mergedReads]);
+    await openPromotion('READY');
 
     await waitForUi(() => {
       expect(cardsOfState('READY'), 'the next candidate is not being asked about').toBe(1);
       // The record too, and in the same window: it is drawn from its own read of the merges on
       // record, and reading it synchronously right after the window is how a loaded host took a
       // null where a receipt was asserted.
-      expect(count('.project-promotion-receipt'), 'the merge stopped being drawn at all').toBe(1);
+      expect(recordLines(), 'the merge stopped being drawn at all').toBe(1);
     });
     const receipt = record()!;
-    expect(receipt.getAttribute('data-state'), 'the record followed the new candidate').toBe('MERGED');
+    expect(receiptOpened()?.getAttribute('data-state'), 'the record followed the new candidate').toBe('MERGED');
     expect(receipt.textContent, 'the record now names a commit that never landed').toContain(MERGED_SHA.slice(0, 7));
     expect(receipt.textContent, 'the record took the next candidate’s commit').not.toContain(NEXT_SOURCE_SHA.slice(0, 7));
     // One record and one question: the merge is not redrawn as the thing being asked about.
-    expect(count('.project-promotion-receipt')).toBe(1);
+    expect(recordLines()).toBe(1);
   });
 
   it('leads at the head of a conversation whose window begins after the merge', async () => {
-    mergesOnRecord = [merged({ merged: { sha: MERGED_SHA, byUserId: 'user-1', at: '2026-09-11T02:00:00Z' } })];
+    mergesOnRecord = [merged({ merged: { sha: MERGED_SHA, byUserId: 'user-1', at: '2026-09-11T02:00:00Z', automatic: false, revert: null } })];
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
       expect(mounted().textContent).toContain(`${NOTE[COORDINATOR_PUBLIC]}, opening`);
@@ -497,7 +531,7 @@ describe('the record a merge leaves, in the conversation it happened in', { time
     await waitForUi(() => {
       expect(mounted().textContent).toContain(`${NOTE[ORDINARY_PUBLIC]}, opening`);
     });
-    expect(count('.project-promotion-receipt')).toBe(0);
+    expect(recordLines()).toBe(0);
     expect(
       requested.filter((path) => path.endsWith('/promotions/merged')),
       'a conversation with no project read the merges of one',
@@ -513,13 +547,14 @@ describe('the card a blocked candidate leaves, in the conversation it happened i
   it('is drawn among the events, at the moment it was blocked, and not in the pane’s card strip', async () => {
     currentPromotion = blocked();
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    const details = await openPromotion('BLOCKED');
     await waitForUi(() => {
       expect(cardsOfState('BLOCKED'), 'no blocked candidate is drawn').toBe(1);
     });
     await note(COORDINATOR_PUBLIC, 2);
 
-    const card = blockedCard()!;
-    expect(card.textContent, 'the card does not name the branch it could not merge').toContain(
+    const card = promotionPreview()!;
+    expect(details.textContent, 'the card does not name the branch it could not merge').toContain(
       'orbit/runner-web-714027',
     );
     // It is IN the flow: the thing after it is an event of the conversation, and the message
@@ -537,23 +572,26 @@ describe('the card a blocked candidate leaves, in the conversation it happened i
     currentPromotion = blocked();
     openItemRows = { needsYou: [], withCoordinator: [blockedItem()] };
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    const details = await openPromotion('BLOCKED');
     // The card is a RECORD of the block and still a LIVE reading of it: the row it reads names who
     // is resolving the candidate, which is nowhere on the candidate itself. The press says it now,
     // with how long they have had it — and the wait is the row's to know.
     await waitForUi(() => {
-      expect(blockedCard()?.textContent).toContain(`${RESOLVING} · `);
+      expect(details.textContent).toContain(`${RESOLVING} · `);
     });
   });
 
   it('goes once the branch is offered again, which the strip draws as the question it is', async () => {
     currentPromotion = blocked();
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await openPromotion('BLOCKED');
     await waitForUi(() => {
       expect(cardsOfState('BLOCKED')).toBe(1);
     });
 
     currentPromotion = candidate();
     await rereadProject([() => currentReads]);
+    await openPromotion('READY');
     await waitForUi(() => {
       expect(cardsOfState('READY'), 'the next candidate is not being asked about').toBe(1);
     });
@@ -563,13 +601,14 @@ describe('the card a blocked candidate leaves, in the conversation it happened i
   it('keeps the strip’s card when the stamp is one nothing can parse', async () => {
     currentPromotion = blocked({ decidedAt: 'some time last Tuesday' });
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await openPromotion('BLOCKED');
     await waitForUi(() => {
       expect(cardsOfState('BLOCKED')).toBe(1);
     });
     await note(COORDINATOR_PUBLIC, 2);
     // Drawn at the tail rather than dropped: a candidate is not taken off the screen for a clock
     // this build cannot read (the fallback `DeliveryAnchor.exception` keeps on the native ends).
-    const card = blockedCard()!;
+    const card = promotionPreview()!;
     const later = mounted().querySelector<HTMLElement>('[data-seq="3"]')!;
     expect(
       later.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -586,17 +625,18 @@ describe('what is not a record', { timeout: 60_000 }, () => {
   it('draws no card, and leaves the events as themselves, when nothing has merged', async () => {
     currentPromotion = candidate();
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await openPromotion('READY');
     await waitForUi(() => {
       expect(cardsOfState('READY'), 'no candidate is being asked about').toBe(1);
     });
-    expect(count('.project-promotion-receipt'), 'a receipt was drawn for a project that merged nothing').toBe(0);
+    expect(recordLines(), 'a receipt was drawn for a project that merged nothing').toBe(0);
   });
 
   it('draws a message about merging as a message, not as a card made out of it', async () => {
     mergesOnRecord = [merged()];
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
-      expect(count('.project-promotion-receipt')).toBe(1);
+      expect(recordLines()).toBe(1);
     });
     // An event that mentions the merge in its text and carries junk shaped like a promotion
     // payload: read off its own fields it is an ordinary reply, and drawing it as a card would be
@@ -614,7 +654,7 @@ describe('what is not a record', { timeout: 60_000 }, () => {
     await waitForUi(() => {
       expect(mounted().textContent).toContain(text);
     });
-    expect(count('.project-promotion-receipt'), 'an event with a promotion-shaped payload became a card').toBe(1);
+    expect(recordLines(), 'an event with a promotion-shaped payload became a card').toBe(1);
     expect(cardsOfState('MERGED'), 'the merge was drawn twice').toBe(1);
   });
 });
@@ -625,7 +665,7 @@ describe('the card strip', { timeout: 60_000 }, () => {
     mergesOnRecord = [merged()];
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
-      expect(count('.project-promotion-receipt')).toBe(1);
+      expect(recordLines()).toBe(1);
     });
     expect(
       cardsOfState('MERGED'),

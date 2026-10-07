@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -39,6 +40,7 @@ function asMe<T extends { avatar?: { updatedAt: Date } | null }>(account: T) {
   return { ...rest, avatarUpdatedAt: avatar?.updatedAt ?? null };
 }
 
+@PatForbidden('ACCOUNT')
 @Controller('users')
 export class UsersController {
   constructor(private readonly prisma: PrismaService) {}
@@ -140,6 +142,7 @@ export class UsersController {
       merged.notifySessionFinished = dto.notifySessionFinished;
     if (dto.notifyAgentMessage !== undefined) merged.notifyAgentMessage = dto.notifyAgentMessage;
     if (dto.enableOrchestration !== undefined) merged.enableOrchestration = dto.enableOrchestration;
+    if (dto.modelRouting !== undefined) merged.modelRouting = dto.modelRouting;
     return asMe(await this.prisma.user.update({
       where: { id: user.userId },
       data: { preferences: merged as Prisma.InputJsonValue },

@@ -109,6 +109,7 @@ import Markdown from 'react-markdown';
 import { orbitLinkRemarkPlugin } from '../lib/orbitLink';
 import { OrbitLinkCardsCtx, orbitLinkCardComponents } from './OrbitLinkCard';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
+import { dshRepair, type DshRepair } from '../lib/dshRuntime';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
@@ -182,12 +183,17 @@ export interface AuthErrorHelp {
   /** Runner id, which unlocks signing in from the browser instead of on that machine. */
   runnerId?: string;
   runtime?: string;
+  googleLogin?: 'available' | 'needs_update' | 'unsupported_platform';
   runnerVersion?: string | null;
   onConnectGemini?: () => void;
   onSwitchToGemini?: () => void;
   onOpenProviders?: () => void;
   onInstall?: () => void;
   installDisabled?: boolean;
+  /** DeepSeek Harness: open this session's own key (its provider's edit page). */
+  onEditDshKey?: () => void;
+  /** DeepSeek Harness: install the pinned CLI on this session's runner. */
+  onInstallDsh?: () => void;
   /** Re-send the last user message, once the user has signed back in. */
   onRetry?: () => void;
   /** A re-send is already in flight, so the button offers none: one failure, one attempt. */
@@ -201,6 +207,62 @@ export interface AuthErrorHelp {
 export const AuthErrorCtx = createContext<AuthErrorHelp | null>(null);
 
 export type AntigravityRepair = 'needsKey' | 'updateRunner' | 'notInstalled';
+
+/**
+ * A DeepSeek Harness session that could not run, as the remedy rather than the runner's sentence.
+ * Its credential is a configured key, never a sign-in on the runner, so every key problem is fixed
+ * on that provider's own page; everything else is about the machine (dshRepair says which).
+ */
+export function DshRepairCard({ repair, help, seq }: { repair: DshRepair; help: AuthErrorHelp; seq?: number }) {
+  const machine = help.runnerName || 'this runner';
+  const keyProblem = repair === 'needsKey' || repair === 'invalidKey';
+  return (
+    <div className="chat-authfix" data-seq={seq} data-dsh-repair={repair}>
+      <div className="chat-authfix-head">
+        <WarningFilled className="chat-authfix-icon" />
+        <div className="chat-authfix-title">
+          {repair === 'needsKey'
+            ? 'DeepSeek Harness needs an API key'
+            : repair === 'invalidKey'
+              ? 'DeepSeek rejected this API key'
+              : repair === 'updateRunner'
+                ? 'Waiting for a newer runner'
+                : repair === 'notInstalled'
+                  ? `DeepSeek Harness isn't installed on ${machine}`
+                  : `DeepSeek Harness can't run on ${machine}`}
+        </div>
+      </div>
+      <div className="chat-authfix-desc">
+        {repair === 'needsKey'
+          ? 'This session has no DeepSeek Harness key to run on. Add or re-enable the key in Providers, then send your message again.'
+          : repair === 'invalidKey'
+            ? 'Update the key in Providers, then send your message again. Connecting a key does not check it — the first request does.'
+            : repair === 'updateRunner'
+              ? `${machine} runs Orbit runner ${help.runnerVersion || 'an unknown version'}, which predates DeepSeek Harness. The runner updates itself when no session is running on it.`
+              : repair === 'notInstalled'
+                ? 'Install it from Providers, then send your message again.'
+                : 'DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only. Move this work to a runner that can.'}
+      </div>
+      <div className="chat-authfix-actions">
+        {keyProblem && help.onEditDshKey && (
+          <button className="chat-authfix-go" type="button" onClick={help.onEditDshKey}>
+            Update the API key
+          </button>
+        )}
+        {repair === 'notInstalled' && help.onInstallDsh && (
+          <button className="chat-authfix-go" type="button" onClick={help.onInstallDsh} disabled={help.installDisabled}>
+            Install
+          </button>
+        )}
+        {keyProblem && help.onRetry && (
+          <button className="chat-authfix-retry" type="button" onClick={help.onRetry} disabled={help.retryDisabled}>
+            Retry — re-send my last message
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function antigravityRepair(message: string): AntigravityRepair | null {
   if (message.startsWith('Failed to authenticate: Antigravity runs on an API key (GEMINI_API_KEY), and neither this session nor the runner has one')) return 'needsKey';
@@ -220,18 +282,23 @@ export function AntigravityRepairCard({ repair, help, seq }: {
       <div className="chat-authfix-head">
         <WarningFilled className="chat-authfix-icon" />
         <div className="chat-authfix-title">
-          {repair === 'needsKey' ? 'Antigravity needs a Gemini API key'
+          {repair === 'needsKey' ? 'Antigravity needs authentication'
             : repair === 'updateRunner' ? 'Waiting for a newer runner'
               : `Antigravity CLI isn't installed on ${machine}`}
         </div>
       </div>
       <div className="chat-authfix-desc">
         {repair === 'needsKey'
-          ? 'Connect Gemini in Providers. Orbit stores the key encrypted, and this conversation can continue on it.'
+          ? 'Sign in with Google on this runner, or connect a Gemini API key in Providers.'
           : repair === 'updateRunner'
             ? `${machine} runs Orbit runner ${help.runnerVersion || 'an unknown version'}; Antigravity needs 0.1.209 or newer. The runner updates itself when no session is running on it, and this session starts then.`
             : 'Install it from Providers, then send your message again.'}
       </div>
+      {repair === 'needsKey' && help.provider === 'antigravity' && (
+        help.googleLogin === 'available' && help.runnerId
+          ? <RunnerSignIn runnerId={help.runnerId} engine="antigravity" onDone={help.onRetry} />
+          : <div className="chat-authfix-desc">{help.googleLogin === 'unsupported_platform' ? 'Google sign-in is not supported on macOS runners yet. Use a Gemini API key.' : 'Update this runner to sign in with Google.'}</div>
+      )}
       <div className="chat-authfix-actions">
         {repair === 'needsKey' ? (
           <>
@@ -393,6 +460,9 @@ type TextNode = {
   // got is the only thing that reports it, and the states above are shown for it alone. On
   // the event itself so a reload still knows which bubble that was.
   steer?: boolean;
+  // A `!cmd` still on the queue (`queuedTurnEvent`): drawn verbatim as the command it will run, since
+  // Markdown would mangle its shell syntax. No echo carries it — the runner runs one as a Bash card.
+  shell?: boolean;
   // What the control plane recorded, when it stored this `user` event, as appended at delivery
   // (`controlPlaneNote`). Already taken out of `text`; drawn under it, in the same bubble.
   note?: string;
@@ -961,6 +1031,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             attachmentRefs: refs,
             delivery: typeof p.delivery === 'string' ? p.delivery : undefined,
             steer: p.steer === true,
+            shell: p.shell === true,
           };
           if (taskStart) {
             taskStartByParent.set(parentKey(parent), { text, card: taskStart });
@@ -1459,15 +1530,44 @@ function StandaloneResult({ node }: { node: ResultNode }) {
   return <ToolResult seq={node.seq} content={full ? full.content : node.content} isError={node.isError} />;
 }
 
+/**
+ * A turn still waiting on the queue, drawn from the event its echo will be (`queuedTurnEvent`,
+ * lib/acceptedUserTurn) by the dispatch that will draw the echo: the card or bubble the transcript
+ * draws once a runner takes the turn, so taking it changes nothing but the queue's line. `queued` is
+ * that line (WorkspaceView's `QueuedTurnMeta`): how the turn stands and the way out of it.
+ */
+export function QueuedUserTurn({
+  event,
+  turnImages,
+  queued,
+}: {
+  event: RunEvent;
+  turnImages?: Record<string, TurnImage[]>;
+  queued: ReactNode;
+}) {
+  // A row with nothing to draw yet — a file-only message before the snapshot names its file — still
+  // has its line, and the way out with it.
+  const node = useMemo<Node>(
+    () => buildNodes([event], turnImages)[0] ?? { kind: 'user', seq: event.seq, text: '' },
+    [event, turnImages],
+  );
+  return <NodeView node={node} queued={queued} />;
+}
+
 // `data-seq` marks where each event's card starts, so ⌘F can scroll to a hit the server found by
 // seq. Only these top-level roots carry it: a lookup takes the last stamp at or before the target,
 // which resolves anything folded inside one (a tool_result, a grouped run, a sub-workspace's events)
 // to the card that contains it.
-function NodeView({ node, live }: { node: Node; live?: boolean }) {
+//
+// `queued` is the queue's own line for a turn still waiting to be delivered (QueuedUserTurn): the
+// turn is drawn by this same dispatch, with that line in the slot each card keeps for it.
+function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?: ReactNode }) {
   const exporting = useContext(ExportCtx);
   const authHelp = useContext(AuthErrorCtx);
   switch (node.kind) {
     case 'user': {
+      // A turn still on the queue is no event yet: nothing for ⌘F to land on, so nothing is stamped.
+      const seq = queued ? undefined : node.seq;
       // Another Orbit session's message (`session_send` / `project_send`): somebody's words, but not
       // the reader's, so not the reader's bubble. Who sent it is what the control plane recorded
       // beside the echo (lib/sessionMessage), so it is asked first — before anything is read out of
@@ -1477,27 +1577,36 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           <SessionMessageCard
             card={node.sessionMessage}
             text={node.text}
-            seq={node.seq}
+            seq={seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
             attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
+            queued={queued}
           />
         );
       }
       // The outcomes of this session's requests, handed back (lib/sessionRequest): a reply turn
       // carries nobody's words, and a message of the owner's may carry outcomes that were held for
       // it — then the owner's words are their bubble, first, and the outcomes follow as cards. What
-      // else delivery appended folds into the cards, as it does everywhere.
+      // else delivery appended folds into the cards, as it does everywhere. Still queued, the queue's
+      // line goes under the cards — or under the owner's words, the message it is about, when they
+      // are there.
       if (node.sessionReplies) {
         const rest = withoutReplyBlocks(node.note);
+        const words = node.text.trim() !== '';
         return (
           <>
-            {node.text.trim() !== '' && <UserBubble node={{ ...node, note: undefined }} />}
+            {words && <UserBubble node={{ ...node, note: undefined }} queued={queued} />}
             <SessionReplyCards
               cards={node.sessionReplies}
-              seq={node.seq}
+              seq={seq}
               ts={node.ts}
-              attached={rest !== '' && <ControlPlaneNote kind={describeNote(rest)} text={rest} />}
+              attached={
+                <>
+                  {rest !== '' && <ControlPlaneNote kind={describeNote(rest)} text={rest} />}
+                  {!words && queued}
+                </>
+              }
             />
           </>
         );
@@ -1509,10 +1618,11 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           <WatchWakeCard
             wake={wake}
             text={node.text}
-            seq={node.seq}
+            seq={seq}
             ts={node.ts}
             linkable={!exporting}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            queued={queued}
           />
         );
       }
@@ -1527,9 +1637,10 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           <OpenItemDeliveryCard
             card={node.itemCard}
             text={node.text}
-            seq={node.seq}
+            seq={seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            queued={queued}
           />
         );
       }
@@ -1541,11 +1652,12 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           <TaskStartCard
             card={node.taskStart}
             text={node.text}
-            seq={node.seq}
+            seq={seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
             attachments={<TurnAttachments node={node} />}
             attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
+            queued={queued}
           />
         );
       }
@@ -1556,9 +1668,10 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           <ProjectStartedCard
             card={node.startedCard}
             text={node.text}
-            seq={node.seq}
+            seq={seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            queued={queued}
           />
         );
       }
@@ -1571,18 +1684,20 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
         return node.reviewRequest ? (
           <ReviewRequestedCard
             card={node.reviewRequest}
-            seq={node.seq}
+            seq={seq}
             ts={node.ts}
             undelivered={undelivered}
             attached={attached}
+            queued={queued}
           />
         ) : (
           <SentBackByReviewerCard
             card={node.reviewReturn!}
-            seq={node.seq}
+            seq={seq}
             ts={node.ts}
             undelivered={undelivered}
             attached={attached}
+            queued={queued}
           />
         );
       }
@@ -1606,10 +1721,11 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           <>
             <BackgroundWakeCard
               wake={background}
-              seq={node.seq}
+              seq={seq}
               ts={node.ts}
               undelivered={undelivered}
               steer={node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined}
+              queued={queued}
               attached={
                 background.rest !== '' && (
                   <ControlPlaneNote kind={describeNote(background.rest)} text={background.rest} />
@@ -1620,7 +1736,7 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           </>
         );
       }
-      return <UserBubble node={node} />;
+      return <UserBubble node={node} queued={queued} />;
     }
     case 'assistant':
       return <AssistantBubble text={node.text} seq={node.seq} />;
@@ -1670,6 +1786,8 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
       );
     }
     case 'error': {
+      const dsh = authHelp?.runtime === 'dsh' ? dshRepair(node.message) : null;
+      if (dsh && authHelp) return <DshRepairCard repair={dsh} help={authHelp} seq={node.seq} />;
       const repair = antigravityRepair(node.message);
       if (repair && authHelp && (authHelp.runtime ?? authHelp.provider) === 'antigravity') {
         return <AntigravityRepairCard repair={repair} help={authHelp} seq={node.seq} />;
@@ -1779,10 +1897,9 @@ const LOCAL_LOGIN = new Set(['claude', 'codex', 'kimi', 'opencode', 'antigravity
  * Of those, the ones Orbit can sign in from here. OpenCode is deliberately absent: its login
  * picks an underlying provider interactively, which the browser relay's DTO cannot express, so
  * the runner refuses such a request outright (loginFlowFor in login.go). Its card names the
- * command to run instead of offering a button that cannot work. Antigravity has no sign-in at
- * all: its card connects an encrypted Gemini key in Providers.
+ * command to run instead of offering a button that cannot work.
  */
-const RELAY_LOGIN = new Set(['claude', 'codex', 'kimi']);
+const RELAY_LOGIN = new Set(['claude', 'codex', 'kimi', 'antigravity']);
 
 /**
  * A sign-in failure, rendered as a remedy rather than an error line. The runtime reports it as
@@ -2167,7 +2284,11 @@ export const USER_BUBBLE_TRUNCATE = 6000;
 // time) fades in on hover, like Claude; it's absolutely positioned so it never adds height,
 // and lives inside the hover wrap so the pointer can travel down onto it without dismissing
 // it (CSS :hover hits ancestors).
-function UserBubble({ node }: { node: TextNode }) {
+//
+// Still on the queue (`queued`, the queue's own line), the bubble is the same one, dimmed and dashed,
+// with that line at its foot — so a message does not change shape when the runner picks it up — and
+// no seq, being no event yet. A queued `!cmd` shows the command verbatim.
+function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   const exp = useContext(ExportCtx);
   const putBack = useContext(UndeliveredCtx);
   const [copied, setCopied] = useState(false);
@@ -2193,15 +2314,23 @@ function UserBubble({ node }: { node: TextNode }) {
   };
   return (
     <div className="chat-user-wrap">
-      <div className="chat-msg chat-user" data-seq={node.seq}>
+      <div
+        className={queued ? 'chat-msg chat-user chat-queued' : 'chat-msg chat-user'}
+        data-seq={queued ? undefined : node.seq}
+      >
         <TurnAttachments node={node} />
-        {shownText && <MD breaks>{shownText}</MD>}
+        {node.shell ? (
+          <code className="chat-queued-cmd">!{shownText}</code>
+        ) : (
+          shownText && <MD breaks>{shownText}</MD>
+        )}
         {attached && (
           // Named, not hidden: without this the agent answers about a quota outage nobody
           // appears to have raised. Folded under the words, so what the model read is one click
           // away without putting it in the middle of someone's sentence.
           <ControlPlaneNote kind={attached.kind} text={attached.text} />
         )}
+        {queued}
       </div>
       {node.delivery === 'failed' || node.delivery === 'unconfirmed' ? (
         // The one thing a bubble must never do is stand there looking sent when the engine
@@ -2974,18 +3103,31 @@ function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
   const tasks = useMemo(() => parseReferencedTasks(jobs ? jobs.rest : text), [text, jobs]);
   const wiki = useMemo(() => parseWikiContext(tasks ? tasks.rest : jobs ? jobs.rest : text), [text, jobs, tasks]);
   const rest = wiki ? wiki.rest : tasks ? tasks.rest : jobs ? jobs.rest : text;
+  const baseLabel = `⊕ Orbit attached: ${kind}`;
+  const label = `${baseLabel}${tasks ? ` · ${summarizeReferencedTasks(tasks.tasks)}` : ''}${jobs ? ` · ${summarizeBackgroundJobs(jobs)}` : ''}`;
   return (
-    <div className="chat-injected">
+    <div className={`chat-injected${open ? ' is-open' : ''}`}>
       <button
         type="button"
         className="chat-injected-head"
+        data-display-kind={kind}
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
-        {`⊕ Orbit attached: ${kind}`}
-        {tasks && ` · ${summarizeReferencedTasks(tasks.tasks)}`}
-        {jobs && ` · ${summarizeBackgroundJobs(jobs)}`}
+        {label}
       </button>
+      {!open && (
+        <div className="chat-injected-overview">
+          <div className="chat-injected-summary">
+            <strong>Orbit context</strong>
+            <span>Attached to this message</span>
+          </div>
+          <p>Context is kept out of your message and available when you need the full details.</p>
+          <button type="button" className="chat-injected-action" onClick={() => setOpen(true)}>
+            View full context <RightOutlined />
+          </button>
+        </div>
+      )}
       {open &&
         (tasks || jobs || wiki ? (
           <>
@@ -3206,8 +3348,9 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
             <ToolResult seq={node.seq} content={resultContent} isError compact markdown={isSubWorkspace} />
           )}
           {node.name === 'Workflow' && (
-            <TaskProgressDetail
-              id={node.id}
+            <WorkflowProgressDetail
+              node={node}
+              live={live}
               // Before a runner that reports progress, a workflow's receipt is still all there is.
               // An agent's ack is internal metadata; its own transcript below says what it did.
               fallback={
@@ -3217,8 +3360,13 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
               }
             />
           )}
-          {body && <div className="chat-tool-body">{body}</div>}
-          {node.children.length > 0 && (
+          {body && (node.name === 'Workflow' ? (
+            <details className="chat-workflow-source" open={exp ? true : undefined}>
+              <summary>Workflow source</summary>
+              <div className="chat-tool-body">{body}</div>
+            </details>
+          ) : <div className="chat-tool-body">{body}</div>)}
+          {node.name !== 'Workflow' && node.children.length > 0 && (
             <div className="chat-subagent">
               <NodeList nodes={node.children} live={live} />
             </div>
@@ -3390,6 +3538,41 @@ function TaskBadgeAndStatus({ node, live, meta }: { node: ToolNode; live?: boole
 function TaskProgressDetail({ id, fallback }: { id: string; fallback?: ReactNode }) {
   const progress = useContext(TaskLookupCtx).progress(id);
   return progress ? <TaskProgressBlock progress={progress} /> : <>{fallback}</>;
+}
+
+function WorkflowProgressDetail({ node, live, fallback }: { node: ToolNode; live?: boolean; fallback?: ReactNode }) {
+  const progress = useContext(TaskLookupCtx).progress(node.id);
+  const exp = useContext(ExportCtx);
+  const agents = new Map(node.children.filter((child): child is ToolNode => child.kind === 'tool').map((child) => [child.id, child]));
+  const linked = new Set(progress?.agents.map((agent) => agent.transcriptKey).filter(Boolean));
+  const remaining = node.children.filter((child) => child.kind !== 'tool' || !linked.has(child.id));
+  return (
+    <>
+      {progress ? (
+        <TaskProgressBlock
+          progress={progress}
+          defaultOpen={!!exp}
+          renderAgent={(agent) => {
+            const child = agent.transcriptKey ? agents.get(agent.transcriptKey) : undefined;
+            return child ? <WorkflowAgentTranscript node={child} live={live} /> : null;
+          }}
+        />
+      ) : fallback}
+      {remaining.length > 0 && <div className="chat-subagent"><NodeList nodes={remaining} live={live} /></div>}
+    </>
+  );
+}
+
+function WorkflowAgentTranscript({ node, live }: { node: ToolNode; live?: boolean }) {
+  const fullResult = useFullPayload(node.result?.seq ?? 0, node.result?.truncated, !!node.result);
+  return (
+    <>
+      <NodeList nodes={node.children} live={live} />
+      {node.result && (
+        <ToolResult seq={node.seq} content={fullResult ? fullResult.content : node.result.content} isError={node.result.isError} compact markdown />
+      )}
+    </>
+  );
 }
 
 function ToolStatus({ node, live }: { node: ToolNode; live?: boolean }) {

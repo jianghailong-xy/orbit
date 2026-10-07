@@ -1,7 +1,10 @@
 import {
   AgentProvider,
   autoAvailable,
+  DSH_PERMISSION_MODES,
   isRetiredModel,
+  openCodeKeyModel,
+  openCodeKeyOf,
   type PlanUsageSnapshot,
   type RunnerModelCatalog,
   type RuntimeDefaultModels,
@@ -43,7 +46,33 @@ export interface ConfiguredProvider {
    *  endpoint reached with a subscription token). Null for a metered API key or a third-party
    *  endpoint, neither of which has a 5-hour/weekly window at all. Served by GET /providers. */
   planUsage?: PlanUsageSnapshot | null;
+  /** Whether an OpenCode session may spend this key too (shared `openCodeKeys`), as GET /providers
+   *  decides it: absent from an older server, which reads as no. */
+  runsOnOpenCode?: boolean;
 }
+
+const OPENCODE_KEY_CHOICE = `${AgentProvider.OPENCODE}/`;
+
+/**
+ * The Provider-menu identity of a configured key run on OpenCode: `opencode/<slug>`. Not a value a
+ * session stores — its provider stays `opencode` and the key rides in its model (shared
+ * `openCodeKeys`) — but the one the pickers select, list and seed models by. No configured slug can
+ * hold a `/`, so it never names anything else.
+ */
+export const openCodeKeyChoice = (slug: string): string => `${OPENCODE_KEY_CHOICE}${slug}`;
+
+/** The configured key an `opencode/<slug>` choice names, or null for any other identity. */
+export const openCodeChoiceKey = (choice?: string | null): string | null =>
+  choice?.startsWith(OPENCODE_KEY_CHOICE) && choice.length > OPENCODE_KEY_CHOICE.length
+    ? choice.slice(OPENCODE_KEY_CHOICE.length)
+    : null;
+
+/** The Provider-menu identity a session runs on: its provider, except that an OpenCode session whose
+ *  model names a configured key is on that key's choice. */
+export const providerChoiceFor = (provider: string, model?: string | null): string => {
+  const key = provider === AgentProvider.OPENCODE ? openCodeKeyOf(model) : null;
+  return key ? openCodeKeyChoice(key.slug) : provider;
+};
 
 /** Resolve a configured provider by slug — built-in slugs never match. */
 const configuredProvider = (
@@ -57,6 +86,8 @@ export const runtimeForProvider = (
   provider?: string | null,
   configured?: ConfiguredProvider[] | null,
 ): AgentProvider => {
+  // A key run on OpenCode is run by OpenCode, whichever CLI the key itself borrows.
+  if (openCodeChoiceKey(provider)) return AgentProvider.OPENCODE;
   const custom = configuredProvider(provider, configured);
   // Configured providers borrow Claude, Codex, Kimi or Antigravity; invalid/legacy runtime values
   // use the same safe Claude fallback as the backend. First-class Kimi and Antigravity are also the
@@ -65,6 +96,7 @@ export const runtimeForProvider = (
     if (custom.runtime === AgentProvider.CODEX) return AgentProvider.CODEX;
     if (custom.runtime === AgentProvider.KIMI) return AgentProvider.KIMI;
     if (custom.runtime === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
+    if (custom.runtime === AgentProvider.DSH) return AgentProvider.DSH;
     return AgentProvider.CLAUDE;
   }
   const value = provider;
@@ -72,6 +104,7 @@ export const runtimeForProvider = (
   if (value === AgentProvider.KIMI) return AgentProvider.KIMI;
   if (value === AgentProvider.OPENCODE) return AgentProvider.OPENCODE;
   if (value === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
+  if (value === AgentProvider.DSH) return AgentProvider.DSH;
   return AgentProvider.CLAUDE;
 };
 
@@ -197,6 +230,8 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
   kimi: 'kimi-code/kimi-for-coding',
   opencode: '',
   antigravity: '',
+  // Harness's model values are opaque ACP tokens from the runner's catalogue; none is shipped.
+  dsh: '',
 };
 
 export const modelOptionsForProvider = (
@@ -204,6 +239,14 @@ export const modelOptionsForProvider = (
   modelCatalog?: RunnerModelCatalog | null,
   configured?: ConfiguredProvider[] | null,
 ): ModelOption[] => {
+  // A key run on OpenCode offers the key's own models, under the OpenCode ids that name the key.
+  const key = openCodeChoiceKey(provider);
+  if (key) {
+    return modelOptionsForProvider(key, modelCatalog, configured).map((option) => ({
+      value: openCodeKeyModel(key, option.value),
+      label: option.label,
+    }));
+  }
   // A configured provider carries its own model list (from the API), which wins for its slug.
   const custom = configuredProvider(provider, configured);
   if (custom) {
@@ -247,6 +290,9 @@ export const defaultModelForProvider = (
   configured?: ConfiguredProvider[] | null,
   runtimeDefaultModels?: RuntimeDefaultModels,
 ): string => {
+  // A key run on OpenCode starts on the key's own default, named for OpenCode.
+  const key = openCodeChoiceKey(provider);
+  if (key) return openCodeKeyModel(key, defaultModelForProvider(key, modelCatalog, configured, runtimeDefaultModels));
   const custom = configuredProvider(provider, configured);
   // OpenCode picks the model itself when none is passed; '' is the choice, not a missing value.
   if (!custom && provider === AgentProvider.OPENCODE) {
@@ -274,6 +320,8 @@ export const defaultModelForProvider = (
         catalogOptionsForProvider(customRuntime, modelCatalog)?.[0]?.value;
       if (live) return live;
     }
+    // Harness has no static model space: until a runner reports its catalogue the runtime picks.
+    if (customRuntime === AgentProvider.DSH) return '';
     return (
       custom.defaultModel ||
       custom.models.find((model) => model.value && model.label)?.value ||
@@ -308,6 +356,8 @@ export const livePinnedModel = (
   configured?: ConfiguredProvider[] | null,
   runtimeDefaultModels?: RuntimeDefaultModels,
 ): string | null | undefined => {
+  // A key's model on OpenCode is OpenCode's selection, which dispatch leaves alone.
+  if (openCodeChoiceKey(provider)) return model;
   const custom = configuredProvider(provider, configured);
   // Antigravity's '' is the stand-in for a catalogue not reported yet, not a pick that outlives
   // one: dispatch runs a model-less session on the reported default, so that is what to show.
@@ -494,12 +544,22 @@ const effortWithinDeclaredLevels = (effort: string, levels: string[]): string =>
   return levels.reduce((nearest, level) => (distance(level) <= distance(nearest) ? level : nearest));
 };
 
+/** Harness's thinking levels are its catalogue row's `reasoningLevels` (ACP `reasoning_effort`),
+ *  opaque like its model values. A model the runner hasn't reported offers Default only: there is
+ *  no static list to fall back on, and a guessed level would be refused at dispatch. */
+const dshEffortOptions = (model?: string | null, modelCatalog?: RunnerModelCatalog | null) => {
+  const row = modelCatalog?.[AgentProvider.DSH]?.find((entry) => entry.value === model);
+  const levels = [...new Set((row?.reasoningLevels ?? []).filter(Boolean))];
+  return [{ value: '', label: 'Default' }, ...levels.map((level) => ({ value: level, label: effortLabel(level) }))];
+};
+
 export const effortOptionsForProvider = (
   provider?: string | null,
   model?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
   configured?: ConfiguredProvider[] | null,
 ) => {
+  if (runtimeForProvider(provider, configured) === AgentProvider.DSH) return dshEffortOptions(model, modelCatalog);
   const declared = declaredEffortLevels(provider, model, configured);
   if (declared) {
     return CLAUDE_EFFORT_OPTIONS.filter(
@@ -538,6 +598,9 @@ export const normalizeEffortForProvider = (
   modelCatalog?: RunnerModelCatalog | null,
   configured?: ConfiguredProvider[] | null,
 ): string => {
+  if (runtimeForProvider(provider, configured) === AgentProvider.DSH) {
+    return dshEffortOptions(model, modelCatalog).some((option) => option.value === effort) ? effort : '';
+  }
   // A level the declaring model lacks is not dropped but moved, exactly as dispatch moves it, so
   // the pill names the level the session actually runs at.
   const declared = declaredEffortLevels(provider, model, configured);
@@ -634,6 +697,17 @@ export const supportsAuto = (
     !!configuredProvider(provider, configured),
     modelCatalog,
   );
+/** Whether the runtime behind a provider identity accepts this permission mode at all. Only
+ *  DeepSeek Harness refuses modes outright (DSH_PERMISSION_MODES, which the server enforces at
+ *  admission): those are not offered rather than caveated, since the session would be rejected. */
+export const permissionModeSupported = (
+  mode: string,
+  provider?: string | null,
+  configured?: ConfiguredProvider[] | null,
+): boolean =>
+  runtimeForProvider(provider, configured) !== AgentProvider.DSH ||
+  (DSH_PERMISSION_MODES as readonly string[]).includes(mode);
+
 export const clampPermissionModeForModel = (
   mode: string,
   model: string,
@@ -641,7 +715,11 @@ export const clampPermissionModeForModel = (
   configured?: ConfiguredProvider[] | null,
   modelCatalog?: RunnerModelCatalog | null,
 ): string =>
-  mode === 'auto' && !supportsAuto(model, provider, configured, modelCatalog) ? 'default' : mode;
+  !permissionModeSupported(mode, provider, configured)
+    ? 'default'
+    : mode === 'auto' && !supportsAuto(model, provider, configured, modelCatalog)
+      ? 'default'
+      : mode;
 
 // App defaults used when the user has set no preference of their own.
 export const DEFAULT_MODEL = 'claude-opus-5';

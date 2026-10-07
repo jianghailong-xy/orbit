@@ -44,10 +44,12 @@ export function TaskStartCard({
   undelivered,
   attachments,
   attached,
+  queued,
 }: {
   card: Card;
   /** The brief the agent was handed, verbatim — the record this card is drawn from. */
   text: string;
+  /** Unset while the brief is still queued: it is no event yet, so ⌘F has nothing to land on. */
   seq?: number;
   ts?: string;
   undelivered?: boolean;
@@ -55,6 +57,8 @@ export function TaskStartCard({
   attachments?: ReactNode;
   /** Whatever else delivery appended to the same turn, as its own folded entry. */
   attached?: ReactNode;
+  /** The queue's own line, while a resumed run's brief still waits behind a running turn. */
+  queued?: ReactNode;
 }) {
   // An export is read on paper, where nothing can be opened: it gets the card open.
   const exporting = useContext(ExportCtx) != null;
@@ -72,7 +76,12 @@ export function TaskStartCard({
     <div className="tsc-wrap">
       {/* The sticky bar at the top of the transcript names this turn off these two attributes, the
           way it names every other card that is nobody's message. */}
-      <div className="tsc" data-seq={seq} data-sticky-label={TASK_START_LABEL} data-sticky-text={card.title}>
+      <div
+        className={`tsc${queued ? ' is-queued' : ''}`}
+        data-seq={seq}
+        data-sticky-label={TASK_START_LABEL}
+        data-sticky-text={card.title}
+      >
         <div className="tsc-head">
           <span className="tsc-mark"><PlayCircleFilled /></span>
           <span>{TASK_START_LABEL}</span>
@@ -141,6 +150,7 @@ export function TaskStartCard({
           <summary>{TASK_START_RAW_SUMMARY}</summary>
           <pre>{text}</pre>
         </details>
+        {queued && <div className="tsc-queued">{queued}</div>}
       </div>
     </div>
   );

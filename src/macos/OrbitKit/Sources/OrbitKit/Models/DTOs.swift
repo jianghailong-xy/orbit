@@ -88,6 +88,8 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let codexAccount: String?
     /// The same for its Claude sessions: one of the runner's Claude accounts, or nil for Automatic.
     public let claudeAccount: String?
+    /// The same for its Antigravity sessions: one of the runner's Google accounts, or nil for Automatic.
+    public let antigravityAccount: String?
 
     public let enableWorktree: Bool?
     /// Smart model selection (docs/model-routing-design.md §7.2): on, a fresh task run here gets the
@@ -108,7 +110,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         case description, appendSystemPrompt, systemPrompt, allowedTools, disallowedTools
         case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
         case antigravityKeyAvailableByRunner
-        case autoInitGit, codexAccount, claudeAccount, enableWorktree, modelRouting, workDirExists, workDirIsGit
+        case autoInitGit, codexAccount, claudeAccount, antigravityAccount, enableWorktree, modelRouting, workDirExists, workDirIsGit
         case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup
     }
 
@@ -139,6 +141,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         autoInitGit = try c.decodeIfPresent(Bool.self, forKey: .autoInitGit)
         codexAccount = try c.decodeIfPresent(String.self, forKey: .codexAccount)
         claudeAccount = try c.decodeIfPresent(String.self, forKey: .claudeAccount)
+        antigravityAccount = try c.decodeIfPresent(String.self, forKey: .antigravityAccount)
         enableWorktree = try c.decodeIfPresent(Bool.self, forKey: .enableWorktree)
         modelRouting = try c.decodeIfPresent(Bool.self, forKey: .modelRouting)
         workDirExists = try c.decodeIfPresent(Bool.self, forKey: .workDirExists)
@@ -201,9 +204,14 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// runner too old to report it, which stays unrestricted — an unknown must not withdraw a mode
     /// that works (see `AgentDefaults.isRunnable`).
     public let runsAsRoot: Bool?
+    /// Where this runner's updates of itself stand, as it last reported. Nil from an older server or
+    /// a runner too old to report it, which the Runners pages judge by `runsAsRoot` as they always have.
+    public var selfUpdate: RunnerSelfUpdate? = nil
     /// What the runner declared it can do on its last poll — `codex-account-move/v1` and
-    /// `claude-account-move/v1` say it carries a session's conversation to another of its accounts.
-    /// Nil from an older server, which claims nothing.
+    /// `claude-account-move/v1` say it carries a session's conversation to another of its accounts;
+    /// `antigravity-account-login/v1`, that it signs in Antigravity accounts of their own, which is all
+    /// a session needs to move between them (`CodexAccounts.moveCapability`). Nil from an older server,
+    /// which claims nothing.
     public var capabilities: [String]? = nil
     /// Engine install/update relay and account-removal relay. Their string-valued states stay raw
     /// so a newer control plane cannot make the runner list undecodable.
@@ -291,6 +299,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public let deletedAt: String?
     /// Authoritative action availability from newer servers. nil retains legacy local inference.
     public let capabilities: SessionCapabilities?
+    /// The project's integration line, exposed for the existing worktree-bar display.
+    public let projectIntegrationRef: String?
     public let agentId: String?
     public let assignedRunnerId: String?
     public let provider: String?
@@ -300,6 +310,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// On a shared pool: the key its last claim chose (nil before the first, or when none could
     /// run) — the same read as above, in the shared pool's own field.
     public let poolKeyId: String?
+    /// On a Codex pool of one's own ChatGPT accounts: the account this session runs on, as the
+    /// masked view every response names one by (email + `…AB12`, never its id). Nil until a claim
+    /// records one, on a session of any other kind, and from an older control plane.
+    public let poolCodexLogin: CodexLogin?
     /// Which of the runner's Codex accounts this session runs on (`default` or a slot id): picked on
     /// New Session, or the one Automatic chose when it was created. Nil follows its workspace's
     /// (`Agent.codexAccount`). Carried by the detail payload, like the two above.
@@ -310,6 +324,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// The same pair for a session on the built-in Claude engine: one of the runner's Claude accounts.
     public let claudeAccount: String?
     public let claudeAccountPinned: Bool?
+    /// The same pair for a session on the built-in Antigravity engine: one of the runner's Google
+    /// accounts.
+    public let antigravityAccount: String?
+    public let antigravityAccountPinned: Bool?
     public let pendingApprovals: Int?
     /// What `pendingApprovals` is counting, when one word says it better than "approval":
     /// `OWNER_CONFIRMATION` when everything counted is an OWNER_CONFIRMED task's run waiting for its
@@ -370,6 +388,9 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// nil for ordinary Sessions and when talking to an older server.
     public let projectId: String?
     public let projectTitle: String?
+    /// The project this session belongs to in any role; nil for an ordinary conversation and
+    /// from a server that predates project grouping.
+    public let projectMembership: SessionProjectMembership?
     /// The list row's second-line preview, built by `SessionLine`: the (server-truncated) last
     /// assistant reply, the tool currently in flight, and the live background-shell count.
     public let lastAssistantText: String?
@@ -478,15 +499,19 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
             ?? legacy.decodeIfPresent(String.self, forKey: .archivedAt)
         deletedAt = try values.decodeIfPresent(String.self, forKey: .deletedAt)
         capabilities = try values.decodeIfPresent(SessionCapabilities.self, forKey: .capabilities)
+        projectIntegrationRef = try values.decodeIfPresent(String.self, forKey: .projectIntegrationRef)
         agentId = try values.decodeIfPresent(String.self, forKey: .agentId)
         assignedRunnerId = try values.decodeIfPresent(String.self, forKey: .assignedRunnerId)
         provider = try values.decodeIfPresent(String.self, forKey: .provider)
         poolMemberProviderId = try values.decodeIfPresent(String.self, forKey: .poolMemberProviderId)
         poolKeyId = try values.decodeIfPresent(String.self, forKey: .poolKeyId)
+        poolCodexLogin = try values.decodeIfPresent(CodexLogin.self, forKey: .poolCodexLogin)
         codexAccount = try values.decodeIfPresent(String.self, forKey: .codexAccount)
         codexAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .codexAccountPinned)
         claudeAccount = try values.decodeIfPresent(String.self, forKey: .claudeAccount)
         claudeAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .claudeAccountPinned)
+        antigravityAccount = try values.decodeIfPresent(String.self, forKey: .antigravityAccount)
+        antigravityAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .antigravityAccountPinned)
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)
@@ -508,6 +533,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         source = try values.decodeIfPresent(String.self, forKey: .source)
         projectId = try values.decodeIfPresent(String.self, forKey: .projectId)
         projectTitle = try values.decodeIfPresent(String.self, forKey: .projectTitle)
+        projectMembership = try values.decodeIfPresent(SessionProjectMembership.self, forKey: .projectMembership)
         lastAssistantText = try values.decodeIfPresent(String.self, forKey: .lastAssistantText)
         lastToolUse = try values.decodeIfPresent(String.self, forKey: .lastToolUse)
         lastUserText = try values.decodeIfPresent(String.self, forKey: .lastUserText)
@@ -546,11 +572,15 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 currentTurnStartedAt: String? = nil,
                 tags: [SessionTag]? = nil, retryAt: String? = nil,
                 poolMemberProviderId: String? = nil, poolKeyId: String? = nil,
+                poolCodexLogin: CodexLogin? = nil,
                 codexAccount: String? = nil, codexAccountPinned: Bool? = nil,
                 claudeAccount: String? = nil, claudeAccountPinned: Bool? = nil,
+                antigravityAccount: String? = nil, antigravityAccountPinned: Bool? = nil,
                 awaitingReplyFrom: [SessionRequestPeer]? = nil, owesReplyTo: [SessionRequestPeer]? = nil,
                 folderId: String? = nil,
-                confirmationUnderReview: ConfirmationUnderReview? = nil) {
+                confirmationUnderReview: ConfirmationUnderReview? = nil,
+                projectMembership: SessionProjectMembership? = nil,
+                projectIntegrationRef: String? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -566,10 +596,13 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.provider = provider
         self.poolMemberProviderId = poolMemberProviderId
         self.poolKeyId = poolKeyId
+        self.poolCodexLogin = poolCodexLogin
         self.codexAccount = codexAccount
         self.codexAccountPinned = codexAccountPinned
         self.claudeAccount = claudeAccount
         self.claudeAccountPinned = claudeAccountPinned
+        self.antigravityAccount = antigravityAccount
+        self.antigravityAccountPinned = antigravityAccountPinned
         self.pendingApprovals = pendingApprovals
         self.waitingKind = waitingKind
         self.ownerItems = ownerItems
@@ -586,6 +619,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.source = source
         self.projectId = projectId
         self.projectTitle = projectTitle
+        self.projectMembership = projectMembership
+        self.projectIntegrationRef = projectIntegrationRef
         self.lastAssistantText = lastAssistantText
         self.lastToolUse = lastToolUse
         self.lastUserText = lastUserText
@@ -648,6 +683,8 @@ public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     public var codexAccount: String? = nil
     /// Its Claude account, the same way (`Agent.claudeAccount`).
     public var claudeAccount: String? = nil
+    /// Its Antigravity account, the same way (`Agent.antigravityAccount`).
+    public var antigravityAccount: String? = nil
     /// Its environment, which can decide the account too — a config directory or a key of its own
     /// (`CodexAccounts.automaticOffered`). Carried by the detail payload's workspace row.
     public var env: [String: String]? = nil
@@ -729,7 +766,18 @@ public struct RetryMessage: Codable, Sendable {
 /// key: the server derives one from the failed message (criterion 19), so there is nothing here for a
 /// second press to spell differently.
 public struct RetryResendRequest: Codable, Sendable {
-    public init() {}
+    /// The composer's pending pick, when Retry was pressed after choosing one. The re-send is a
+    /// resume, and what the person chose has to travel with it — otherwise picking a provider and
+    /// pressing Retry runs on the provider the session was already on, which is the bug this is for.
+    /// Both nil, the re-send goes where the session is: what a Retry pressed with nothing chosen must
+    /// do, and what every client did before this existed (nils are omitted, so the body is `{}`).
+    public let provider: String?
+    /// The account of the engine `provider` names, as SendTurnRequest.account.
+    public let account: String?
+    public init(provider: String? = nil, account: String? = nil) {
+        self.provider = provider
+        self.account = account
+    }
 }
 
 /// POST /sessions/:id/turns — send a user message or raw shell command.
@@ -815,6 +863,11 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// The card this queued turn is, read by the same function the runner's echo is read by. Nil
     /// unless `openItemDelivery` is one.
     public var itemCard: OpenItemDelivery? { OpenItemDelivery.parseCard(openItemDelivery) }
+    /// The same for the turn that hands a task's run its brief (`taskStart`) — a resumed run's; a
+    /// run's opening turn is never listed — held raw for `TaskStart.parseCard`, the reader the echo's
+    /// payload is read by. Nil on every other turn, and from a server that predates the field.
+    public let taskStart: JSONValue?
+    public var taskStartCard: TaskStart? { TaskStart.parseCard(taskStart) }
     /// The same for the message telling a coordinator its project was started (`projectStarted`),
     /// held raw for `ProjectStarted.parseCard` — the reader the echo's payload is read by.
     public let projectStarted: JSONValue?
@@ -825,6 +878,13 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// sent, and from a server that predates the field.
     public let sessionMessage: JSONValue?
     public var senderCard: SessionMessage? { SessionMessage.parseCard(sessionMessage) }
+    /// The outcomes a reply turn hands back (`sessionReplies`) — held raw for `SessionReply.parse`,
+    /// the reader the echo's payload is read by, so the queue draws the reply cards the echo will be
+    /// drawn as. Nil on every other turn, and from a server that predates the field.
+    public let sessionReplies: JSONValue?
+    public var replyCards: [SessionReply]? {
+        sessionReplies.flatMap { SessionReply.parse(.object(["sessionReplies": $0])) }
+    }
     /// A confirmation review's two turns — the request a reviewer is handed and the reviewer's
     /// return handed to the run — held raw for the readers the echo's payload is read by
     /// (`ConfirmationReviewTurns.swift`). Nil on every other turn, and from an older server.
@@ -834,6 +894,14 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     }
     public let confirmationReturn: JSONValue?
     public var reviewReturnCard: ConfirmationReturnCard? { ConfirmationReturnCard.parseCard(confirmationReturn) }
+    /// Every card this turn is drawn as while it waits, each read as above — the one place the queue's
+    /// cards are gathered, so the row reconciled in place and the row first seen in a listing carry
+    /// the same ones (`TranscriptReducer.reconcileQueuedTurns`).
+    public var cards: TurnCards {
+        TurnCards(itemCard: itemCard, taskStart: taskStartCard, startedCard: startedCard,
+                  sessionMessage: senderCard, sessionReplies: replyCards,
+                  reviewRequest: reviewRequestCard, reviewReturn: reviewReturnCard)
+    }
     /// The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
     /// delivery — so nobody typed its words. Nil on every turn somebody sent, and from a server that
     /// predates the field.
@@ -841,16 +909,19 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
 
     public init(turnId: String, kind: String? = nil, content: String,
                 attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil,
+                taskStart: JSONValue? = nil,
                 projectStarted: JSONValue? = nil, sessionMessage: JSONValue? = nil,
-                authoredByOrbit: Bool? = nil, confirmationReviewRequest: JSONValue? = nil,
+                sessionReplies: JSONValue? = nil, authoredByOrbit: Bool? = nil, confirmationReviewRequest: JSONValue? = nil,
                 confirmationReturn: JSONValue? = nil) {
         self.turnId = turnId
         self.kind = kind
         self.content = content
         self.attachments = attachments
         self.openItemDelivery = openItemDelivery
+        self.taskStart = taskStart
         self.projectStarted = projectStarted
         self.sessionMessage = sessionMessage
+        self.sessionReplies = sessionReplies
         self.authoredByOrbit = authoredByOrbit
         self.confirmationReviewRequest = confirmationReviewRequest
         self.confirmationReturn = confirmationReturn
@@ -885,6 +956,8 @@ public struct CreateSessionRequest: Codable, Sendable {
     public let codexAccount: String?
     /// The same for a session on the built-in Claude engine: one of the runner's Claude accounts.
     public let claudeAccount: String?
+    /// The same for a session on the built-in Antigravity engine: one of the runner's Google accounts.
+    public let antigravityAccount: String?
     /// The folder the new session is filed in — one started from a folder's page lands in that
     /// folder (docs/session-folders-move-design.md §3.2). It has to be one of this workspace's
     /// folders, else the server answers 400. Nil omits it: the session is in no folder.
@@ -894,7 +967,7 @@ public struct CreateSessionRequest: Codable, Sendable {
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
                 shell: Bool? = nil, attachmentIds: [String]? = nil, codexAccount: String? = nil,
-                claudeAccount: String? = nil, folderId: String? = nil) {
+                claudeAccount: String? = nil, antigravityAccount: String? = nil, folderId: String? = nil) {
         self.prompt = prompt
         self.title = title
         self.agentId = agentId
@@ -908,6 +981,7 @@ public struct CreateSessionRequest: Codable, Sendable {
         self.attachmentIds = attachmentIds
         self.codexAccount = codexAccount
         self.claudeAccount = claudeAccount
+        self.antigravityAccount = antigravityAccount
         self.folderId = folderId
     }
 }
@@ -1084,6 +1158,11 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     public let lifecycleState: SessionLifecycleState?
     /// Authoritative action availability from newer servers. nil retains legacy local inference.
     public let capabilities: SessionCapabilities?
+    /// Project membership and its integration line drive the existing worktree bar labels.
+    public let projectId: String?
+    public let projectTitle: String?
+    public let projectMembership: SessionProjectMembership?
+    public let projectIntegrationRef: String?
     /// The isolated branch this session's work lives on (`orbit/<slug>-<hash>`), or nil pre-isolation.
     public let branch: String?
     /// What the runner did: "worktree" (isolated) | "shared-nogit" (no git → the shared workDir).
@@ -1099,7 +1178,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     public let mergeRepairSession: MergeRepairSession?
     public let mergeRecoverySupported: Bool?
     public let workspace: SessionDetailAgent?
-    /// The branch the last merge targeted (nil = the runner's auto-detected default).
+    /// The server-resolved merge target: an explicit choice, project integration line, or default.
     public let mergeTarget: String?
     /// Candidate target branches for the "Merge to…" dropdown (empty/nil for older runners).
     public let mergeTargets: [String]?
@@ -1154,6 +1233,10 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         lifecycleState = try values.decodeIfPresent(SessionLifecycleState.self, forKey: .lifecycleState)
             ?? legacy.decodeIfPresent(SessionLifecycleState.self, forKey: .filingState)
         capabilities = try values.decodeIfPresent(SessionCapabilities.self, forKey: .capabilities)
+        projectId = try values.decodeIfPresent(String.self, forKey: .projectId)
+        projectTitle = try values.decodeIfPresent(String.self, forKey: .projectTitle)
+        projectMembership = try values.decodeIfPresent(SessionProjectMembership.self, forKey: .projectMembership)
+        projectIntegrationRef = try values.decodeIfPresent(String.self, forKey: .projectIntegrationRef)
         branch = try values.decodeIfPresent(String.self, forKey: .branch)
         isolationStatus = try values.decodeIfPresent(String.self, forKey: .isolationStatus)
         changedFiles = try values.decodeIfPresent([SessionChangedFile].self, forKey: .changedFiles)
@@ -1182,6 +1265,9 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
                 sessionState: SessionState? = nil,
                 runState: SessionRunState? = nil, lifecycleState: SessionLifecycleState? = nil,
                 capabilities: SessionCapabilities? = nil,
+                projectId: String? = nil, projectTitle: String? = nil,
+                projectMembership: SessionProjectMembership? = nil,
+                projectIntegrationRef: String? = nil,
                 branch: String? = nil, isolationStatus: String? = nil,
                 changedFiles: [SessionChangedFile]? = nil, worktreeDirty: Bool? = nil,
                 mergeStatus: String? = nil, mergeError: String? = nil, mergeTarget: String? = nil,
@@ -1200,6 +1286,10 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.runState = runState
         self.lifecycleState = lifecycleState
         self.capabilities = capabilities
+        self.projectId = projectId
+        self.projectTitle = projectTitle
+        self.projectMembership = projectMembership
+        self.projectIntegrationRef = projectIntegrationRef
         self.branch = branch
         self.isolationStatus = isolationStatus
         self.changedFiles = changedFiles

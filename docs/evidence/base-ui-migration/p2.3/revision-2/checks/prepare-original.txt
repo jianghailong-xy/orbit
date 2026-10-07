@@ -1,0 +1,6 @@
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+/tmp/orbit-p23-r2-reference
+/tmp/orbit-p23-r2-reference

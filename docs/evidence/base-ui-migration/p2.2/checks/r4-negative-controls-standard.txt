@@ -1,0 +1,39 @@
+[WebServer] (node:376975) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 16 tests using 1 worker
+
+(node:377159) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.browser.mjs:6:42 › observer rejects retained scroll lock (497ms)
+  ✓   2 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.browser.mjs:6:42 › observer rejects late scroll lock (345ms)
+(node:377253) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   3 [chromium-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.browser.mjs:6:42 › observer rejects retained scroll lock (443ms)
+  ✓   4 [chromium-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.browser.mjs:6:42 › observer rejects late scroll lock (248ms)
+(node:377348) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   5 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.browser.mjs:6:42 › observer rejects retained scroll lock (501ms)
+  ✓   6 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.browser.mjs:6:42 › observer rejects late scroll lock (344ms)
+(node:377961) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   7 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.browser.mjs:6:42 › observer rejects retained scroll lock (597ms)
+  ✓   8 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.browser.mjs:6:42 › observer rejects late scroll lock (308ms)
+(node:378621) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   9 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.browser.mjs:6:42 › observer rejects retained scroll lock (1.0s)
+  ✓  10 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.browser.mjs:6:42 › observer rejects late scroll lock (673ms)
+(node:379854) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  11 [webkit-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.browser.mjs:6:42 › observer rejects retained scroll lock (805ms)
+  ✓  12 [webkit-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.browser.mjs:6:42 › observer rejects late scroll lock (608ms)
+(node:381023) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  13 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.browser.mjs:6:42 › observer rejects retained scroll lock (1.3s)
+  ✓  14 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.browser.mjs:6:42 › observer rejects late scroll lock (614ms)
+(node:381980) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  15 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.browser.mjs:6:42 › observer rejects retained scroll lock (643ms)
+  ✓  16 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.browser.mjs:6:42 › observer rejects late scroll lock (335ms)
+
+  16 passed (15.4s)

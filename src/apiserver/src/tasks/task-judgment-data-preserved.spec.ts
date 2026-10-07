@@ -1879,7 +1879,104 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // device_token only. No existing token, user FK, task, project, acceptance row, fence,
       // function or trigger is changed, and there is no DML or preserved object in its scope.
       // Renumbered before landing because the delivery-review migration already occupies 0375.
-      '0376_android_push_installation'],
+      '0376_android_push_installation',
+      // DeepSeek Harness runner admission (0377): one new session acquisition trigger and its
+      // function, plus a replacement of 0367/0372's Antigravity claim function that excludes
+      // discriminator-marked native dsh sessions from a colliding configured provider lookup.
+      // The new function reads model_provider and locks the authorized runner FOR SHARE NOWAIT;
+      // neither function writes another relation or touches a preserved ledger, task, project,
+      // criterion, enum, acceptance object or DONE fence. No stored row is rewritten, and no
+      // existing trigger, table, column, constraint, index or type is dropped or altered.
+      '0377_dsh_runner_gate',
+      // Open-item hand-over history (0378): three nullable columns and two checks on
+      // project_open_item only. No existing rows are rewritten, and the session id deliberately
+      // has no foreign key so purging a conversation cannot erase the owner's explanation.
+      '0378_open_item_hand_over',
+      // A task's concrete fix for an exception item (0379): one nullable task FK to
+      // project_open_item, SET NULL on item deletion and an index for the read/escalation paths.
+      // No existing row is backfilled, and no preserved completion/fence object is touched.
+      '0379_open_item_fix_link',
+      // Owner integration retry attribution (0380): one nullable requester column on
+      // project_integration_job and one nullable owner-attribution column on project_open_item;
+      // the two existing all-or-none CHECKs are replaced with XOR checks. Existing coordinator
+      // retries satisfy the widened constraints, and no task, project, acceptance, DONE fence,
+      // trigger or function is rewritten; nothing is backfilled.
+      '0380_owner_integration_retry',
+      // Reopen landing intent (0381): one task-keyed marker row records the explicit task_reopen
+      // door until the next DONE queues its LAND_TASK generation. It is consumed transactionally;
+      // no existing task, project, acceptance, DONE fence, trigger or function is rewritten.
+      '0381_task_reopen_landing_intent',
+      // Credential throttle (0382): one nullable `throttled_until` on pool_codex_login and one on
+      // pool_api_key, written by the pool gateways when a 429 outlasts the wait they may hold open.
+      // Two ADD COLUMN of a nullable timestamp and nothing else — no task, project, acceptance, DONE
+      // fence, trigger or function is touched, and no existing row is backfilled.
+      '0382_pool_credential_throttle',
+      // Personal access tokens (0383): one new table, personal_access_token, with its own CHECKs,
+      // indexes and one foreign key to `user` (ON DELETE CASCADE). No existing table, column,
+      // constraint, function, trigger or type is altered or dropped; no task, project, acceptance
+      // or DONE fence object is named, and no row is written.
+      '0383_personal_access_token',
+      // Activity credential (0384): two nullable columns on `activity` — credential_kind and
+      // credential_id — and one CHECK pairing them, which every existing row (both NULL) satisfies.
+      // `activity` is not a preserved relation; no task, project, acceptance or DONE fence object,
+      // trigger, function or type is named, and no row is written or backfilled.
+      '0384_activity_credential',
+      // Runner self-update state (0385): one nullable JSONB `self_update` and one nullable
+      // TIMESTAMP(3) `self_update_requested_at` on `runner`, neither with a default, so both ADD
+      // COLUMNs are catalog-only. `runner` is not a preserved relation nor reachable from one, and
+      // neither column is in the UPDATE OF list of 0118's runner availability trigger. No table,
+      // index, constraint, enum, type, function or trigger is created, replaced or dropped; no
+      // task, project, acceptance or DONE fence object is named; no INSERT, UPDATE or DELETE —
+      // every runner reads NULL, "not reported" and "nobody asked", until its next heartbeat.
+      '0385_runner_self_update',
+      // Move requests (0386): one nullable `requested_criterion_definition_id` on
+      // project_handoff_approval with a CHECK keeping it to MOVE_TASK rows, one partial unique index
+      // (one PENDING move per owner, task and pair of projects) and one new function + BEFORE UPDATE
+      // trigger freezing the new column. 0155's guard is not replaced; no task, project,
+      // acceptance or DONE fence object is named, and no row is written or backfilled.
+      '0386_project_handoff_move_request',
+      // Antigravity accounts (0387): one nullable TEXT with no default on `workspace`
+      // (`antigravity_account`, 0309's `claude_account` exactly), and on `session` one nullable TEXT
+      // with no default (`antigravity_account`) and one BOOLEAN NOT NULL DEFAULT false
+      // (`antigravity_account_pinned`) — 0336's pair exactly, catalog-only as a constant default is —
+      // with no index, no CHECK and no foreign key, and nothing else. `task`, `project` and
+      // `project_acceptance_criterion_definition` are not named, no `project_acceptance_*` object nor
+      // any of the six preserved triggers/functions is, and no function, trigger, enum or type is
+      // created — so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: nothing
+      // is backfilled.
+      '0387_antigravity_account',
+      // `orbit login` through the browser (0388): one new table, pat_device_login, with its own
+      // CHECKs, indexes and one foreign key to `user` (ON DELETE CASCADE). No existing table,
+      // column, constraint, function, trigger or type is altered or dropped; no task, project,
+      // acceptance or DONE fence object is named, and no row is written.
+      '0388_pat_device_login',
+      // Confirmed moves (0389): one CREATE OR REPLACE of `task_claimed_project_move_guard` (0122,
+      // widened by 0130); its trigger, event and refusal are unchanged. The body still refuses a
+      // project change on a task with a live claim, except in the transaction that applies the
+      // account owner's confirmation of a MOVE_TASK for that task and those two projects — named by
+      // a transaction-local setting and an unspent, USER-approved project_handoff_approval row the
+      // function only reads. It is none of the six preserved triggers/functions and not the DONE
+      // fence; no table, column, constraint, index or type is touched, and no row is written.
+      '0389_move_task_confirmation_live_claim',
+      // Sign-in providers (0390): one new table, sign_in_provider, with its primary key and two
+      // CHECKs of its own, and no other index, foreign key, function or trigger. No existing table,
+      // column, constraint, function, trigger or type is altered or dropped; no task, project,
+      // acceptance or DONE fence object is named, and no row is written. Written as 0387 and
+      // renumbered before landing, unchanged otherwise, when main's 0387_antigravity_account took
+      // that number first.
+      '0390_sign_in_provider',
+      // Signing in with Google (0391): two new tables. user_identity, with its primary key, two
+      // CHECKs, two unique indexes and a foreign key to `user` (ON DELETE CASCADE); and
+      // oauth_login_flow, with its primary key, four CHECKs, two unique indexes, two indexes and a
+      // foreign key to `user` (ON DELETE CASCADE). No function or trigger. No existing table, column,
+      // constraint, function, trigger or type is altered or dropped; no task, project, acceptance or
+      // DONE fence object is named, and no row is written.
+      '0391_google_login_flow',
+      // Accounts without a password (0392): one ALTER COLUMN … DROP NOT NULL of `user.password_hash`,
+      // and nothing else. `user` is not a preserved relation; its email's unique index, every other
+      // column and every constraint stay as they were; no task, project, acceptance or DONE fence
+      // object, function, trigger or type is named, and no row is written or backfilled.
+      '0392_user_password_hash_nullable'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

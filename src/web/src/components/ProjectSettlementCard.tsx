@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type JSX, type Ref } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert } from 'antd';
+import { Alert, Input, Modal } from 'antd';
+import type { DoneRequest, ProjectDoneRecord, ProjectOpenItemRow, SessionWaitingKind } from '@orbit/shared';
 import { api } from '../api';
 import {
   acceptanceConfirmationKey,
@@ -10,6 +11,34 @@ import {
 } from '../lib/acceptanceConfirmation';
 import { ENTER_HINT, SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './CardHotkey';
 import { PROVENANCE_LABEL, PROVENANCE_TITLE } from './CriteriaDecisionCard';
+import {
+  DONE_CARD_COORDINATOR_CALL,
+  DONE_CARD_SHOW_ALL,
+  DONE_CARD_SHOW_LESS,
+  DONE_CARD_HEADING,
+  DONE_CARD_MISSING,
+  DONE_CARD_NOT_YET,
+  DONE_CARD_ORBIT_CHECKED,
+  DONE_CARD_RECORD,
+  DONE_CARD_REOPEN,
+  DONE_CARD_RECEIPT,
+  DONE_CARD_SEE_ACCEPTED,
+  PROJECT_DONE_COPY,
+  criterionForGap,
+  doneProvenance,
+  formatDoneDate,
+  formatDoneDateTime,
+  doneRequestWaiting,
+  landingReasonLabel,
+  orbitCheckedOpenItemCount,
+  projectDoneCardTally,
+  projectDoneReceiptTally,
+  projectWhyNotDoneTally,
+  type ProjectDerivedDone,
+  type ProjectDoneCounts,
+  type ProjectDoneDocument,
+} from '../lib/projectDone';
+import { projectStarted } from '../lib/projectStart';
 
 /**
  * WHY this project is not DONE — the projection, rendered.
@@ -94,6 +123,7 @@ export interface SettlementCriterionAnswer {
   conflicts: SettlementConflict[];
   remedy: SettlementRemedy | null;
   withheld: SettlementClause[];
+  landingReason?: string | null;
 }
 
 /** `derivedDone`, as the project document serves it. */
@@ -103,6 +133,13 @@ export interface SettlementProjection {
   withheld: SettlementClause[];
   criteria: SettlementCriterionAnswer[];
   confirmation: 'UNCONFIRMED' | 'CONFIRMED' | 'STALE';
+  counts?: {
+    criteria: number;
+    met: number;
+    landed: number;
+    onMain: number;
+    byReason: Record<string, number>;
+  };
 }
 
 /** As much of the project document as this card reads: the words of each criterion, the task tally
@@ -117,6 +154,11 @@ export interface SettlementProjectDocument {
   tasksByStatus?: Record<string, number>;
   /** The projection. Absent from a server that predates it, which draws no card. */
   derivedDone?: SettlementProjection;
+  doneBy?: 'OWNER' | 'DERIVED' | null;
+  doneAt?: string | null;
+  acceptedGaps?: readonly Record<string, unknown>[] | null;
+  /** Null while nobody has started the project; absent from a server that predates starts. */
+  startedAt?: string | null;
 }
 
 /** The card's heading: the question a reader actually has, since the server settles the project
@@ -215,24 +257,26 @@ export function settlementTally(project: SettlementProjectDocument): string {
 
 /**
  * Whether this project is the one the card is for: it LOOKS finished and the derivation says it is
- * not.
+ * not — OPEN and started, every stated criterion met by the work filed under it, no task under it
+ * IN_PROGRESS, and a projection that does not call it done.
  *
  * The first half is what keeps the card off every unfinished project ("the work is not done yet"
  * is not news, and a card saying it under every project forever is what the condition is shaped to
  * avoid); the second is what makes it a question rather than a status. Both halves come off the
  * same read, and the projection decides the second one — this file decides nothing about DONE.
+ * The unified read asks it the same way (`asksWhyNotDone`), and so do the native clients
+ * (`ProjectDone.slot`).
  */
 export function settlementHeldOnProject(
   project: SettlementProjectDocument | null | undefined,
 ): boolean {
-  if (!project || project.status !== 'OPEN') return false;
+  if (!project || project.status !== 'OPEN' || projectStarted(project) !== true) return false;
   const projection = project.derivedDone;
-  if (!projection || projection.criteria.length === 0) return false;
+  if (!projection || projection.done || projection.criteria.length === 0) return false;
   if (!projection.criteria.every((criterion) => criterion.satisfied)) return false;
   // Not while something is running: this is a question about a project that has stopped, and
   // asking it mid-sweep would put it up and take it down again for no reader's benefit.
-  if ((project.tasksByStatus?.IN_PROGRESS ?? 0) !== 0) return false;
-  return projection.withheld.length > 0;
+  return (project.tasksByStatus?.IN_PROGRESS ?? 0) === 0;
 }
 
 function plural(n: number, one: string, many: string): string {
@@ -375,6 +419,10 @@ export function ProjectSettlementCard({
   keys = false,
   onConfirm,
   onDelegate,
+  doneRequest,
+  requestId,
+  onRecordDone,
+  onNotYet,
 }: {
   /** The card's own element, which is where its keyboard claim says it is drawn (`CardHotkey.ts`). */
   ref?: Ref<HTMLDivElement>;
@@ -383,16 +431,43 @@ export function ProjectSettlementCard({
   /** The standard-set standing, read only when the confirmation clause is withholding. */
   standing?: StandardSetConfirmationStanding | null;
   /** Whether the derivation has stopped withholding — read back, not remembered. */
-  settled: boolean;
+  settled?: boolean;
   busy?: boolean;
   error?: Error | null;
   /** Whether this card holds the keyboard — see `CardHotkey.ts`. A static render never does. */
   keys?: boolean;
-  onConfirm: () => void;
+  onConfirm?: () => void;
   /** The conversation's own way of handing the card's facts to the agent that owns this project. */
-  onDelegate: () => void;
+  onDelegate?: () => void;
+  /** Current owner-facing card props.  Kept optional for the pre-DONE_REQUEST projection card. */
+  doneRequest?: DoneRequest | null;
+  requestId?: string | null;
+  onRecordDone?: () => void;
+  onNotYet?: (note: string) => void;
 }): JSX.Element {
+  settled = settled ?? project.derivedDone?.done === true;
+  // Keep this hook before the modern/legacy branch.  A rolling deploy can briefly serve the old
+  // projection shape and then the unified one; changing the number of hooks between those reads
+  // would make React reject an otherwise harmless refresh.
   const [openClause, setOpenClause] = useState<SettlementClause | null>(null);
+  if (project.derivedDone && 'counts' in project.derivedDone) {
+    return (
+      <ProjectDoneCard
+        ref={ref}
+        project={project as unknown as ProjectDoneDocument}
+        doneRequest={doneRequest}
+        requestId={requestId}
+        standing={standing}
+        busy={busy}
+        error={error}
+        keys={keys}
+        onRecordDone={onRecordDone}
+        onNotYet={onNotYet}
+        openItemsCount={0}
+        runningCount={0}
+      />
+    );
+  }
   const projection = project.derivedDone;
   const withheld = projection?.withheld ?? [];
   const words = new Map((project.acceptanceCriteriaItems ?? []).map((item) => [item.id, item]));
@@ -536,6 +611,17 @@ export function ProjectSettlementCard({
 const CONFIRMATION_CLAUSE = 'STANDARD_SET_UNCONFIRMED';
 
 /**
+ * Whether the conversation asks "Why is this project not done?" off the unified read: only of a
+ * project that looks finished and is not done (`settlementHeldOnProject`) — never of one with a
+ * criterion still unmet or a task still IN_PROGRESS.
+ */
+export function asksWhyNotDone(project: SettlementProjectDocument | null | undefined): boolean {
+  const projection = project?.derivedDone;
+  if (!projection || !('counts' in projection)) return false;
+  return settlementHeldOnProject(project);
+}
+
+/**
  * The wired card for one conversation: drawn from the project document, which carries the
  * projection, and re-derived on every render.
  *
@@ -546,6 +632,8 @@ const CONFIRMATION_CLAUSE = 'STANDARD_SET_UNCONFIRMED';
 export function SessionProjectSettlementCard({
   projectId,
   onDelegate,
+  coordinator = true,
+  waitingKind = null,
 }: {
   /** The project this session coordinates. Ordinary sessions have none and get no card. */
   projectId: string | null | undefined;
@@ -554,6 +642,10 @@ export function SessionProjectSettlementCard({
    *  the project they are about (`projectSettlementContext`). The card stays put: what it says is
    *  still true. */
   onDelegate?: (talk: { facts: string }) => void;
+  /** WorkspaceView supplies the membership role; omitted keeps the legacy standalone behavior. */
+  coordinator?: boolean;
+  /** The server's owner-decision signal, used to distinguish a requested card from D5's reminder. */
+  waitingKind?: SessionWaitingKind | null;
 }): JSX.Element | null {
   const qc = useQueryClient();
   const project = projectId ?? '';
@@ -561,22 +653,56 @@ export function SessionProjectSettlementCard({
   const documentRead = useQuery({
     queryKey: ['project', project],
     queryFn: () => api<SettlementProjectDocument>(`/projects/${encodeURIComponent(project)}`),
-    enabled: Boolean(projectId),
+    enabled: Boolean(projectId) && coordinator,
+    refetchInterval: 20_000,
+  });
+  const openItemsRead = useQuery({
+    queryKey: ['project', project, 'open-items'],
+    queryFn: () => api<{ doneRequest?: ProjectOpenItemRow | null; startRequest?: ProjectOpenItemRow | null; needsYou?: ProjectOpenItemRow[]; withCoordinator?: ProjectOpenItemRow[] }>(`/projects/${encodeURIComponent(project)}/open-items`),
+    enabled: Boolean(projectId) && coordinator,
     refetchInterval: 20_000,
   });
   // A read that has not answered yet is not an answer: there is nothing to draw the card from, and
   // nothing is drawn.
   const document = documentRead.data ?? null;
+  const doneRequestRow = openItemsRead.data?.doneRequest ?? null;
+  const doneRequest = doneRequestRow?.doneRequest ?? null;
+  const [doneDelivered, setDoneDelivered] = useState(false);
+  const [doneReceipt, setDoneReceipt] = useState<ProjectDoneRecord | null>(null);
+  const hasDoneSignal = waitingKind === 'RECORD_AS_DONE'
+    || (waitingKind === 'DONE_REQUEST' && Boolean(doneRequestRow?.itemId));
+  useEffect(() => {
+    if (!coordinator) {
+      setDoneDelivered(false);
+      return;
+    }
+    if (doneRequestRow?.itemId || hasDoneSignal) {
+      setDoneDelivered(true);
+    } else if (!doneReceipt) {
+      // A request that was answered or superseded must not leave a stale card behind.  Keep the
+      // local receipt visible after Record as done, though: it is the acknowledgement the turn
+      // promised to leave in place.
+      setDoneDelivered(false);
+    }
+  }, [coordinator, doneRequestRow?.itemId, doneReceipt, hasDoneSignal]);
   const held = settlementHeldOnProject(document);
   const settled = document?.derivedDone?.done === true;
+  // Delivered once and kept: the older projection's card, which has a settled state to go to rather
+  // than vanishing. The unified read is asked per read instead (`asksWhyNotDone`, below): up exactly
+  // while the project looks finished. Kept past that, it would hold the keys and fall through to the
+  // owner's card, unasked, the moment a task started or a criterion stopped being met.
+  const unified = document?.derivedDone != null && 'counts' in document.derivedDone;
   useEffect(() => {
-    if (held) setDelivered(true);
-  }, [held]);
-  const shown = delivered || held;
+    if (held && !unified) setDelivered(true);
+  }, [held, unified]);
+  const shown = (delivered && !unified) || held;
 
   // The confirmation standing, read only when the card is up AND the clause withholding settlement
   // is the one a person clears — the same key and door the start card uses.
-  const needsStanding = shown && (document?.derivedDone?.withheld.includes(CONFIRMATION_CLAUSE) ?? false);
+  const needsStanding = (shown && (document?.derivedDone?.withheld.includes(CONFIRMATION_CLAUSE) ?? false))
+    || doneDelivered
+    || doneRequest !== null
+    || hasDoneSignal;
   const standingRead = useQuery({
     queryKey: acceptanceConfirmationKey(project),
     queryFn: () => readAcceptanceConfirmation(project),
@@ -590,6 +716,45 @@ export function SessionProjectSettlementCard({
       // And the projection, which the confirmation just moved: DONE is stored on this edge.
       void qc.invalidateQueries({ queryKey: ['project', project] });
       void qc.invalidateQueries({ queryKey: ['projects'] });
+    },
+  });
+  const done = useMutation({
+    mutationFn: async () => {
+      // A request carries the exact criteria seal it was made about.  Answering with that seal
+      // lets the owner door reject a stale request atomically; only an unasked owner action uses
+      // the current confirmation read.
+      const criteriaDigest = doneRequest?.criteriaDigest ?? standingRead.data?.currentVersion.digest;
+      if (!criteriaDigest || !document) throw new Error('The criteria version is still loading');
+      return api<ProjectDoneRecord>(`/projects/${encodeURIComponent(project)}/done`, {
+        method: 'POST',
+        body: {
+          requestId: doneRequestRow?.itemId ?? null,
+          criteriaDigest,
+          acceptedGaps: doneRequest?.gaps ?? syntheticDoneGaps(document as ProjectDoneDocument),
+        },
+      });
+    },
+    onSuccess: async (next) => {
+      setDoneReceipt(next);
+      await qc.invalidateQueries({ queryKey: ['project', project] });
+      await qc.invalidateQueries({ queryKey: ['projects'] });
+      await qc.invalidateQueries({ queryKey: ['project', project, 'open-items'] });
+    },
+  });
+  const decline = useMutation({
+    mutationFn: ({ note }: { note: string }) => api(`/projects/${encodeURIComponent(project)}/done-requests/${encodeURIComponent(doneRequestRow?.itemId ?? '')}/decline`, { method: 'POST', body: { note } }),
+    onSuccess: async () => {
+      setDoneDelivered(false);
+      await qc.invalidateQueries({ queryKey: ['project', project, 'open-items'] });
+    },
+  });
+  const reopen = useMutation({
+    mutationFn: () => api<{ id: string }>(`/projects/${encodeURIComponent(project)}`, { method: 'PATCH', body: { status: 'OPEN' } }),
+    onSuccess: async () => {
+      setDoneReceipt(null);
+      await qc.invalidateQueries({ queryKey: ['project', project] });
+      await qc.invalidateQueries({ queryKey: ['projects'] });
+      await qc.invalidateQueries({ queryKey: ['project', project, 'open-items'] });
     },
   });
 
@@ -609,12 +774,70 @@ export function SessionProjectSettlementCard({
   };
   const offersConfirmation = document?.derivedDone?.withheld.includes(CONFIRMATION_CLAUSE) ?? false;
   const confirmable = standing != null && standing.state !== 'CONFIRMED';
-  const asking = shown && document !== null && !settled;
+  const asking = (shown || doneDelivered) && document !== null && !settled;
   const anchor = useRef<HTMLDivElement>(null);
   const keys = useCardKeyClaim(asking, anchor);
-  useApproveHotkey(keys && offersConfirmation && confirmable && !confirm.isPending, confirmSet, { requireMod: false });
-  useApproveHotkey(keys, delegate);
+  useApproveHotkey(keys && offersConfirmation && confirmable && !confirm.isPending, confirmSet, { requireMod: false, anchor });
+  useApproveHotkey(keys, delegate, { anchor });
 
+  // A current server's non-settled projection is the grouped Why-not-done read.  It stays a
+  // separate card until a DONE_REQUEST arrives; the owner card below is only for an actual request
+  // (or the receipt left by answering one).
+  if (!doneDelivered && document !== null && asksWhyNotDone(document)) {
+    return (
+      <ProjectWhyNotDoneCard
+        project={document as unknown as ProjectDoneDocument}
+        openItems={{
+          withCoordinator: openItemsRead.data?.withCoordinator,
+          doneRequest: doneRequestRow,
+        }}
+        onReview={() => setDoneDelivered(true)}
+        onAskCoordinator={delegate}
+      />
+    );
+  }
+
+  // A DONE Orbit recorded itself is the Why-not-done card's terminal state, read off the project
+  // document so that it survives a refresh. Like the question itself, it is drawn only from the
+  // unified read (`counts`); an older projection keeps drawing nothing here.
+  if (
+    !doneDelivered
+    && document?.status === 'DONE'
+    && document.doneBy !== 'OWNER'
+    && document.derivedDone != null
+    && 'counts' in document.derivedDone
+  ) {
+    return <ProjectWhyNotDoneCard project={document as unknown as ProjectDoneDocument} />;
+  }
+
+  // The owner's DONE is a durable record on the project document, so its receipt is drawn from
+  // that read too — a refresh loses the local receipt and the answered request, not the record.
+  const ownerRecordedDone = document?.status === 'DONE' && document.doneBy === 'OWNER';
+  if ((doneDelivered || ownerRecordedDone) && document !== null) {
+    const doneProject = document as unknown as ProjectDoneDocument;
+    return (
+      <ProjectDoneCard
+        ref={anchor}
+        project={doneProject}
+        doneRequest={doneRequest}
+        requestId={doneRequestRow?.itemId ?? null}
+        requestWaitingSince={doneRequestRow?.waitingSince ?? null}
+        standing={standing}
+        receipt={doneReceipt}
+        keys={keys}
+        busy={done.isPending || !(doneRequest?.criteriaDigest ?? standing?.currentVersion.digest)}
+        error={done.error ?? decline.error}
+        notYetBusy={decline.isPending}
+        openItemsCount={orbitCheckedOpenItemCount(openItemsRead.data)}
+        runningCount={doneProject.derivedDone?.counts?.byReason?.IN_FLIGHT ?? 0}
+        onRecordDone={() => done.mutate()}
+        onNotYet={(note) => {
+          if (doneRequestRow) decline.mutate({ note });
+        }}
+        onReopen={() => reopen.mutate()}
+      />
+    );
+  }
   if (!shown || document === null) return null;
   const title = document.title || project;
   return (
@@ -629,5 +852,562 @@ export function SessionProjectSettlementCard({
       onConfirm={confirmSet}
       onDelegate={delegate}
     />
+  );
+}
+
+/* -------------------------------------------------------------------------------------------------
+ * Owner-facing DONE_REQUEST card
+ * -------------------------------------------------------------------------------------------------
+ *
+ * This is intentionally kept beside the older projection card above.  A few long-lived clients
+ * still receive the pre-DONE_REQUEST projection and the old card remains their safe fallback; a
+ * current server sends `open-items.doneRequest` and takes this path.  The new path never computes
+ * a count from tasks or rows: every number is read from `project.derivedDone.counts`.
+ */
+
+export interface ProjectDoneCardProps {
+  ref?: Ref<HTMLDivElement>;
+  project: ProjectDoneDocument;
+  doneRequest?: DoneRequest | null;
+  requestId?: string | null;
+  /** The DONE_REQUEST row's `waitingSince`: since when the coordinator has been asking. */
+  requestWaitingSince?: string | null;
+  /** The clock the request's wait is read against. */
+  now?: number;
+  /** The server's acceptance read, used for the criteria digest and confirmation date. */
+  standing?: StandardSetConfirmationStanding | null;
+  receipt?: ProjectDoneRecord | null;
+  busy?: boolean;
+  error?: Error | null;
+  keys?: boolean;
+  notYetBusy?: boolean;
+  onRecordDone?: () => void;
+  onNotYet?: (note: string) => void;
+  onReopen?: () => void;
+  /** A page opened without a coordinator request. */
+  ownerInitiated?: boolean;
+  /** The open-item read is used only for the sentence in the Orbit checked row. */
+  openItemsCount?: number;
+  runningCount?: number;
+}
+
+function doneCriterionText(project: ProjectDoneDocument, key: string): string {
+  return criterionForGap(project, key)?.text ?? key;
+}
+
+function doneCriterionOrdinal(project: ProjectDoneDocument, key: string): number | null {
+  return criterionForGap(project, key)?.ordinal ?? null;
+}
+
+function syntheticDoneGaps(project: ProjectDoneDocument): Array<{
+  criterionKey: string;
+  title: string;
+  whyNotProven: string;
+  coordinatorChecked?: string;
+  evidenceRefs?: string[];
+}> {
+  const criteria = project.derivedDone?.criteria ?? [];
+  return criteria
+    // NOTHING_TO_LAND and CODELESS are intentional zero-work outcomes, not gaps to paper over
+    // with a merge receipt.  Keep genuine work/receipt gaps in the owner-initiated payload.
+    .filter((criterion) => (
+      (criterion.landingReason !== null
+        && criterion.landingReason !== 'NOTHING_TO_LAND'
+        && criterion.landingReason !== 'CODELESS')
+      || !criterion.satisfied
+    ))
+    .map((criterion) => {
+      const item = project.acceptanceCriteriaItems?.find((candidate) => candidate.id === criterion.definitionId);
+      const reason = landingReasonLabel(criterion.landingReason);
+      return {
+        criterionKey: item?.key ?? item?.id ?? criterion.definitionId,
+        title: item?.text ?? criterion.definitionId,
+        whyNotProven: criterion.satisfied
+          ? `Orbit cannot prove this criterion is on main: ${reason}.`
+          : 'Orbit cannot prove this criterion is met by its work yet.',
+      };
+    });
+}
+
+function orbitCheckedText(
+  project: ProjectDoneDocument,
+  standing: StandardSetConfirmationStanding | null | undefined,
+  openItemsCount: number,
+  runningCount: number,
+): string {
+  const counts = project.derivedDone?.counts;
+  const allMet = counts != null && counts.met === counts.criteria;
+  const lead = allMet
+    ? 'every criterion is met by its work'
+    : `${counts?.met ?? 0} of ${counts?.criteria ?? 0} criteria are met by their work`;
+  const running = runningCount === 0 ? 'nothing running' : `${runningCount} item${runningCount === 1 ? '' : 's'} running`;
+  const open = openItemsCount === 0 ? 'no open items' : `${openItemsCount} open item${openItemsCount === 1 ? '' : 's'}`;
+  const confirmedAt = formatDoneDate(standing?.confirmation?.confirmedAt);
+  return `${DONE_CARD_ORBIT_CHECKED}: ${lead} · ${running} · ${open}`
+    + (confirmedAt ? ` · criteria confirmed by you on ${confirmedAt}` : '');
+}
+
+function DoneGaps({
+  project,
+  gaps,
+}: {
+  project: ProjectDoneDocument;
+  gaps: readonly {
+    criterionKey: string;
+    title?: string;
+    whyNotProven?: string;
+    coordinatorChecked?: string;
+    evidenceRefs?: string[];
+  }[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? gaps : gaps.slice(0, 3);
+  return (
+    <div className="project-done-gaps">
+      <div className="project-done-section-title">
+        {PROJECT_DONE_COPY.whatOrbitCantProve} · {gaps.length}
+      </div>
+      {gaps.length === 0 ? (
+        <p className="project-done-empty">Orbit has no gaps to report.</p>
+      ) : (
+        <ul className="project-done-gap-list">
+          {shown.map((gap, index) => {
+            const ordinal = doneCriterionOrdinal(project, gap.criterionKey);
+            return (
+              <li className="project-done-gap" key={`${gap.criterionKey}:${index}`}>
+                <span className="project-done-gap-number">{ordinal ?? index + 1}</span>
+                <div className="project-done-gap-body">
+                  <div className="project-done-gap-title">{gap.title ?? doneCriterionText(project, gap.criterionKey)}</div>
+                  {gap.whyNotProven ? <div className="project-done-gap-why">{gap.whyNotProven}</div> : null}
+                  {gap.coordinatorChecked ? (
+                    <div className="project-done-gap-checked">
+                      <b>✓ {PROJECT_DONE_COPY.coordinatorChecked}:</b>{' '}
+                      {gap.coordinatorChecked}
+                      {gap.evidenceRefs?.length ? ` · evidence ${gap.evidenceRefs.join(', ')}` : ''}
+                    </div>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {!expanded && gaps.length > shown.length ? (
+        <button type="button" className="project-done-show-all" onClick={() => setExpanded(true)}>
+          {DONE_CARD_SHOW_ALL} {gaps.length}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function DoneWhenSummary({
+  project,
+  counts,
+}: {
+  project: ProjectDoneDocument;
+  counts: ProjectDoneCounts | undefined;
+}): JSX.Element {
+  const [expanded, setExpanded] = useState(false);
+  const criteria = project.derivedDone?.criteria ?? [];
+  const criteriaCount = counts?.criteria ?? criteria.length;
+  const labels = new Map((project.acceptanceCriteriaItems ?? []).map((item) => [item.id, item]));
+  return (
+    <div className="project-done-when">
+      <div className="project-done-section-title">
+        {PROJECT_DONE_COPY.doneWhen} · {criteriaCount} criteria
+      </div>
+      <div className="project-done-tally">{projectDoneCardTally(counts)}</div>
+      {criteriaCount > 0 ? (
+        <button
+          type="button"
+          className="project-done-show-all"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? DONE_CARD_SHOW_LESS : `${DONE_CARD_SHOW_ALL} ${criteriaCount}`}
+        </button>
+      ) : null}
+      {expanded ? (
+        <ul className="project-done-criteria-list">
+          {criteria.map((criterion, index) => {
+            const item = labels.get(criterion.definitionId);
+            return (
+              <li key={criterion.definitionId}>
+                <span className="project-done-gap-number">{item?.ordinal ?? index + 1}</span>
+                <span>{item?.text ?? criterion.definitionId}</span>
+                <span className="project-done-criterion-state">
+                  {criterion.satisfied ? 'met' : 'not met'} · {landingReasonLabel(criterion.landingReason)}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+/** The shared visual used in the coordinator transcript and in the project-page review modal. */
+export function ProjectDoneCard({
+  ref,
+  project,
+  doneRequest = null,
+  requestId = null,
+  requestWaitingSince = null,
+  now = Date.now(),
+  standing = null,
+  receipt = null,
+  busy = false,
+  error = null,
+  keys = false,
+  notYetBusy = false,
+  onRecordDone,
+  onNotYet,
+  onReopen,
+  ownerInitiated = false,
+  openItemsCount = 0,
+  runningCount = 0,
+}: ProjectDoneCardProps): JSX.Element {
+  const [notYetOpen, setNotYetOpen] = useState(false);
+  const [note, setNote] = useState('');
+  const gaps = doneRequest?.gaps ?? syntheticDoneGaps(project);
+  const counts = project.derivedDone?.counts;
+  const receiptDate = formatDoneDate(receipt?.doneAt ?? project.doneAt);
+  const accepted = receipt?.acceptedGaps ?? project.acceptedGaps ?? [];
+  const receiptDateTime = formatDoneDateTime(receipt?.doneAt ?? project.doneAt);
+  // `doneBy` outlives a reopen on the document, so it is the owner's record only while the
+  // project is DONE; the receipt is the answer this card's own press just got.
+  const ownerRecorded = receipt != null || (project.status === 'DONE' && project.doneBy === 'OWNER');
+  // The receipt is the project's status, not its derived read: an OPEN project is asked the
+  // question even while `derivedDone` says done or a leftover `doneBy` lingers.
+  const recorded = receipt != null || project.status === 'DONE';
+  const canRecord = Boolean(onRecordDone) && !busy;
+
+  if (recorded) {
+    return (
+      <div ref={ref} className="approval-card project-settlement project-done-card is-receipt">
+        <div className="approval-head project-settlement-head">
+          <span className="project-settlement-heading">{PROJECT_DONE_COPY.thisProjectIsDone}</span>
+          <span className="criteria-provenance">FROM ORBIT</span>
+        </div>
+        <div className="approval-body is-questions project-settlement-body">
+          <div className="project-settlement-meta">
+            {project.title} · {doneProvenance({ doneBy: receipt?.doneBy ?? project.doneBy, acceptedGaps: accepted })}
+            {receiptDate ? ` · ${receiptDate}` : ''}
+          </div>
+          <p className="project-done-receipt-line">
+            {ownerRecorded
+              ? `${DONE_CARD_RECEIPT}${receiptDateTime ? ` · ${receiptDateTime}` : ''}`
+              : `${PROJECT_DONE_COPY.thisProjectIsDone} · ${PROJECT_DONE_COPY.recordedByOrbit}`}
+          </p>
+          <p className="project-done-tally">{projectDoneReceiptTally(counts, accepted.length)}</p>
+          {accepted.length > 0 ? (
+            <details className="project-done-accepted">
+              <summary>{DONE_CARD_SEE_ACCEPTED}</summary>
+              <DoneGaps project={project} gaps={accepted as typeof gaps} />
+            </details>
+          ) : null}
+        </div>
+        <div className="approval-actions project-settlement-actions">
+          <button type="button" className="card-action card-action--secondary" onClick={onReopen} disabled={!onReopen}>
+            {DONE_CARD_REOPEN}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={ref} className="approval-card project-settlement project-done-card">
+      <div className="approval-head project-settlement-head">
+        <span className="project-settlement-heading">{DONE_CARD_HEADING}</span>
+        <span className="criteria-provenance" title={PROVENANCE_TITLE}>FROM ORBIT</span>
+      </div>
+      <div className="approval-body is-questions project-settlement-body">
+        <div className="project-settlement-meta">
+          {project.title} · {doneRequest
+            ? [PROJECT_DONE_COPY.askedByCoordinator, doneRequestWaiting(requestWaitingSince, now)].filter(Boolean).join(' · ')
+            : PROJECT_DONE_COPY.noRequestMeta}
+        </div>
+        {doneRequest ? (
+          <div className="project-done-call">
+            <div className="project-done-section-title">{DONE_CARD_COORDINATOR_CALL}</div>
+            <p>{doneRequest.judgment}</p>
+          </div>
+        ) : null}
+        <DoneWhenSummary project={project} counts={counts} />
+        <DoneGaps project={project} gaps={gaps} />
+        <div className="project-done-orbit-checked">
+          <span aria-hidden="true">✓</span>{' '}
+          {orbitCheckedText(project, standing, openItemsCount, runningCount)}
+        </div>
+        <p className="project-done-explanation">
+          {PROJECT_DONE_COPY.recordingExplanation}
+        </p>
+        {error ? <Alert className="project-settlement-error" type="error" showIcon message="Project was not recorded done" description={error.message} /> : null}
+        {notYetOpen ? (
+          <div className="project-done-not-yet">
+            <Input.TextArea
+              aria-label={DONE_CARD_MISSING}
+              placeholder={DONE_CARD_MISSING}
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              autoSize={{ minRows: 2, maxRows: 5 }}
+              disabled={notYetBusy}
+            />
+            <p>{PROJECT_DONE_COPY.notYetHint}</p>
+            <div className="project-done-not-yet-actions">
+              <button type="button" className="card-action card-action--primary" disabled={notYetBusy || !note.trim()} onClick={() => onNotYet?.(note.trim())}>
+                {PROJECT_DONE_COPY.sendToCoordinator}
+              </button>
+              <button type="button" className="card-action card-action--secondary" onClick={() => setNotYetOpen(false)} disabled={notYetBusy}>
+                {PROJECT_DONE_COPY.back}
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+      {!notYetOpen ? (
+        <div className="approval-actions project-settlement-actions">
+          <button type="button" className="card-action card-action--primary" disabled={!canRecord} onClick={onRecordDone}>
+            {counts && counts.met < counts.criteria ? PROJECT_DONE_COPY.recordAsDoneAnyway : DONE_CARD_RECORD}
+            {keys && canRecord ? <span className="approval-kbd">{ENTER_HINT}</span> : null}
+          </button>
+          {doneRequest ? (
+            <button type="button" className="card-action card-action--secondary" disabled={busy || notYetBusy} onClick={() => setNotYetOpen(true)}>
+              {DONE_CARD_NOT_YET}
+              {keys ? <span className="approval-kbd">{SHORTCUT_HINT}</span> : null}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function doneRequestFromView(view: { doneRequest?: ProjectOpenItemRow | null } | undefined): ProjectOpenItemRow | null {
+  return view?.doneRequest ?? null;
+}
+
+export interface ProjectDoneDialogProps {
+  projectId: string;
+  open: boolean;
+  onClose: () => void;
+  /** Optional data lets the coordinator transcript avoid a second open-items request. */
+  project?: ProjectDoneDocument | null;
+  doneRequestRow?: ProjectOpenItemRow | null;
+  onRecorded?: (record: ProjectDoneRecord) => void;
+}
+
+/** Modal host for the project page. It deliberately renders `ProjectDoneCard`, so Review and
+ * Record as done… have one visual and one mutation contract. */
+export function ProjectDoneDialog({
+  projectId,
+  open,
+  onClose,
+  project: suppliedProject,
+  doneRequestRow: suppliedRow,
+  onRecorded,
+}: ProjectDoneDialogProps): JSX.Element {
+  const qc = useQueryClient();
+  const projectRead = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: () => api<ProjectDoneDocument>(`/projects/${encodeURIComponent(projectId)}`),
+    enabled: open && Boolean(projectId) && suppliedProject == null,
+  });
+  const openItemsRead = useQuery({
+    queryKey: ['project', projectId, 'open-items'],
+    queryFn: () => api<{ doneRequest?: ProjectOpenItemRow | null; startRequest?: ProjectOpenItemRow | null; needsYou?: ProjectOpenItemRow[]; withCoordinator?: ProjectOpenItemRow[] }>(`/projects/${encodeURIComponent(projectId)}/open-items`),
+    enabled: open && Boolean(projectId) && suppliedRow === undefined,
+    refetchInterval: open ? 20_000 : false,
+  });
+  const standingRead = useQuery({
+    queryKey: acceptanceConfirmationKey(projectId),
+    queryFn: () => readAcceptanceConfirmation(projectId),
+    enabled: open && Boolean(projectId),
+    refetchInterval: open ? 20_000 : false,
+  });
+  const [receipt, setReceipt] = useState<ProjectDoneRecord | null>(null);
+  const [declineError, setDeclineError] = useState<Error | null>(null);
+  const record = useMutation({
+    mutationFn: async ({ requestId, criteriaDigest, acceptedGaps }: { requestId: string | null; criteriaDigest: string; acceptedGaps: Record<string, unknown>[] }) =>
+      api<ProjectDoneRecord>(`/projects/${encodeURIComponent(projectId)}/done`, {
+        method: 'POST',
+        body: { requestId, criteriaDigest, acceptedGaps },
+      }),
+    onSuccess: async (next) => {
+      setReceipt(next);
+      onRecorded?.(next);
+      await qc.invalidateQueries({ queryKey: ['project', projectId] });
+      await qc.invalidateQueries({ queryKey: ['projects'] });
+      await qc.invalidateQueries({ queryKey: ['project', projectId, 'open-items'] });
+    },
+  });
+  const decline = useMutation({
+    mutationFn: (input: { itemId: string; note: string }) => api(`/projects/${encodeURIComponent(projectId)}/done-requests/${encodeURIComponent(input.itemId)}/decline`, { method: 'POST', body: { note: input.note } }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['project', projectId, 'open-items'] });
+      onClose();
+    },
+    onError: (error) => setDeclineError(error instanceof Error ? error : new Error(String(error))),
+  });
+  const reopen = useMutation({
+    mutationFn: () => api<{ id: string }>(`/projects/${encodeURIComponent(projectId)}`, { method: 'PATCH', body: { status: 'OPEN' } }),
+    onSuccess: async () => {
+      setReceipt(null);
+      await qc.invalidateQueries({ queryKey: ['project', projectId] });
+      await qc.invalidateQueries({ queryKey: ['projects'] });
+      await qc.invalidateQueries({ queryKey: ['project', projectId, 'open-items'] });
+    },
+  });
+  const project = suppliedProject ?? projectRead.data ?? null;
+  const row = suppliedRow !== undefined ? suppliedRow : doneRequestFromView(openItemsRead.data);
+  const request = row?.doneRequest ?? null;
+  const standing = standingRead.data ?? null;
+  const criteriaDigest = request?.criteriaDigest ?? standing?.currentVersion.digest;
+  const runningCount = project?.derivedDone?.counts.byReason.IN_FLIGHT ?? 0;
+  const openItemsCount = orbitCheckedOpenItemCount(openItemsRead.data);
+  const submit = (): void => {
+    if (!project || !criteriaDigest || record.isPending) return;
+    record.mutate({ requestId: row?.itemId ?? null, criteriaDigest, acceptedGaps: (request?.gaps ?? syntheticDoneGaps(project)) as Record<string, unknown>[] });
+  };
+  const submitNotYet = (note: string): void => {
+    if (row?.itemId && note.trim()) decline.mutate({ itemId: row.itemId, note });
+  };
+  return (
+    <Modal open={open} title="" footer={null} onCancel={onClose} width={680} destroyOnClose={false} className="project-done-dialog">
+      {project ? (
+        <ProjectDoneCard
+          project={project}
+          doneRequest={request}
+          requestId={row?.itemId ?? null}
+          requestWaitingSince={row?.waitingSince ?? null}
+          standing={standing}
+          receipt={receipt}
+          busy={record.isPending || !criteriaDigest}
+          error={record.error ?? declineError}
+          notYetBusy={decline.isPending}
+          ownerInitiated={!request}
+          openItemsCount={openItemsCount}
+          runningCount={runningCount}
+          onRecordDone={submit}
+          onNotYet={submitNotYet}
+          onReopen={() => reopen.mutate()}
+        />
+      ) : projectRead.isError ? <Alert type="error" showIcon message="Project could not be loaded" description={projectRead.error.message} /> : null}
+    </Modal>
+  );
+}
+
+export interface ProjectWhyNotDoneCardProps {
+  project: ProjectDoneDocument;
+  openItems?: { withCoordinator?: readonly ProjectOpenItemRow[]; doneRequest?: ProjectOpenItemRow | null };
+  onReview?: () => void;
+  onAskCoordinator?: () => void;
+  /** The clock the request's wait is read against. */
+  now?: number;
+}
+
+/**
+ * The compact explanation card used where a project is visible outside the coordinator transcript.
+ * It consumes the criterion answers on `derivedDone` themselves — its tally included
+ * (`projectWhyNotDoneTally`); it never turns task statuses or merge receipts into a second
+ * client-side count.
+ */
+export function ProjectWhyNotDoneCard({
+  project,
+  openItems,
+  onReview,
+  onAskCoordinator,
+  now = Date.now(),
+}: ProjectWhyNotDoneCardProps): JSX.Element {
+  const criteria = project.derivedDone?.criteria ?? [];
+  const byKey = new Map((project.acceptanceCriteriaItems ?? []).map((item) => [item.id, item]));
+  // An unmet criterion is still work even when its landing lane says CODELESS or
+  // NOTHING_TO_LAND.  Those two reasons are excluded only once the criterion itself is met: a
+  // zero-commit task is then a harmless "nothing to land" outcome, not an item to hand back as a
+  // fake merge repair.  A satisfied criterion with NO_RECEIPT is the genuine owner judgment lane.
+  const waiting = criteria.filter((criterion) => (
+    !criterion.satisfied
+      || criterion.landingReason === 'IN_FLIGHT'
+      || criterion.landingReason === 'ON_PROJECT_BRANCH'
+  ));
+  const needsCall = criteria.filter((criterion) => criterion.satisfied && criterion.landingReason === 'NO_RECEIPT');
+  // An in-flight landing already has an owner in the integration lane. Even when the open-items
+  // poll has not caught up, asking the reader to “Ask the coordinator” would be a duplicate door.
+  const onlyInFlight = waiting.length > 0 && waiting.every((criterion) => criterion.landingReason === 'IN_FLIGHT');
+  const coordinatorOnIt = onlyInFlight || (openItems?.withCoordinator?.length ?? 0) > 0;
+  const hasGaps = waiting.length > 0 || needsCall.length > 0;
+  // A DONE project is done whatever its criteria still say: nothing is left to ask "why not".
+  if (project.status === 'DONE' || (!hasGaps && project.derivedDone?.done === true)) {
+    return (
+      <div className="approval-card project-settlement project-why-not-done is-settled">
+        <div className="approval-head project-settlement-head">
+          <span className="project-settlement-heading">{PROJECT_DONE_COPY.thisProjectIsDone}</span>
+          <span className="criteria-provenance">{project.doneBy === 'OWNER' ? PROJECT_DONE_COPY.recordedByYou : PROJECT_DONE_COPY.recordedByOrbit}</span>
+        </div>
+        <div className="approval-body is-questions project-settlement-body">
+          <p className="project-done-tally">{projectWhyNotDoneTally(project.derivedDone)}</p>
+        </div>
+      </div>
+    );
+  }
+  const group = (title: string, rows: readonly typeof criteria[number][], waitingGroup: boolean) => rows.length === 0 ? null : (
+    <div className="project-why-group" key={title}>
+      <div className="project-why-group-head">
+        <span>{title}</span>
+        {waitingGroup && coordinatorOnIt ? <span className="project-why-who">● {PROJECT_DONE_COPY.coordinatorIsOnIt}</span> : null}
+        {!waitingGroup && openItems?.doneRequest ? (
+          <span className="project-why-who">
+            {[PROJECT_DONE_COPY.openItemsDoneRequest.toLowerCase(), doneRequestWaiting(openItems.doneRequest.waitingSince, now)].filter(Boolean).join(' · ')}
+          </span>
+        ) : null}
+      </div>
+      <ul className="project-why-list">
+        {rows.map((criterion) => {
+          const item = byKey.get(criterion.definitionId);
+          return (
+            <li key={criterion.definitionId} className="project-why-item">
+              <span className="project-done-gap-number">{item?.ordinal ?? '•'}</span>
+              <div>
+                <div className="project-why-item-title">{item?.text ?? criterion.definitionId}</div>
+                {/* An unmet criterion is work still to do: its landing lane (no receipt, no code)
+                    describes work that has not happened yet, not work that finished elsewhere. */}
+                <div className="project-why-item-state">
+                  {criterion.satisfied ? landingReasonLabel(criterion.landingReason) : PROJECT_DONE_COPY.notMetYet}
+                </div>
+                <div className="project-why-item-detail">
+                  {!criterion.satisfied
+                    ? PROJECT_DONE_COPY.notMetDetail
+                    : waitingGroup ? PROJECT_DONE_COPY.waitingDetail : PROJECT_DONE_COPY.needsCallDetail}
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+  return (
+    <div className="approval-card project-settlement project-why-not-done">
+      <div className="approval-head project-settlement-head">
+        <span className="project-settlement-heading">{PROJECT_DONE_COPY.whyHeading}</span>
+        <span className="criteria-provenance">FROM ORBIT</span>
+      </div>
+      <div className="approval-body is-questions project-settlement-body">
+        {group(PROJECT_DONE_COPY.waitingOnWork, waiting, true)}
+        {group(PROJECT_DONE_COPY.needsYourCall, needsCall, false)}
+        <p className="project-done-tally">{projectWhyNotDoneTally(project.derivedDone)}</p>
+      </div>
+      <div className="approval-actions project-settlement-actions">
+        {openItems?.doneRequest && onReview ? (
+          <button type="button" className="card-action card-action--primary" onClick={onReview}>{PROJECT_DONE_COPY.reviewDoneRequest}</button>
+        ) : waiting.length > 0 && !coordinatorOnIt && onAskCoordinator ? (
+          <button type="button" className="card-action card-action--secondary" onClick={onAskCoordinator}>{PROJECT_DONE_COPY.askCoordinator}</button>
+        ) : null}
+        {waiting.length > 0 && coordinatorOnIt ? <span className="project-why-status">{PROJECT_DONE_COPY.coordinatorIsOnIt}</span> : null}
+      </div>
+    </div>
   );
 }

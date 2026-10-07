@@ -1,0 +1,97 @@
+{
+  "limitMs": 100,
+  "exitStartedAfterMs": null,
+  "closedAfterMs": 0.5999999940395355,
+  "closeRead": {
+    "phase": "dom-change",
+    "afterEscapeMs": 0.5999999940395355,
+    "connected": false,
+    "hidden": false,
+    "overflow": [
+      "hidden",
+      "hidden"
+    ],
+    "locked": true
+  },
+  "unlockedAfterMs": null,
+  "readyAfterCloseMs": null,
+  "firstRead": {
+    "phase": "first-read-after-hidden-and-focus",
+    "afterEscapeMs": 7.299999982118607,
+    "connected": false,
+    "hidden": false,
+    "overflow": [
+      "hidden",
+      "hidden"
+    ],
+    "locked": true
+  },
+  "finalRead": {
+    "phase": "final-read",
+    "afterEscapeMs": 100.89999997615814,
+    "connected": false,
+    "hidden": false,
+    "overflow": [
+      "hidden",
+      "hidden"
+    ],
+    "locked": true
+  },
+  "samples": [
+    {
+      "phase": "final-escape",
+      "afterEscapeMs": 0.09999999403953552,
+      "connected": true,
+      "hidden": false,
+      "overflow": [
+        "hidden",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "dom-change",
+      "afterEscapeMs": 0.5999999940395355,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "hidden",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "first-read-after-hidden-and-focus",
+      "afterEscapeMs": 7.299999982118607,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "hidden",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "close-deadline",
+      "afterEscapeMs": 100.7999999821186,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "hidden",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "final-read",
+      "afterEscapeMs": 100.89999997615814,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "hidden",
+        "hidden"
+      ],
+      "locked": true
+    }
+  ]
+}

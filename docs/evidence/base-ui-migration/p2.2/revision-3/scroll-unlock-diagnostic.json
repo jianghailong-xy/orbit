@@ -1,0 +1,187 @@
+{
+  "case": "reduce Dialog Popover Select exits restore one layer at a time",
+  "project": "chromium-light-desktop",
+  "firstRun": {
+    "passed": 31,
+    "failed": 1,
+    "failure": "Immediate final scroll-unlocked assertion after hidden Dialog and returned focus"
+  },
+  "unchangedSingleCaseRepeat": {
+    "passed": 5,
+    "failed": 0,
+    "retries": 0,
+    "testTimeoutMs": 90000
+  },
+  "traceFile": "choices-entry-first/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--trace.zip",
+  "traceSha256": "028f45ca780ad341f915ee65b8fdb7c22ba7d11449fe9416bc1ced12aa037608",
+  "apiEvents": [
+    {
+      "type": "before",
+      "callId": "call@166",
+      "startTime": 4946.129,
+      "class": "Page",
+      "method": "keyboardPress",
+      "params": {
+        "key": "Escape"
+      }
+    },
+    {
+      "type": "after",
+      "callId": "call@166",
+      "endTime": 4994.514
+    },
+    {
+      "type": "before",
+      "callId": "call@168",
+      "startTime": 4996.303,
+      "class": "Frame",
+      "method": "expect",
+      "params": {
+        "selector": "internal:role=dialog[name=\"Share workspace\"s]",
+        "expression": "to.be.visible",
+        "expectedValue": {
+          "value": {
+            "v": "undefined"
+          },
+          "handles": []
+        },
+        "isNot": true,
+        "timeout": 15000
+      }
+    },
+    {
+      "type": "after",
+      "callId": "call@168",
+      "endTime": 4997.584
+    },
+    {
+      "type": "before",
+      "callId": "call@170",
+      "startTime": 4998.622,
+      "class": "Frame",
+      "method": "expect",
+      "params": {
+        "selector": "internal:role=button[name=\"Open Dialog\"s]",
+        "expression": "to.be.focused",
+        "expectedValue": {
+          "value": {
+            "v": "undefined"
+          },
+          "handles": []
+        },
+        "isNot": false,
+        "timeout": 15000
+      }
+    },
+    {
+      "type": "after",
+      "callId": "call@170",
+      "endTime": 5000.456
+    },
+    {
+      "type": "before",
+      "callId": "call@172",
+      "startTime": 5002.237,
+      "class": "Frame",
+      "method": "evaluateExpression",
+      "params": {
+        "expression": "() => [document.body, document.documentElement].some(node => /hidden|clip/.test(getComputedStyle(node).overflowY))",
+        "isFunction": true,
+        "arg": {
+          "value": {
+            "v": "undefined"
+          },
+          "handles": []
+        }
+      }
+    },
+    {
+      "type": "after",
+      "callId": "call@172",
+      "endTime": 5003.296,
+      "result": {
+        "value": {
+          "b": true
+        }
+      }
+    }
+  ],
+  "subsequentSnapshots": [
+    {
+      "timestamp": 4995.486,
+      "htmlBody": [
+        [
+          "HTML",
+          {
+            "data-theme": "light"
+          }
+        ],
+        [
+          "BODY",
+          {
+            "style": "overflow: hidden;"
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 5001.792,
+      "htmlBody": [
+        [
+          "HTML",
+          {
+            "data-theme": "light"
+          }
+        ],
+        [
+          "BODY",
+          {
+            "style": "overflow: hidden;"
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 5002.972,
+      "htmlBody": [
+        [
+          "HTML",
+          {
+            "data-theme": "light"
+          }
+        ],
+        [
+          "BODY",
+          {
+            "style": "overflow: hidden;"
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 5004.519,
+      "htmlBody": [
+        [
+          "HTML",
+          {
+            "data-theme": "light"
+          }
+        ],
+        [
+          "BODY",
+          {
+            "style": ""
+          }
+        ]
+      ]
+    }
+  ],
+  "library": {
+    "path": "node_modules/@base-ui/utils/useScrollLock.mjs",
+    "sha256": "8f0150cbc228d9a3733f455bb24817a521f58ddc477bbaaee6232bc7621bcd0c",
+    "releaseSchedulesUnlock": "this.timeoutUnlock.start(0, this.unlock);",
+    "sameLockfileAsBothParents": true
+  },
+  "interpretation": "The recorded lock is transient: after the failed immediate read, the next DOM snapshot already has an empty body style. This is consistent with the dependency deferred-unlock scheduling racing the immediate assertion. No assertion, timeout, runtime or retry configuration was changed. The repeat does not erase the first failure.",
+  "notEstablished": "The exact scheduler ordering that made this one immediate read run before cleanup was not independently reproduced or causally isolated."
+}

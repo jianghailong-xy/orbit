@@ -1,11 +1,13 @@
 import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { CreateWatchDto, UpdateWatchDto } from './dto';
 import { WatchesService } from './watches.service';
 
 @UseGuards(JwtAuthGuard)
+@PatForbidden('NO_SCOPE')
 @Controller('watches')
 export class WatchesController {
   constructor(private readonly watches: WatchesService) {}

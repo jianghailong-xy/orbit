@@ -147,6 +147,64 @@ final class ProjectPageTests: XCTestCase {
                            sessionId: sessionId, fuseEpisodeId: fuse, actions: actions)
     }
 
+    func testOpenItemsSummaryKeepsCoordinatorItemsQuietUntilTheServerReassignsThem() throws {
+        let coordinator = item(.integrationCheckFailed, assignee: .coordinator, waited: 3_600,
+                               escalateIn: -60)
+        let quiet = try XCTUnwrap(ProjectPage.openItemsSummary(
+            status: .open, started: true, items: .init(withCoordinator: [coordinator])))
+        XCTAssertEqual(quiet.count, 1)
+        XCTAssertEqual(quiet.needsYou, 0)
+        XCTAssertNil(quiet.attention, "a local countdown reaching zero does not reassign an item")
+        XCTAssertEqual(quiet.subtitle, "No action needed from you · 1 with the coordinator")
+
+        let owner = item(.integrationCheckFailed, assignee: .owner, waited: 3_600)
+        let escalated = try XCTUnwrap(ProjectPage.openItemsSummary(
+            status: .open, started: true, items: .init(needsYou: [owner])))
+        XCTAssertEqual(escalated.count, 1)
+        XCTAssertEqual(escalated.attention, "1 item needs you")
+        XCTAssertEqual(escalated.subtitle, "1 item needs you")
+
+        let pause = item(.fusePaused, assignee: .owner, waited: 60, actions: [.resume], fuse: "f1")
+        let mixed = try XCTUnwrap(ProjectPage.openItemsSummary(
+            status: .open, started: true,
+            items: .init(needsYou: [owner, pause], withCoordinator: [coordinator])))
+        XCTAssertEqual(mixed.count, 3)
+        XCTAssertEqual(mixed.attention, "2 items need you", "the existing Resume action remains discoverable")
+        XCTAssertEqual(mixed.subtitle, "2 items need you · 1 with the coordinator")
+    }
+
+    /// The coordinator's request to record the project done is one of the owner's items while the
+    /// project is OPEN — the page's count and its reminder say so — and the owner's own Record as
+    /// done… is not, any more than their own Start… is. A server that also listed the request among
+    /// the owner's rows would not have it counted twice (the browser filters it the same way).
+    func testOpenItemsSummaryCountsTheRequestToRecordTheProjectDone() throws {
+        let request = ProjectOpenItemRow(itemId: "d", kind: .unknown, title: ProjectDone.heading,
+                                         waitingSince: iso(240),
+                                         doneRequest: DoneRequest(criteriaDigest: "c", judgment: "j"))
+        let asked = try XCTUnwrap(ProjectPage.openItemsSummary(
+            status: .open, started: true, items: .init(doneRequest: request)))
+        XCTAssertEqual(asked.needsYou, 1)
+        XCTAssertEqual(asked.attention, "1 item needs you")
+        let twice = try XCTUnwrap(ProjectPage.openItemsSummary(
+            status: .open, started: true, items: .init(needsYou: [request], doneRequest: request)))
+        XCTAssertEqual(twice.needsYou, 1, "the request has its own row and is counted once")
+        XCTAssertEqual(ProjectPage.needsYouRows(.init(needsYou: [request])), [])
+        let unasked = try XCTUnwrap(ProjectPage.openItemsSummary(status: .open, started: true, items: .init()))
+        XCTAssertEqual(unasked.needsYou, 0, "the owner's own Record as done… is waiting on nobody")
+        let done = try XCTUnwrap(ProjectPage.openItemsSummary(
+            status: .done, started: true, items: .init(doneRequest: request)))
+        XCTAssertEqual(done.needsYou, 0, "a project already done is asked nothing")
+    }
+
+    func testOpenItemsSummaryDoesNotTurnAnUnreadInboxIntoAnEmptyOne() throws {
+        XCTAssertNil(ProjectPage.openItemsSummary(status: .open, started: true, items: nil))
+        let empty = try XCTUnwrap(ProjectPage.openItemsSummary(
+            status: .open, started: true, items: .init()))
+        XCTAssertEqual(empty.count, 0)
+        XCTAssertNil(empty.attention)
+        XCTAssertEqual(empty.subtitle, "No open items")
+    }
+
     func testWaitingLabelCountsDownToTheOwner() {
         XCTAssertEqual(ProjectPage.waitingLabel(item(.integrationConflict, assignee: .coordinator,
                                                      waited: 18 * 60, escalateIn: 102 * 60), now: Self.now),
@@ -385,7 +443,7 @@ final class ProjectPageTests: XCTestCase {
         let doc = try JSONDecoder().decode(ProjectDocument.self, from: Data("""
         {"id":"p1","title":"Landing","status":"OPEN","goal":"G","instructions":null,
          "createdAt":"2026-09-23T00:00:00.000Z","updatedAt":"2026-09-24T00:00:00.000Z",
-         "coordinatorEnabled":true,"configRevision":"7","coordinatorSessionId":"s1",
+         "coordinatorEnabled":true,"configRevision":"7","coordinatorSessionId":"s1","coordinatorWorkspaceId":"w1",
          "maxConcurrentTasks":3,"_count":{"tasks":7},"tasksByStatus":{"OPEN":4,"DONE":3},
          "acceptanceCriteriaItems":[{"id":"c1","ordinal":1,"text":"T","revision":2,"satisfied":false,
            "unmet":[{"clause":"NO_WORK_SERVES_IT","heldUpBy":[]}],"landing":"UNKNOWN",
@@ -399,6 +457,8 @@ final class ProjectPageTests: XCTestCase {
         XCTAssertEqual(doc.taskCount, 7)
         XCTAssertEqual(doc.configRevision, "7")
         XCTAssertEqual(doc.coordinatorEnabled, true)
+        XCTAssertEqual(doc.coordinatorWorkspaceId, "w1", "the workspace whose Wiki space the Wiki opens from the project")
+        XCTAssertEqual(try JSONDecoder().decode(ProjectDocument.self, from: JSONEncoder().encode(doc)).coordinatorWorkspaceId, "w1")
         XCTAssertEqual(doc.acceptanceCriteriaItems.first?.unmet.first?.clause, "NO_WORK_SERVES_IT")
         XCTAssertEqual(doc.integration?.ref, "project/landing")
         XCTAssertEqual(doc.integration?.locked, true)

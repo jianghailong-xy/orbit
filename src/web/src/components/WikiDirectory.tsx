@@ -62,7 +62,9 @@ export type WikiDirectoryAt =
   | { view: 'index' }
   | { view: 'topic'; topic: string; part: number }
   | { view: 'doc'; slug: string }
-  | { view: 'plan' };
+  | { view: 'plan' }
+  // Activity (design §12.3.2) is not one of the directory's rows: beside it, none is lit.
+  | { view: 'activity' };
 
 /** The section a document's page has on screen, as it announces it (`wk-doc-section`): the directory lights it. */
 export const WIKI_DOC_SECTION_EVENT = 'wk-doc-section';

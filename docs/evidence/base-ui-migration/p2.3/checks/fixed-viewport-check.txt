@@ -1,0 +1,71 @@
+
+> @orbit/web@0.1.0 pretest:ui-toasts
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-toasts
+> playwright test --config ui-migration/toasts.config.mjs --project=webkit-dark-phone --grep unchanged appearance|retained|breakpoint
+
+[WebServer] (node:1977785) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 5 tests using 1 worker
+
+(node:1977870) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Dialog with unchanged appearance (1.4s)
+  ✓  2 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance (1.0s)
+  ✓  3 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance (991ms)
+  ✘  4 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin (17.2s)
+(node:1979334) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  5 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:285:1 › notification origin follows viewport resize across the phone breakpoint (1.1s)
+
+
+  1) [webkit-dark-phone] › ui-migration/toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('region', { name: 'Notifications', exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('region', { name: 'Notifications', exact: true }) with timeout 15000ms
+      - waiting for getByRole('region', { name: 'Notifications', exact: true })
+
+
+      278 |   await dialog.getByRole('button', { name: 'Error notice', exact: true }).click();
+      279 |   await finishAnimations();
+    > 280 |   await expect(notices(page)).toBeVisible();
+          |                               ^
+      281 |   await shot(info, 'retained-reopened-with-motion', page);
+      282 |   await attach(info, 'retained-and-motion', { visibleAfterClose: true, sameSettledGeometry: true, reopenedAcceptsNewNotifications: true });
+      283 | });
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:280:31
+
+    Error Context: .toasts-results/toasts.browser.mjs-retaine-8fda9-tles-at-the-original-origin-webkit-dark-phone/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts.browser.mjs-retaine-8fda9-tles-at-the-original-origin-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts.browser.mjs-retaine-8fda9-tles-at-the-original-origin-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [webkit-dark-phone] › ui-migration/toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin 
+  4 passed (23.1s)
+npm error Lifecycle script `test:ui-toasts` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/toasts.config.mjs --project=webkit-dark-phone --grep 'unchanged appearance|retained|breakpoint'

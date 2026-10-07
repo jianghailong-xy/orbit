@@ -207,7 +207,7 @@ describe('the sidebar’s Projects group', () => {
     expect(requested.filter((p) => p === '/task-lists' || p.startsWith('/tasks/'))).toEqual([]);
   });
 
-  it('opens a project’s page from its row, and lights that row there instead of Projects', async () => {
+  it('opens a project’s page from its row when no workspace can show its sessions, and lights that row there instead of Projects', async () => {
     serve();
     await visit('/projects');
     expect(currentEntry()).toBe('Projects');

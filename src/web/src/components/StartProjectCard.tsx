@@ -67,6 +67,9 @@ import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
 import { PROVENANCE_LABEL, shortSeal } from './CriteriaDecisionCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { ago } from '../lib/watches';
+import { ReviewCard } from './ReviewCard';
+import { useIsMobile } from '../lib/useMediaQuery';
+import { Drawer } from './ui/Drawer';
 
 /**
  * "Start this project?" — the one card on which the account owner starts a project: the criteria
@@ -432,15 +435,25 @@ export function startPlanView(
 /**
  * The wired card for one conversation: the coordinator's open request, the criteria it names and
  * the plan it is about, read on every render; the press; and the keys.
+ *
+ * `bare` draws the same card for the project's sessions page, inside its start dialog
+ * (`ProjectStartDialog` with `asked`): no review wrapper around it, Chat about this only when there
+ * is a composer to hand it to, and a word in place of the card while the request is still being
+ * read or has stopped standing.
  */
 export function SessionStartProjectCard({
   projectId,
+  bare = false,
   onOpen,
+  onStarted,
   onChatAbout,
   onViewTasks,
 }: {
   /** The project this conversation coordinates. Ordinary conversations have none and get no card. */
   projectId: string | null | undefined;
+  bare?: boolean;
+  /** Told once a press went through, after the reads it changed have come round. */
+  onStarted?: () => void;
   /** Told whether the card is on screen, each time that changes, and `false` when it goes. A
    *  stable function. */
   onOpen?: (open: boolean) => void;
@@ -448,6 +461,8 @@ export function SessionStartProjectCard({
   onChatAbout?: (plan: SettlementPlanChat) => void;
   onViewTasks?: () => void;
 }): JSX.Element | null {
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const narrow = useIsMobile();
   const qc = useQueryClient();
   const project = projectId ?? '';
   const enabled = Boolean(projectId);
@@ -497,12 +512,17 @@ export function SessionStartProjectCard({
       qc.invalidateQueries({ queryKey: acceptanceConfirmationKey(project) }),
       qc.invalidateQueries({ queryKey: ['project', project], exact: true }),
       qc.invalidateQueries({ queryKey: projectOpenItemsQuery(project).queryKey }),
+      // The project rows say whether it started too: the sessions page's start row reads them.
+      qc.invalidateQueries({ queryKey: ['projects'] }),
     ]);
   const start = useMutation({
     mutationFn: (body: StartProjectRequestBody) => startProject(project, body),
     // The record of the start is drawn by the conversation from the confirmation read, and the
     // project read is what says it is started: both come round again.
-    onSuccess: () => reread(),
+    onSuccess: async () => {
+      await reread();
+      onStarted?.();
+    },
     // Returned rather than fired off, so the button stays dead until the reads it re-derives from
     // have caught up with the refusal.
     onError: () => reread(),
@@ -532,6 +552,7 @@ export function SessionStartProjectCard({
   };
   const talkAbout = (): void => {
     if (!request || criteria === null) return;
+    setReviewOpen(false);
     onChatAbout?.({
       projectId: project,
       criteriaDigest: request.criteriaDigest,
@@ -542,14 +563,25 @@ export function SessionStartProjectCard({
   };
   const anchor = useRef<HTMLDivElement>(null);
   const keys = useDecisionCardKeys({
-    confirmEnabled: onScreen && !start.isPending && stale === null && draft !== null && startDraftComplete(draft),
+    confirmEnabled: (!narrow || reviewOpen || bare) && onScreen && !start.isPending && stale === null && draft !== null && startDraftComplete(draft),
     onConfirm: press,
     anchor,
   });
 
-  if (!onScreen || !shown || !request || !draft) return null;
+  if (!onScreen || !shown || !request || !draft) {
+    if (!bare || answeredHere) return null;
+    // In the dialog, nothing at all would read as a dialog that broke: say what is happening.
+    const reading = standingRead.isPending || documentRead.isPending || (started === false && itemsRead.isPending);
+    return reading ? (
+      <div className="start-card-dialog-loading">
+        <Spin />
+      </div>
+    ) : (
+      <Alert type="info" showIcon message={unread ? CONFIRMATION_UNREAD_EXPLANATION : START_REQUEST_GONE} />
+    );
+  }
   const branchRef = request.settings.projectBranchName ?? `refs/heads/project/${project}`;
-  return (
+  const card = (
     <StartProjectCard
       ref={anchor}
       key={shown.itemId}
@@ -568,9 +600,17 @@ export function SessionStartProjectCard({
       projectHref={`/projects/${encodeURIComponent(project)}`}
       onDraft={(next) => setEdited({ itemId: shown.itemId, draft: next })}
       onStart={press}
-      onChatAbout={talkAbout}
-      onViewTasks={onViewTasks}
+      onChatAbout={onChatAbout ? talkAbout : undefined}
+      onViewTasks={onViewTasks ? () => { setReviewOpen(false); onViewTasks(); } : undefined}
     />
+  );
+  if (bare) return card;
+  return (
+    <ReviewCard id="settlement-preview" title={START_PROJECT_TITLE} summary={title}
+      meta={stale ?? `${criteria?.length ?? 0} criteria · ${document?._count?.tasks ?? 0} tasks`}
+      open={reviewOpen} onOpenChange={setReviewOpen}>
+      {card}
+    </ReviewCard>
   );
 }
 
@@ -707,25 +747,38 @@ function OwnerStartProjectCard({
   );
 }
 
-/** The owner's "Start…", as a dialog over the project page. Mounted only while open, so a page nobody
- *  starts from never reads the plan's graph for it. */
+/** The start card over a page: the owner's own "Start…", or — `asked` — the coordinator's request,
+ *  answered here (the project's sessions page, docs/mocks/project-start-sessions-page). A dialog on a
+ *  wide screen and a sheet from the bottom on a phone, as iOS puts it up. Mounted only while open, so
+ *  a page nobody starts from never reads the plan's graph for it. */
 export function ProjectStartDialog({
   projectId,
   open,
   onClose,
   onViewTasks,
+  asked = false,
 }: {
   projectId: string;
   open: boolean;
   onClose: () => void;
   /** Where the card's "View tasks" goes: the page's own task list, under the dialog. */
   onViewTasks?: () => void;
+  asked?: boolean;
 }): JSX.Element {
-  return (
+  const narrow = useIsMobile();
+  const card = !open ? null : asked ? (
+    <SessionStartProjectCard projectId={projectId} bare onStarted={onClose} onViewTasks={onViewTasks} />
+  ) : (
+    <OwnerStartProjectCard projectId={projectId} onStarted={onClose} onViewTasks={onViewTasks} />
+  );
+  return narrow ? (
+    <Drawer open={open} onClose={onClose} title={START_PROJECT_TITLE} placement="bottom" height="92%"
+      className="start-card-sheet">
+      {card}
+    </Drawer>
+  ) : (
     <Modal open={open} onCancel={onClose} footer={null} width={640} className="start-card-dialog">
-      {open ? (
-        <OwnerStartProjectCard projectId={projectId} onStarted={onClose} onViewTasks={onViewTasks} />
-      ) : null}
+      {card}
     </Modal>
   );
 }

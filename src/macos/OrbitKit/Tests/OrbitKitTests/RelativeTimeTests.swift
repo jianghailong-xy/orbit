@@ -61,4 +61,18 @@ final class RelativeTimeTests: XCTestCase {
     func testElapsedRejectsAnInvalidString() {
         XCTAssertNil(RelativeTime.elapsed("not-a-date"))
     }
+
+    /// `parse` keeps what it read: the same string, read again, is the same instant — with or
+    /// without fractional seconds — and a string that doesn't parse stays unparsed.
+    func testParseAnswersTheSameOnARepeatRead() {
+        for iso in ["2026-10-06T01:49:28.123Z", "2026-10-06T01:49:28Z"] {
+            let first = RelativeTime.parse(iso)
+            XCTAssertNotNil(first)
+            XCTAssertEqual(RelativeTime.parse(iso), first)
+        }
+        XCTAssertEqual(RelativeTime.parse("2026-10-06T01:49:28.500Z")?.timeIntervalSince1970,
+                       RelativeTime.parse("2026-10-06T01:49:28Z").map { $0.timeIntervalSince1970 + 0.5 })
+        XCTAssertNil(RelativeTime.parse("not a date"))
+        XCTAssertNil(RelativeTime.parse("not a date"))
+    }
 }

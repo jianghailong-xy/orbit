@@ -64,8 +64,12 @@ export function antigravityState(runner: { capabilities?: readonly string[]; eng
     installed: health?.installed ?? null,
     version: health?.version ?? null,
     // A Google sign-in the probe could not read still counts: only a definite `no` takes it away,
-    // as only a definite `no` refuses a session (signedOutEngineRefusal).
-    envKeyAvailable: health?.auth === 'yes' || (health?.auth === 'unknown' && authSource === 'google'),
+    // as only a definite `no` refuses a session (signedOutEngineRefusal). So does any Google account
+    // the runner added: a session can start on it (automaticAccount) whatever Default's says.
+    envKeyAvailable:
+      health?.auth === 'yes' ||
+      (health?.auth === 'unknown' && authSource === 'google') ||
+      (health?.accounts ?? []).some((account) => account.id !== 'default' && account.auth !== 'no'),
     authSource,
     googleLogin: antigravityGoogleLogin(runner),
   };

@@ -1,0 +1,97 @@
+{
+  "limitMs": 100,
+  "exitStartedAfterMs": null,
+  "closedAfterMs": 1,
+  "closeRead": {
+    "phase": "dom-change",
+    "afterEscapeMs": 1,
+    "connected": false,
+    "hidden": false,
+    "overflow": [
+      "hidden",
+      "hidden"
+    ],
+    "locked": true
+  },
+  "unlockedAfterMs": null,
+  "readyAfterCloseMs": null,
+  "firstRead": {
+    "phase": "first-read-after-hidden-and-focus",
+    "afterEscapeMs": 7,
+    "connected": false,
+    "hidden": false,
+    "overflow": [
+      "hidden",
+      "hidden"
+    ],
+    "locked": true
+  },
+  "finalRead": {
+    "phase": "final-read",
+    "afterEscapeMs": 101,
+    "connected": false,
+    "hidden": false,
+    "overflow": [
+      "hidden",
+      "hidden"
+    ],
+    "locked": true
+  },
+  "samples": [
+    {
+      "phase": "final-escape",
+      "afterEscapeMs": 0,
+      "connected": true,
+      "hidden": false,
+      "overflow": [
+        "hidden",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "dom-change",
+      "afterEscapeMs": 1,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "hidden",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "first-read-after-hidden-and-focus",
+      "afterEscapeMs": 7,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "hidden",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "close-deadline",
+      "afterEscapeMs": 101,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "hidden",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "final-read",
+      "afterEscapeMs": 101,
+      "connected": false,
+      "hidden": false,
+      "overflow": [
+        "hidden",
+        "hidden"
+      ],
+      "locked": true
+    }
+  ]
+}

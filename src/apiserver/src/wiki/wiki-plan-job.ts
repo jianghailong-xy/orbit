@@ -618,26 +618,36 @@ export class WikiPlanJobFacts implements OnModuleInit, OnModuleDestroy {
 
 /** The job the plan's read shows: the space's that has not ended, else the one that ended last. */
 export async function wikiPlanJobOfSpace(prisma: Db, ownerId: string, spaceId: string): Promise<WikiPlanJob | null> {
+  const row = await wikiPlanJobRowOfSpace(prisma, ownerId, spaceId);
+  return row ? wikiPlanJobView(prisma, row) : null;
+}
+
+/** That job's row, as it is stored: the spaces list counts what of the plan waits on the owner from it. */
+export async function wikiPlanJobRowOfSpace(prisma: Db, ownerId: string, spaceId: string): Promise<WikiPlanJobRow | null> {
   const open = await prisma.wikiPlanJob.findFirst({
     where: { ownerId, spaceId, state: { in: [...OPEN_STATES] } },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     select: JOB_SELECT,
   });
-  const row = open ?? (await prisma.wikiPlanJob.findFirst({
+  return open ?? (await prisma.wikiPlanJob.findFirst({
     where: { ownerId, spaceId },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     select: JOB_SELECT,
   }));
-  return row ? wikiPlanJobView(prisma, row) : null;
 }
 
-/** A job row as the doors answer it. */
-export async function wikiPlanJobView(prisma: Db, row: WikiPlanJobRow): Promise<WikiPlanJob> {
-  const state: WikiPlanJobState = row.state === 'made'
+/** Where a job stands as the plan's read says it (contract `plan.jobs.states`): a made one runs, an ended one says how. */
+export function wikiPlanJobStateOf(row: Pick<WikiPlanJobRow, 'state' | 'outcome'>): WikiPlanJobState {
+  return row.state === 'made'
     ? 'running'
     : row.state === 'ended'
       ? (row.outcome as WikiPlanJobOutcome)
       : (row.state as 'queued' | 'held');
+}
+
+/** A job row as the doors answer it. */
+export async function wikiPlanJobView(prisma: Db, row: WikiPlanJobRow): Promise<WikiPlanJob> {
+  const state = wikiPlanJobStateOf(row);
   let waitingFor: WikiPlanJob['waitingFor'] = null;
   if (row.state === 'queued') {
     const space = await prisma.wikiSpace.findFirst({ where: { id: row.spaceId, ownerId: row.ownerId }, select: { settings: true } });

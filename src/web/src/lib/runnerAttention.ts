@@ -1,20 +1,27 @@
 import type { LoginEngine, ReportedEngine, RunnerRepoHealth } from '@orbit/shared';
-import { codexAccountSnapshot } from '@orbit/shared';
+import { codexAccountSnapshot, withEnginePlanUsage } from '@orbit/shared';
 import type { Runner } from '../components/TasksSidePanel';
-import { engineKeepsAccounts } from './engineAccounts';
+import { engineKeepsAccounts, runsOnEnvKey } from './engineAccounts';
 import { planUsageRows, planUsageSnapshotForProvider, type PlanUsageDisplayRow } from './planUsage';
 import { ago, ENGINE_CLI_NAME, updateNoteOf } from './runnerEngines';
 import {
   ATTENTION_CANT_UPDATE_ITSELF,
   ATTENTION_CHECKOUT_DETAIL,
+  ATTENTION_INSTALL_FOLDER_NOT_WRITABLE,
   ATTENTION_NEVER_CHECKED_IN,
   ATTENTION_OFFLINE_ONE_SESSION_WAITS,
   ATTENTION_OFFLINE_WAKE,
+  ATTENTION_RUNNER_UPDATE_FAILED,
+  ATTENTION_UPDATER_OFF,
+  ATTENTION_UPDATES_TURN_ON,
+  ATTENTION_UPDATES_TURNED_OFF,
+  ATTENTION_UPDATE_DIDNT_GO_THROUGH,
   RUNNER_GIT_CHERRY_PICK,
   RUNNER_GIT_CONFLICT,
   RUNNER_GIT_MERGE,
   RUNNER_GIT_REBASE,
   RUNNER_GIT_REVERT,
+  RUNNER_INSTALL_FOLDER,
   RUNNER_KEEP_FREE_10_GB,
   RUNNER_KEEP_FREE_20_GB,
   RUNNER_KEEP_FREE_50_GB,
@@ -46,16 +53,19 @@ import {
   attentionDiskNoReserve,
   attentionEngineUpdateDetail,
   attentionEngineUpdateFailed,
+  attentionInstallFolderNotWritableDetail,
   attentionOfflineFor,
   attentionOfflineSessionsWait,
   attentionQuotaDetail,
   attentionQuotaDetailMany,
   attentionQuotaShort,
   attentionQuotaTitle,
+  attentionRunnerUpdateFailedDetail,
   attentionSignedOutDetail,
   attentionSignedOutDetailMany,
   attentionSignedOutShort,
   attentionSignedOutTitle,
+  attentionUpdatesTurnedOffDetail,
   runnerGb,
   runnerNamesMore,
   runnerNamesTwo,
@@ -95,6 +105,7 @@ export type AttentionRunner = Pick<
   | 'lastHeartbeatAt'
   | 'activeSessions'
   | 'runsAsRoot'
+  | 'selfUpdate'
   | 'minFreeDiskMb'
   | 'engines'
   | 'planUsage'
@@ -134,7 +145,8 @@ export type AttentionKind =
 export type AttentionTone = 'bad' | 'warn' | 'idle';
 
 export interface AttentionAction {
-  kind: 'signIn' | 'repair' | 'setReserve' | 'copyCommand' | 'updateEngines';
+  /** updateRunner: POST /runners/:id/self-update — Update Runner Now. */
+  kind: 'signIn' | 'repair' | 'setReserve' | 'copyCommand' | 'updateEngines' | 'updateRunner';
   engine?: ReportedEngine;
   /** repair: POST /workspaces/:id/repo-cleanup for any workspace in the stuck checkout. */
   workspaceId?: string;
@@ -165,7 +177,7 @@ const DAY = 24 * HOUR;
 const MIB = 1024 * 1024;
 const GIB = 1024 * MIB;
 
-const LOGIN_ENGINES: LoginEngine[] = ['claude', 'codex', 'kimi'];
+const LOGIN_ENGINES: LoginEngine[] = ['claude', 'codex', 'kimi', 'antigravity'];
 const LOGIN_NAME: Record<LoginEngine, string> = {
   claude: RUNNER_LOGIN_CLAUDE,
   codex: RUNNER_LOGIN_CODEX,
@@ -191,6 +203,12 @@ const CLAUDE_WINDOW = new Map<string, string>([
   ['sevenDay', RUNNER_QUOTA_WEEKLY],
   ['sevenDayOpus', RUNNER_QUOTA_WEEKLY_OPUS],
   ['sevenDaySonnet', RUNNER_QUOTA_WEEKLY_SONNET],
+]);
+
+/** Antigravity's buckets by the label planUsageRows gives the window agy names for each. */
+const ANTIGRAVITY_WINDOW = new Map<string, string>([
+  ['5-hour', RUNNER_QUOTA_FIVE_HOUR],
+  ['Weekly', RUNNER_QUOTA_WEEKLY],
 ]);
 
 /** Codex-shaped windows by the label planUsageRows derives from their length (a bucket other than
@@ -422,11 +440,18 @@ function checkoutItems(workspaces: ReadonlyArray<AttentionWorkspace>): Attention
 function quotaWindow(row: PlanUsageDisplayRow): string {
   const claude = CLAUDE_WINDOW.get(row.key);
   if (claude) return claude;
+  // An Antigravity bucket, by the window agy names for it.
+  if (row.remaining) return ANTIGRAVITY_WINDOW.get(row.label) ?? RUNNER_QUOTA_OTHER;
   return CODEX_WINDOW.find(([label]) => row.label.endsWith(label))?.[1] ?? RUNNER_QUOTA_OTHER;
 }
 
+/** How much of a window is used, whichever way its row counts: Antigravity's say what is left. */
+const usedPercent = (row: PlanUsageDisplayRow): number => (row.remaining ? 100 - row.percent : row.percent);
+
 /** Warn only when every candidate account is near its limit. Show the fullest window of the
- *  account with the most room; an unread account cannot establish an engine-wide shortage. */
+ *  account with the most room; an unread account cannot establish an engine-wide shortage — and
+ *  neither can an Antigravity Default that runs on the machine's Gemini key (runsOnEnvKey), which
+ *  has no quota to run out of. */
 function quotaItems(
   runner: AttentionRunner,
   workspaces: ReadonlyArray<AttentionWorkspace>,
@@ -435,13 +460,15 @@ function quotaItems(
   return LOGIN_ENGINES.flatMap((engine): AttentionItem[] => {
     const users = workspacesOn(workspaces, engine);
     if (users.length === 0) return [];
-    const usage = planUsageSnapshotForProvider(runner.planUsage, engine);
-    const accounts = runner.engines?.find((e) => e.engine === engine)?.accounts;
+    // Antigravity's quota travels with its engine's health, not in the heartbeat's planUsage.
+    const usage = planUsageSnapshotForProvider(withEnginePlanUsage(runner.planUsage, runner.engines), engine);
+    const health = runner.engines?.find((e) => e.engine === engine);
+    const accounts = health?.accounts;
     const snapshots =
       engineKeepsAccounts(engine) && accounts?.length
         ? accounts
-            .filter((account) => account.auth !== 'no')
-            .map((account) => usage && codexAccountSnapshot(usage, account.id))
+            .filter((account) => account.auth !== 'no' || runsOnEnvKey(health, account))
+            .map((account) => (runsOnEnvKey(health, account) ? undefined : usage && codexAccountSnapshot(usage, account.id)))
         : [usage];
     let fullest: PlanUsageDisplayRow | undefined;
     for (const snapshot of snapshots) {
@@ -451,18 +478,19 @@ function quotaItems(
           )
         : [];
       if (near.length === 0) return [];
-      const accountFullest = near.reduce((top, row) => (row.percent > top.percent ? row : top));
-      if (!fullest || accountFullest.percent < fullest.percent) fullest = accountFullest;
+      const accountFullest = near.reduce((top, row) => (usedPercent(row) > usedPercent(top) ? row : top));
+      if (!fullest || usedPercent(accountFullest) < usedPercent(fullest)) fullest = accountFullest;
     }
     if (!fullest) return [];
     const name = LOGIN_NAME[engine];
     const window = quotaWindow(fullest);
+    const percent = usedPercent(fullest);
     return [
       {
         kind: 'quotaNearLimit',
         tone: 'warn',
-        short: attentionQuotaShort(name, window, fullest.percent),
-        title: attentionQuotaTitle(name, window, fullest.percent),
+        short: attentionQuotaShort(name, window, percent),
+        title: attentionQuotaTitle(name, window, percent),
         detail:
           users.length === 1
             ? attentionQuotaDetail(users[0], name)
@@ -470,7 +498,7 @@ function quotaItems(
         params: {
           engine,
           window,
-          percent: fullest.percent,
+          percent,
           resetsAt: fullest.window.resetsAt ?? null,
           workspaces: users,
         },
@@ -511,28 +539,98 @@ function diskItem(
   };
 }
 
+/** The runner's own words as the start of a sentence: capitalized, with no closing full stop. */
+function runnerSaid(words: string | undefined, otherwise: string): string {
+  const said = words?.trim().replace(/\.+$/, '') ?? '';
+  return said ? said.charAt(0).toUpperCase() + said.slice(1) : otherwise;
+}
+
 /**
- * Behind the latest release on a runner that is not root. Root is what lets the updater replace
- * the binary in a root-owned install directory; a regular user stays on its version until someone
- * runs `sudo orbit upgrade` there. Unknown (null) is an older runner and is not flagged. A root
- * runner that is behind installs the release itself when no turn is running — no item for that.
+ * Behind the latest release, and not catching up by itself.
+ *
+ * A runner that reports where its updates stand (`selfUpdate`) is taken at its word:
+ * - `dirNotWritable`: the user it runs as can't write its install folder. `sudo orbit upgrade` there
+ *   moves the install somewhere it can, once.
+ * - `disabledByEnv`: its updater is off, and the reason says by what. Only ORBIT_NO_SELFUPDATE is a
+ *   switch to turn back; a development build or a platform with no release has none.
+ * - `failed`: the check or the install failed, in its own words. Update Runner Now tries again, so
+ *   this is raised only while it is online, like an engine's failed update.
+ * - `enabled`, `waitingForIdle`, `heldByRollout`: it catches up by itself — no item; About says
+ *   which. Nor for a state this client doesn't know: there is nothing it could prescribe.
+ *
+ * A runner too old to report it is judged by runsAsRoot, as before there was a report. Root is what
+ * lets the updater replace the binary in a root-owned install directory; a regular user stays on
+ * its version until someone runs `sudo orbit upgrade` there. Unknown (null) is not flagged, and a
+ * root runner that is behind installs the release itself when no turn is running.
  */
 function cannotSelfUpdateItem(
   runner: AttentionRunner,
   latestVersion: string | null,
+  offline: boolean,
 ): AttentionItem | null {
   const version = runner.version?.trim();
-  if (runner.runsAsRoot !== false || !version || !latestVersion) return null;
+  if (!version || !latestVersion) return null;
   if (compareRunnerVersions(version, latestVersion) >= 0) return null;
-  return {
-    kind: 'cannotSelfUpdate',
-    tone: 'warn',
-    short: ATTENTION_CANT_UPDATE_ITSELF,
-    title: ATTENTION_CANT_UPDATE_ITSELF,
-    detail: attentionCantUpdateItselfDetail(version, latestVersion, RUNNER_UPGRADE_COMMAND),
-    action: { kind: 'copyCommand', command: RUNNER_UPGRADE_COMMAND },
-    params: { version, latest: latestVersion },
-  };
+  const report = runner.selfUpdate;
+  if (!report) {
+    if (runner.runsAsRoot !== false) return null;
+    return {
+      kind: 'cannotSelfUpdate',
+      tone: 'warn',
+      short: ATTENTION_CANT_UPDATE_ITSELF,
+      title: ATTENTION_CANT_UPDATE_ITSELF,
+      detail: attentionCantUpdateItselfDetail(version, latestVersion, RUNNER_UPGRADE_COMMAND),
+      action: { kind: 'copyCommand', command: RUNNER_UPGRADE_COMMAND },
+      params: { version, latest: latestVersion },
+    };
+  }
+  const reported = { version, latest: latestVersion, state: report.state, reason: report.reason ?? null };
+  switch (report.state) {
+    case 'dirNotWritable':
+      return {
+        kind: 'cannotSelfUpdate',
+        tone: 'warn',
+        short: ATTENTION_INSTALL_FOLDER_NOT_WRITABLE,
+        title: ATTENTION_INSTALL_FOLDER_NOT_WRITABLE,
+        detail: attentionInstallFolderNotWritableDetail(
+          report.installDir ?? RUNNER_INSTALL_FOLDER,
+          version,
+          latestVersion,
+          RUNNER_UPGRADE_COMMAND,
+        ),
+        action: { kind: 'copyCommand', command: RUNNER_UPGRADE_COMMAND },
+        params: { version, latest: latestVersion, state: report.state, installDir: report.installDir ?? null },
+      };
+    case 'disabledByEnv': {
+      const why = runnerSaid(report.reason, ATTENTION_UPDATER_OFF);
+      const detail = attentionUpdatesTurnedOffDetail(why, version, latestVersion);
+      return {
+        kind: 'cannotSelfUpdate',
+        tone: 'warn',
+        short: ATTENTION_UPDATES_TURNED_OFF,
+        title: ATTENTION_UPDATES_TURNED_OFF,
+        detail: report.reason?.includes('ORBIT_NO_SELFUPDATE') ? `${detail} ${ATTENTION_UPDATES_TURN_ON}` : detail,
+        params: reported,
+      };
+    }
+    case 'failed':
+      if (offline) return null;
+      return {
+        kind: 'cannotSelfUpdate',
+        tone: 'warn',
+        short: ATTENTION_RUNNER_UPDATE_FAILED,
+        title: ATTENTION_RUNNER_UPDATE_FAILED,
+        detail: attentionRunnerUpdateFailedDetail(
+          runnerSaid(report.reason, ATTENTION_UPDATE_DIDNT_GO_THROUGH),
+          version,
+          latestVersion,
+        ),
+        action: { kind: 'updateRunner' },
+        params: reported,
+      };
+    default:
+      return null;
+  }
 }
 
 /** An installed CLI whose update note is a warning (runnerEngines' updateNoteOf). */
@@ -570,10 +668,21 @@ export function runnerAttention(input: RunnerAttentionInput): AttentionItem[] {
     const disk = diskItem(runner, workspaces);
     if (disk) items.push(disk);
   }
-  const cannotUpdate = cannotSelfUpdateItem(runner, latestVersion);
+  const cannotUpdate = cannotSelfUpdateItem(runner, latestVersion, offline);
   if (cannotUpdate) items.push(cannotUpdate);
   if (!offline) items.push(...engineUpdateItems(runner, nowMs));
   return items;
+}
+
+/**
+ * Whether Update Runner Now can do anything here. Only a runner that reports its updates takes the
+ * request (the server refuses an older one), only while it is online, and not one whose updater is
+ * off or can't write its install folder: a check now would find what the last one did.
+ */
+export function runnerCanUpdateNow(runner: AttentionRunner, nowMs: number): boolean {
+  const state = runner.selfUpdate?.state;
+  if (!state || state === 'disabledByEnv' || state === 'dirNotWritable') return false;
+  return !runnerIsOffline(runner, nowMs);
 }
 
 // MARK: the list row

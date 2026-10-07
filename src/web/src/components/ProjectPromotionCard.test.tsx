@@ -958,3 +958,6 @@ describe('the presses', () => {
     expect(host.textContent).toContain('project/bg-jobs');
   });
 });
+
+// The card's content/decision contract is tested inline; real dialogs are covered in ReviewCard.test.tsx.
+vi.mock('./ReviewCard', () => import('../test/inlineReviewCard'));

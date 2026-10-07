@@ -2,10 +2,11 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// Settings on iOS says what the web's Settings, Profile, Shared links and Providers pages say.
-/// `SettingsCopy`, `SharedLinksList` and `ProvidersOverview` carry those pages' words over to the
-/// phone, and nothing in either build notices a word changed at one end only — so each one is looked
-/// up in the web source it came from. A missing counterpart is a FAILURE, never an `XCTSkip`.
+/// Settings on iOS says what the web's Settings, Profile, Shared links, Access tokens and Providers
+/// pages say. `SettingsCopy`, `SharedLinksList`, `AccessTokensList` and `ProvidersOverview` carry
+/// those pages' words over to the phone (and Access tokens' to the Mac's form too), and nothing in
+/// either build notices a word changed at one end only — so each one is looked up in the web source
+/// it came from. A missing counterpart is a FAILURE, never an `XCTSkip`.
 ///
 /// Deliberately not compared: the group headers of Settings' list (Sessions, Machines & models,
 /// Preferences, Account), which regroup the web's cards for a phone; "Default permission", the
@@ -17,6 +18,9 @@ final class SettingsCopyParityTests: XCTestCase {
     private static let settings = "src/web/src/pages/SettingsPage.tsx"
     private static let profile = "src/web/src/pages/ProfilePage.tsx"
     private static let sharedLinks = "src/web/src/pages/SharedLinksPage.tsx"
+    private static let accessTokens = "src/web/src/pages/AccessTokensPage.tsx"
+    private static let accessTokenTable = "src/web/src/components/AccessTokenTable.tsx"
+    private static let accessTokenWords = "src/web/src/lib/accessTokens.ts"
     private static let providers = "src/web/src/pages/ProvidersPage.tsx"
     private static let engines = "src/web/src/components/RunnerEngines.tsx"
     private static let pools = "src/web/src/components/AccountPools.tsx"
@@ -62,6 +66,7 @@ final class SettingsCopyParityTests: XCTestCase {
             assertSays(page, "title=\"\(card)\"", in: Self.settings)
         }
         assertSays(page, "label=\"\(SettingsHome.title(.sharedLinks))\"", in: Self.settings)
+        assertSays(page, "<Card title=\"\(SettingsHome.title(.accessTokens))\"", in: Self.settings)
         assertSays(try web(Self.profile), "<Card title=\"\(SettingsHome.title(.changePassword))\">",
                    in: Self.profile)
     }
@@ -80,6 +85,16 @@ final class SettingsCopyParityTests: XCTestCase {
         let page = try web(Self.settings)
         assertSays(page, "label=\"\(SettingsCopy.letSessionsOrchestrate)\"", in: Self.settings)
         assertSays(page, "hint=\"\(SettingsCopy.letSessionsOrchestrateHint)\"", in: Self.settings)
+    }
+
+    /// Smart model selection: the Session defaults card's switch, with its label and hint.
+    func testSmartModelSelectionSaysWhatTheWebPageSays() throws {
+        let page = try web(Self.settings)
+        assertSays(page, "label=\"\(SettingsCopy.smartModelSelection)\"", in: Self.settings)
+        assertSays(page, "hint=\"\(SettingsCopy.smartModelSelectionHint)\"", in: Self.settings)
+        assertSays(page, "checked={prefs.modelRouting === true}", in: Self.settings)
+        assertSays(page, "save.mutate({ modelRouting: v })", in: Self.settings)
+        XCTAssertEqual(SettingsHome.title(.modelRouting), SettingsCopy.smartModelSelection)
     }
 
     /// The edit-profile card's field is called what the web Profile page calls the same value.
@@ -130,13 +145,62 @@ final class SettingsCopyParityTests: XCTestCase {
         XCTAssertEqual(SharedLinksList.turnedOff(7), "7 links turned off")
     }
 
+    /// Access tokens: the web page's tabs and words, the table's lines, and how `lib/accessTokens.ts`
+    /// sums a token's scopes and says when it stops. The apps' one sentence of their own is where to
+    /// issue a token, since only the web does (docs/personal-access-token-design.md §9).
+    func testAccessTokensSayWhatTheWebPageSays() throws {
+        let page = try web(Self.accessTokens)
+        assertSays(page, "<h1 className=\"page-title\">\(AccessTokensList.title)</h1>", in: Self.accessTokens)
+        assertSays(page, "> \(AccessTokensList.subtitle) </p>", in: Self.accessTokens)
+        assertSays(page, "['active', '\(AccessTokensList.Tab.active.label)', active.length]", in: Self.accessTokens)
+        assertSays(page, "['ended', '\(AccessTokensList.Tab.ended.label)', ended.length]", in: Self.accessTokens)
+        assertSays(page, "? '\(AccessTokensList.Tab.active.empty)'", in: Self.accessTokens)
+        assertSays(page, ": '\(AccessTokensList.Tab.ended.empty)'", in: Self.accessTokens)
+        assertSays(page, "\(AccessTokensList.couldNotLoad) {tokensQ.error.message}", in: Self.accessTokens)
+        assertSays(page, "message.success('\(AccessTokensList.revoked)'", in: Self.accessTokens)
+        assertSays(page, "message.error(\"\(AccessTokensList.couldNotRevoke)\", e.message)", in: Self.accessTokens)
+
+        let table = try web(Self.accessTokenTable)
+        let token = AccessToken(id: "t", name: "NAME", tokenHint: "HINT")
+        assertSays(table, "title={`\(AccessTokensList.revokeTitle(token).replacingOccurrences(of: "NAME", with: "${token.name}"))`}",
+                   in: Self.accessTokenTable)
+        assertSays(table, "description=\"\(AccessTokensList.revokeDetail)\"", in: Self.accessTokenTable)
+        assertSays(table, "okText=\"\(AccessTokensList.revoke)\"", in: Self.accessTokenTable)
+        assertSays(table, AccessTokensList.hint(token).replacingOccurrences(of: "HINT", with: "{token.tokenHint}"),
+                   in: Self.accessTokenTable)
+        assertSays(table, "return '\(AccessTokensList.workspacesLine(token))'", in: Self.accessTokenTable)
+        assertSays(table, "gone === 1 ? 'a deleted workspace' : `${gone} deleted workspaces`", in: Self.accessTokenTable)
+        assertSays(table, ">\(AccessTokensList.neverUsed)</span>", in: Self.accessTokenTable)
+        assertSays(table, "?? '\(AccessTokensList.addressUnknown)'", in: Self.accessTokenTable)
+        assertSays(table, "title: 'Last used'", in: Self.accessTokenTable)
+
+        let words = try web(Self.accessTokenWords)
+        for group in AccessTokensList.scopeGroups {
+            let write = group.write.map { ", write: '\($0)'" } ?? ""
+            assertSays(words, "{ resource: '\(group.resource)', read: '\(group.read)'\(write) }", in: Self.accessTokenWords)
+        }
+        assertSays(words, "return '\(AccessTokensList.scopeSummary(AccessTokensList.allScopes))';", in: Self.accessTokenWords)
+        assertSays(words, "return '\(AccessTokensList.scopeSummary(AccessTokensList.readScopes))';", in: Self.accessTokenWords)
+        assertSays(words, "[`${group.resource}: read & write`]", in: Self.accessTokenWords)
+        assertSays(words, "}).join(' · ');", in: Self.accessTokenWords)
+        assertSays(words, "export const NEVER_EXPIRES = '\(AccessTokensList.neverExpires)';", in: Self.accessTokenWords)
+        assertSays(words, "return 'in less than an hour';", in: Self.accessTokenWords)
+        assertSays(words, "hours === 1 ? 'in 1 hour' : `in ${hours} hours`", in: Self.accessTokenWords)
+        assertSays(words, "days === 1 ? 'in 1 day' : `in ${days} days`", in: Self.accessTokenWords)
+        assertSays(words, "at ? `Expired ${fullDate(at)}` : 'Expired'", in: Self.accessTokenWords)
+        assertSays(words, "return `Revoked by an administrator${at}`;", in: Self.accessTokenWords)
+        assertSays(words, "return `Revoked with a password change${at}`;", in: Self.accessTokenWords)
+        assertSays(words, "toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })",
+                   in: Self.accessTokenWords)
+    }
+
     /// Providers: the web page's three groups, their lines, and a runner card's summary.
     func testProvidersSayWhatTheWebPageSays() throws {
         let engines = try web(Self.engines)
         assertSays(engines, "<h3>\(ProvidersOverview.onYourRunners)</h3>", in: Self.engines)
         assertSays(engines, "re-sec-sub\"> \(ProvidersOverview.onYourRunnersDetail)", in: Self.engines)
         assertSays(engines, "return '\(ProvidersOverview.runnerSummary(try runner(engines: nil)))'", in: Self.engines)
-        assertSays(engines, "'All signed in' : `${ready} of ${ENGINES.length} signed in`", in: Self.engines)
+        assertSays(engines, "'All signed in' : `${ready} of ${engines.length} signed in`", in: Self.engines)
 
         let pools = try web(Self.pools)
         assertSays(pools, "<h3>\(ProvidersOverview.accountPools)</h3>", in: Self.pools)

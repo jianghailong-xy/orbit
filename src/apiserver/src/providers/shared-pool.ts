@@ -165,7 +165,7 @@ export async function sharedPoolKeyCandidates(
     where: { poolId },
     orderBy: { id: 'asc' },
     select: {
-      id: true, contributorId: true, label: true, enabled: true, state: true, shareCap: true, spentUntil: true, pausedUntil: true,
+      id: true, contributorId: true, label: true, enabled: true, state: true, shareCap: true, spentUntil: true, throttledUntil: true, pausedUntil: true,
     },
   });
   const spent = await db.poolUsage.findMany({

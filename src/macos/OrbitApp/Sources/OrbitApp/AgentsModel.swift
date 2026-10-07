@@ -50,6 +50,10 @@ final class AgentsModel {
 
     // The selected agent's sessions for the current Open/Completed/Trash view.
     private(set) var agentSessions: [Session] = []
+    #if os(iOS)
+    /// The same scope across every Workspace, for project wording and coordinator placement.
+    private(set) var allSessions: [Session] = []
+    #endif
     private(set) var sessionsLoading = false
     /// The last (agent, view) `loadSessions` ran for, so a row action can silently refresh the same
     /// list without the view having to thread the agent id / tab back in.
@@ -58,6 +62,9 @@ final class AgentsModel {
     /// agent's Open list is that snapshot narrowed to the agent, so a first load of one can start
     /// from its rows instead of a blank "Loading…".
     private var openSnapshot: [Session]?
+    /// The app's Open-list refresh (`AppModel.loadSessions`), answering the list it adopted — nil
+    /// when that fetch failed. An Open list loads through it, so the app fetches that list once.
+    @ObservationIgnored var refreshOpen: (@MainActor () async -> [Session]?)?
 
     private let api: APIClient
 
@@ -185,15 +192,16 @@ final class AgentsModel {
         }
     }
 
-    /// Take what a cold launch restores (`AppModel.restoreLaunchSnapshot`): the workspace list and
-    /// its runner labels as the previous run had them, with the list pointed at the Open sessions of
-    /// the workspace the launch lands on — the app's Open snapshot then fills its rows before the
-    /// first frame. `loadState` is left alone: none of this is an answer from the server, and
-    /// `load()` replaces it all.
-    func adoptLaunchSnapshot(_ snapshot: LaunchSnapshot, showing agentID: String?) {
-        items = snapshot.agents
-        runnerNames = snapshot.runnerNames
-        runnerOrder = snapshot.runnerOrder
+    /// Take what a cold launch restores (`AppModel.adoptLaunchSnapshot`): the workspace list and its
+    /// runner labels as the previous run had them, with the list pointed at the Open sessions of the
+    /// workspace the launch lands on — the app's Open snapshot then fills its rows before the first
+    /// frame. `loadState` is left alone: none of this is an answer from the server, and `load()`
+    /// replaces it all. It arrives as the snapshot's fill-in, which is empty of workspaces once this
+    /// model's own fetch has answered (`LaunchSnapshot.fillIn`) — so this is never the older list.
+    func adoptLaunchSnapshot(_ workspaces: LaunchSnapshotFillIn.Workspaces, showing agentID: String?) {
+        items = workspaces.items
+        runnerNames = workspaces.runnerNames
+        runnerOrder = workspaces.runnerOrder
         if let agentID { lastSessionQuery = (agentID, .open) }
     }
 
@@ -323,8 +331,18 @@ final class AgentsModel {
             }
         }
         defer { sessionsLoading = false }
+        // The app already keeps the Open list: refresh it through the app's one fetch rather than
+        // a second of the same list beside it. A failed one falls through to this list's own, which
+        // says what went wrong.
+        if view == .open, let refreshOpen, let all = await refreshOpen() {
+            adoptOpen(all, agentID: agentID)
+            return
+        }
         do {
             let all = try await api.listSessions(view: view)
+            #if os(iOS)
+            allSessions = all
+            #endif
             agentSessions = SessionFilter.forAgent(all, agentID: agentID, view: view)
         } catch { errorText = friendly(error) }
     }
@@ -351,7 +369,31 @@ final class AgentsModel {
     func applyOpenSnapshot(_ all: [Session]) {
         openSnapshot = all
         guard let q = lastSessionQuery, q.view == .open else { return }
-        agentSessions = SessionFilter.forAgent(all, agentID: q.agentID, view: q.view)
+        adoptOpen(all, agentID: q.agentID)
+    }
+
+    /// `applyOpenSnapshot` for a list that differs from the last one in one row, held by the
+    /// workspaces in `workspaceIDs` (before and after, which differ only for a move): the pane's own
+    /// list is re-read only when it is one of them.
+    func applyOpenRow(_ all: [Session], workspaceIDs: Set<String?>) {
+        openSnapshot = all
+        guard let q = lastSessionQuery, q.view == .open else { return }
+        #if os(iOS)
+        allSessions = all
+        #endif
+        guard workspaceIDs.contains(q.agentID) else { return }
+        let mine = SessionFilter.forAgent(all, agentID: q.agentID, view: .open)
+        if agentSessions != mine { agentSessions = mine }
+    }
+
+    /// Write the Open list only where it changed: Observation invalidates on assignment, equal or
+    /// not, and the list redraws for each — a change in another workspace leaves this one's rows.
+    private func adoptOpen(_ all: [Session], agentID: String) {
+        #if os(iOS)
+        if allSessions != all { allSessions = all }
+        #endif
+        let mine = SessionFilter.forAgent(all, agentID: agentID, view: .open)
+        if agentSessions != mine { agentSessions = mine }
     }
 
     private func friendly(_ error: Error) -> String {

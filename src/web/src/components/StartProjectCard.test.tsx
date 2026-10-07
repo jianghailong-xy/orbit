@@ -5,6 +5,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectOpenItemRow, ProjectStartRequest, StartProjectRequestBody } from '@orbit/shared';
 import { api, ApiError } from '../api';
+import { MOBILE_QUERY } from '../lib/useMediaQuery';
+import { revealSettlementCard } from './DecisionRail';
 import type { StandardSetConfirmationStanding } from '../lib/acceptanceConfirmation';
 import {
   READY_TO_START,
@@ -30,6 +32,7 @@ import {
   startCardMeta,
   startCheckedLine,
   startExplanation,
+  startPageRow,
 } from '../lib/projectStart';
 import {
   ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER,
@@ -41,7 +44,7 @@ import {
 import { ENTER_HINT } from './CardHotkey';
 import { PROVENANCE_LABEL, shortSeal } from './CriteriaDecisionCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
-import { SessionStartProjectCard, startBody, startPlanView } from './StartProjectCard';
+import { ProjectStartDialog, SessionStartProjectCard, startBody, startPlanView } from './StartProjectCard';
 
 /**
  * "Start this project?" — drawn on the coordinator's request and never inferred, pressed once at
@@ -181,12 +184,15 @@ const reports: Array<boolean | string | null> = [];
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 let client: QueryClient | null = null;
+let narrow = false;
 
 function answer<T>(value: Answer<T>): Promise<T> {
   return value instanceof Error ? Promise.reject(value) : Promise.resolve(value);
 }
 
 beforeEach(() => {
+  narrow = false;
+  startedCalls = 0;
   server.standing = standingOf();
   server.document = documentOf();
   server.row = rowOf('item-1');
@@ -201,7 +207,7 @@ beforeEach(() => {
   armed.length = 0;
   reports.length = 0;
   vi.stubGlobal('matchMedia', (query: string) => ({
-    matches: false, media: query, onchange: null,
+    matches: narrow && query === MOBILE_QUERY, media: query, onchange: null,
     addListener: () => {}, removeListener: () => {},
     addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
   }));
@@ -248,8 +254,10 @@ async function until(done: () => boolean, what: string): Promise<void> {
   expect(done(), `waited for ${what}`).toBe(true);
 }
 
+let startedCalls = 0;
+
 async function mount(
-  options: { router?: boolean; onViewTasks?: () => void } = {},
+  options: { router?: boolean; bare?: boolean; dialog?: boolean; onViewTasks?: () => void } = {},
 ): Promise<{ node: HTMLElement; qc: QueryClient }> {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   const qc = new QueryClient({
@@ -264,7 +272,11 @@ async function mount(
   await act(async () => {
     tree.render(
       <QueryClientProvider client={qc}>
-        {options.router ? (
+        {options.dialog ? (
+          <ProjectStartDialog projectId={PROJECT} asked open onClose={() => { startedCalls += 1; }} />
+        ) : options.bare ? (
+          <SessionStartProjectCard projectId={PROJECT} bare onStarted={() => { startedCalls += 1; }} />
+        ) : options.router ? (
           <SessionAcceptanceConfirmationCard
             projectId={PROJECT}
             onOpenQuestion={(question) => reports.push(question)}
@@ -284,11 +296,13 @@ async function mount(
   return { node, qc };
 }
 
-const cardIn = (node: ParentNode): HTMLElement | null => node.querySelector<HTMLElement>('.start-card');
+const cardIn = (_node: ParentNode): HTMLElement | null => document.querySelector<HTMLElement>('.start-card');
 
 async function delivered(options: { onViewTasks?: () => void } = {}) {
   const { node, qc } = await mount(options);
   await until(() => cardIn(node) !== null && (cardIn(node)!.querySelector('.start-card-plan span') !== null), 'the card and its plan');
+  expect(node.querySelector('.review-card-preview')).toBeNull();
+  expect(node.contains(cardIn(node))).toBe(true);
   const card = (): HTMLElement => {
     const found = cardIn(node);
     if (!found) throw new Error('the card is not on the page');
@@ -400,6 +414,12 @@ describe('the plan in one line', () => {
     // "A new card" opens with a word, not a marker.
     expect(planTaskLabel('A new card for the start')).toBe('A new card for the start');
     expect(planTaskLabel('x'.repeat(40))).toBe(`${'x'.repeat(23)}…`);
+    // A capital and one or two digits is a code, and a space after it is enough.
+    expect(planTaskLabel('P1 Web：合并 Runners 与 Providers 为 Infrastructure 页')).toBe('P1');
+    expect(planTaskLabel('P5：接通 Web、macOS 和 iOS 的 DeepSeek Harness 操作链')).toBe('P5');
+    expect(planTaskLabel('D12. wire the card')).toBe('D12');
+    expect(planTaskLabel('v2 API changes')).toBe('v2 API changes');
+    expect(planTaskLabel('P123 three')).toBe('P123 three');
   });
 
   it('says the mock’s plan the way the mock does', () => {
@@ -494,7 +514,7 @@ describe('when the card is drawn', () => {
     const { node } = await mount({ router: true });
     await until(() => cardIn(node) !== null, 'the card');
     await until(() => reports.includes('START'), 'the router to report the start question');
-    expect(node.querySelectorAll('.settlement-card'), 'another settlement card was drawn beside it').toHaveLength(1);
+    expect(document.querySelectorAll('.settlement-card'), 'another settlement card was drawn beside it').toHaveLength(1);
   });
 });
 
@@ -592,6 +612,47 @@ describe('what the card says', () => {
     expect(new URL(link!.href, window.location.href).pathname).toBe(`/projects/${PROJECT}`);
     expect(card().querySelector('button.start-card-link')).toBeNull();
   });
+});
+
+describe('which start row a page draws', () => {
+  it('draws the request once asked, the owner’s own Start… once the read says nobody asked, and nothing else', () => {
+    const row = rowOf('item-1');
+    expect(startPageRow(false, { startRequest: row })).toEqual({ kind: 'asked', row });
+    expect(startPageRow(false, { startRequest: null })).toEqual({ kind: 'own' });
+    // A read still on its way is not a project nobody asked about, nor is a read that does not say.
+    expect(startPageRow(false, undefined)).toBeNull();
+    expect(startPageRow(null, { startRequest: null })).toBeNull();
+    expect(startPageRow(true, { startRequest: row })).toBeNull();
+  });
+});
+
+describe('the card answered over the project’s sessions page', () => {
+  it('draws the same request bare — no review around it, no Chat about this — and says once it went through', async () => {
+    const { node } = await mount({ bare: true });
+    await until(() => cardIn(node) !== null && cardIn(node)!.querySelector('.start-card-plan span') !== null, 'the card');
+    expect(document.querySelector('.review-card-preview')).toBeNull();
+    expect(actionsOf(cardIn(node)!).map(labelOf)).toEqual([START_PROJECT_ACTION]);
+    await act(async () => {
+      action(cardIn(node)!, START_PROJECT_ACTION).click();
+    });
+    await until(() => bodies.length === 1, 'the press to reach the door');
+    expect(bodies[0]?.requestId).toBe('item-1');
+    await until(() => startedCalls === 1, 'the page to be told the start went through');
+  });
+
+  it('says the request no longer stands, rather than drawing an empty dialog', async () => {
+    server.row = null;
+    const { node } = await mount({ bare: true });
+    await until(() => node.textContent?.includes(START_REQUEST_GONE) ?? false, 'the sentence that says so');
+    expect(cardIn(node)).toBeNull();
+  });
+
+  it.each([[false, '.start-card-dialog'], [true, '.start-card-sheet']] as const)(
+    'puts the card up as a dialog on a wide screen and a sheet on a phone (phone=%s)', async (phone, shell) => {
+      narrow = phone;
+      await mount({ dialog: true });
+      await until(() => document.querySelector(`${shell} .start-card`) !== null, `the card in ${shell}`);
+    });
 });
 
 describe('the press', () => {
@@ -700,5 +761,31 @@ describe('the press', () => {
     await until(() => bodies.length === 1, 'the press');
     expect(bodies[0]).toMatchObject({ line: 'MAIN', maxConcurrentTasks: 2, requestId: 'item-2' });
     expect(bodies[0]).not.toHaveProperty('projectBranchName');
+  });
+});
+
+describe('the compact project preview', () => {
+  it('holds no shortcut until opened and keeps edited settings across close and reopen', async () => {
+    narrow = true;
+    const { node } = await mount();
+    await until(() => node.querySelector('.review-card-preview') !== null, 'the preview');
+    const preview = node.querySelector<HTMLElement>('#settlement-preview')!;
+    preview.scrollIntoView = vi.fn();
+    await key();
+    expect(bodies).toEqual([]);
+    await act(async () => { expect(revealSettlementCard()).toBe(true); });
+    expect(preview.scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'instant' });
+    expect(document.querySelector('.review-card-dialog[data-open]')).not.toBeNull();
+    expect(bodies).toEqual([]);
+    const field = () => settingRow(cardIn(node)!, 'Merge check').querySelector<HTMLInputElement>('input')!;
+    await type(field(), 'npm run my-check');
+    await act(async () => { document.querySelector<HTMLButtonElement>('.review-card-dialog [aria-label="Close"]')!.click(); });
+    await key();
+    expect(bodies).toEqual([]);
+    await act(async () => { node.querySelector<HTMLButtonElement>('.review-card-preview')!.click(); });
+    expect(field().value).toBe('npm run my-check');
+    await act(async () => { action(cardIn(node)!, START_PROJECT_ACTION).click(); });
+    await until(() => bodies.length === 1, 'the start decision');
+    expect(bodies[0]).toMatchObject({ mergeCheckCommand: 'npm run my-check', requestId: 'item-1' });
   });
 });

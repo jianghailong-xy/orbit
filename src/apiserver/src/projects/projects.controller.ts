@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { ProjectStatus } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden, PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import {
@@ -82,15 +83,17 @@ export class ProjectsController {
    * involved, and this is the same choice `POST :id/coordinator` has always taken. Without it the
    * project is created exactly as before, coordinated by nothing.
    */
+  @PatScope('projects:write', { workspaceConfinable: false })
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateProjectDto) {
     const principal = { type: 'OWNER', id: user.userId } as const;
     return dto.workspaceId
-      ? this.projects.createInWorkspace(user.userId, dto, dto.workspaceId, principal)
-      : this.projects.create(user.userId, dto, undefined, principal);
+      ? this.projects.createInWorkspace(user.userId, dto, dto.workspaceId, principal, undefined, user.credential)
+      : this.projects.create(user.userId, dto, undefined, principal, user.credential);
   }
 
   /** The owner's projects, newest first. `?status=OPEN|DONE|CANCELLED` narrows; absent means all. */
+  @PatScope('projects:read', { workspaceConfinable: false })
   @Get()
   list(@CurrentUser() user: AuthUser, @Query('status') status?: string) {
     return this.projects.list(user.userId, this.parseStatus(status));
@@ -108,11 +111,13 @@ export class ProjectsController {
    * Declared before `:id` so the static path is matched as itself: Nest takes routes in
    * declaration order, and `sidebar` fed to the id pipe is a 400, not a project.
    */
+  @PatScope('projects:read', { workspaceConfinable: false })
   @Get('sidebar')
   sidebar(@CurrentUser() user: AuthUser) {
     return this.projects.listSidebar(user.userId);
   }
 
+  @PatScope('projects:read', { workspaceConfinable: false })
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.projects.get(user.userId, id);
@@ -126,6 +131,7 @@ export class ProjectsController {
    * and the combined count cannot express. `shape` says whether the graph is worth drawing as a
    * node-link diagram or reads as a chain. No ids, so nothing here needs Base62 rewriting.
    */
+  @PatScope('projects:read', { workspaceConfinable: false })
   @Get(':id/panorama')
   panorama(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.projects.panorama(user.userId, id);
@@ -140,6 +146,7 @@ export class ProjectsController {
    * one number a client cannot derive from the rows it was sent. `taskId` is an address like any
    * other and is rendered Base62 by the response interceptor.
    */
+  @PatScope('projects:read', { workspaceConfinable: false })
   @Get(':id/panorama/blocking')
   panoramaBlocking(
     @CurrentUser() user: AuthUser,
@@ -158,6 +165,7 @@ export class ProjectsController {
    * row instead of removing it. A PAUSED row passes every other Run gate and carries the owning
    * list plus its release scope. IDs are rendered in Base62 by the response interceptor.
    */
+  @PatScope('projects:read', { workspaceConfinable: false })
   @Get(':id/panorama/ready')
   panoramaReady(
     @CurrentUser() user: AuthUser,
@@ -175,6 +183,7 @@ export class ProjectsController {
    * base62 short form (that is what `parentTaskId` is encoded as on the way out), and a value
    * that decodes to nothing must be a 400 here rather than a 500 from a `::uuid` cast.
    */
+  @PatScope('projects:read', { workspaceConfinable: false })
   @Get(':id/tasks/page')
   taskPage(
     @CurrentUser() user: AuthUser,
@@ -197,6 +206,7 @@ export class ProjectsController {
    * for the two cases folding cannot save, both far above anything seen here: a project past the
    * read ceiling, and a fold still too large to carry.
    */
+  @PatScope('projects:read', { workspaceConfinable: false })
   @Get(':id/dependency-graph')
   dependencyGraph(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.projects.dependencyGraph(user.userId, id);
@@ -216,6 +226,7 @@ export class ProjectsController {
    * nothing (CP1). Like a repeat finding, that is not an error: a caller that retried a request it
    * never saw the answer to must be able to ask again and learn what happened.
    */
+  @PatScope('projects:write', { workspaceConfinable: false })
   @Post(':id/tasks/:taskId/checkpoints')
   async recordCheckpoint(
     @CurrentUser() user: AuthUser,
@@ -246,6 +257,7 @@ export class ProjectsController {
   }
 
   /** Every checkpoint on this task, newest first, and the one a later task may start from. */
+  @PatScope('projects:read', { workspaceConfinable: false })
   @Get(':id/tasks/:taskId/checkpoints')
   async taskCheckpoints(
     @CurrentUser() user: AuthUser,
@@ -280,6 +292,7 @@ export class ProjectsController {
    * closed one reports the spend it was last measured at rather than one that kept running after
    * the work stopped.
    */
+  @PatScope('projects:read', { workspaceConfinable: false })
   @Get(':id/tasks/:taskId/attempts')
   async taskAttempts(
     @CurrentUser() user: AuthUser,
@@ -297,6 +310,7 @@ export class ProjectsController {
    * people on the source are the ones waiting on the answer, and a list that showed one direction
    * would leave one of them looking at a queue that never mentions what they are blocked on.
    */
+  @PatScope('projects:read', { workspaceConfinable: false })
   @Get(':id/handoffs')
   listHandoffs(
     @CurrentUser() user: AuthUser,
@@ -322,7 +336,10 @@ export class ProjectsController {
    * same row: it is a stable read-back rather than a second decision, so clicking approve twice
    * cannot extend an authorization's own deadline. Denying is final for that crossing; if you change
    * your mind, file the work yourself, which is an ordinary write under your own authority (R1).
+   * Approving a request to MOVE a task moves it, as this person's act, and answers with the request
+   * spent on it (APPLIED) — or refuses with nothing written when the move can no longer be made.
    */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post(':id/handoffs/:handoffId/decision')
   async decideHandoff(
     @CurrentUser() user: AuthUser,
@@ -358,7 +375,9 @@ export class ProjectsController {
         crossingKey: answer.row.crossingKey,
       });
     }
-    return this.handoffs.decide(user.userId, user.userId, handoffId, dto.decision, new Date());
+    return this.handoffs.decide(
+      user.userId, user.userId, handoffId, dto.decision, new Date(), user.credential,
+    );
   }
 
   /**
@@ -369,6 +388,7 @@ export class ProjectsController {
    * new row one generation up. Since 0229 nothing reads these rows to decide anything: they are a
    * record of what was seen, kept for a reader.
    */
+  @PatScope('projects:write', { workspaceConfinable: false })
   @Post(':id/acceptance/merge-evidence')
   recordMergeEvidence(
     @CurrentUser() user: AuthUser,
@@ -387,6 +407,7 @@ export class ProjectsController {
    * controller carries no acting session, so it is the shape the service asks for; the refusal for
    * a request that DOES carry one is inside the service, reached identically from every door.
    */
+  @PatScope('projects:read', { workspaceConfinable: false })
   @Get(':id/acceptance/confirmation')
   standardSetConfirmation(
     @CurrentUser() user: AuthUser,
@@ -395,6 +416,7 @@ export class ProjectsController {
     return this.acceptance.standardSetConfirmation(user.userId, id);
   }
 
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post(':id/acceptance/confirmation')
   confirmStandardSet(
     @CurrentUser() user: AuthUser,
@@ -413,6 +435,7 @@ export class ProjectsController {
    * what this door adds is the header an agent's request carries, `X-Orbit-Session-Id`, handed on
    * so a request made from a session is refused 403 whatever credential came with it.
    */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post(':id/start')
   start(
     @CurrentUser() user: AuthUser,
@@ -428,6 +451,7 @@ export class ProjectsController {
    * (`ProjectAcceptanceService.recordProjectDone`). A request carrying an acting session is refused
    * whole, and a seal or a request that has moved is a 409 that writes nothing.
    */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post(':id/done')
   done(
     @CurrentUser() user: AuthUser,
@@ -448,6 +472,7 @@ export class ProjectsController {
    * `X-Orbit-Session-Id`, is handed on so a request made from a session is refused 403 whatever
    * credential came with it. The runner door has no route to either.
    */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post(':id/pause')
   pause(
     @CurrentUser() user: AuthUser,
@@ -457,6 +482,7 @@ export class ProjectsController {
     return this.projects.pause(user.userId, id, actingSessionId);
   }
 
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post(':id/resume')
   resume(
     @CurrentUser() user: AuthUser,
@@ -481,6 +507,7 @@ export class ProjectsController {
    * proposal but the ability to answer it, so the rule that governs the door governs this too and
    * is applied by the same predicate, in the service, where every caller meets it.
    */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Get(':id/acceptance/criteria-decisions/pending')
   pendingCriteriaDecisions(
     @CurrentUser() user: AuthUser,
@@ -501,6 +528,7 @@ export class ProjectsController {
    * and `PublicIdPipe` on it would try to decode a base62 spelling of the very value the database
    * stores verbatim.
    */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post(':id/acceptance/criteria-decisions/:intentId')
   decideCriteriaChange(
     @CurrentUser() user: AuthUser,
@@ -525,6 +553,7 @@ export class ProjectsController {
    * and `withCoordinator` is what its coordinator conversation is handling. Oldest first in both,
    * each row carrying how long it has waited and, while it is the coordinator's, when it stops being.
    */
+  @PatScope('projects:read', { workspaceConfinable: false })
   @Get(':id/open-items')
   openItemsOf(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.openItems.list(user.userId, id);
@@ -542,6 +571,7 @@ export class ProjectsController {
    * today; an empty one resumes without raising anything, which — since the day's spend has not
    * moved — is how a project pauses again on the next thing its coordinator starts.
    */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post(':id/fuse/:episodeId/resume')
   resumeFuse(
     @CurrentUser() user: AuthUser,
@@ -560,6 +590,7 @@ export class ProjectsController {
    * deciding under a different name. The answer ends the question and is told to whichever
    * conversation coordinates the project at this moment — which need not be the one that asked.
    */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post(':id/open-items/:itemId/answer')
   answerOpenItem(
     @CurrentUser() user: AuthUser,
@@ -578,6 +609,7 @@ export class ProjectsController {
    * window — which is not a decision an agent's own tool could make on their behalf. Nothing ends
    * here; the item goes back with its clock restarted, and what happens to it is the coordinator's.
    */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post(':id/open-items/:itemId/return-to-coordinator')
   returnOpenItemToCoordinator(
     @CurrentUser() user: AuthUser,
@@ -596,6 +628,7 @@ export class ProjectsController {
    * the platform could not verify, so the sentence is the whole of what the record gains — and the
    * item must still be open, because an ending is final (its row is guarded against rewrite).
    */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post(':id/open-items/:itemId/resolve')
   resolveOpenItem(
     @CurrentUser() user: AuthUser,
@@ -606,6 +639,7 @@ export class ProjectsController {
     return this.openItems.resolveOpenItem(user.userId, id, itemId, dto, { kind: 'OWNER' });
   }
 
+  @PatScope('projects:write', { workspaceConfinable: false })
   @Post(':id/blockers/:blockerId/resolve')
   resolveBlocker(
     @CurrentUser() user: AuthUser,
@@ -621,6 +655,7 @@ export class ProjectsController {
    * (`docs/project-integration-line-contract.md` §1.6). A project nobody chose a line for, and that
    * has integrated nothing yet, answers `NOT_DECIDED`.
    */
+  @PatScope('projects:read', { workspaceConfinable: false })
   @Get(':id/integration')
   integration(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.projects.integration(user.userId, id);
@@ -630,7 +665,11 @@ export class ProjectsController {
    * The account owner choosing this project's integration line — main or a project branch — and the
    * check run before a landing (L5). Once the project started integrating, a change that would move
    * the line is 409 `INTEGRATION_LINE_LOCKED`; the merge check can still change.
+   *
+   * Closed to tokens whole: every field here is the one `PATCH :id` refuses a token as `integration`
+   * (docs/personal-access-token-design.md §5).
    */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Patch(':id/integration')
   configureIntegration(
     @CurrentUser() user: AuthUser,
@@ -655,18 +694,24 @@ export class ProjectsController {
    * OWNER rather than to an AGENT — which is a record of who asked, not an exemption from the
    * fork, so a caller that reads its criteria back and finds them unmoved is looking at a hold
    * rather than at a lost write.
+   *
+   * A personal access token reaches this route with `projects:write`, but `status`, `integration`,
+   * `acceptanceCriteriaItems`, the authorization set and `coordinatorAgentId` are refused it whole —
+   * see `ProjectsService.update`.
    */
+  @PatScope('projects:write', { workspaceConfinable: false })
   @Patch(':id')
   update(
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: UpdateProjectDto,
   ) {
-    return this.projects.update(user.userId, id, dto);
+    return this.projects.update(user.userId, id, dto, undefined, user.credential);
   }
 
   /** Removes an EMPTY project. One that still holds tasks is a 409 naming how many — a task's
    *  project is what the task is for, so it cannot be taken away as a side effect. */
+  @PatScope('projects:write', { workspaceConfinable: false })
   @Delete(':id')
   remove(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.projects.remove(user.userId, id);
@@ -694,6 +739,7 @@ export class ProjectsController {
    * is optional — `workspaceId` decides where a FIRST coordinator opens, and on a project that
    * already has one a different value is a 409 rather than a move.
    */
+  @PatScope('projects:write', { workspaceConfinable: false })
   @Post(':id/coordinator')
   openCoordinator(
     @CurrentUser() user: AuthUser,
@@ -720,6 +766,7 @@ export class ProjectsController {
    * not", so there is nothing here left to name — the replacement opens where the last one ran, and
    * moving it is still `POST :id/coordinator/rebind`.
    */
+  @PatScope('projects:write', { workspaceConfinable: false })
   @Post(':id/coordinator/replace')
   replaceCoordinator(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.projects.coordinator(user.userId, id, undefined, 'replace');
@@ -733,6 +780,7 @@ export class ProjectsController {
    * it is in Trash and whether the press would refuse — all four BEFORE the press, which is the one
    * thing pressing it can never tell you.
    */
+  @PatScope('projects:read', { workspaceConfinable: false })
   @Get(':id/coordinator/status')
   coordinatorStatus(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.projects.coordinatorStatus(user.userId, id);
@@ -750,6 +798,7 @@ export class ProjectsController {
    * `workspaceId` is required and has no `null` spelling — clearing a landing is how a project
    * REACHES the state this endpoint exists to leave (see `RebindProjectCoordinatorDto`).
    */
+  @PatScope('projects:write', { workspaceConfinable: false })
   @Post(':id/coordinator/rebind')
   rebindCoordinator(
     @CurrentUser() user: AuthUser,

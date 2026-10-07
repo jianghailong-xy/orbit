@@ -278,6 +278,7 @@ export function WikiRunTimelineRow({
   at,
   changes,
   spaceSlug,
+  fresh,
 }: {
   changesetId: string;
   origin: string;
@@ -285,6 +286,8 @@ export function WikiRunTimelineRow({
   /** How many of the run's changes the feed holds, for the title before the run's read answers. */
   changes: number;
   spaceSlug: string;
+  /** Activity's: blue when the run came after the reader last looked, grey when before. */
+  fresh?: boolean;
 }) {
   const read = useQuery(wikiChangesetQuery(changesetId));
   const summary = useMemo(() => (read.data ? wikiRunSummary(read.data) : null), [read.data]);
@@ -292,7 +295,7 @@ export function WikiRunTimelineRow({
   const counts = summary ? wikiRunCounts(summary) : [];
   return (
     <li className="wk-tl-run">
-      <WikiDot tone="green" />
+      <WikiDot tone={fresh === undefined ? 'green' : fresh ? 'blue' : 'muted'} />
       <div>
         <div className="wk-tl-h">
           <b>{WIKI_ORIGIN_WORDS[origin] ?? origin}</b>

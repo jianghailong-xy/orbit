@@ -1,0 +1,78 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<body>
+<h1>① 合入 main：从协调会话挪到项目 sessions 页</h1>
+<p class="lede" style="max-width:2090px">现在，合入 main 的请求卡和回执都画在协调会话的对话里（左边三屏）。你在会话列表点项目，进的是项目 sessions 页，可这一页只有进度条。要合入，得先进协调会话，在对话里找到那张卡，再打开详情才能按；合完之后，回执又夹在聊天中间。<br><b>方案：把合入当成项目的一件事，不当成对话里的一条消息。</b>请求、合入中、受阻，都是项目 sessions 页顶部<b>同一张合入卡</b>的不同状态；合完卡片收起，时间线里留一行；协调会话里每个时刻只留一行事件（右边两屏）。数据不变，仍然读 <code>promotions/current</code> 和 <code>promotions/merged</code>，变的只是画的位置。</p>
+<div class="row" id="figs"></div>
+<script>
+// a · 现在：项目 sessions 页（11:33，候选在等你）
+const a = phone(`${statusBar('11:33')}${navProject(33)}<div class="list">
+${mk(progCard(16, 20, 1), 1, 'border-radius:13px')}
+${sh('Coordinator')}${mkRow(coordRow({ dot: true, amb: true, sub: 'Approve merge to main' }), 2)}
+${sh('Today')}${todayRows('11:33')}</div>`);
+
+// b · 现在：协调会话里的请求卡（11:33）
+const b = chatPage({ at: '11:33', body: `
+${ubub('D1 和日志那两项落完之后，先合一次 main。')}
+${abub('好的。D2/F1 已落到项目分支，D1 和「会话日志默认关闭」还在跑验收。')}
+${abub('D1 和「dsh 会话日志默认关闭」都已落到项目分支 <code>project/34Zur…</code>，合入 main 的检查在合并后的树上跑。')}
+${stamp('11:31')}
+${mk(oldAskCard(), 1, 'margin:8px 14px;border-radius:20px').replace('class="ac"', 'class="ac" style="margin:0"')}
+${abub('P6 的端到端回归还在跑：12 个场景已过 9 个。P7 等 P6 判定后再开始。')}
+${ubub('P6 跑完告诉我。')}
+${abub('好的，P6 有结果我第一时间告诉你。')}` });
+
+// c · 现在：回执夹在对话里（12:01，和截图同一张）
+const c = chatPage({ at: '12:01', body: `
+${abub('D1 和「dsh 会话日志默认关闭」都已落到项目分支，合入 main 的检查在合并后的树上跑。')}
+${abub('P6 的端到端回归还在跑：12 个场景已过 9 个。P7 等 P6 判定后再开始。')}
+${ubub('P6 跑完告诉我。')}
+${abub('好的，P6 有结果我第一时间告诉你。')}
+${mk(oldReceiptCard(), 1, 'margin:8px 14px;border-radius:20px').replace('class="ac"', 'class="ac" style="margin:0"')}
+${abub('P6 已判定通过：12 个场景、旧 runner 隔离和续聊都有记录。接下来是 P7 的测试环境演练。')}
+${ubub('P7 先别动生产，等我确认。')}
+${abub('明白：P7 只在测试环境演练，生产部署和客户端发版等你授权。')}` });
+
+// d · 方案：项目 sessions 页，合入卡在进度卡下面（11:33）
+const d = phone(`${statusBar('11:33')}${navProject(33)}<div class="list">
+${progCard(16, 20, 1)}
+${mk(cardAsk(), 1, 'margin-top:10px;border-radius:16px').replace('class="mc ask"', 'class="mc ask" style="margin-top:0"')}
+${sh('Coordinator')}${mkRow(coordRow({ eye: true, sub: 'Watching P6：验收端到端行为、故障语义与旧版本兼容' }), 2)}
+${sh('Today')}${todayRows('11:33')}</div>`);
+
+// e · 方案：协调会话里只留一行（12:01）
+const sysWrap = (html, k) => mk(html.replace('class="sys', 'style="margin:0" class="sys'), k, 'align-self:center;margin:8px 0;border-radius:999px');
+const e = chatPage({ at: '12:01', body: `
+${ubub('D1 和日志那两项落完之后，先合一次 main。')}
+${abub('D1 和「dsh 会话日志默认关闭」都已落到项目分支，合入 main 的检查在合并后的树上跑。')}
+${sysWrap(sysLine(`${ic('merge', 13, 'currentColor', 2.3)}Merge into main · you confirmed it 11:34 <span class="go">${ic('chevr', 11, 'var(--tint)', 2.8)}</span>`), 1)}
+${abub('P6 的端到端回归还在跑：12 个场景已过 9 个。P7 等 P6 判定后再开始。')}
+${ubub('P6 跑完告诉我。')}
+${abub('好的，P6 有结果我第一时间告诉你。')}
+${sysWrap(sysLine(`${ic('check', 13, 'var(--green-ink)', 2.8)}Merged into main · <span class="sha">8d5a868</span> · 2 tasks <span class="go">${ic('chevr', 11, 'var(--tint)', 2.8)}</span>`), 2)}
+${abub('P6 已判定通过：12 个场景、旧 runner 隔离和续聊都有记录。接下来是 P7 的测试环境演练。')}
+${ubub('P7 先别动生产，等我确认。')}
+${abub('明白：P7 只在测试环境演练，生产部署和客户端发版等你授权。')}` });
+
+document.getElementById('figs').innerHTML = [
+  fig('now', '现在 · 项目 sessions 页', a, `<b>落在这一页，却看不到合入</b><ol>
+<li>${n(1)}进度卡只写 “16/20 done · 1 running”，看不出有个合入在等你点。</li>
+<li>${n(2)}唯一的线索是协调会话那一行的橙点和 “Approve merge to main”。要处理，得先点进协调会话。</li></ol>`),
+  fig('now', '现在 · 协调会话 · 请求', b, `<b>请求卡夹在对话里</b><ol>
+<li>${n(1)}进会话，找到卡，点 View details &amp; act 打开 sheet，才按得到 Merge to main。从会话列表算起要点 4 下，还得翻找。</li>
+<li>之后你和 agent 每说一句，卡就往上走一格。离开再回来，要靠顶部的待处理提示把你带回去。</li></ol>`),
+  fig('now', '现在 · 协调会话 · 回执', c, `<b>回执像一条消息（就是你截图里那张）</b><ol>
+<li>${n(1)}合入后，回执按合入时刻插进对话，一张大卡夹在两段聊天之间，把上下文隔开了。</li>
+<li>“Now on main · 2 landed on the branch” 照搬请求卡的句子，看不出是哪两个任务上了 main。</li>
+<li>想知道“上次什么时候合的”，只能在对话里往上翻。</li></ol>`),
+  fig('after', '方案 · 项目 sessions 页', d, `<b>合入卡放在进度卡下面</b><ol>
+<li>${n(1)}合什么（2 个任务和标题）、检查和冲突的结果、判据进度，一眼看全。<b>Merge to main</b> 和 <b>Not now</b> 直接按，Details 打开完整审阅。从会话列表算起只要点 2 下。</li>
+<li>${n(2)}协调会话那一行不再因为合入亮橙点：要你做的事就在这一页上，不用进对话。</li>
+<li>合入中、受阻、完成都在这张卡上变（图 ②）。合完卡片收起，时间线里留一行。</li></ol>`),
+  fig('after', '方案 · 协调会话', e, `<b>对话里每个时刻只留一行</b><ol>
+<li>${n(1)}请求的时刻留一行。等你时是橙色的 “Merge into main is waiting for you · Review”，回答后变灰并写明结果，例如 “you confirmed it 11:34”。</li>
+<li>${n(2)}合入的时刻留一行 “✓ Merged into main · 8d5a868 · 2 tasks”，点开是同一份回执。</li>
+<li>上下文还在：agent 提到合入时，你能看到它在哪句话前后发生的，但不会再被大卡打断。</li></ol>`),
+].join('');
+</script>

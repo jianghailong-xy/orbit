@@ -1,0 +1,135 @@
+[
+  {
+    "t": 50,
+    "opacity": 0.775049,
+    "progress": 0.24999999999999992,
+    "owner": false,
+    "delay": "0s"
+  },
+  {
+    "t": 107,
+    "opacity": 0.965541,
+    "progress": 0.5722222222222225,
+    "owner": true,
+    "delay": "-0.045s"
+  },
+  {
+    "t": 115,
+    "opacity": 0.974364,
+    "progress": 0.6111111111111115,
+    "owner": true,
+    "delay": "-0.045s"
+  },
+  {
+    "t": 139,
+    "opacity": 0.991565,
+    "progress": 0.7444444444444442,
+    "owner": true,
+    "delay": "-0.045s"
+  },
+  {
+    "t": 147,
+    "opacity": 0.994345,
+    "progress": 0.7944444444444443,
+    "owner": true,
+    "delay": "-0.045s"
+  },
+  {
+    "t": 163,
+    "opacity": 0.998375,
+    "progress": 0.8833333333333332,
+    "owner": true,
+    "delay": "-0.045s"
+  },
+  {
+    "t": 179,
+    "opacity": 0.999947,
+    "progress": 0.9722222222222222,
+    "owner": true,
+    "delay": "-0.045s"
+  },
+  {
+    "t": 195,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.045s"
+  },
+  {
+    "t": 211,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.045s"
+  },
+  {
+    "t": 227,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.045s"
+  },
+  {
+    "t": 243,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.045s"
+  },
+  {
+    "t": 259,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.045s"
+  },
+  {
+    "t": 276,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.045s"
+  },
+  {
+    "t": 292,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.045s"
+  },
+  {
+    "t": 308,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.045s"
+  },
+  {
+    "t": 324,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.045s"
+  },
+  {
+    "t": 341,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.045s"
+  },
+  {
+    "t": 356,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.045s"
+  },
+  {
+    "t": 372,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.045s"
+  },
+  {
+    "t": 388,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.045s"
+  },
+  {
+    "t": 404,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.045s"
+  }
+]

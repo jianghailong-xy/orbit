@@ -20,7 +20,9 @@
  *   (8) a send-back leaves the task open, and the next revision is delivered and held again;
  *   (9) a task in no project that no session dispatched: its card is in its run from the start,
  *       counted there, and only the owner's own press in the app decides it from there;
- *  (10) a dispatching session deleted for good: the same, at once — no 30 minutes.
+ *  (10) a dispatching session deleted for good: the same, at once — no 30 minutes;
+ *  (11) a dispatching session running a turn is handed the revision inside that turn, as a steer
+ *       carrying the same block, rather than behind it where the hold ran out unread.
  *
  * Destructive: it truncates. COORDINATOR_PG_URL must name the disposable guarded database with
  * current migrations applied:
@@ -40,7 +42,7 @@ import {
   type Prisma,
 } from '@prisma/client';
 import { Client } from 'pg';
-import { uuidToBase62 } from '@orbit/shared';
+import { SESSION_CURRENT_WORK_ROUTING_V1, uuidToBase62 } from '@orbit/shared';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
@@ -602,5 +604,39 @@ suite('outside a project the dispatching session settles the evidence, and the o
         }, inTheApp);
         assert.equal(await status(orphan.taskId), TaskStatus.DONE, 'the owner’s press settled it');
         assert.equal(await waitingOn(orphan.run), 0, 'and the row goes dark');
+      });
+
+    // (11) ----------------------------------------------------------------------------------------
+    await t.test('(11) a dispatching session running a turn is handed the revision inside it, as a steer',
+      async () => {
+        const routing = [SESSION_CURRENT_WORK_ROUTING_V1];
+        await db.runner.update({ where: { id: runnerId }, data: { capabilities: routing, capabilitiesReportedAt: new Date() } });
+        const busy = await conversation('watching the work it filed, (11)', { status: RunStatus.RUNNING });
+        const running = await db.conversationTurn.create({
+          data: {
+            sessionId: busy, seq: 2, clientTurnId: 'watching-the-tasks', kind: 'message', content: 'watch them',
+            status: 'IN_FLIGHT', deliveredAt: new Date(), leaseDeadlineAt: new Date(Date.now() + 120_000),
+          },
+        });
+        const watched = await dispatched('compact the thumbnails', busy);
+        await submit(watched, 'compacted 9,400 thumbnails');
+        const revision = await latestEvidence(watched.taskId);
+
+        const [steer] = await deliveredTo(busy);
+        assert.equal(steer.clientTurnId, `${PREFIX}${revision.id}`);
+        assert.equal(steer.kind, 'steer', 'written into the running turn, not queued behind it');
+        assert.equal(steer.sendIntent, 'CURRENT_WORK');
+        assert.equal(steer.targetTurnId, running.id);
+        assert.equal(await cardIn(busy, watched.taskId), null, 'held: the owner is not asked');
+
+        const handed = await (runnerApi as unknown as {
+          dequeueTurn(sessionId: string, runnerId: string, leaseGeneration: null, acceptsSteer: boolean,
+            declaredCapabilities: readonly string[]): Promise<{ turnId: string; kind: string; content?: string } | null>;
+        }).dequeueTurn(busy, runnerId, null, true, routing);
+        assert.equal(handed?.turnId, steer.id);
+        assert.equal(handed?.kind, 'steer');
+        assert.equal(handed?.content, await queuedConfirmationReviewContent(db, steer.clientTurnId),
+          'the steer carries the review block');
+        assert.match(handed?.content ?? '', /<orbit-evidence-review task=/);
       });
   });

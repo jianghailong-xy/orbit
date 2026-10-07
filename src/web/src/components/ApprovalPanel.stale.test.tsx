@@ -464,3 +464,6 @@ describe('an approval that arrived live outlives the question it was raised for'
     expect(cardFor(LIVE_COMMAND).textContent).not.toContain(UNANSWERABLE_NOTE);
   });
 });
+
+// This suite tests live turn ownership; dialog isolation is tested in ReviewCard.test.tsx.
+vi.mock('./ReviewCard', () => import('../test/inlineReviewCard'));

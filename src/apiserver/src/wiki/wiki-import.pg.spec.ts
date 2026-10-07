@@ -169,7 +169,7 @@ interface Outcome {
   opId?: string | null;
   entryId?: string | null;
   waitsFor?: string;
-  reasons?: Array<{ code: string; message: string }>;
+  reasons?: Array<{ code: string; message: string; errors?: Array<{ path: string; message: string }> }>;
 }
 
 // ── fixtures ────────────────────────────────────────────────────────────────────────────────────
@@ -593,6 +593,21 @@ test('import · a note is cited by its owner and by nobody else', { skip, concur
       expectStatus(none, 422, `a ref that names no note (${ref})`);
       assert.equal((none.body.ops as Outcome[])[0].reasons?.[0].code, 'WIKI_SOURCE_UNRESOLVED');
     }
+    // A ref that can be no note's id — the file's path, which the import knows as well — is refused by its
+    // path on the import door, its dry run alike, and writes nothing (contract `sourceInput.rowIdKinds`).
+    const changesets = () => h.prisma.wikiChangeset.count({ where: { ownerId: who.owner.id } });
+    const before = await changesets();
+    const byPath = [addFrom('memory/quotes.md', 'concept', 'A note cited by its path')];
+    const dryByPath = await propose(h, who.as, who.spaceId, byPath, { dryRun: true });
+    const byPathAnswer = await propose(h, who.as, who.spaceId, byPath);
+    expectStatus(byPathAnswer, 400, "a note cited by its file's path");
+    expectStatus(dryByPath, 400, "a note cited by its file's path, on the dry run");
+    assert.deepEqual(dryByPath.body.ops, byPathAnswer.body.ops, 'the dry run refuses what the request does');
+    const reason = (byPathAnswer.body.ops as Outcome[])[0].reasons?.[0];
+    assert.equal(reason?.code, 'WIKI_SCHEMA');
+    assert.deepEqual(reason?.errors?.map((e) => e.path), ['ops[0].sources[0].ref']);
+    assert.match(reason?.errors?.[0].message ?? '', /the note's id, as orbit wiki import registered it/u);
+    assert.equal(await changesets(), before, 'nothing is written');
   });
 });
 

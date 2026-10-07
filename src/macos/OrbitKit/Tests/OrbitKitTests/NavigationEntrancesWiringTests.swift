@@ -79,8 +79,6 @@ final class NavigationEntrancesWiringTests: XCTestCase {
              "show(.compose(agentID: id, folderID: nil), agent: id)"),
             ("func composeWithAgent(_ id: String) {", "\n    }",
              "show(.compose(agentID: id, folderID: nil), agent: id)"),
-            ("func openRecentSession(_ s: Session) {", "\n    }",
-             "show(.console(sessionID: s.id, origin: .drawer), agent: s.agent?.id ?? s.agentId)"),
             ("func openNeedsYouSession(_ s: Session) {", "\n    }",
              "show(.console(sessionID: s.id, origin: .banner), agent: s.agent?.id ?? s.agentId)"),
             // Its cold fetch is a function of its own now (`refreshUnlistedSession`, shared with a
@@ -103,7 +101,7 @@ final class NavigationEntrancesWiringTests: XCTestCase {
     /// origin is a tap that silently hands the edge to the wrong gesture.
     func testTheConsoleEntrancesKeepTheirOriginsApart() throws {
         let app = try appSource("AppModel.swift")
-        let origins = ["origin: .drawer", "origin: .banner", "origin: .deepLink", "origin: .conversation"]
+        let origins = ["origin: .banner", "origin: .deepLink", "origin: .conversation"]
         for origin in origins {
             let hits = code(app).components(separatedBy: origin).count - 1
             XCTAssertEqual(hits, 1,
@@ -128,7 +126,7 @@ final class NavigationEntrancesWiringTests: XCTestCase {
 
         // And it is where they land: every entry calls it.
         for entry in ["func newSessionInCurrentAgent() {", "func composeWithAgent(_ id: String) {",
-                      "func openRecentSession(_ s: Session) {", "func openNeedsYouSession(_ s: Session) {",
+                      "func openNeedsYouSession(_ s: Session) {",
                       "func openSession(_ id: String) {"] {
             let end = entry.hasPrefix("func openSession") ? "guard !sessions.contains(where:" : "\n    }"
             XCTAssertTrue(code(try slice(app, from: entry, to: end)).contains("show("),
@@ -156,7 +154,7 @@ final class NavigationEntrancesWiringTests: XCTestCase {
             // themselves.
             XCTAssertTrue(text.contains("model.openOrbitLink(url)"),
                           "a transcript link is a route too, and takes the same door")
-            for opener in ["openRecentSession(", "openNeedsYouSession(", "openSession(",
+            for opener in ["openNeedsYouSession(", "openSession(",
                            "openAgent(", "openCreatedAgentSession(", "composeWithAgent(",
                            "startComposingSession("] {
                 XCTAssertFalse(text.contains(opener),
@@ -223,7 +221,7 @@ final class NavigationEntrancesWiringTests: XCTestCase {
         XCTAssertTrue(card.contains("sessionID: PublicID.toPublic(sessionID)"),
                       "the foreground card holds the lists' spelling of the pushed session")
 
-        let reconcile = try slice(app, from: "let needsYou = Set(SessionGrouping.group(list).needsYou.map(\\.id))",
+        let reconcile = try slice(app, from: "private func reconcileDeliveredApprovals(_ needsYou: Set<String>) {",
                                   to: "#endif")
         XCTAssertTrue(reconcile.contains(
             "removeDeliveredApprovals(where: { !needsYou.contains(PublicID.toPublic($0)) })"),
@@ -253,8 +251,14 @@ final class NavigationEntrancesWiringTests: XCTestCase {
         // console on a phone opens its card's task over itself (the Agents stack), so which stack
         // that is changes with the section; without it, coming back to a Tasks page left while the
         // console's task held the slot is that page refused its load, a spinner.
+        //
+        // The Wiki's line is argued for too, and it moves no frame either: coming into the Wiki from
+        // another section, it tells the Wiki which workspace the reader was in — read off the stack being
+        // left, which only this moment still knows — so the Wiki opens that workspace's space (wiki
+        // design §12.3.4), as the web's sidebar keeps the same for its tab.
         let known = ["get { nav.section }",
                      "set {",
+                     "if newValue == .wiki && nav.section != .wiki { wiki?.open(fromWorkspace: workspaceInView) }",
                      "nav.section = newValue",
                      "tasks?.setSectionActive(newValue == .tasks)",
                      "syncTaskDetailStore()"]

@@ -53,6 +53,8 @@ public struct ProjectCriterionUnmet: Codable, Equatable, Sendable {
 /// the read declining to answer — a third state, never merged with "no".
 public struct ProjectCriterion: Codable, Equatable, Sendable, Identifiable {
     public let id: String
+    /// The criterion's `key`, which a gap names it by (`AcceptedGap.criterionKey`).
+    public let key: String?
     public let ordinal: Int
     public let text: String
     public let satisfied: Bool?
@@ -62,10 +64,11 @@ public struct ProjectCriterion: Codable, Equatable, Sendable, Identifiable {
     /// How the owner said anybody would know this criterion holds.
     public let verificationMethod: String?
 
-    public init(id: String, ordinal: Int, text: String, satisfied: Bool? = nil,
+    public init(id: String, key: String? = nil, ordinal: Int, text: String, satisfied: Bool? = nil,
                 unmet: [ProjectCriterionUnmet] = [], landing: String? = nil,
                 verificationMethod: String? = nil) {
         self.id = id
+        self.key = key
         self.ordinal = ordinal
         self.text = text
         self.satisfied = satisfied
@@ -77,6 +80,7 @@ public struct ProjectCriterion: Codable, Equatable, Sendable, Identifiable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
+        key = try c.decodeIfPresent(String.self, forKey: .key)
         ordinal = try c.decodeIfPresent(Int.self, forKey: .ordinal) ?? 0
         text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
         satisfied = try c.decodeIfPresent(Bool.self, forKey: .satisfied)
@@ -133,6 +137,9 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
     /// The revision the switch's write is fenced against — a decimal string, compared as text.
     public let configRevision: String?
     public let coordinatorSessionId: String?
+    /// The workspace the coordinator's conversation runs in — the one whose Wiki space the Wiki opens
+    /// from this project's pages (wiki design §12.3.4). Nil from a server that did not say.
+    public let coordinatorWorkspaceId: String?
     /// Everything filed under the project, settled work included.
     public let taskCount: Int
     public let acceptanceCriteriaItems: [ProjectCriterion]
@@ -154,6 +161,25 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
     /// How many of its tasks may be in flight at once — How it runs' "At most". Nil from a read that
     /// did not say.
     public let maxConcurrentTasks: Int?
+    /// The projection of its committed facts — whether they make it done, and why not
+    /// (`ProjectDone.swift`). Nil from a server that predates it.
+    public let derivedDone: ProjectDerivedDone?
+    /// Who recorded it done — the owner in person, or Orbit — and when; nil while it is not.
+    public let doneBy: ProjectDoneBy?
+    public let doneAt: String?
+    /// The gaps the owner accepted when they recorded it done.
+    public let acceptedGaps: [AcceptedGap]
+
+    /// What the done cards and rows read off this document.
+    public var doneSubject: ProjectDoneSubject {
+        ProjectDoneSubject(title: title, status: status.rawValue,
+                           criteria: acceptanceCriteriaItems.map {
+                               ProjectDoneSubject.Criterion(id: $0.id, key: $0.key, ordinal: $0.ordinal,
+                                                            text: $0.text)
+                           },
+                           derivedDone: derivedDone, doneBy: doneBy, doneAt: doneAt,
+                           acceptedGaps: acceptedGaps, tasksByStatus: tasksByStatus)
+    }
 
     /// Whether the project has been started, read off `startedAt` and off nothing else — not off
     /// Automatic, which is how a started project runs rather than whether it does. Nil for a read
@@ -166,12 +192,13 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
     public init(id: String, title: String, status: ProjectStatus = .open, goal: String? = nil,
                 instructions: String? = nil, createdAt: String = "", updatedAt: String? = nil,
                 coordinatorEnabled: Bool? = nil, configRevision: String? = nil,
-                coordinatorSessionId: String? = nil, taskCount: Int = 0,
+                coordinatorSessionId: String? = nil, coordinatorWorkspaceId: String? = nil, taskCount: Int = 0,
                 acceptanceCriteriaItems: [ProjectCriterion] = [],
                 integration: ProjectIntegrationSettings? = nil,
                 tasksByStatus: [String: Int]? = nil, blockers: ProjectBlockers? = nil,
                 startedAt: String? = nil, startedAtRead: Bool = false, pausedAt: String? = nil,
-                maxConcurrentTasks: Int? = nil) {
+                maxConcurrentTasks: Int? = nil, derivedDone: ProjectDerivedDone? = nil,
+                doneBy: ProjectDoneBy? = nil, doneAt: String? = nil, acceptedGaps: [AcceptedGap] = []) {
         self.id = id
         self.title = title
         self.status = status
@@ -182,6 +209,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         self.coordinatorEnabled = coordinatorEnabled
         self.configRevision = configRevision
         self.coordinatorSessionId = coordinatorSessionId
+        self.coordinatorWorkspaceId = coordinatorWorkspaceId
         self.taskCount = taskCount
         self.acceptanceCriteriaItems = acceptanceCriteriaItems
         self.integration = integration
@@ -191,6 +219,10 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         self.startedAtRead = startedAtRead || startedAt != nil
         self.pausedAt = pausedAt
         self.maxConcurrentTasks = maxConcurrentTasks
+        self.derivedDone = derivedDone
+        self.doneBy = doneBy
+        self.doneAt = doneAt
+        self.acceptedGaps = acceptedGaps
     }
 
     private struct Counts: Codable {
@@ -199,8 +231,9 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, status, goal, instructions, createdAt, updatedAt, coordinatorEnabled,
-             configRevision, coordinatorSessionId, acceptanceCriteriaItems, integration, tasksByStatus,
-             blockers, startedAt, pausedAt, maxConcurrentTasks
+             configRevision, coordinatorSessionId, coordinatorWorkspaceId, acceptanceCriteriaItems, integration, tasksByStatus,
+             blockers, startedAt, pausedAt, maxConcurrentTasks, derivedDone, doneBy, doneAt,
+             acceptedGaps
         case counts = "_count"
     }
 
@@ -216,6 +249,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         coordinatorEnabled = try c.decodeIfPresent(Bool.self, forKey: .coordinatorEnabled)
         configRevision = decodeDecimal(c, .configRevision)
         coordinatorSessionId = try c.decodeIfPresent(String.self, forKey: .coordinatorSessionId)
+        coordinatorWorkspaceId = try? c.decodeIfPresent(String.self, forKey: .coordinatorWorkspaceId)
         taskCount = try c.decodeIfPresent(Counts.self, forKey: .counts)?.tasks ?? 0
         acceptanceCriteriaItems = try c.decodeIfPresent([ProjectCriterion].self,
                                                         forKey: .acceptanceCriteriaItems) ?? []
@@ -226,6 +260,10 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt)
         pausedAt = try c.decodeIfPresent(String.self, forKey: .pausedAt)
         maxConcurrentTasks = try? c.decodeIfPresent(Int.self, forKey: .maxConcurrentTasks)
+        derivedDone = try? c.decodeIfPresent(ProjectDerivedDone.self, forKey: .derivedDone)
+        doneBy = try? c.decodeIfPresent(ProjectDoneBy.self, forKey: .doneBy)
+        doneAt = try? c.decodeIfPresent(String.self, forKey: .doneAt)
+        acceptedGaps = ((try? c.decodeIfPresent([AcceptedGap].self, forKey: .acceptedGaps)) ?? nil) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -240,6 +278,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         try c.encodeIfPresent(coordinatorEnabled, forKey: .coordinatorEnabled)
         try c.encodeIfPresent(configRevision, forKey: .configRevision)
         try c.encodeIfPresent(coordinatorSessionId, forKey: .coordinatorSessionId)
+        try c.encodeIfPresent(coordinatorWorkspaceId, forKey: .coordinatorWorkspaceId)
         try c.encode(Counts(tasks: taskCount), forKey: .counts)
         try c.encode(acceptanceCriteriaItems, forKey: .acceptanceCriteriaItems)
         try c.encodeIfPresent(integration, forKey: .integration)
@@ -248,6 +287,10 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         if startedAtRead { try c.encode(startedAt, forKey: .startedAt) }
         try c.encodeIfPresent(pausedAt, forKey: .pausedAt)
         try c.encodeIfPresent(maxConcurrentTasks, forKey: .maxConcurrentTasks)
+        try c.encodeIfPresent(derivedDone, forKey: .derivedDone)
+        try c.encodeIfPresent(doneBy, forKey: .doneBy)
+        try c.encodeIfPresent(doneAt, forKey: .doneAt)
+        if !acceptedGaps.isEmpty { try c.encode(acceptedGaps, forKey: .acceptedGaps) }
     }
 }
 

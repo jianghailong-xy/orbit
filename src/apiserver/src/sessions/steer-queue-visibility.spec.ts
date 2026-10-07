@@ -86,6 +86,8 @@ const ITEM_CARD = {
     limit: 3,
   },
   actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'],
+  requiredAction: 'The coordinator must get this task past its failure — retry it, file a repair task, or close it.',
+  primaryAction: 'RETRY',
   landing: {
     receipts: 0,
     state: 'NOT_KNOWN',
@@ -183,6 +185,9 @@ function makeService(
         integrationRef: `refs/heads/project/${PROJECT_ID}`,
       }),
     },
+    // The outcomes riding on any of these turns (session-request.ts `readSessionReplyCards`, read for
+    // every listed turn as the echo reads them): none here.
+    sessionRequest: { findMany: async () => [] },
     $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
   } as never;
   const service = new SessionsService(

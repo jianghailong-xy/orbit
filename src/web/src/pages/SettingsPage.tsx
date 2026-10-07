@@ -71,6 +71,17 @@ export function SettingsPage() {
             loading={save.isPending}
           />
         </Field>
+        {/* Absent means OFF, unlike the switches below — only turning it on has to be written. */}
+        <Field
+          label="Smart model selection"
+          hint="Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before."
+        >
+          <Switch
+            checked={prefs.modelRouting === true}
+            onChange={(v) => save.mutate({ modelRouting: v })}
+            loading={save.isPending}
+          />
+        </Field>
       </Card>
 
       {/* One switch for the whole account, not one per workspace: the server reads it live on
@@ -131,6 +142,15 @@ export function SettingsPage() {
           hint="Everything you’ve made viewable by link: what each one includes, how often it was opened, and a way to turn it off."
         >
           <Button onClick={() => navigate('/settings/shared-links')}>Manage</Button>
+        </Field>
+      </Card>
+
+      <Card title="Access tokens" style={{ marginTop: 16 }}>
+        <Field
+          label="Personal access tokens"
+          hint="Let scripts and the orbit CLI use the Orbit API as you: what each token can reach, when it was last used, and a way to revoke it."
+        >
+          <Button onClick={() => navigate('/settings/access-tokens')}>Manage</Button>
         </Field>
       </Card>
 

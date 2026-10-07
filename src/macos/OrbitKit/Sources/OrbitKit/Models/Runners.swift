@@ -80,15 +80,19 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
     /// them into one row per base model (`gemini-3.8-flash`) with its levels as `reasoningLevels`,
     /// and a session passes the two back as `--model` and `--effort`.
     public let antigravity: [RunnerModelInfo]?
+    /// DeepSeek Harness's ACP `configOptions`: opaque model values (`value` is never reparsed) with
+    /// their `reasoning_effort` levels, and no context window (P0 contract §4).
+    public let dsh: [RunnerModelInfo]?
 
     public init(claude: [RunnerModelInfo]? = nil, codex: [RunnerModelInfo]? = nil,
                 kimi: [RunnerModelInfo]? = nil, opencode: [RunnerModelInfo]? = nil,
-                antigravity: [RunnerModelInfo]? = nil) {
+                antigravity: [RunnerModelInfo]? = nil, dsh: [RunnerModelInfo]? = nil) {
         self.claude = claude
         self.codex = codex
         self.kimi = kimi
         self.opencode = opencode
         self.antigravity = antigravity
+        self.dsh = dsh
     }
 
     public func models(for provider: String) -> [ModelOption]? {
@@ -98,6 +102,7 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
         case "kimi":     rows = kimi
         case "opencode": rows = opencode
         case "antigravity": rows = antigravity
+        case "dsh":      rows = dsh
         default:         rows = claude
         }
         guard let rows, !rows.isEmpty else { return nil }
@@ -107,7 +112,7 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
     public func contextWindow(for id: String) -> Int? {
         // A list rather than one `(rows ?? []) + …` chain: at five runtimes that expression is past
         // what the Swift type-checker resolves in reasonable time, and it fails the build outright.
-        let runtimes: [[RunnerModelInfo]?] = [claude, codex, kimi, opencode, antigravity]
+        let runtimes: [[RunnerModelInfo]?] = [claude, codex, kimi, opencode, antigravity, dsh]
         let all = runtimes.flatMap { $0 ?? [] }
         return all.first { $0.value == id }?.contextWindow
     }
@@ -122,6 +127,7 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
         case "kimi": rows = kimi
         case "opencode": rows = opencode
         case "antigravity": rows = antigravity
+        case "dsh": rows = dsh
         default: rows = claude
         }
         return rows?.first { $0.value == model }
@@ -185,19 +191,30 @@ public struct RotateTokenResponse: Codable, Equatable, Sendable {
     public let token: String
 }
 
-/// Server-resolved Antigravity support, CLI readiness, and runner-environment key availability.
+public enum AntigravityGoogleLogin: String, Codable, Equatable, Sendable {
+    case available
+    case needsUpdate = "needs_update"
+    case unsupportedPlatform = "unsupported_platform"
+}
+
+/// Server-resolved Antigravity support, CLI readiness, and credential availability.
 public struct RunnerAntigravityState: Codable, Equatable, Sendable {
     public let supported: Bool
     public let installed: Bool?
     public let version: String?
     public let envKeyAvailable: Bool
+    public let authSource: String?
+    public let googleLogin: AntigravityGoogleLogin?
 
     public init(supported: Bool, installed: Bool? = nil, version: String? = nil,
-                envKeyAvailable: Bool = false) {
+                envKeyAvailable: Bool = false, authSource: String? = nil,
+                googleLogin: AntigravityGoogleLogin? = nil) {
         self.supported = supported
         self.installed = installed
         self.version = version
         self.envKeyAvailable = envKeyAvailable
+        self.authSource = authSource
+        self.googleLogin = googleLogin
     }
 }
 
@@ -212,22 +229,62 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     /// The CLI's own answer to "am I signed in": `yes` / `no` / `unknown`.
     public let auth: String?
     /// The accounts this engine is signed into on the runner, Default first — reported for an engine
-    /// whose CLI keeps a login per directory (Codex, Claude). Absent from an older runner.
+    /// whose CLI keeps a login per directory (Codex, Claude, Antigravity). Absent from an older runner.
+    /// `auth` above stays the engine's answer: for Antigravity that may be a GEMINI_API_KEY, while its
+    /// Default account is the runner's Google sign-in alone (`RunnerPageFormat.runsOnEnvKey`).
     public let accounts: [RunnerEngineAccount]?
     public let update: RunnerEngineUpdate?
+    public let authSource: String?
+    /// Antigravity only: its Google accounts' quota, which never rides in the runner's `planUsage` —
+    /// Default's buckets, present only while the runner's own Google sign-in answers yes, and every
+    /// other signed-in account's under `accounts`, by its id (`CodexAccounts.usage`).
+    public let planUsage: PlanUsageSnapshot?
+    /// Fixed-version/platform admission failure (`DSH_PLATFORM_UNSUPPORTED: …`), independent of
+    /// whether a binary is present. Only DeepSeek Harness reports one today.
+    public let installationError: String?
+    /// DeepSeek Harness only: what the runner's probe established, kept apart from a key's validity.
+    public let dsh: DshRuntimeHealth?
     public var id: String { engine }
     /// Only the CLI's own "yes" counts — the third state exists precisely so an engine that
     /// wouldn't answer is never shown as signed in (web's `rowKindOf`).
     public var signedIn: Bool { auth == "yes" }
 
     public init(engine: String, installed: Bool? = nil, version: String? = nil, auth: String? = nil,
-                accounts: [RunnerEngineAccount]? = nil, update: RunnerEngineUpdate? = nil) {
+                accounts: [RunnerEngineAccount]? = nil, update: RunnerEngineUpdate? = nil,
+                authSource: String? = nil, planUsage: PlanUsageSnapshot? = nil,
+                installationError: String? = nil, dsh: DshRuntimeHealth? = nil) {
         self.engine = engine
+        self.installationError = installationError
+        self.dsh = dsh
         self.installed = installed
         self.version = version
         self.auth = auth
         self.accounts = accounts
         self.update = update
+        self.authSource = authSource
+        self.planUsage = planUsage
+    }
+}
+
+/// DeepSeek Harness's half of an engine report (shared `DshRuntimeHealth`). The machine probe has no
+/// session key, so it never says whether a key works: `requestValidation` stays `unknown` there.
+public struct DshRuntimeHealth: Codable, Equatable, Sendable {
+    public let versionCompatible: Bool
+    public let credentialPresent: Bool?
+    public let modelCatalogReadable: Bool?
+    public let requestValidation: String?
+    public let sandboxEnforcement: String?
+    /// A fixed `DSH_*` code, never upstream text.
+    public let diagnostic: String?
+
+    public init(versionCompatible: Bool, credentialPresent: Bool? = nil, modelCatalogReadable: Bool? = nil,
+                requestValidation: String? = nil, sandboxEnforcement: String? = nil, diagnostic: String? = nil) {
+        self.versionCompatible = versionCompatible
+        self.credentialPresent = credentialPresent
+        self.modelCatalogReadable = modelCatalogReadable
+        self.requestValidation = requestValidation
+        self.sandboxEnforcement = sandboxEnforcement
+        self.diagnostic = diagnostic
     }
 }
 
@@ -241,7 +298,8 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
     public let name: String?
     /// The CLI's own answer for this account: `yes` / `no` / `unknown`.
     public let auth: String?
-    /// The account's directory on that machine: a CODEX_HOME or a CLAUDE_CONFIG_DIR.
+    /// The account's directory on that machine: a CODEX_HOME, a CLAUDE_CONFIG_DIR, or the Gemini
+    /// directory an Antigravity Google sign-in lives in.
     public let home: String?
     /// The same directory under Codex's historical field name, Codex accounts only: read
     /// `home ?? codexHome`.
@@ -298,6 +356,25 @@ public struct RunnerInstallState: Codable, Equatable, Sendable {
     public let mode: String?
     /// One runner has one install relay; another engine's active install occupies it too.
     public var inFlight: Bool { status == "pending" || status == "installing" }
+}
+
+/// Where a runner's updates of itself stand, as its heartbeats report them (@orbit/shared
+/// `RunnerSelfUpdate`): `enabled`, `disabledByEnv`, `dirNotWritable`, `waitingForIdle`, `failed` or
+/// `heldByRollout`, why (`reason`, for `failed` and `disabledByEnv`), the folder holding its binary,
+/// and the last update it installed. The state stays raw so a newer control plane cannot make the
+/// runner list undecodable; `RunnerAttention` reads the ones it knows.
+public struct RunnerSelfUpdate: Codable, Equatable, Sendable {
+    public let state: String
+    public let reason: String?
+    public let installDir: String?
+    public let lastUpdatedAt: String?
+    public let lastUpdatedFrom: String?
+    public let lastUpdatedTo: String?
+}
+
+/// POST /runners/:id/self-update (Update Runner Now) acknowledges when the check was requested.
+public struct RunnerSelfUpdateRequest: Codable, Equatable, Sendable {
+    public let requestedAt: String?
 }
 
 /// Browser-facing account-removal relay. Raw engine/status strings preserve forward compatibility.
@@ -553,6 +630,21 @@ public struct PlanUsageRateLimitReset: Codable, Equatable, Sendable {
     public var isSupported: Bool { support == "SUPPORTED" }
 }
 
+/// Antigravity's remaining quota for one weekly or 5-hour bucket.
+public struct PlanUsageBucket: Codable, Equatable, Sendable {
+    public let id: String
+    public let window: String
+    public let remainingFraction: Double
+    public let resetTime: String?
+
+    public init(id: String, window: String, remainingFraction: Double, resetTime: String? = nil) {
+        self.id = id
+        self.window = window
+        self.remainingFraction = remainingFraction
+        self.resetTime = resetTime
+    }
+}
+
 /// One provider's usage snapshot. Claude fills fiveHour/sevenDay; Codex fills primary/secondary.
 public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
     public let provider: String?
@@ -571,9 +663,11 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
     /// Earned Codex reset state (absent on older runners and non-Codex snapshots).
     public let rateLimitReset: PlanUsageRateLimitReset?
     public let fetchedAt: String?
-    /// The runner's other accounts of this engine, by account id, each as its own windows: this
-    /// snapshot's windows are Default's (web `codexAccountSnapshot`).
+    /// The runner's other accounts of this engine — Codex, Claude Code or Antigravity — by account id,
+    /// each as its own windows: this snapshot's windows (or buckets) are Default's (web
+    /// `codexAccountSnapshot`).
     public var accounts: [String: PlanUsageSnapshot]? = nil
+    public let buckets: [PlanUsageBucket]?
 
     public init(provider: String? = nil, fiveHour: PlanUsageWindow? = nil,
                 sevenDay: PlanUsageWindow? = nil, sevenDayOpus: PlanUsageWindow? = nil,
@@ -583,7 +677,8 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
                 rateLimitReachedType: String? = nil, credits: PlanUsageCredits? = nil,
                 rateLimits: [PlanUsageRateLimit]? = nil,
                 rateLimitReset: PlanUsageRateLimitReset? = nil,
-                fetchedAt: String? = nil, accounts: [String: PlanUsageSnapshot]? = nil) {
+                fetchedAt: String? = nil, accounts: [String: PlanUsageSnapshot]? = nil,
+                buckets: [PlanUsageBucket]? = nil) {
         self.provider = provider
         self.fiveHour = fiveHour
         self.sevenDay = sevenDay
@@ -600,6 +695,7 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
         self.rateLimitReset = rateLimitReset
         self.fetchedAt = fetchedAt
         self.accounts = accounts
+        self.buckets = buckets
     }
 }
 
@@ -621,6 +717,12 @@ public struct PlanUsage: Codable, Equatable, Sendable {
     public let rateLimits: [PlanUsageRateLimit]?
     /// Earned Codex reset state on a flat (legacy) provider snapshot.
     public let rateLimitReset: PlanUsageRateLimitReset?
+    /// Every other account's own snapshot, by account id, on a flat (legacy) payload — where this
+    /// object's own windows are Default's. Web's `PlanUsage extends PlanUsageSnapshot`, so a flat
+    /// payload keeps its `accounts` as it is read; a client splitting the two types has to carry
+    /// them across itself, or a machine that reports one provider at a time loses every added
+    /// account's quota while its Default still reads (web `planUsageSnapshotForProvider`).
+    public let accounts: [String: PlanUsageSnapshot]?
     public let claude: PlanUsageSnapshot?
     public let codex: PlanUsageSnapshot?
     public let kimi: PlanUsageSnapshot?
@@ -634,6 +736,7 @@ public struct PlanUsage: Codable, Equatable, Sendable {
                 rateLimitReachedType: String? = nil, credits: PlanUsageCredits? = nil,
                 rateLimits: [PlanUsageRateLimit]? = nil,
                 rateLimitReset: PlanUsageRateLimitReset? = nil,
+                accounts: [String: PlanUsageSnapshot]? = nil,
                 claude: PlanUsageSnapshot? = nil, codex: PlanUsageSnapshot? = nil,
                 kimi: PlanUsageSnapshot? = nil,
                 fetchedAt: String? = nil) {
@@ -651,6 +754,7 @@ public struct PlanUsage: Codable, Equatable, Sendable {
         self.credits = credits
         self.rateLimits = rateLimits
         self.rateLimitReset = rateLimitReset
+        self.accounts = accounts
         self.claude = claude
         self.codex = codex
         self.kimi = kimi
@@ -664,10 +768,11 @@ public struct PlanUsageRow: Equatable, Sendable, Identifiable {
     public let label: String
     public let groupLabel: String?
     public let window: PlanUsageWindow
+    public var remaining: Bool = false
     public var id: String { key }
-    /// Orbit displays percent consumed for every provider.
+    /// Antigravity reports remaining quota; other providers report consumed quota.
     public var percent: Int {
-        min(100, max(0, Int(window.utilization.rounded())))
+        min(100, max(0, Int((remaining ? 100 - window.utilization : window.utilization).rounded())))
     }
     /// At or past 90% used, judged on the reading rather than its rounding: 89.6 shows as 90% and
     /// is not near the limit (web's `PlanUsageDisplayRow.nearLimit`).
@@ -693,6 +798,14 @@ private func codexWindowLabel(_ window: PlanUsageWindow, secondary: Bool) -> Str
 public extension PlanUsageSnapshot {
     /// Present windows in provider order, preserving every Codex TUI rate-limit bucket.
     var rows: [PlanUsageRow] {
+        if provider == "antigravity" {
+            return (buckets ?? []).map { bucket in
+                let label = bucket.window == "weekly" ? "Weekly" : bucket.window == "5h" ? "5-hour" : bucket.window
+                return PlanUsageRow(key: bucket.id, label: label, groupLabel: bucket.id,
+                                    window: PlanUsageWindow(utilization: (1 - bucket.remainingFraction) * 100,
+                                                            resetsAt: bucket.resetTime), remaining: true)
+            }
+        }
         let codex = provider == "codex" || primary != nil || secondary != nil || rateLimits?.isEmpty == false
         if codex {
             let buckets = (rateLimits?.isEmpty == false
@@ -735,6 +848,7 @@ public extension PlanUsageSnapshot {
     /// outlives it only on a reading that has stopped refreshing.
     func currentRows(at now: Date = Date()) -> [PlanUsageRow] {
         rows.map { row in
+            if row.remaining { return row }
             guard let resets = planUsageResetDate(row.window), resets <= now else { return row }
             return PlanUsageRow(key: row.key, label: row.label, groupLabel: row.groupLabel,
                                 window: PlanUsageWindow(utilization: 0, label: row.window.label,
@@ -779,9 +893,12 @@ public extension PlanUsage {
                           rateLimitReachedType: rateLimitReachedType, credits: credits,
                           rateLimits: rateLimits,
                           rateLimitReset: rateLimitReset,
-                          fetchedAt: fetchedAt)
+                          fetchedAt: fetchedAt, accounts: accounts)
     }
 
+    /// The runner's own report for one engine. Never Antigravity's, which travels with its engine
+    /// health instead (`RunnerEngineHealth.planUsage`): read every engine's accounts through
+    /// `CodexAccounts.usage`.
     func snapshot(for provider: String) -> PlanUsageSnapshot? {
         // OpenCode may use any underlying provider and Orbit does not collect a
         // provider-specific quota snapshot for it. Never mislabel Claude usage.

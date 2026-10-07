@@ -4,7 +4,7 @@ import XCTest
 /// Two words, two meanings. The project menu's link is the signed-in app address — something you
 /// copy for yourself, so it reads `Copy Link` and goes to the pasteboard, not to the system share
 /// sheet. `Share` is the public, read-only link, and the session page offers it on both platforms:
-/// one sheet, opened from the nav bar on iOS and from the window toolbar on macOS. On iOS the
+/// one sheet, opened from the nav-bar menu on iOS and from the window toolbar on macOS. On iOS the
 /// session list's rows offer it as well.
 ///
 /// SwiftUI doesn't exist on Linux, so nothing here compiles the shells. Each check reads the part of
@@ -118,9 +118,15 @@ final class ShareEntriesWiringTests: XCTestCase {
         XCTAssertTrue(mac.contains("Label(\"Share session\", systemImage: \"square.and.arrow.up\")"))
 
         let phone = try slice(body, from: "ToolbarItem(placement: .topBarTrailing) {",
-                              to: ".accessibilityLabel(\"Share session\")")
+                              to: ".sessionRenameAlert(")
         XCTAssertEqual(try branches(of: "ToolbarItem(placement: .topBarTrailing) {", in: console), ["os(iOS)"])
-        XCTAssertTrue(phone.contains("Button { showShare = true }"))
+        XCTAssertTrue(phone.contains("if let session = appModel.session(id: sessionID)"))
+        XCTAssertTrue(phone.contains("sessionMenu(session)"))
+        let menu = try slice(console, from: "private func sessionMenu(", to: "\n    }")
+        XCTAssertEqual(try branches(of: "private func sessionMenu(", in: console), ["os(iOS)"])
+        XCTAssertTrue(menu.contains("Menu {"))
+        XCTAssertTrue(menu.contains("Button { showShare = true }"))
+        XCTAssertTrue(menu.contains(".accessibilityLabel(\"Session actions\")"))
 
         // One sheet, presented on both platforms by whichever button set the flag, and it is the
         // ShareSheet: nothing else is presented between the flag's sheet and the ShareSheet it builds.
@@ -130,6 +136,65 @@ final class ShareEntriesWiringTests: XCTestCase {
         XCTAssertEqual(presented.components(separatedBy: ".sheet(").count, 2, "one sheet, the flag's own")
         XCTAssertFalse(presented.contains("#"), "the sheet's content isn't gated either")
         XCTAssertEqual(console.components(separatedBy: "ShareSheet(").count, 2, "one place builds the sheet")
+    }
+
+    func testTheIOSSessionMenuKeepsTrashAndPermanentDeletionSeparate() throws {
+        let console = code(try appSource("Views/Console/ConsoleView.swift"))
+        // The menu's own items, up to the confirmation that hangs off it (iOS 26 anchors that panel
+        // to the view it is declared on, so the ⋯ carries it): the list below is what the menu
+        // offers, and the confirmation is read on its own further down.
+        let menu = try slice(console, from: "private func sessionMenu(", to: ".orbitConfirmation(")
+        let trash = try slice(menu, from: "if session.effectiveLifecycleState == .trash {", to: "} else {")
+        XCTAssertTrue(trash.contains("appModel.moveSessionToOpen(session.id)"))
+        XCTAssertTrue(trash.contains("canRestore"))
+        XCTAssertTrue(trash.contains("confirmPurge = true"))
+        for action in ["showShare = true", "appModel.deleteSession(", "appModel.completeSession("] {
+            XCTAssertFalse(trash.contains(action), "Trash cannot offer \(action)")
+        }
+        XCTAssertFalse(menu.contains("appModel.purgeSession("), "the menu only requests confirmation")
+        let confirmation = try slice(console, from: ".orbitConfirmation(\"Delete permanently?\"",
+                                     to: "} message: {")
+        XCTAssertTrue(confirmation.contains("appModel.purgeSession(sessionID)"))
+        XCTAssertTrue(confirmation.contains("role: .destructive"))
+        XCTAssertEqual(console.components(separatedBy: "appModel.purgeSession(").count - 1, 1,
+                       "permanent deletion has no path outside its confirmation")
+    }
+
+    func testTheIOSSessionMenuUsesSessionCapabilitiesAndPreservesConversationNavigation() throws {
+        let console = code(try appSource("Views/Console/ConsoleView.swift"))
+        let menu = try slice(console, from: "private func sessionMenu(", to: "\n    }")
+        let complete = try slice(menu, from: "appModel.completeSession(session.id)", to: "canComplete")
+        XCTAssertTrue(complete.contains(".disabled("), "Complete follows the server's capability")
+        XCTAssertTrue(menu.contains("appModel.deleteSession(session.id)"), "Delete remains a soft delete")
+        XCTAssertTrue(menu.contains("openFromConversation(.task(taskID), overConsole: opensPagesOverConsole)"))
+        XCTAssertTrue(menu.contains("openProjectFromConversation(projectID, overConsole: opensPagesOverConsole)"))
+        XCTAssertFalse(menu.contains("appModel.route("), "opening related work must retain the phone's way back")
+        XCTAssertFalse(menu.contains("setStatus("), "filing a session must not declare its task done")
+    }
+
+    func testTheIOSSessionMenuCopiesTheSignedInLinkWithoutPublishing() throws {
+        let console = code(try appSource("Views/Console/ConsoleView.swift"))
+        let menu = try slice(console, from: "private func sessionMenu(", to: "\n    }")
+        let copy = try slice(menu, from: "if let url = appModel.sessionWebURL(session.id) {",
+                             to: "Label(SharePanelCopy.copyLink,")
+        XCTAssertTrue(copy.contains("PlatformPasteboard.copyString(url.absoluteString)"))
+        XCTAssertFalse(copy.contains("showShare = true"))
+        XCTAssertFalse(menu.contains("ShareLink("))
+        XCTAssertFalse(menu.contains("putShareLink("), "only the Share panel may publish a link")
+        let model = code(try appSource("AppModel.swift"))
+        let address = try slice(model, from: "func sessionWebURL(", to: "\n    }")
+        XCTAssertTrue(address.contains("appendingPathComponent(\"sessions\")"))
+        XCTAssertTrue(address.contains("PublicID.toPublic("))
+    }
+
+    func testTheIOSSessionMoveUsesTheNestedWorkspaceRelationFromCurrentAPIs() throws {
+        let console = code(try appSource("Views/Console/ConsoleView.swift"))
+        let workspace = try slice(console, from: "private func sessionWorkspace(", to: "\n    }")
+        XCTAssertTrue(workspace.contains("session.agent?.id ?? session.agentId"),
+                      "current list/detail payloads send agent.id without a flat agentId")
+        XCTAssertEqual(console.components(separatedBy: "($0.agent?.id ?? $0.agentId)").count - 1, 2,
+                       "both the cached and fetched folder counts use the same nested relation")
+        XCTAssertFalse(console.contains("$0.agentId =="), "a flat-only filter silently loses current API rows")
     }
 
     /// The iOS session list offers Share on each row too: swiped left, just inside Delete, and as

@@ -61,7 +61,7 @@ private struct SessionRowActions: ViewModifier {
     func body(content: Content) -> some View {
         swipeable(content)
             .sessionRenameAlert(isPresented: $renaming, draft: $renameDraft, sessionID: session.id)
-            .confirmationDialog("Delete permanently?", isPresented: $confirmPurge, titleVisibility: .visible) {
+            .orbitConfirmation("Delete permanently?", isPresented: $confirmPurge) {
                 Button("Delete Permanently", role: .destructive) { model.purgeSession(session.id) }
                 Button("Cancel", role: .cancel) {}
             } message: {
@@ -152,6 +152,7 @@ private struct SessionRowActions: ViewModifier {
     private var moveAction: RowSwipeAction? {
         #if os(iOS)
         guard !isTrash, let onMove else { return nil }
+        if let membership = session.projectMembership, membership.role != .coordinator { return nil }
         return RowSwipeAction(title: "Move", systemImage: "folder", tint: .indigo, perform: onMove)
         #else
         return nil

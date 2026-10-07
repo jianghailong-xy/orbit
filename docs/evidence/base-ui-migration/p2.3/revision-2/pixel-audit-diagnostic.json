@@ -1,0 +1,769 @@
+{
+  "settled": [
+    {
+      "file": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        360,
+        128
+      ],
+      "final": {
+        "bbox": [
+          47,
+          43,
+          347,
+          115
+        ],
+        "pixels": 91,
+        "max": 2
+      },
+      "preRaster": {
+        "bbox": [
+          47,
+          43,
+          347,
+          115
+        ],
+        "pixels": 91,
+        "max": 2
+      }
+    },
+    {
+      "file": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        360,
+        128
+      ],
+      "final": {
+        "bbox": [
+          47,
+          43,
+          347,
+          115
+        ],
+        "pixels": 91,
+        "max": 2
+      },
+      "preRaster": {
+        "bbox": [
+          47,
+          43,
+          347,
+          115
+        ],
+        "pixels": 91,
+        "max": 2
+      }
+    },
+    {
+      "file": "chromium-dark-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        360,
+        128
+      ],
+      "final": {
+        "bbox": [
+          47,
+          43,
+          347,
+          115
+        ],
+        "pixels": 91,
+        "max": 2
+      },
+      "preRaster": {
+        "bbox": [
+          47,
+          43,
+          347,
+          115
+        ],
+        "pixels": 91,
+        "max": 2
+      }
+    },
+    {
+      "file": "chromium-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        358,
+        144
+      ],
+      "final": {
+        "bbox": [
+          47,
+          43,
+          345,
+          131
+        ],
+        "pixels": 70,
+        "max": 2
+      },
+      "preRaster": {
+        "bbox": [
+          47,
+          43,
+          345,
+          131
+        ],
+        "pixels": 70,
+        "max": 2
+      }
+    },
+    {
+      "file": "chromium-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        358,
+        144
+      ],
+      "final": {
+        "bbox": [
+          47,
+          43,
+          345,
+          131
+        ],
+        "pixels": 70,
+        "max": 2
+      },
+      "preRaster": {
+        "bbox": [
+          47,
+          43,
+          345,
+          131
+        ],
+        "pixels": 70,
+        "max": 2
+      }
+    },
+    {
+      "file": "chromium-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        358,
+        144
+      ],
+      "final": {
+        "bbox": [
+          47,
+          43,
+          345,
+          131
+        ],
+        "pixels": 70,
+        "max": 2
+      },
+      "preRaster": {
+        "bbox": [
+          47,
+          43,
+          345,
+          131
+        ],
+        "pixels": 70,
+        "max": 2
+      }
+    },
+    {
+      "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        360,
+        128
+      ],
+      "final": {
+        "bbox": [
+          1,
+          1,
+          359,
+          126
+        ],
+        "pixels": 132,
+        "max": 3
+      },
+      "preRaster": {
+        "bbox": [
+          1,
+          1,
+          359,
+          126
+        ],
+        "pixels": 132,
+        "max": 3
+      }
+    },
+    {
+      "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        360,
+        128
+      ],
+      "final": {
+        "bbox": [
+          1,
+          1,
+          359,
+          126
+        ],
+        "pixels": 132,
+        "max": 3
+      },
+      "preRaster": {
+        "bbox": [
+          1,
+          1,
+          359,
+          126
+        ],
+        "pixels": 132,
+        "max": 3
+      }
+    },
+    {
+      "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        360,
+        128
+      ],
+      "final": {
+        "bbox": [
+          1,
+          1,
+          359,
+          126
+        ],
+        "pixels": 132,
+        "max": 3
+      },
+      "preRaster": {
+        "bbox": [
+          1,
+          1,
+          359,
+          126
+        ],
+        "pixels": 132,
+        "max": 3
+      }
+    },
+    {
+      "file": "chromium-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        358,
+        144
+      ],
+      "final": {
+        "bbox": [
+          1,
+          1,
+          357,
+          143
+        ],
+        "pixels": 119,
+        "max": 3
+      },
+      "preRaster": {
+        "bbox": [
+          1,
+          1,
+          357,
+          143
+        ],
+        "pixels": 119,
+        "max": 3
+      }
+    },
+    {
+      "file": "chromium-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        358,
+        144
+      ],
+      "final": {
+        "bbox": [
+          1,
+          1,
+          357,
+          143
+        ],
+        "pixels": 119,
+        "max": 3
+      },
+      "preRaster": {
+        "bbox": [
+          1,
+          1,
+          357,
+          143
+        ],
+        "pixels": 119,
+        "max": 3
+      }
+    },
+    {
+      "file": "chromium-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        358,
+        144
+      ],
+      "final": {
+        "bbox": [
+          1,
+          1,
+          357,
+          143
+        ],
+        "pixels": 119,
+        "max": 3
+      },
+      "preRaster": {
+        "bbox": [
+          1,
+          1,
+          357,
+          143
+        ],
+        "pixels": 119,
+        "max": 3
+      }
+    },
+    {
+      "file": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        360,
+        128
+      ],
+      "final": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      },
+      "preRaster": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      }
+    },
+    {
+      "file": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        360,
+        128
+      ],
+      "final": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      },
+      "preRaster": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      }
+    },
+    {
+      "file": "webkit-dark-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        360,
+        128
+      ],
+      "final": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      },
+      "preRaster": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      }
+    },
+    {
+      "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        350,
+        144
+      ],
+      "final": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      },
+      "preRaster": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      }
+    },
+    {
+      "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        350,
+        144
+      ],
+      "final": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      },
+      "preRaster": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      }
+    },
+    {
+      "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        350,
+        144
+      ],
+      "final": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      },
+      "preRaster": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      }
+    },
+    {
+      "file": "webkit-light-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        360,
+        128
+      ],
+      "final": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      },
+      "preRaster": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      }
+    },
+    {
+      "file": "webkit-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        360,
+        128
+      ],
+      "final": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      },
+      "preRaster": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      }
+    },
+    {
+      "file": "webkit-light-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        360,
+        128
+      ],
+      "final": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      },
+      "preRaster": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      }
+    },
+    {
+      "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        350,
+        144
+      ],
+      "final": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      },
+      "preRaster": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      }
+    },
+    {
+      "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        350,
+        144
+      ],
+      "final": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      },
+      "preRaster": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      }
+    },
+    {
+      "file": "webkit-light-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+      "size": [
+        350,
+        144
+      ],
+      "final": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      },
+      "preRaster": {
+        "bbox": null,
+        "pixels": 0,
+        "max": 0
+      }
+    }
+  ],
+  "midpoints": [
+    {
+      "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+      "bbox": [
+        426,
+        223,
+        789,
+        298
+      ],
+      "pixels": 779,
+      "max": 2
+    },
+    {
+      "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+      "bbox": [
+        257,
+        399,
+        418,
+        431
+      ],
+      "pixels": 1123,
+      "max": 33
+    },
+    {
+      "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+      "bbox": [
+        24,
+        366,
+        138,
+        398
+      ],
+      "pixels": 739,
+      "max": 35
+    },
+    {
+      "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+      "bbox": [
+        32,
+        399,
+        142,
+        431
+      ],
+      "pixels": 702,
+      "max": 5
+    },
+    {
+      "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+      "bbox": [
+        142,
+        399,
+        257,
+        431
+      ],
+      "pixels": 773,
+      "max": 28
+    },
+    {
+      "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+      "bbox": [
+        24,
+        551,
+        185,
+        583
+      ],
+      "pixels": 1053,
+      "max": 6
+    },
+    {
+      "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+      "bbox": [
+        150,
+        486,
+        264,
+        518
+      ],
+      "pixels": 728,
+      "max": 16
+    },
+    {
+      "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+      "bbox": [
+        32,
+        519,
+        142,
+        551
+      ],
+      "pixels": 769,
+      "max": 48
+    },
+    {
+      "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+      "bbox": [
+        257,
+        399,
+        418,
+        431
+      ],
+      "pixels": 1116,
+      "max": 22
+    },
+    {
+      "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+      "bbox": [
+        24,
+        366,
+        138,
+        398
+      ],
+      "pixels": 756,
+      "max": 28
+    },
+    {
+      "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+      "bbox": [
+        32,
+        399,
+        142,
+        431
+      ],
+      "pixels": 771,
+      "max": 100
+    },
+    {
+      "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+      "bbox": [
+        142,
+        399,
+        257,
+        431
+      ],
+      "pixels": 782,
+      "max": 35
+    },
+    {
+      "file": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+      "bbox": [
+        24,
+        551,
+        185,
+        583
+      ],
+      "pixels": 1113,
+      "max": 42
+    },
+    {
+      "file": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+      "bbox": [
+        150,
+        486,
+        264,
+        518
+      ],
+      "pixels": 652,
+      "max": 3
+    },
+    {
+      "file": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+      "bbox": [
+        32,
+        519,
+        142,
+        551
+      ],
+      "pixels": 771,
+      "max": 59
+    }
+  ],
+  "production": [
+    {
+      "file": "chromium-dark-desktop--P2.3-production-notification-compatibility--production-notification.png",
+      "bbox": [
+        951,
+        59,
+        1251,
+        149
+      ],
+      "pixels": 89,
+      "max": 2
+    },
+    {
+      "file": "chromium-dark-phone--P2.3-production-notification-compatibility--production-notification.png",
+      "bbox": [
+        63,
+        99,
+        361,
+        205
+      ],
+      "pixels": 73,
+      "max": 2
+    },
+    {
+      "file": "chromium-light-desktop--P2.3-production-notification-compatibility--production-notification.png",
+      "bbox": [
+        905,
+        17,
+        1263,
+        160
+      ],
+      "pixels": 129,
+      "max": 3
+    },
+    {
+      "file": "chromium-light-phone--P2.3-production-notification-compatibility--production-notification.png",
+      "bbox": [
+        17,
+        57,
+        373,
+        217
+      ],
+      "pixels": 120,
+      "max": 3
+    },
+    {
+      "file": "webkit-dark-desktop--P2.3-production-notification-compatibility--production-notification.png",
+      "bbox": null,
+      "pixels": 0,
+      "max": 0
+    },
+    {
+      "file": "webkit-dark-phone--P2.3-production-notification-compatibility--production-notification.png",
+      "bbox": null,
+      "pixels": 0,
+      "max": 0
+    },
+    {
+      "file": "webkit-light-desktop--P2.3-production-notification-compatibility--production-notification.png",
+      "bbox": null,
+      "pixels": 0,
+      "max": 0
+    },
+    {
+      "file": "webkit-light-phone--P2.3-production-notification-compatibility--production-notification.png",
+      "bbox": null,
+      "pixels": 0,
+      "max": 0
+    }
+  ]
+}

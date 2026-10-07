@@ -1,0 +1,13 @@
+{
+  "limitMs": 250,
+  "before": 0,
+  "after": 36,
+  "scrollHeight": 1800,
+  "viewportHeight": 844,
+  "input": {
+    "kind": "PageDown",
+    "trusted": true,
+    "afterStartMs": 1.2999999821186066
+  },
+  "movedAfterMs": 24.899999976158142
+}

@@ -5,7 +5,7 @@
 # Output (default dist-bin/), each runner binary gzip-compressed (~2.4 MB each;
 # install.sh and the Go self-updater fetch the .gz and decompress with stdlib gzip):
 #   orbit-linux-x64.gz  orbit-linux-arm64.gz  orbit-darwin-x64.gz  orbit-darwin-arm64.gz
-#   version.json
+#   version.json  (names each .gz with the sha256 of its bytes as served: assets.<platform>)
 #
 # Requires: the Go toolchain on PATH.
 set -euo pipefail
@@ -70,6 +70,7 @@ fi
 
 mkdir -p "$OUT"
 echo ">> source $SOURCE_SHA"
+ASSETS=()
 for t in "${TARGETS[@]}"; do
   suffix="${t%%:*}"
   rest="${t#*:}"
@@ -88,9 +89,11 @@ for t in "${TARGETS[@]}"; do
   fi
   # Ship the binary gzip-compressed; -f replaces orbit-$suffix with orbit-$suffix.gz.
   gzip -9 -f "$ROOT/$OUT/orbit-$suffix"
+  ASSETS+=("$ROOT/$OUT/orbit-$suffix.gz")
 done
 
+# Only the .gz files built above: a stale one left in $OUT must not be vouched for.
 (cd "$SRC" && go run ./cmd/release-manifest \
-  "$VER" "$ROOT/contracts/runner-write-protocol.json" "$ROOT/$OUT/version.json")
+  "$VER" "$ROOT/contracts/runner-write-protocol.json" "$ROOT/$OUT/version.json" "${ASSETS[@]}")
 echo ">> wrote $OUT/version.json (v$VER)"
 ls -lh "$OUT"

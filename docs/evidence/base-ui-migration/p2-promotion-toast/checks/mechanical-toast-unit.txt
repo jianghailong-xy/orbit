@@ -1,0 +1,13 @@
+
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2 src/lib/toast.test.tsx src/lib/toastFeed.test.ts
+
+
+ RUN  v5.0.2 /root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web
+
+
+ Test Files  2 passed (2)
+      Tests  28 passed (28)
+   Start at  19:41:20
+   Duration  1.48s (transform 35%, import 28%, environment 26%, tests 11%)
+

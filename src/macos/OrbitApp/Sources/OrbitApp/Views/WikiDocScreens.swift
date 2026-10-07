@@ -8,8 +8,10 @@ import OrbitKit
 
 extension AppModel {
     /// The workspace the space's maintenance runs in, as this client holds it.
-    private var wikiMaintenanceAgent: Agent? {
-        guard let id = wiki?.currentSpace?.settings?.maintenance?.workspaceId else { return nil }
+    private var wikiMaintenanceAgent: Agent? { wikiMaintenanceAgent(of: wiki?.currentSpace) }
+
+    private func wikiMaintenanceAgent(of space: WikiSpace?) -> Agent? {
+        guard let id = space?.settings?.maintenance?.workspaceId else { return nil }
         return agents?.items.first { PublicID.storageKey($0.id) == PublicID.storageKey(id) }
     }
 
@@ -18,8 +20,11 @@ extension AppModel {
 
     /// Whether that runner is online — nil when unknown. A job whose run has not started on a runner that is
     /// offline is held (owner's call 2026-09-29), as the web's `useWikiMaintenanceWhere` reads it.
-    var wikiMaintenanceRunnerOnline: Bool? {
-        guard let runner = wikiMaintenanceRunnerID, let online = agents?.runnerOnline else { return nil }
+    var wikiMaintenanceRunnerOnline: Bool? { wikiMaintenanceRunnerOnline(of: wiki?.currentSpace) }
+
+    /// The same of any space: Activity says what waits in the other spaces' plans too.
+    func wikiMaintenanceRunnerOnline(of space: WikiSpace?) -> Bool? {
+        guard let runner = wikiMaintenanceAgent(of: space)?.runnerId, let online = agents?.runnerOnline else { return nil }
         return online.first { PublicID.storageKey($0.key) == PublicID.storageKey(runner) }?.value
     }
 
@@ -66,6 +71,7 @@ struct WikiDocScreen: View {
             .task {
                 await wiki.loadDoc(address.slug)
                 await wiki.loadDocsDirectory()
+                if wiki.entries.isEmpty { await wiki.loadEntries() }
             }
             .refreshable { await wiki.loadDoc(address.slug) }
             .sheet(isPresented: $contentsShown) {
@@ -82,10 +88,10 @@ struct WikiDocScreen: View {
         return (docs.written, docs.total)
     }
 
-    /// The space's entries the home read, by id: the summaries under the entries the quotes came through.
+    /// The space's newest entries, by id: the summaries under the entries the quotes came through.
     private func summaries(_ wiki: WikiModel) -> [String: String] {
         var out: [String: String] = [:]
-        for entry in wiki.home?.entries ?? [] { if let summary = entry.summary { out[PublicID.storageKey(entry.id)] = summary } }
+        for entry in wiki.entries { if let summary = entry.summary { out[PublicID.storageKey(entry.id)] = summary } }
         return out
     }
 
@@ -134,6 +140,7 @@ struct WikiPlanScreen: View {
     @State private var editing: WikiPlanEditTarget?
     @State private var refused: [String: [WikiPlanGateError]] = [:]
     @State private var notice: String?
+    @State private var noticeTitle = WikiCopy.planDraftFailed
 
     var body: some View {
         if let wiki = model.wiki {
@@ -149,7 +156,7 @@ struct WikiPlanScreen: View {
                 }
                 .sheet(isPresented: $redrafting) { redraftSheet(wiki) }
                 .sheet(item: $editing) { target in editSheet(wiki, target) }
-                .alert(WikiCopy.refused, isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
+                .alert(noticeTitle, isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
                     Button("OK", role: .cancel) { notice = nil }
                 } message: {
                     Text(notice ?? "")
@@ -255,9 +262,10 @@ struct WikiPlanScreen: View {
     // MARK: the writes
 
     /// Draft plan, or Redraft… with the owner's words. True once the server took it.
-    private func redraft(_ wiki: WikiModel, _ words: String?) async -> Bool {
+    private func redraft(_ wiki: WikiModel, _ words: String?, failure: String = WikiCopy.planDraftFailed) async -> Bool {
         let answer = await wiki.redraftPlan(instructions: words)
         if let refusal = answer.refusal {
+            noticeTitle = failure
             notice = refusal
             return false
         }
@@ -271,8 +279,10 @@ struct WikiPlanScreen: View {
             model.showToast(WikiPlanCopy.confirmed(confirmed))
             if address.version != nil && address.doc == nil { model.nav.replaceTop(with: .wikiPlan(version: nil)) }
         case .refused(let errors):
+            noticeTitle = WikiCopy.planConfirmFailed
             notice = errors.map { "\($0.path) \($0.message)" }.joined(separator: "\n")
         case .failed(let message):
+            noticeTitle = WikiCopy.planConfirmFailed
             notice = message
         }
     }
@@ -292,12 +302,14 @@ struct WikiPlanScreen: View {
         case .refused(let errors):
             refused[proposal.id] = errors
         case .failed(let message):
+            noticeTitle = edit ? WikiCopy.changeEditFailed : WikiCopy.changeAcceptFailed
             notice = message
         }
     }
 
     private func reject(_ wiki: WikiModel, _ proposal: WikiPlanProposal) async {
         if let message = await wiki.rejectPlanProposal(proposal.id) {
+            noticeTitle = WikiCopy.changeRejectFailed
             notice = message
         } else {
             model.showToast(WikiPlanCopy.changeRejected)
@@ -327,7 +339,7 @@ struct WikiPlanScreen: View {
                                                             from: newest.map { version -> (version: Int, inForce: Bool) in
                                                                 (version.version, version.status == .confirmed)
                                                             }),
-                             protectedDocs: protected) { words in await redraft(wiki, words) }
+                             protectedDocs: protected) { words in await redraft(wiki, words, failure: WikiCopy.planRedraftFailed) }
     }
 
     /// Edit a document, or one of its sections, of the newest version — the draft waiting, else the one in force.

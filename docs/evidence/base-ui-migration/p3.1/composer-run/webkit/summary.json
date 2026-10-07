@@ -1,0 +1,2552 @@
+{
+  "stats": {
+    "startTime": "2026-10-06T08:02:10.989Z",
+    "duration": 230103.036,
+    "expected": 60,
+    "skipped": 12,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "webkit-light-desktop--records-per-keystroke-cost-of-the-session-field-with-short-and-long-drafts",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 285
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-light-phone--records-per-keystroke-cost-of-the-session-field-with-short-and-long-drafts",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 137
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-dark-desktop--records-per-keystroke-cost-of-the-session-field-with-short-and-long-drafts",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 135
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-dark-phone--records-per-keystroke-cost-of-the-session-field-with-short-and-long-drafts",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 148
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-light-desktop--session-Enter-sends-Shift-Enter-breaks-the-line-Chinese-composition-never-sends",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2544
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--session-Enter-sends-Shift-Enter-breaks-the-line-Chinese-composition-never-sends--session-keys-and-ime.json",
+          "sha256": "d8f91082682bea2167d364568ba51ac81bfcbbba168d88f1d9d70d5706efe13b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--comment-Ctrl-Meta-Enter-posts-plain-Enter-and-composition-keep-editing",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2217
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--comment-Ctrl-Meta-Enter-posts-plain-Enter-and-composition-keep-editing--comment-keys-and-ime.json",
+          "sha256": "41fece97f1b955c0b28a1130dcd5f37481996abd6ac49de8b01e5ab5d046226b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--session-menus-arrows-Enter-Tab-Escape-and-pointer-keep-the-field-focused-with-the-caret-at-the-end",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3163
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--session-menus-arrows-Enter-Tab-Escape-and-pointer-keep-the-field-focused-with-the-caret-at-the-end--session-menus.json",
+          "sha256": "7ce617b9d5d146903b84ea458fb344ac62c788a110affd3373930d112c7025b3"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--comment--mention-restores-focus-and-the-caret-through-the-native-ref",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2833
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--comment--mention-restores-focus-and-the-caret-through-the-native-ref--comment-mention-caret.json",
+          "sha256": "35d946c596340c342a3621ecd5ee6f3c0c991baca1f82f7be317fb0758d878b0"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--paste-text-and-files-the-50-000-character-cap-and-history-recall",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2970
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--paste-text-and-files-the-50-000-character-cap-and-history-recall--session-paste-history.json",
+          "sha256": "5edb758e98f27a308fdc73479b3243a4fb36a7e42a9bfab8255b0c7729b79fe2"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--session-Enter-sends-Shift-Enter-breaks-the-line-Chinese-composition-never-sends",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2398
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--session-Enter-sends-Shift-Enter-breaks-the-line-Chinese-composition-never-sends--session-keys-and-ime.json",
+          "sha256": "d8f91082682bea2167d364568ba51ac81bfcbbba168d88f1d9d70d5706efe13b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--comment-Ctrl-Meta-Enter-posts-plain-Enter-and-composition-keep-editing",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1919
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--comment-Ctrl-Meta-Enter-posts-plain-Enter-and-composition-keep-editing--comment-keys-and-ime.json",
+          "sha256": "0eb73e0376140870e461abbba5c15f7e5adbc6b421da5771fe7bc17503b162ae"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--session-menus-arrows-Enter-Tab-Escape-and-pointer-keep-the-field-focused-with-the-caret-at-the-end",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3015
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--session-menus-arrows-Enter-Tab-Escape-and-pointer-keep-the-field-focused-with-the-caret-at-the-end--session-menus.json",
+          "sha256": "82830cf0b1cc18ea3441fd6ac6df067376521f550b30668394262e5793387965"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--comment--mention-restores-focus-and-the-caret-through-the-native-ref",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2832
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--comment--mention-restores-focus-and-the-caret-through-the-native-ref--comment-mention-caret.json",
+          "sha256": "293536317051ca9f4f3756a6013879fc11603aa986c3fd438ec3d4cd3dd1c4ed"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--paste-text-and-files-the-50-000-character-cap-and-history-recall",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2695
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--paste-text-and-files-the-50-000-character-cap-and-history-recall--session-paste-history.json",
+          "sha256": "5edb758e98f27a308fdc73479b3243a4fb36a7e42a9bfab8255b0c7729b79fe2"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--session-Enter-sends-Shift-Enter-breaks-the-line-Chinese-composition-never-sends",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2383
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--session-Enter-sends-Shift-Enter-breaks-the-line-Chinese-composition-never-sends--session-keys-and-ime.json",
+          "sha256": "d8f91082682bea2167d364568ba51ac81bfcbbba168d88f1d9d70d5706efe13b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--comment-Ctrl-Meta-Enter-posts-plain-Enter-and-composition-keep-editing",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2140
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--comment-Ctrl-Meta-Enter-posts-plain-Enter-and-composition-keep-editing--comment-keys-and-ime.json",
+          "sha256": "41fece97f1b955c0b28a1130dcd5f37481996abd6ac49de8b01e5ab5d046226b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--session-menus-arrows-Enter-Tab-Escape-and-pointer-keep-the-field-focused-with-the-caret-at-the-end",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3151
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--session-menus-arrows-Enter-Tab-Escape-and-pointer-keep-the-field-focused-with-the-caret-at-the-end--session-menus.json",
+          "sha256": "7ce617b9d5d146903b84ea458fb344ac62c788a110affd3373930d112c7025b3"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--comment--mention-restores-focus-and-the-caret-through-the-native-ref",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2352
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--comment--mention-restores-focus-and-the-caret-through-the-native-ref--comment-mention-caret.json",
+          "sha256": "35d946c596340c342a3621ecd5ee6f3c0c991baca1f82f7be317fb0758d878b0"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--paste-text-and-files-the-50-000-character-cap-and-history-recall",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3013
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--paste-text-and-files-the-50-000-character-cap-and-history-recall--session-paste-history.json",
+          "sha256": "5edb758e98f27a308fdc73479b3243a4fb36a7e42a9bfab8255b0c7729b79fe2"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--session-Enter-sends-Shift-Enter-breaks-the-line-Chinese-composition-never-sends",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2429
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--session-Enter-sends-Shift-Enter-breaks-the-line-Chinese-composition-never-sends--session-keys-and-ime.json",
+          "sha256": "d8f91082682bea2167d364568ba51ac81bfcbbba168d88f1d9d70d5706efe13b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--comment-Ctrl-Meta-Enter-posts-plain-Enter-and-composition-keep-editing",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1841
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--comment-Ctrl-Meta-Enter-posts-plain-Enter-and-composition-keep-editing--comment-keys-and-ime.json",
+          "sha256": "0eb73e0376140870e461abbba5c15f7e5adbc6b421da5771fe7bc17503b162ae"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--session-menus-arrows-Enter-Tab-Escape-and-pointer-keep-the-field-focused-with-the-caret-at-the-end",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2959
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--session-menus-arrows-Enter-Tab-Escape-and-pointer-keep-the-field-focused-with-the-caret-at-the-end--session-menus.json",
+          "sha256": "82830cf0b1cc18ea3441fd6ac6df067376521f550b30668394262e5793387965"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--comment--mention-restores-focus-and-the-caret-through-the-native-ref",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2600
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--comment--mention-restores-focus-and-the-caret-through-the-native-ref--comment-mention-caret.json",
+          "sha256": "293536317051ca9f4f3756a6013879fc11603aa986c3fd438ec3d4cd3dd1c4ed"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--paste-text-and-files-the-50-000-character-cap-and-history-recall",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2534
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--paste-text-and-files-the-50-000-character-cap-and-history-recall--session-paste-history.json",
+          "sha256": "5edb758e98f27a308fdc73479b3243a4fb36a7e42a9bfab8255b0c7729b79fe2"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 13318
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-idle-ant.png",
+          "sha256": "b0d698f7d137115d415163dc45ac71ea37482a63743566f70c3161660bb3b0c2"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-idle-orbit.png",
+          "sha256": "b0d698f7d137115d415163dc45ac71ea37482a63743566f70c3161660bb3b0c2"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-one-line-ant.png",
+          "sha256": "d6db123a22575edce159b00635375a2f02ccb568395d9bd634f3b2b9d8782899"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-one-line-orbit.png",
+          "sha256": "d6db123a22575edce159b00635375a2f02ccb568395d9bd634f3b2b9d8782899"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-two-lines-ant.png",
+          "sha256": "7b5d059deb90fdb2f5b1829b0d5859d1649ec593d3b30258f4a9a2e434251468"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-two-lines-orbit.png",
+          "sha256": "7b5d059deb90fdb2f5b1829b0d5859d1649ec593d3b30258f4a9a2e434251468"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-capped-scrolled-to-end-ant.png",
+          "sha256": "317b2f6dd263e99ac6dce71cd7df9f24197571140fe775a9964ea5a61369226f"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-capped-scrolled-to-end-orbit.png",
+          "sha256": "317b2f6dd263e99ac6dce71cd7df9f24197571140fe775a9964ea5a61369226f"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-shell-mode-ant.png",
+          "sha256": "93763be3cb5a42120f9b92a083454c166b670b52e09a4a357f4eacbe39c6896f"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-shell-mode-orbit.png",
+          "sha256": "93763be3cb5a42120f9b92a083454c166b670b52e09a4a357f4eacbe39c6896f"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-cleared-ant.png",
+          "sha256": "0a1f5b68110261816c08fc46697f6441387b008999977c6ee88827ebc9957c1c"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-cleared-orbit.png",
+          "sha256": "0a1f5b68110261816c08fc46697f6441387b008999977c6ee88827ebc9957c1c"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-before-edit-ant.png",
+          "sha256": "c310ceb6a5216353c2b10fac3bb585134e6ad04278bdfe3d57558fb609b41181"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-before-edit-orbit.png",
+          "sha256": "c310ceb6a5216353c2b10fac3bb585134e6ad04278bdfe3d57558fb609b41181"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-after-edit-ant.png",
+          "sha256": "b3fc3322efb752e1f8ede5dd9277beaf033e01d99239ab3095b1de1101b51d17"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-after-edit-orbit.png",
+          "sha256": "b3fc3322efb752e1f8ede5dd9277beaf033e01d99239ab3095b1de1101b51d17"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-states.json",
+          "sha256": "4cb610b36fabf9e60209e63922a10235ffb7c974365518ae1f838ab04bca2480"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 7739
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-idle-ant.png",
+          "sha256": "3860814f23f88b1fa5d0fcedb77a3b0a5ea376a6512c0364a564062aec70fc85"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-idle-orbit.png",
+          "sha256": "3860814f23f88b1fa5d0fcedb77a3b0a5ea376a6512c0364a564062aec70fc85"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-two-lines-ant.png",
+          "sha256": "ecfbf14b530c9d79f8e95860ea0dc7b9a81d1389bbcbe3a415916341bf2c6d1b"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-two-lines-orbit.png",
+          "sha256": "ecfbf14b530c9d79f8e95860ea0dc7b9a81d1389bbcbe3a415916341bf2c6d1b"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-states.json",
+          "sha256": "1658e1705fde0b48eaebbdbb502eee81416b24247bb33a52036e608291d5a7ba"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-ant.png",
+          "sha256": "d1100ec375113fc96f38bcd74760b0fc133da91a9d0ddff580e5ca4eb25d71df"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-orbit.png",
+          "sha256": "d1100ec375113fc96f38bcd74760b0fc133da91a9d0ddff580e5ca4eb25d71df"
+        },
+        {
+          "file": "webkit-light-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-text-Read-20only-20draft-states.json",
+          "sha256": "6e72ee9cfaa5b9cc14090064645b761b83dde5e3b91a236112ff91adf34450b6"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5991
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-idle-ant.png",
+          "sha256": "912bd56cffeaf0b5c913356745f1d5095adaf2280038d1a6f0ce9b947d014c9b"
+        },
+        {
+          "file": "webkit-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-idle-orbit.png",
+          "sha256": "912bd56cffeaf0b5c913356745f1d5095adaf2280038d1a6f0ce9b947d014c9b"
+        },
+        {
+          "file": "webkit-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-hover-ant.png",
+          "sha256": "2f9c14b1fc1cc626150479e2505378c808dc21d2ca63c60097a51feb4c6e8a20"
+        },
+        {
+          "file": "webkit-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-hover-orbit.png",
+          "sha256": "2f9c14b1fc1cc626150479e2505378c808dc21d2ca63c60097a51feb4c6e8a20"
+        },
+        {
+          "file": "webkit-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-focused-ant.png",
+          "sha256": "ab7bfc5cb29a1ca00c608fb5bf733ca9085db1a06e9711fc40587ce9da681778"
+        },
+        {
+          "file": "webkit-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-focused-orbit.png",
+          "sha256": "ab7bfc5cb29a1ca00c608fb5bf733ca9085db1a06e9711fc40587ce9da681778"
+        },
+        {
+          "file": "webkit-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-one-line-ant.png",
+          "sha256": "a4de48e3b31af0fdd462fa3d06b5ebab5f16f13e8b6d436cfa79fef4e000a547"
+        },
+        {
+          "file": "webkit-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-one-line-orbit.png",
+          "sha256": "a4de48e3b31af0fdd462fa3d06b5ebab5f16f13e8b6d436cfa79fef4e000a547"
+        },
+        {
+          "file": "webkit-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-two-lines-ant.png",
+          "sha256": "75f2512ace9e9575e1540ac112f6b52b5afa5eb27ba3d6b0413aeaac329150ae"
+        },
+        {
+          "file": "webkit-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-two-lines-orbit.png",
+          "sha256": "75f2512ace9e9575e1540ac112f6b52b5afa5eb27ba3d6b0413aeaac329150ae"
+        },
+        {
+          "file": "webkit-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-capped-scrolled-ant.png",
+          "sha256": "d06355ff7359def1419c5bbaff83139c50b408f627890a18c94d6c2a932d8bac"
+        },
+        {
+          "file": "webkit-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-capped-scrolled-orbit.png",
+          "sha256": "d06355ff7359def1419c5bbaff83139c50b408f627890a18c94d6c2a932d8bac"
+        },
+        {
+          "file": "webkit-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-cleared-ant.png",
+          "sha256": "2f9c14b1fc1cc626150479e2505378c808dc21d2ca63c60097a51feb4c6e8a20"
+        },
+        {
+          "file": "webkit-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-cleared-orbit.png",
+          "sha256": "2f9c14b1fc1cc626150479e2505378c808dc21d2ca63c60097a51feb4c6e8a20"
+        },
+        {
+          "file": "webkit-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-states.json",
+          "sha256": "bf8dbab5257c2d5ad4e6cf96aa34ec4da605b07cce1af9c2a20950468803eee6"
+        },
+        {
+          "file": "webkit-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-ant.png",
+          "sha256": "77494c0b54b5145c10f379bc2bd675da0b03b2360b5d05fe8bde14f59fe97de5"
+        },
+        {
+          "file": "webkit-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-orbit.png",
+          "sha256": "77494c0b54b5145c10f379bc2bd675da0b03b2360b5d05fe8bde14f59fe97de5"
+        },
+        {
+          "file": "webkit-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-text-Read-20only-states.json",
+          "sha256": "a0c1bbdcda90b48d58e94f9e9582655b6a3e56f34017ca63512ee16e4cad78b6"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2894
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-rest-ant.png",
+          "sha256": "f5176ce625c5f922cda1e9670a3a9af7fd72c2514d3460c06e25ff14760eafb6"
+        },
+        {
+          "file": "webkit-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-rest-orbit.png",
+          "sha256": "f5176ce625c5f922cda1e9670a3a9af7fd72c2514d3460c06e25ff14760eafb6"
+        },
+        {
+          "file": "webkit-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-keyboard-focus-ant.png",
+          "sha256": "d211e70a14458a8013918370544dfc9ccb613d3fb9fdbda030bc7c8e2ae42a3f"
+        },
+        {
+          "file": "webkit-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-keyboard-focus-orbit.png",
+          "sha256": "d211e70a14458a8013918370544dfc9ccb613d3fb9fdbda030bc7c8e2ae42a3f"
+        },
+        {
+          "file": "webkit-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-focus-and-hover-ant.png",
+          "sha256": "d211e70a14458a8013918370544dfc9ccb613d3fb9fdbda030bc7c8e2ae42a3f"
+        },
+        {
+          "file": "webkit-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-focus-and-hover-orbit.png",
+          "sha256": "d211e70a14458a8013918370544dfc9ccb613d3fb9fdbda030bc7c8e2ae42a3f"
+        },
+        {
+          "file": "webkit-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-typed-ant.png",
+          "sha256": "45db91615be46416aaa3f0f5bfa534e837a90bf831e6f2b994cbcd525029639a"
+        },
+        {
+          "file": "webkit-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-typed-orbit.png",
+          "sha256": "45db91615be46416aaa3f0f5bfa534e837a90bf831e6f2b994cbcd525029639a"
+        },
+        {
+          "file": "webkit-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-states.json",
+          "sha256": "1fdd9f091239d412479f029e7cb0027e5229328843c07f9ebce89959fe56708d"
+        },
+        {
+          "file": "webkit-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-ant.png",
+          "sha256": "372bd0fd47dad34416ea7e1f97077249476c8c311370597a7d0532bee6518df7"
+        },
+        {
+          "file": "webkit-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-orbit.png",
+          "sha256": "372bd0fd47dad34416ea7e1f97077249476c8c311370597a7d0532bee6518df7"
+        },
+        {
+          "file": "webkit-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-text-Disabled-states.json",
+          "sha256": "4d476c43367fc10e7fa461ce53885a2c061415a38c0f2b3d996d6cf557b8886a"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3995
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-capped-handle-shown-ant.png",
+          "sha256": "ebcae3d462b077544903d75d4fa87307c357c971d30cf72d2e558209bfcb08a8"
+        },
+        {
+          "file": "webkit-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-capped-handle-shown-orbit.png",
+          "sha256": "ebcae3d462b077544903d75d4fa87307c357c971d30cf72d2e558209bfcb08a8"
+        },
+        {
+          "file": "webkit-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-dragged-taller-ant.png",
+          "sha256": "839ab7c89662b3d2cc8a84f57a5d008b0ac01bd926f000cb3da9cfb7de0efd52"
+        },
+        {
+          "file": "webkit-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-dragged-taller-orbit.png",
+          "sha256": "839ab7c89662b3d2cc8a84f57a5d008b0ac01bd926f000cb3da9cfb7de0efd52"
+        },
+        {
+          "file": "webkit-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-clamped-minimum-ant.png",
+          "sha256": "4b1755c5246b8ed2b0a1d166966b41210d523a5464905053fa0dd7e85c68f24f"
+        },
+        {
+          "file": "webkit-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-clamped-minimum-orbit.png",
+          "sha256": "4b1755c5246b8ed2b0a1d166966b41210d523a5464905053fa0dd7e85c68f24f"
+        },
+        {
+          "file": "webkit-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-manual-height-kept-for-short-text-ant.png",
+          "sha256": "eb7f0bc9deeba55c4f0bdb8e80043443a40dfb96e5ac58ae4eca2358613829b8"
+        },
+        {
+          "file": "webkit-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-manual-height-kept-for-short-text-orbit.png",
+          "sha256": "eb7f0bc9deeba55c4f0bdb8e80043443a40dfb96e5ac58ae4eca2358613829b8"
+        },
+        {
+          "file": "webkit-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-reset-to-auto-ant.png",
+          "sha256": "a18fd9d29444fc72c42b6f0a44f404d340ee2a1db8ee683f5832681e03124131"
+        },
+        {
+          "file": "webkit-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-reset-to-auto-orbit.png",
+          "sha256": "a18fd9d29444fc72c42b6f0a44f404d340ee2a1db8ee683f5832681e03124131"
+        },
+        {
+          "file": "webkit-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-states.json",
+          "sha256": "d8c89bb1bbb204e90cb199d78c467c3cef9508727eae2961a957cc635fead063"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3598
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-ant-field.png",
+          "sha256": "60f8b3026a7d1bb2460203b03f4d08731d94f3b59fb45b7e12e3da1ddd6b4f97"
+        },
+        {
+          "file": "webkit-light-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-ant-mirror.png",
+          "sha256": "60f8b3026a7d1bb2460203b03f4d08731d94f3b59fb45b7e12e3da1ddd6b4f97"
+        },
+        {
+          "file": "webkit-light-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-ant-field.png",
+          "sha256": "9b24f658143aaa657c175c34620050cc5b1f3f594bc1e1a6dfd2037488a861f5"
+        },
+        {
+          "file": "webkit-light-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-ant-mirror.png",
+          "sha256": "9b24f658143aaa657c175c34620050cc5b1f3f594bc1e1a6dfd2037488a861f5"
+        },
+        {
+          "file": "webkit-light-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-orbit-field.png",
+          "sha256": "60f8b3026a7d1bb2460203b03f4d08731d94f3b59fb45b7e12e3da1ddd6b4f97"
+        },
+        {
+          "file": "webkit-light-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-orbit-mirror.png",
+          "sha256": "60f8b3026a7d1bb2460203b03f4d08731d94f3b59fb45b7e12e3da1ddd6b4f97"
+        },
+        {
+          "file": "webkit-light-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-orbit-field.png",
+          "sha256": "9b24f658143aaa657c175c34620050cc5b1f3f594bc1e1a6dfd2037488a861f5"
+        },
+        {
+          "file": "webkit-light-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-orbit-mirror.png",
+          "sha256": "9b24f658143aaa657c175c34620050cc5b1f3f594bc1e1a6dfd2037488a861f5"
+        },
+        {
+          "file": "webkit-light-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--mirror-probe.json",
+          "sha256": "30a46fcdb35f3b045e9020fe866b11ee1dac512cbb046a5c65118a6965bfc5e1"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 6809
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-idle-ant.png",
+          "sha256": "ba792126b5aea787f70cddf09ab09b669e366de0d26102cf04c5dcdd06352c22"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-idle-orbit.png",
+          "sha256": "ba792126b5aea787f70cddf09ab09b669e366de0d26102cf04c5dcdd06352c22"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-one-line-ant.png",
+          "sha256": "72620b4876897877b5e3d04cad8547c27d9929dec31b8662ab6aeedac49a72bf"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-one-line-orbit.png",
+          "sha256": "72620b4876897877b5e3d04cad8547c27d9929dec31b8662ab6aeedac49a72bf"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-two-lines-ant.png",
+          "sha256": "292855a37c29755e717796b8bc8fe0bf9182f99323feff5f22780191554be092"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-two-lines-orbit.png",
+          "sha256": "292855a37c29755e717796b8bc8fe0bf9182f99323feff5f22780191554be092"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-capped-scrolled-to-end-ant.png",
+          "sha256": "1a0f8804b2c0607b186e748a5528b07561cf531a93402b5f4f5876b7e8fb2033"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-capped-scrolled-to-end-orbit.png",
+          "sha256": "1a0f8804b2c0607b186e748a5528b07561cf531a93402b5f4f5876b7e8fb2033"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-shell-mode-ant.png",
+          "sha256": "d1469923c247387db2c2c52b9e4d015eab1db12a2fc50a91f832583e96949827"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-shell-mode-orbit.png",
+          "sha256": "d1469923c247387db2c2c52b9e4d015eab1db12a2fc50a91f832583e96949827"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-cleared-ant.png",
+          "sha256": "2d82e9e78eb39ea625490ccd660b9d24d7f45b9cea093cdf69d4d1659c9ef81f"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-cleared-orbit.png",
+          "sha256": "2d82e9e78eb39ea625490ccd660b9d24d7f45b9cea093cdf69d4d1659c9ef81f"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-before-edit-ant.png",
+          "sha256": "7037bfb84eda0c03af320d724f016937690b33146d0db5cd180cdaf85520125d"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-before-edit-orbit.png",
+          "sha256": "7037bfb84eda0c03af320d724f016937690b33146d0db5cd180cdaf85520125d"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-after-edit-ant.png",
+          "sha256": "a25ddccaa709cbc9186b41e5e6a0c8fa9e0e9df78c7f62325377ea2412bb6f72"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-after-edit-orbit.png",
+          "sha256": "a25ddccaa709cbc9186b41e5e6a0c8fa9e0e9df78c7f62325377ea2412bb6f72"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-states.json",
+          "sha256": "b7bdfbcc3c933427fa8538bd48ee54493c4445fdc54dff120e849c311531c929"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3310
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-idle-ant.png",
+          "sha256": "95503d1b201986cfe3d0825450c283b34081ff727ad359b53d6714bfe391164a"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-idle-orbit.png",
+          "sha256": "95503d1b201986cfe3d0825450c283b34081ff727ad359b53d6714bfe391164a"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-two-lines-ant.png",
+          "sha256": "5801c00c965888d005f7c1c771745b930f7349ce513b1969fea7bca188c84ea7"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-two-lines-orbit.png",
+          "sha256": "5801c00c965888d005f7c1c771745b930f7349ce513b1969fea7bca188c84ea7"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-states.json",
+          "sha256": "d2b71356b850cae63937cc8f0bc41edc5e68a4eb3a458aba2ae7f3044f34ac4f"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-ant.png",
+          "sha256": "a153770725118a241097271cdb6da7b5f81187c5e41887f6b0a39a8ed7d13106"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-orbit.png",
+          "sha256": "a153770725118a241097271cdb6da7b5f81187c5e41887f6b0a39a8ed7d13106"
+        },
+        {
+          "file": "webkit-light-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-text-Read-20only-20draft-states.json",
+          "sha256": "9c7e17c99a5b176c7f4ff92e5f89dbcac12ff4dea913b70d13fe46cf46fe1b4a"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5700
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-idle-ant.png",
+          "sha256": "a8acae427841cee6815643981ddfbf58e79ecd9cd69d3ce759c6aaa01454a9ca"
+        },
+        {
+          "file": "webkit-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-idle-orbit.png",
+          "sha256": "a8acae427841cee6815643981ddfbf58e79ecd9cd69d3ce759c6aaa01454a9ca"
+        },
+        {
+          "file": "webkit-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-focused-ant.png",
+          "sha256": "1fd0d3190e35b3326e3233ac124252d042f76dc7b805b14f87d9003c31050138"
+        },
+        {
+          "file": "webkit-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-focused-orbit.png",
+          "sha256": "1fd0d3190e35b3326e3233ac124252d042f76dc7b805b14f87d9003c31050138"
+        },
+        {
+          "file": "webkit-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-one-line-ant.png",
+          "sha256": "24907489d8d65a5f3b1f26e03965452451591b169660fb82519416a366629228"
+        },
+        {
+          "file": "webkit-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-one-line-orbit.png",
+          "sha256": "24907489d8d65a5f3b1f26e03965452451591b169660fb82519416a366629228"
+        },
+        {
+          "file": "webkit-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-two-lines-ant.png",
+          "sha256": "31541ac15db19a41fdb2dd40a04b2a83f9987c2b293182a36c875c92b65ca856"
+        },
+        {
+          "file": "webkit-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-two-lines-orbit.png",
+          "sha256": "31541ac15db19a41fdb2dd40a04b2a83f9987c2b293182a36c875c92b65ca856"
+        },
+        {
+          "file": "webkit-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-capped-scrolled-ant.png",
+          "sha256": "22667139c9484d250b3ff715a4807340fd8a94e148c9a31de9a2b7b67b18fde4"
+        },
+        {
+          "file": "webkit-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-capped-scrolled-orbit.png",
+          "sha256": "22667139c9484d250b3ff715a4807340fd8a94e148c9a31de9a2b7b67b18fde4"
+        },
+        {
+          "file": "webkit-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-cleared-ant.png",
+          "sha256": "a8acae427841cee6815643981ddfbf58e79ecd9cd69d3ce759c6aaa01454a9ca"
+        },
+        {
+          "file": "webkit-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-cleared-orbit.png",
+          "sha256": "a8acae427841cee6815643981ddfbf58e79ecd9cd69d3ce759c6aaa01454a9ca"
+        },
+        {
+          "file": "webkit-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-states.json",
+          "sha256": "390f6f8eaa2e6b06d07661f83869142554a5cf9862dfbbd7b72e16553d77f9cc"
+        },
+        {
+          "file": "webkit-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-ant.png",
+          "sha256": "bbde5326dfd4558a50cc5bc758e916c1c866598d844c04639f72c1136e9f9f3c"
+        },
+        {
+          "file": "webkit-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-orbit.png",
+          "sha256": "bbde5326dfd4558a50cc5bc758e916c1c866598d844c04639f72c1136e9f9f3c"
+        },
+        {
+          "file": "webkit-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-text-Read-20only-states.json",
+          "sha256": "bfa4d6cfe74c4a11be6b3b1d25472f0697293c79931ac4dc9e5964e0839c1125"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3361
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-rest-ant.png",
+          "sha256": "2477a10ecd8391fff6ec0152a448031d1d8071dcf557a87b4b80637ddbdbf9d2"
+        },
+        {
+          "file": "webkit-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-rest-orbit.png",
+          "sha256": "2477a10ecd8391fff6ec0152a448031d1d8071dcf557a87b4b80637ddbdbf9d2"
+        },
+        {
+          "file": "webkit-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-keyboard-focus-ant.png",
+          "sha256": "26e0fd35848a526c32e4b907de15e03468db5eeecb22376d3550fc41ea05cb31"
+        },
+        {
+          "file": "webkit-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-keyboard-focus-orbit.png",
+          "sha256": "26e0fd35848a526c32e4b907de15e03468db5eeecb22376d3550fc41ea05cb31"
+        },
+        {
+          "file": "webkit-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-focus-and-hover-ant.png",
+          "sha256": "26e0fd35848a526c32e4b907de15e03468db5eeecb22376d3550fc41ea05cb31"
+        },
+        {
+          "file": "webkit-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-focus-and-hover-orbit.png",
+          "sha256": "26e0fd35848a526c32e4b907de15e03468db5eeecb22376d3550fc41ea05cb31"
+        },
+        {
+          "file": "webkit-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-typed-ant.png",
+          "sha256": "6d15e6754ddf438a73bcf0a1ac5aee247d3cba127e08cc740cfb8159d1db9fef"
+        },
+        {
+          "file": "webkit-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-typed-orbit.png",
+          "sha256": "6d15e6754ddf438a73bcf0a1ac5aee247d3cba127e08cc740cfb8159d1db9fef"
+        },
+        {
+          "file": "webkit-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-states.json",
+          "sha256": "1929b55a021e550a134615a38c1218ff43df4ab9e28b9034675810a276d437c6"
+        },
+        {
+          "file": "webkit-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-ant.png",
+          "sha256": "2db0f7a96441245ce6807886c750ae5e787f03c33bdc628e870dfe616bff9ade"
+        },
+        {
+          "file": "webkit-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-orbit.png",
+          "sha256": "2db0f7a96441245ce6807886c750ae5e787f03c33bdc628e870dfe616bff9ade"
+        },
+        {
+          "file": "webkit-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-text-Disabled-states.json",
+          "sha256": "6522047591296cedcc9132f4057db1350e93f926b10caedacae0ba1ca6152e0b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3885
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-capped-handle-shown-ant.png",
+          "sha256": "a60df297813f31db5ec52e8dfd9b0b61596bd0e3a685d2a6b507ff5140f8a4d7"
+        },
+        {
+          "file": "webkit-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-capped-handle-shown-orbit.png",
+          "sha256": "a60df297813f31db5ec52e8dfd9b0b61596bd0e3a685d2a6b507ff5140f8a4d7"
+        },
+        {
+          "file": "webkit-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-dragged-taller-ant.png",
+          "sha256": "359bb68bd52dab8b5574f782f62d0f4dd72fc57dcb5458f68555848bc35cab2f"
+        },
+        {
+          "file": "webkit-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-dragged-taller-orbit.png",
+          "sha256": "359bb68bd52dab8b5574f782f62d0f4dd72fc57dcb5458f68555848bc35cab2f"
+        },
+        {
+          "file": "webkit-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-clamped-minimum-ant.png",
+          "sha256": "765092036bca37fd9d1818cdb1113533d14d45a86aa3973e9466ea7bb928bd74"
+        },
+        {
+          "file": "webkit-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-clamped-minimum-orbit.png",
+          "sha256": "765092036bca37fd9d1818cdb1113533d14d45a86aa3973e9466ea7bb928bd74"
+        },
+        {
+          "file": "webkit-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-manual-height-kept-for-short-text-ant.png",
+          "sha256": "efcfe5f47fe8bd2095d74ddf0ddcb460b86197b9021e6384b7bd708d114b9541"
+        },
+        {
+          "file": "webkit-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-manual-height-kept-for-short-text-orbit.png",
+          "sha256": "efcfe5f47fe8bd2095d74ddf0ddcb460b86197b9021e6384b7bd708d114b9541"
+        },
+        {
+          "file": "webkit-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-reset-to-auto-ant.png",
+          "sha256": "b3f74f59a7aa0ef0b73bc7a59a67bfbf6b97aeffc66f53045eb2509be4cadf7e"
+        },
+        {
+          "file": "webkit-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-reset-to-auto-orbit.png",
+          "sha256": "b3f74f59a7aa0ef0b73bc7a59a67bfbf6b97aeffc66f53045eb2509be4cadf7e"
+        },
+        {
+          "file": "webkit-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-states.json",
+          "sha256": "0ee47d537da522665291fe15b0ac578663f7ee8daf19ddedfa627c4835901d43"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3635
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-ant-field.png",
+          "sha256": "e6bd92ddc80aa6ae40a61980d75ecf56e874fba1cf916db5cd6783ffdc63dc81"
+        },
+        {
+          "file": "webkit-light-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-ant-mirror.png",
+          "sha256": "e6bd92ddc80aa6ae40a61980d75ecf56e874fba1cf916db5cd6783ffdc63dc81"
+        },
+        {
+          "file": "webkit-light-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-ant-field.png",
+          "sha256": "6cb1b58a2effcf67919e7cd5116bed53d89c54112767c3c8ebb355dfd80b17d0"
+        },
+        {
+          "file": "webkit-light-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-ant-mirror.png",
+          "sha256": "6cb1b58a2effcf67919e7cd5116bed53d89c54112767c3c8ebb355dfd80b17d0"
+        },
+        {
+          "file": "webkit-light-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-orbit-field.png",
+          "sha256": "e6bd92ddc80aa6ae40a61980d75ecf56e874fba1cf916db5cd6783ffdc63dc81"
+        },
+        {
+          "file": "webkit-light-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-orbit-mirror.png",
+          "sha256": "e6bd92ddc80aa6ae40a61980d75ecf56e874fba1cf916db5cd6783ffdc63dc81"
+        },
+        {
+          "file": "webkit-light-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-orbit-field.png",
+          "sha256": "6cb1b58a2effcf67919e7cd5116bed53d89c54112767c3c8ebb355dfd80b17d0"
+        },
+        {
+          "file": "webkit-light-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-orbit-mirror.png",
+          "sha256": "6cb1b58a2effcf67919e7cd5116bed53d89c54112767c3c8ebb355dfd80b17d0"
+        },
+        {
+          "file": "webkit-light-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--mirror-probe.json",
+          "sha256": "57b0dacb230890aa71f4fc8347cd846f0ee36af22d0ee81158998c4d27f8c3ff"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 6557
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-idle-ant.png",
+          "sha256": "09083592161ea1505e2b2146603cf88521011f8671ae1d604eb62ed4cce0f88b"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-idle-orbit.png",
+          "sha256": "09083592161ea1505e2b2146603cf88521011f8671ae1d604eb62ed4cce0f88b"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-one-line-ant.png",
+          "sha256": "4fdd9554ccd12d139ef76afc05370f9007313088d10a9595b2c7659b287777f9"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-one-line-orbit.png",
+          "sha256": "4fdd9554ccd12d139ef76afc05370f9007313088d10a9595b2c7659b287777f9"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-two-lines-ant.png",
+          "sha256": "0ed7d300010947d5e95fcbdd778e7eed0e198db9530fbc2d58c426ea065d800d"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-two-lines-orbit.png",
+          "sha256": "0ed7d300010947d5e95fcbdd778e7eed0e198db9530fbc2d58c426ea065d800d"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-capped-scrolled-to-end-ant.png",
+          "sha256": "43785b64d446a4250e8154b01a51f489b03cbd20dbaf0e3e463a07143df7b4b6"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-capped-scrolled-to-end-orbit.png",
+          "sha256": "43785b64d446a4250e8154b01a51f489b03cbd20dbaf0e3e463a07143df7b4b6"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-shell-mode-ant.png",
+          "sha256": "eefe60db65257a97859214fbd6697505549e53b9e9d819e334f8e6bb89430331"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-shell-mode-orbit.png",
+          "sha256": "eefe60db65257a97859214fbd6697505549e53b9e9d819e334f8e6bb89430331"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-cleared-ant.png",
+          "sha256": "22a4196f9dd64595dc9de857d9a3791261291d096458d7e728dab363a049e4d5"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-cleared-orbit.png",
+          "sha256": "22a4196f9dd64595dc9de857d9a3791261291d096458d7e728dab363a049e4d5"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-before-edit-ant.png",
+          "sha256": "6d9b3ef6e3e25026c3e9ce618f654625a497f5e3b5dc74b75fdcdf07c9385087"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-before-edit-orbit.png",
+          "sha256": "6d9b3ef6e3e25026c3e9ce618f654625a497f5e3b5dc74b75fdcdf07c9385087"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-after-edit-ant.png",
+          "sha256": "d962cd683dba6ef3e713645b23e1e8e9afb80e45e1e1372811741130986a45e9"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-after-edit-orbit.png",
+          "sha256": "d962cd683dba6ef3e713645b23e1e8e9afb80e45e1e1372811741130986a45e9"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-states.json",
+          "sha256": "e9f4f9c29fe662087341c277ed83a838cd1b5a00c2f17e7612f2fe99cbb58337"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3454
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-idle-ant.png",
+          "sha256": "8f91934accb3c047eccdae16a503d9c76beee495e01f35eb51d6579cec686d12"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-idle-orbit.png",
+          "sha256": "8f91934accb3c047eccdae16a503d9c76beee495e01f35eb51d6579cec686d12"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-two-lines-ant.png",
+          "sha256": "79a51c60712bd95fd9004273ef2acd40baa5fe0107b8ca492073e305c125e846"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-two-lines-orbit.png",
+          "sha256": "79a51c60712bd95fd9004273ef2acd40baa5fe0107b8ca492073e305c125e846"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-states.json",
+          "sha256": "bf15af3683e2cc9e53477d9f1fdf658c8e51f62ca5ee6a169c0f06ace1d5637c"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-ant.png",
+          "sha256": "dc992ece298662a12c9817edfa34e378cf15b5c544d08ef56b1485fa27abe95c"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-orbit.png",
+          "sha256": "dc992ece298662a12c9817edfa34e378cf15b5c544d08ef56b1485fa27abe95c"
+        },
+        {
+          "file": "webkit-dark-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-text-Read-20only-20draft-states.json",
+          "sha256": "522de7eda94cc8931300b306a6daefbc9e7912004a86d4d7bbae48b5c8b5a52d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 9722
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-idle-ant.png",
+          "sha256": "9c352fcdd73a4fd70c1318c57a9ae9e083e27c7955bf2881bef258cd8c36f538"
+        },
+        {
+          "file": "webkit-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-idle-orbit.png",
+          "sha256": "9c352fcdd73a4fd70c1318c57a9ae9e083e27c7955bf2881bef258cd8c36f538"
+        },
+        {
+          "file": "webkit-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-hover-ant.png",
+          "sha256": "073d455b97fc65fafaa4d5d8ae14b2bbe9ba8dec271b7af43bf4e7f49b788ac4"
+        },
+        {
+          "file": "webkit-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-hover-orbit.png",
+          "sha256": "073d455b97fc65fafaa4d5d8ae14b2bbe9ba8dec271b7af43bf4e7f49b788ac4"
+        },
+        {
+          "file": "webkit-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-focused-ant.png",
+          "sha256": "8df43a6664681560c88a4ea8ff1c6edeb2d95fa81d8648e7dea3ef930d32ad36"
+        },
+        {
+          "file": "webkit-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-focused-orbit.png",
+          "sha256": "8df43a6664681560c88a4ea8ff1c6edeb2d95fa81d8648e7dea3ef930d32ad36"
+        },
+        {
+          "file": "webkit-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-one-line-ant.png",
+          "sha256": "2f7e8a50a9759612c084a71688845ff28da5d6b882fd8e38e79d6a235dfd9dd8"
+        },
+        {
+          "file": "webkit-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-one-line-orbit.png",
+          "sha256": "2f7e8a50a9759612c084a71688845ff28da5d6b882fd8e38e79d6a235dfd9dd8"
+        },
+        {
+          "file": "webkit-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-two-lines-ant.png",
+          "sha256": "f498f02e3d62a4ff603f99bb2590945b687f7bd2dad93aa62541e9f89620b55b"
+        },
+        {
+          "file": "webkit-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-two-lines-orbit.png",
+          "sha256": "f498f02e3d62a4ff603f99bb2590945b687f7bd2dad93aa62541e9f89620b55b"
+        },
+        {
+          "file": "webkit-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-capped-scrolled-ant.png",
+          "sha256": "1e407fe69a42c4a5b86d43e21b412637c671e70e8a7dec8df3c9c5be7aab4333"
+        },
+        {
+          "file": "webkit-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-capped-scrolled-orbit.png",
+          "sha256": "1e407fe69a42c4a5b86d43e21b412637c671e70e8a7dec8df3c9c5be7aab4333"
+        },
+        {
+          "file": "webkit-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-cleared-ant.png",
+          "sha256": "073d455b97fc65fafaa4d5d8ae14b2bbe9ba8dec271b7af43bf4e7f49b788ac4"
+        },
+        {
+          "file": "webkit-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-cleared-orbit.png",
+          "sha256": "073d455b97fc65fafaa4d5d8ae14b2bbe9ba8dec271b7af43bf4e7f49b788ac4"
+        },
+        {
+          "file": "webkit-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-states.json",
+          "sha256": "942775b6561f0ade63a80241dd32296b096abada9c6781ed1eb134099bfdf947"
+        },
+        {
+          "file": "webkit-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-ant.png",
+          "sha256": "b6051309a0016a48a224ea8b667e9715133c3f50b518d69d922e8bd3ee833ffe"
+        },
+        {
+          "file": "webkit-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-orbit.png",
+          "sha256": "b6051309a0016a48a224ea8b667e9715133c3f50b518d69d922e8bd3ee833ffe"
+        },
+        {
+          "file": "webkit-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-text-Read-20only-states.json",
+          "sha256": "d00e44f3c8c9663884e1f8b311fe9cb8354f9f2ba797939820177b8726f932e0"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3246
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-rest-ant.png",
+          "sha256": "5515b708031a7635a3dcdc7689c0c07d58dd769c3cddb9e9d8133a1b5d6336e3"
+        },
+        {
+          "file": "webkit-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-rest-orbit.png",
+          "sha256": "5515b708031a7635a3dcdc7689c0c07d58dd769c3cddb9e9d8133a1b5d6336e3"
+        },
+        {
+          "file": "webkit-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-keyboard-focus-ant.png",
+          "sha256": "a401f45ed711fbf9f9e15b0ea8a686fb8b1144ba4f759feeacfb397c409d5337"
+        },
+        {
+          "file": "webkit-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-keyboard-focus-orbit.png",
+          "sha256": "a401f45ed711fbf9f9e15b0ea8a686fb8b1144ba4f759feeacfb397c409d5337"
+        },
+        {
+          "file": "webkit-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-focus-and-hover-ant.png",
+          "sha256": "a401f45ed711fbf9f9e15b0ea8a686fb8b1144ba4f759feeacfb397c409d5337"
+        },
+        {
+          "file": "webkit-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-focus-and-hover-orbit.png",
+          "sha256": "a401f45ed711fbf9f9e15b0ea8a686fb8b1144ba4f759feeacfb397c409d5337"
+        },
+        {
+          "file": "webkit-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-typed-ant.png",
+          "sha256": "60cf3e867c2cddf54a47a5a1fd1f087eac855ea280677573857f964f216e8576"
+        },
+        {
+          "file": "webkit-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-typed-orbit.png",
+          "sha256": "60cf3e867c2cddf54a47a5a1fd1f087eac855ea280677573857f964f216e8576"
+        },
+        {
+          "file": "webkit-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-states.json",
+          "sha256": "6b015cd24189a3ff4cfd55b58c340e5335dc3d35f99c7bb516c30ea8d027d01c"
+        },
+        {
+          "file": "webkit-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-ant.png",
+          "sha256": "26dcf3c746b28cb131d01fe8a4403134196de5385a4cc65946b2da2934c0bc01"
+        },
+        {
+          "file": "webkit-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-orbit.png",
+          "sha256": "26dcf3c746b28cb131d01fe8a4403134196de5385a4cc65946b2da2934c0bc01"
+        },
+        {
+          "file": "webkit-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-text-Disabled-states.json",
+          "sha256": "d4cdab1a93b6d2417978be13d6a4774c047934c8a8d74ffa4fd54035d9f3eba8"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4450
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-capped-handle-shown-ant.png",
+          "sha256": "65671c94c3985024ac755d0a0b025a3133b90b1c2f4a9db088f5304e52e8a68a"
+        },
+        {
+          "file": "webkit-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-capped-handle-shown-orbit.png",
+          "sha256": "65671c94c3985024ac755d0a0b025a3133b90b1c2f4a9db088f5304e52e8a68a"
+        },
+        {
+          "file": "webkit-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-dragged-taller-ant.png",
+          "sha256": "55d6f4124b89f75e951c1217e6158dae5ad0bbe3a5cd2e114f99dd3c02672112"
+        },
+        {
+          "file": "webkit-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-dragged-taller-orbit.png",
+          "sha256": "55d6f4124b89f75e951c1217e6158dae5ad0bbe3a5cd2e114f99dd3c02672112"
+        },
+        {
+          "file": "webkit-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-clamped-minimum-ant.png",
+          "sha256": "c7697398940a55f7e8cefeec09605a862346ef625f7c5df99a19ce2cefa7d9a4"
+        },
+        {
+          "file": "webkit-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-clamped-minimum-orbit.png",
+          "sha256": "c7697398940a55f7e8cefeec09605a862346ef625f7c5df99a19ce2cefa7d9a4"
+        },
+        {
+          "file": "webkit-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-manual-height-kept-for-short-text-ant.png",
+          "sha256": "60cbeeb4a35096dfa13b1e803abe631febfebc4e29f06fc364be8e57eaef185e"
+        },
+        {
+          "file": "webkit-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-manual-height-kept-for-short-text-orbit.png",
+          "sha256": "60cbeeb4a35096dfa13b1e803abe631febfebc4e29f06fc364be8e57eaef185e"
+        },
+        {
+          "file": "webkit-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-reset-to-auto-ant.png",
+          "sha256": "0472ba997cea26c2760f7fcbcecebb228309d752d451a0d820a1af63f56de14b"
+        },
+        {
+          "file": "webkit-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-reset-to-auto-orbit.png",
+          "sha256": "0472ba997cea26c2760f7fcbcecebb228309d752d451a0d820a1af63f56de14b"
+        },
+        {
+          "file": "webkit-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-states.json",
+          "sha256": "29352df9b1311435e5d1e7395861266e779f9ebd2406e65cc32704da7bd3063d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5291
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-ant-field.png",
+          "sha256": "87369dd66c7cf0e501f5e3a6d7ad801a3142853c28a4ea1959b148eb3c99e22c"
+        },
+        {
+          "file": "webkit-dark-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-ant-mirror.png",
+          "sha256": "87369dd66c7cf0e501f5e3a6d7ad801a3142853c28a4ea1959b148eb3c99e22c"
+        },
+        {
+          "file": "webkit-dark-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-ant-field.png",
+          "sha256": "8aaef5e3ebae74aae62e30205134f5a6466e0c006a75a70f14688ca9d162b17b"
+        },
+        {
+          "file": "webkit-dark-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-ant-mirror.png",
+          "sha256": "8aaef5e3ebae74aae62e30205134f5a6466e0c006a75a70f14688ca9d162b17b"
+        },
+        {
+          "file": "webkit-dark-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-orbit-field.png",
+          "sha256": "87369dd66c7cf0e501f5e3a6d7ad801a3142853c28a4ea1959b148eb3c99e22c"
+        },
+        {
+          "file": "webkit-dark-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-orbit-mirror.png",
+          "sha256": "87369dd66c7cf0e501f5e3a6d7ad801a3142853c28a4ea1959b148eb3c99e22c"
+        },
+        {
+          "file": "webkit-dark-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-orbit-field.png",
+          "sha256": "8aaef5e3ebae74aae62e30205134f5a6466e0c006a75a70f14688ca9d162b17b"
+        },
+        {
+          "file": "webkit-dark-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-orbit-mirror.png",
+          "sha256": "8aaef5e3ebae74aae62e30205134f5a6466e0c006a75a70f14688ca9d162b17b"
+        },
+        {
+          "file": "webkit-dark-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--mirror-probe.json",
+          "sha256": "30a46fcdb35f3b045e9020fe866b11ee1dac512cbb046a5c65118a6965bfc5e1"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 6374
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-idle-ant.png",
+          "sha256": "1f657a08bce84305231bd86cfff3b58039ee0fb0a2ea34ad36c5e7544dcc3fbe"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-idle-orbit.png",
+          "sha256": "1f657a08bce84305231bd86cfff3b58039ee0fb0a2ea34ad36c5e7544dcc3fbe"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-one-line-ant.png",
+          "sha256": "216f157140355c847ce68d91e58099e74ab688aa3f3d6a095b7eed6313201a00"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-one-line-orbit.png",
+          "sha256": "216f157140355c847ce68d91e58099e74ab688aa3f3d6a095b7eed6313201a00"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-two-lines-ant.png",
+          "sha256": "fbe77b9d198cf96c953872ddf687b86ee001031044a5f53e9910dd9ed02e57c4"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-two-lines-orbit.png",
+          "sha256": "fbe77b9d198cf96c953872ddf687b86ee001031044a5f53e9910dd9ed02e57c4"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-capped-scrolled-to-end-ant.png",
+          "sha256": "212b368c7bb06a7c145d22a0ba29fc46be14f950aa073400bfba51b5ec09af8b"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-capped-scrolled-to-end-orbit.png",
+          "sha256": "212b368c7bb06a7c145d22a0ba29fc46be14f950aa073400bfba51b5ec09af8b"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-shell-mode-ant.png",
+          "sha256": "7ebdc5c5dce6adfa509fb2dfd4a8d58beb83d6122cd0accca94717928c21e56e"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-shell-mode-orbit.png",
+          "sha256": "7ebdc5c5dce6adfa509fb2dfd4a8d58beb83d6122cd0accca94717928c21e56e"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-cleared-ant.png",
+          "sha256": "e73cd251d0daeb3d795591c0c0d69141cfab8659678649a89dd35ccb5120c49e"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-cleared-orbit.png",
+          "sha256": "e73cd251d0daeb3d795591c0c0d69141cfab8659678649a89dd35ccb5120c49e"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-before-edit-ant.png",
+          "sha256": "3a68eaf64165949626466e1f45179cf818cfb7ccaac483200f20f27d288d5f45"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-before-edit-orbit.png",
+          "sha256": "3a68eaf64165949626466e1f45179cf818cfb7ccaac483200f20f27d288d5f45"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-after-edit-ant.png",
+          "sha256": "d06c95db486184b4702f2f030f282fc07e792af49f22322fd433204d121bba3e"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-after-edit-orbit.png",
+          "sha256": "d06c95db486184b4702f2f030f282fc07e792af49f22322fd433204d121bba3e"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-states.json",
+          "sha256": "ccae395aea58c4e4dd71328418ea24a75c5f163591b98e9a684391711bd256dc"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3352
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-idle-ant.png",
+          "sha256": "81a57dd51ca37c7a85ce6e923e1db122b5a213dc7509e93d95d1d2decaa9c1b9"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-idle-orbit.png",
+          "sha256": "81a57dd51ca37c7a85ce6e923e1db122b5a213dc7509e93d95d1d2decaa9c1b9"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-two-lines-ant.png",
+          "sha256": "ef2cb234069586ed96609540a98f3ff253964cb8dd85bd361df3bc0ea85add32"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-two-lines-orbit.png",
+          "sha256": "ef2cb234069586ed96609540a98f3ff253964cb8dd85bd361df3bc0ea85add32"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-states.json",
+          "sha256": "869a87ebf12f0181da880ebfa70a3435e32d6458e6d93797bfb2a232756b4a87"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-ant.png",
+          "sha256": "dfc1ed1f0c7bc667ec6a19058b06257802cf95320e607d17bfa51a34b07f2528"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-orbit.png",
+          "sha256": "dfc1ed1f0c7bc667ec6a19058b06257802cf95320e607d17bfa51a34b07f2528"
+        },
+        {
+          "file": "webkit-dark-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-text-Read-20only-20draft-states.json",
+          "sha256": "84661eb92635c7fc6d4b051635e00eb37e8617285d8d8859d92e84e36ad60412"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5640
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-idle-ant.png",
+          "sha256": "52bfb694f0fc10dbfe26cd8e4b5fdcbefb73debfaf0fa08710246f1a97eb69b8"
+        },
+        {
+          "file": "webkit-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-idle-orbit.png",
+          "sha256": "52bfb694f0fc10dbfe26cd8e4b5fdcbefb73debfaf0fa08710246f1a97eb69b8"
+        },
+        {
+          "file": "webkit-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-focused-ant.png",
+          "sha256": "c09b65da4edb0e56a430ab9a43b52aac337cfb0f46bffa616ddb12af51fadcd2"
+        },
+        {
+          "file": "webkit-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-focused-orbit.png",
+          "sha256": "c09b65da4edb0e56a430ab9a43b52aac337cfb0f46bffa616ddb12af51fadcd2"
+        },
+        {
+          "file": "webkit-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-one-line-ant.png",
+          "sha256": "4b0f712f0c55687dbb930118c2f9fc9995bb35b338101da1cfcb4a9050e8b359"
+        },
+        {
+          "file": "webkit-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-one-line-orbit.png",
+          "sha256": "4b0f712f0c55687dbb930118c2f9fc9995bb35b338101da1cfcb4a9050e8b359"
+        },
+        {
+          "file": "webkit-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-two-lines-ant.png",
+          "sha256": "539fc19f48e28aff8a64d8d20e8c10dcd3e8abec7b3ed40e45d0e32b87eb01e3"
+        },
+        {
+          "file": "webkit-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-two-lines-orbit.png",
+          "sha256": "539fc19f48e28aff8a64d8d20e8c10dcd3e8abec7b3ed40e45d0e32b87eb01e3"
+        },
+        {
+          "file": "webkit-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-capped-scrolled-ant.png",
+          "sha256": "a0fbecc03d9a0703bd01d99c7a71a814b18ab2e49994603d66c5667bbcd71d6b"
+        },
+        {
+          "file": "webkit-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-capped-scrolled-orbit.png",
+          "sha256": "a0fbecc03d9a0703bd01d99c7a71a814b18ab2e49994603d66c5667bbcd71d6b"
+        },
+        {
+          "file": "webkit-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-cleared-ant.png",
+          "sha256": "52bfb694f0fc10dbfe26cd8e4b5fdcbefb73debfaf0fa08710246f1a97eb69b8"
+        },
+        {
+          "file": "webkit-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-cleared-orbit.png",
+          "sha256": "52bfb694f0fc10dbfe26cd8e4b5fdcbefb73debfaf0fa08710246f1a97eb69b8"
+        },
+        {
+          "file": "webkit-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-states.json",
+          "sha256": "a1b5da5c608d7efb41b9d074e8c9d973b4450547caa41c0c6f51aa50e603c77b"
+        },
+        {
+          "file": "webkit-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-ant.png",
+          "sha256": "33a4411608e2f648f6d8c83c6fd0daa87ea0d0b936c256a728929e6c3eb143f0"
+        },
+        {
+          "file": "webkit-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-orbit.png",
+          "sha256": "33a4411608e2f648f6d8c83c6fd0daa87ea0d0b936c256a728929e6c3eb143f0"
+        },
+        {
+          "file": "webkit-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-text-Read-20only-states.json",
+          "sha256": "712b21c044e3f158f1bdaa3b7fedaae15c20972ab5bdb5adaee110ef083e24df"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3440
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-rest-ant.png",
+          "sha256": "2f2b1bf1e686572de8564af2651abeddb6fd51455036fb72364554d631c0d76e"
+        },
+        {
+          "file": "webkit-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-rest-orbit.png",
+          "sha256": "2f2b1bf1e686572de8564af2651abeddb6fd51455036fb72364554d631c0d76e"
+        },
+        {
+          "file": "webkit-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-keyboard-focus-ant.png",
+          "sha256": "0d360fcfa1dfec1a36f0f1f4e62b4e14a4d6c242db03eb5a9965d36d054c4eef"
+        },
+        {
+          "file": "webkit-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-keyboard-focus-orbit.png",
+          "sha256": "0d360fcfa1dfec1a36f0f1f4e62b4e14a4d6c242db03eb5a9965d36d054c4eef"
+        },
+        {
+          "file": "webkit-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-focus-and-hover-ant.png",
+          "sha256": "0d360fcfa1dfec1a36f0f1f4e62b4e14a4d6c242db03eb5a9965d36d054c4eef"
+        },
+        {
+          "file": "webkit-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-focus-and-hover-orbit.png",
+          "sha256": "0d360fcfa1dfec1a36f0f1f4e62b4e14a4d6c242db03eb5a9965d36d054c4eef"
+        },
+        {
+          "file": "webkit-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-typed-ant.png",
+          "sha256": "66d755b3c1987534adde4dc36846bd8e2bb57a6609e0a24731bc0febdc846459"
+        },
+        {
+          "file": "webkit-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-typed-orbit.png",
+          "sha256": "66d755b3c1987534adde4dc36846bd8e2bb57a6609e0a24731bc0febdc846459"
+        },
+        {
+          "file": "webkit-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-states.json",
+          "sha256": "443aea18227ea4f238a35a820f9a053871c574dd20e8aa7ce884c361b92e7a47"
+        },
+        {
+          "file": "webkit-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-ant.png",
+          "sha256": "9d2f4e0fb34b83cf849f0564329c54a8b9331b336fcda47d263b2c9db14663ce"
+        },
+        {
+          "file": "webkit-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-orbit.png",
+          "sha256": "9d2f4e0fb34b83cf849f0564329c54a8b9331b336fcda47d263b2c9db14663ce"
+        },
+        {
+          "file": "webkit-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-text-Disabled-states.json",
+          "sha256": "f335c050112a83de9e2d655263c24028269a1a48ec8ffaa76f29701e57339377"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3829
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-capped-handle-shown-ant.png",
+          "sha256": "7bd013c6d1da45ba12111c009b756b8d7f6df00d251b3293d251adf85408f3af"
+        },
+        {
+          "file": "webkit-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-capped-handle-shown-orbit.png",
+          "sha256": "7bd013c6d1da45ba12111c009b756b8d7f6df00d251b3293d251adf85408f3af"
+        },
+        {
+          "file": "webkit-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-dragged-taller-ant.png",
+          "sha256": "a951b8acc08697d278c8f573faed6926b0169ad778dd77ef77d514fab90e32f9"
+        },
+        {
+          "file": "webkit-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-dragged-taller-orbit.png",
+          "sha256": "a951b8acc08697d278c8f573faed6926b0169ad778dd77ef77d514fab90e32f9"
+        },
+        {
+          "file": "webkit-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-clamped-minimum-ant.png",
+          "sha256": "7abdbfcf93a59701e247f4b9dce3cd275a89dd3a483a7fb89a570f2234e5a9d2"
+        },
+        {
+          "file": "webkit-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-clamped-minimum-orbit.png",
+          "sha256": "7abdbfcf93a59701e247f4b9dce3cd275a89dd3a483a7fb89a570f2234e5a9d2"
+        },
+        {
+          "file": "webkit-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-manual-height-kept-for-short-text-ant.png",
+          "sha256": "575ad26cbe7dbfdf71b303f2f9335f17179031b5069360670b7e42210aef0391"
+        },
+        {
+          "file": "webkit-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-manual-height-kept-for-short-text-orbit.png",
+          "sha256": "575ad26cbe7dbfdf71b303f2f9335f17179031b5069360670b7e42210aef0391"
+        },
+        {
+          "file": "webkit-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-reset-to-auto-ant.png",
+          "sha256": "bdd13f96b1671ee0e428bb2ae8da603370d4b6307850653930479c7b3cca4847"
+        },
+        {
+          "file": "webkit-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-reset-to-auto-orbit.png",
+          "sha256": "bdd13f96b1671ee0e428bb2ae8da603370d4b6307850653930479c7b3cca4847"
+        },
+        {
+          "file": "webkit-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-states.json",
+          "sha256": "c9e50063a082faf5c5f71143625407179594698fc9e5e7a713746a446af95f9a"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3506
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-ant-field.png",
+          "sha256": "b456e7e8662bc31c9667704d8f067e200d0053b9920b41bbdc22ee9fc89cb649"
+        },
+        {
+          "file": "webkit-dark-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-ant-mirror.png",
+          "sha256": "b456e7e8662bc31c9667704d8f067e200d0053b9920b41bbdc22ee9fc89cb649"
+        },
+        {
+          "file": "webkit-dark-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-ant-field.png",
+          "sha256": "7d2648ae720ee1fc5044bb96d94fb18dcc287a4b125b889dccf84a3cfff9d47c"
+        },
+        {
+          "file": "webkit-dark-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-ant-mirror.png",
+          "sha256": "7d2648ae720ee1fc5044bb96d94fb18dcc287a4b125b889dccf84a3cfff9d47c"
+        },
+        {
+          "file": "webkit-dark-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-orbit-field.png",
+          "sha256": "b456e7e8662bc31c9667704d8f067e200d0053b9920b41bbdc22ee9fc89cb649"
+        },
+        {
+          "file": "webkit-dark-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-orbit-mirror.png",
+          "sha256": "b456e7e8662bc31c9667704d8f067e200d0053b9920b41bbdc22ee9fc89cb649"
+        },
+        {
+          "file": "webkit-dark-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-orbit-field.png",
+          "sha256": "7d2648ae720ee1fc5044bb96d94fb18dcc287a4b125b889dccf84a3cfff9d47c"
+        },
+        {
+          "file": "webkit-dark-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-orbit-mirror.png",
+          "sha256": "7d2648ae720ee1fc5044bb96d94fb18dcc287a4b125b889dccf84a3cfff9d47c"
+        },
+        {
+          "file": "webkit-dark-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--mirror-probe.json",
+          "sha256": "57b0dacb230890aa71f4fc8347cd846f0ee36af22d0ee81158998c4d27f8c3ff"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--fields-match-at-599px",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3997
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--fields-match-at-599px--session-idle-ant.png",
+          "sha256": "3c883994f4b312239eee04ce64b36ffc165421cfc89b9679712b78047d278751"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-599px--session-idle-orbit.png",
+          "sha256": "3c883994f4b312239eee04ce64b36ffc165421cfc89b9679712b78047d278751"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-599px--session-two-lines-ant.png",
+          "sha256": "7f6140f68dc15c45d20fcfba61600fb1bc8ee8e6add9a4a1e67874948ddb0b9a"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-599px--session-two-lines-orbit.png",
+          "sha256": "7f6140f68dc15c45d20fcfba61600fb1bc8ee8e6add9a4a1e67874948ddb0b9a"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-599px--session-width-360-states.json",
+          "sha256": "feb96adf831b6513e9d55dc10a06cf8c12e9f3523f0f8c9dc1fef045dafbe2e8"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-599px--comment-idle-ant.png",
+          "sha256": "fff9035ed241da3d87d388ae25eec807e96e903914c3736570b3f5c41f4b88f8"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-599px--comment-idle-orbit.png",
+          "sha256": "fff9035ed241da3d87d388ae25eec807e96e903914c3736570b3f5c41f4b88f8"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-599px--comment-two-lines-ant.png",
+          "sha256": "485b62e16e83548019e5b64383808187b3a67d7ab8de7c3b4bf69593eec2fbdb"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-599px--comment-two-lines-orbit.png",
+          "sha256": "485b62e16e83548019e5b64383808187b3a67d7ab8de7c3b4bf69593eec2fbdb"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-599px--comment-width-360-states.json",
+          "sha256": "221310e18833deb05f47ff014fb9796fe36a07c739e9e28b3c0d161617744abc"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--fields-match-at-601px",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3903
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--fields-match-at-601px--session-idle-ant.png",
+          "sha256": "306cedcbae80f3c789f91c1d1f3a9a01ee6d0018d33680145d722d97eceefb93"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-601px--session-idle-orbit.png",
+          "sha256": "306cedcbae80f3c789f91c1d1f3a9a01ee6d0018d33680145d722d97eceefb93"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-601px--session-two-lines-ant.png",
+          "sha256": "c457020e6d069a76605a969ccbd4f4c73f7fc0d4fb57a6c15ebc6d0616cde5fb"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-601px--session-two-lines-orbit.png",
+          "sha256": "c457020e6d069a76605a969ccbd4f4c73f7fc0d4fb57a6c15ebc6d0616cde5fb"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-601px--session-width-360-states.json",
+          "sha256": "1d21b209335e47d7c8a5cee6fb3e82af4bc8ff4858b55242c50162a7a1146fbd"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-601px--comment-idle-ant.png",
+          "sha256": "fff9035ed241da3d87d388ae25eec807e96e903914c3736570b3f5c41f4b88f8"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-601px--comment-idle-orbit.png",
+          "sha256": "fff9035ed241da3d87d388ae25eec807e96e903914c3736570b3f5c41f4b88f8"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-601px--comment-two-lines-ant.png",
+          "sha256": "485b62e16e83548019e5b64383808187b3a67d7ab8de7c3b4bf69593eec2fbdb"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-601px--comment-two-lines-orbit.png",
+          "sha256": "485b62e16e83548019e5b64383808187b3a67d7ab8de7c3b4bf69593eec2fbdb"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-601px--comment-width-360-states.json",
+          "sha256": "63388d62905b9a05d0f9a47694b42fabb87c761d059cc9223f22d308f23f27ab"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--fields-match-at-959px",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4029
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--fields-match-at-959px--session-idle-ant.png",
+          "sha256": "306cedcbae80f3c789f91c1d1f3a9a01ee6d0018d33680145d722d97eceefb93"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-959px--session-idle-orbit.png",
+          "sha256": "306cedcbae80f3c789f91c1d1f3a9a01ee6d0018d33680145d722d97eceefb93"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-959px--session-two-lines-ant.png",
+          "sha256": "c457020e6d069a76605a969ccbd4f4c73f7fc0d4fb57a6c15ebc6d0616cde5fb"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-959px--session-two-lines-orbit.png",
+          "sha256": "c457020e6d069a76605a969ccbd4f4c73f7fc0d4fb57a6c15ebc6d0616cde5fb"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-959px--session-width-360-states.json",
+          "sha256": "acf9422cf3d846a8a569f6b2d8700ba18776e49786f776eaa6f41deb7e3c07cb"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-959px--comment-idle-ant.png",
+          "sha256": "fff9035ed241da3d87d388ae25eec807e96e903914c3736570b3f5c41f4b88f8"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-959px--comment-idle-orbit.png",
+          "sha256": "fff9035ed241da3d87d388ae25eec807e96e903914c3736570b3f5c41f4b88f8"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-959px--comment-two-lines-ant.png",
+          "sha256": "485b62e16e83548019e5b64383808187b3a67d7ab8de7c3b4bf69593eec2fbdb"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-959px--comment-two-lines-orbit.png",
+          "sha256": "485b62e16e83548019e5b64383808187b3a67d7ab8de7c3b4bf69593eec2fbdb"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-959px--comment-width-360-states.json",
+          "sha256": "9eed494fb7d48dcaad4cccdaff45ef1c0f0e282bef2d27846e1474e09fccea63"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--fields-match-at-961px",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3583
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--fields-match-at-961px--session-idle-ant.png",
+          "sha256": "306cedcbae80f3c789f91c1d1f3a9a01ee6d0018d33680145d722d97eceefb93"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-961px--session-idle-orbit.png",
+          "sha256": "306cedcbae80f3c789f91c1d1f3a9a01ee6d0018d33680145d722d97eceefb93"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-961px--session-two-lines-ant.png",
+          "sha256": "c457020e6d069a76605a969ccbd4f4c73f7fc0d4fb57a6c15ebc6d0616cde5fb"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-961px--session-two-lines-orbit.png",
+          "sha256": "c457020e6d069a76605a969ccbd4f4c73f7fc0d4fb57a6c15ebc6d0616cde5fb"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-961px--session-width-360-states.json",
+          "sha256": "dd760d41a724f439ceb7472d254f8dbd4a2c8bf676aa875c61525a4dfb294f38"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-961px--comment-idle-ant.png",
+          "sha256": "e135a9760c08af41e6590b0cd6427e51b2f25368346934bcaf501eb1d28647f7"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-961px--comment-idle-orbit.png",
+          "sha256": "e135a9760c08af41e6590b0cd6427e51b2f25368346934bcaf501eb1d28647f7"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-961px--comment-two-lines-ant.png",
+          "sha256": "9f7f8c5521d3fc92418ee5ee5f6346377d72b95a07ec004c6581a7c8817d208d"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-961px--comment-two-lines-orbit.png",
+          "sha256": "9f7f8c5521d3fc92418ee5ee5f6346377d72b95a07ec004c6581a7c8817d208d"
+        },
+        {
+          "file": "webkit-light-desktop--fields-match-at-961px--comment-width-360-states.json",
+          "sha256": "4c00f96a6b0ce0d61fb70e26f0944819f5da2b9ab7334798324ecb55f58290bf"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--fields-match-at-599px",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 0
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-light-phone--fields-match-at-601px",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 0
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-light-phone--fields-match-at-959px",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 0
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-light-phone--fields-match-at-961px",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 0
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-dark-desktop--fields-match-at-599px",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3875
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--fields-match-at-599px--session-idle-ant.png",
+          "sha256": "552068a58882c8878eea746d66e7a6ae715700bb4bf97eefd4b710bf4f8f1dd5"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-599px--session-idle-orbit.png",
+          "sha256": "552068a58882c8878eea746d66e7a6ae715700bb4bf97eefd4b710bf4f8f1dd5"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-599px--session-two-lines-ant.png",
+          "sha256": "a86fec4da2f4d254e7b5bfaecce3ded314c1c17585a61c13b7ccbd195f0a780c"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-599px--session-two-lines-orbit.png",
+          "sha256": "a86fec4da2f4d254e7b5bfaecce3ded314c1c17585a61c13b7ccbd195f0a780c"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-599px--session-width-360-states.json",
+          "sha256": "b512035d17d3283b89377ef7c396db5f5fa45d0301f037d29c31032f5954acf7"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-599px--comment-idle-ant.png",
+          "sha256": "745a018509dd5eaaa0d7f8bfe0128277cf8c00d72dbe6474ea8d9403c2f09e5e"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-599px--comment-idle-orbit.png",
+          "sha256": "745a018509dd5eaaa0d7f8bfe0128277cf8c00d72dbe6474ea8d9403c2f09e5e"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-599px--comment-two-lines-ant.png",
+          "sha256": "85d1b1092141071527d3a27834be6fe0ee47ddbb14a5e12661b98c3895de8d33"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-599px--comment-two-lines-orbit.png",
+          "sha256": "85d1b1092141071527d3a27834be6fe0ee47ddbb14a5e12661b98c3895de8d33"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-599px--comment-width-360-states.json",
+          "sha256": "b9019da108702cacd8636ba337db07d495665cd0a924e8573daaf2b6418beb07"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--fields-match-at-601px",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3946
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--fields-match-at-601px--session-idle-ant.png",
+          "sha256": "b0387ac5407401add372afe069de5e99b7a78a94e7298ae8904d25ca6666cf37"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-601px--session-idle-orbit.png",
+          "sha256": "b0387ac5407401add372afe069de5e99b7a78a94e7298ae8904d25ca6666cf37"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-601px--session-two-lines-ant.png",
+          "sha256": "0f0d45cd07339f0f7bd0834084b8a89ee12c622749130b4ee77a1cb4e832a3ed"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-601px--session-two-lines-orbit.png",
+          "sha256": "0f0d45cd07339f0f7bd0834084b8a89ee12c622749130b4ee77a1cb4e832a3ed"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-601px--session-width-360-states.json",
+          "sha256": "9a7a96b23bb1925b69a19f05247790ab232a8253da288a3472857b23e48ce4dc"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-601px--comment-idle-ant.png",
+          "sha256": "745a018509dd5eaaa0d7f8bfe0128277cf8c00d72dbe6474ea8d9403c2f09e5e"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-601px--comment-idle-orbit.png",
+          "sha256": "745a018509dd5eaaa0d7f8bfe0128277cf8c00d72dbe6474ea8d9403c2f09e5e"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-601px--comment-two-lines-ant.png",
+          "sha256": "85d1b1092141071527d3a27834be6fe0ee47ddbb14a5e12661b98c3895de8d33"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-601px--comment-two-lines-orbit.png",
+          "sha256": "85d1b1092141071527d3a27834be6fe0ee47ddbb14a5e12661b98c3895de8d33"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-601px--comment-width-360-states.json",
+          "sha256": "40b21c4259f2a2b8feadbc678632ee37798c1af78835ff178681174885c41d7a"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--fields-match-at-959px",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3917
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--fields-match-at-959px--session-idle-ant.png",
+          "sha256": "b0387ac5407401add372afe069de5e99b7a78a94e7298ae8904d25ca6666cf37"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-959px--session-idle-orbit.png",
+          "sha256": "b0387ac5407401add372afe069de5e99b7a78a94e7298ae8904d25ca6666cf37"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-959px--session-two-lines-ant.png",
+          "sha256": "0f0d45cd07339f0f7bd0834084b8a89ee12c622749130b4ee77a1cb4e832a3ed"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-959px--session-two-lines-orbit.png",
+          "sha256": "0f0d45cd07339f0f7bd0834084b8a89ee12c622749130b4ee77a1cb4e832a3ed"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-959px--session-width-360-states.json",
+          "sha256": "70cd04418b5a14fc8ddd62c52f5df35be486bef4f0c8319ea975b67c23ebb3c0"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-959px--comment-idle-ant.png",
+          "sha256": "745a018509dd5eaaa0d7f8bfe0128277cf8c00d72dbe6474ea8d9403c2f09e5e"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-959px--comment-idle-orbit.png",
+          "sha256": "745a018509dd5eaaa0d7f8bfe0128277cf8c00d72dbe6474ea8d9403c2f09e5e"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-959px--comment-two-lines-ant.png",
+          "sha256": "85d1b1092141071527d3a27834be6fe0ee47ddbb14a5e12661b98c3895de8d33"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-959px--comment-two-lines-orbit.png",
+          "sha256": "85d1b1092141071527d3a27834be6fe0ee47ddbb14a5e12661b98c3895de8d33"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-959px--comment-width-360-states.json",
+          "sha256": "d61c7a877aa3014eae7994871c1c23735dce2a9045f3d14897ceb742bf470b13"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--fields-match-at-961px",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3864
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--fields-match-at-961px--session-idle-ant.png",
+          "sha256": "b0387ac5407401add372afe069de5e99b7a78a94e7298ae8904d25ca6666cf37"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-961px--session-idle-orbit.png",
+          "sha256": "b0387ac5407401add372afe069de5e99b7a78a94e7298ae8904d25ca6666cf37"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-961px--session-two-lines-ant.png",
+          "sha256": "0f0d45cd07339f0f7bd0834084b8a89ee12c622749130b4ee77a1cb4e832a3ed"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-961px--session-two-lines-orbit.png",
+          "sha256": "0f0d45cd07339f0f7bd0834084b8a89ee12c622749130b4ee77a1cb4e832a3ed"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-961px--session-width-360-states.json",
+          "sha256": "6177f8cffb135da9d81d56ab4d304eb340296fc0d872b5f50ca04400536a07c8"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-961px--comment-idle-ant.png",
+          "sha256": "d60f887fb6052352de900074055e58b15346fe94735064d5bae44c9c9ac4b9d9"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-961px--comment-idle-orbit.png",
+          "sha256": "d60f887fb6052352de900074055e58b15346fe94735064d5bae44c9c9ac4b9d9"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-961px--comment-two-lines-ant.png",
+          "sha256": "46cc850c15ef2c651e80b4d370ae90db2fbe529e232b9271a1ab230108152037"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-961px--comment-two-lines-orbit.png",
+          "sha256": "46cc850c15ef2c651e80b4d370ae90db2fbe529e232b9271a1ab230108152037"
+        },
+        {
+          "file": "webkit-dark-desktop--fields-match-at-961px--comment-width-360-states.json",
+          "sha256": "fc72a5d8b8356f0df5edf50650eedd7e621ad256bdc321a4ed9c210888c29098"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--fields-match-at-599px",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 0
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-dark-phone--fields-match-at-601px",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 0
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-dark-phone--fields-match-at-959px",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 0
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-dark-phone--fields-match-at-961px",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 0
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "webkit-light-desktop--auto-size-transitions-match-AntD-reduced-motion-drops-them-as-other-Orbit-controls-do",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3823
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--auto-size-transitions-match-AntD-reduced-motion-drops-them-as-other-Orbit-controls-do--normal-motion.json",
+          "sha256": "c9bfd9f7b78e5d4d750f00ae7a799df3c56361dbf663eebe4699b7c3d0e6ab64"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--auto-size-transitions-match-AntD-reduced-motion-drops-them-as-other-Orbit-controls-do",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4067
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--auto-size-transitions-match-AntD-reduced-motion-drops-them-as-other-Orbit-controls-do--normal-motion.json",
+          "sha256": "8dc84711d73b35d20086c7559d62d78755e4c49ce13961e94d8ac56c7e2b2b05"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--auto-size-transitions-match-AntD-reduced-motion-drops-them-as-other-Orbit-controls-do",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4259
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--auto-size-transitions-match-AntD-reduced-motion-drops-them-as-other-Orbit-controls-do--normal-motion.json",
+          "sha256": "48b92cd63f104b5e60803a65979e86f6f453e87243030b565d80eb2896945904"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--auto-size-transitions-match-AntD-reduced-motion-drops-them-as-other-Orbit-controls-do",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4124
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--auto-size-transitions-match-AntD-reduced-motion-drops-them-as-other-Orbit-controls-do--normal-motion.json",
+          "sha256": "29098a1b6a43a412761fefbfc4bf7305d01c4547c71aa4bb4c316c5d064251e8"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--records-the-one-intended-difference-Orbit-text-fields-stop-transitioning",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1012
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--records-the-one-intended-difference-Orbit-text-fields-stop-transitioning--reduced-motion.json",
+          "sha256": "27ad4393543bb312addc50dbca8467ef935eb0eb34aeb03e7423f4580ce57515"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--records-the-one-intended-difference-Orbit-text-fields-stop-transitioning",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 967
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--records-the-one-intended-difference-Orbit-text-fields-stop-transitioning--reduced-motion.json",
+          "sha256": "27ad4393543bb312addc50dbca8467ef935eb0eb34aeb03e7423f4580ce57515"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--records-the-one-intended-difference-Orbit-text-fields-stop-transitioning",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 894
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--records-the-one-intended-difference-Orbit-text-fields-stop-transitioning--reduced-motion.json",
+          "sha256": "27ad4393543bb312addc50dbca8467ef935eb0eb34aeb03e7423f4580ce57515"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--records-the-one-intended-difference-Orbit-text-fields-stop-transitioning",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 880
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--records-the-one-intended-difference-Orbit-text-fields-stop-transitioning--reduced-motion.json",
+          "sha256": "27ad4393543bb312addc50dbca8467ef935eb0eb34aeb03e7423f4580ce57515"
+        }
+      ]
+    }
+  ]
+}

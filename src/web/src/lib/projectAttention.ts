@@ -6,9 +6,11 @@ import {
   type ProjectListAttention,
   type ProjectListCoordinatorActivity,
   type ProjectListIntegration,
+  type ProjectSidebarTaskCounts,
 } from '@orbit/shared';
 import type { ProjectSection, SectionProject } from '../components/ProjectSections';
 import type { ProjectPanoramaBuckets } from '../components/ProjectPanoramaHeader';
+import { READY_TO_CLOSE } from './projectDone';
 import { READY_TO_START } from './projectStart';
 
 /**
@@ -68,6 +70,10 @@ export type AttentionReason =
   // The fifth: its coordinator has asked the owner to start it (`project_request_start`), and
   // nobody has. A project whose coordinator has not asked is waiting on nobody, and has no reason.
   | 'ready-to-start'
+  // The sixth: its coordinator has asked the owner to record it done (`project_request_done`,
+  // `attention.doneRequest`). Not `ready-to-close`, which is this client's own reading of a task
+  // tally that nobody asked about.
+  | 'done-request'
   // What the project's COORDINATOR is holding, on its way to being handled: it says the project is
   // moving, so it never lands in Needs attention (§7.1 V2).
   | 'coordinator-handling'
@@ -174,15 +180,22 @@ function isOwnerItemReason(reason: AttentionReason | null): reason is OwnerItemP
 }
 
 /** Whether this reason is something the owner is being asked for in person: one of the four items,
- *  or a coordinator's request to start the project. One tier, and one lane — Needs attention. */
+ *  or a coordinator's request to start the project or to record it done. One tier, and one lane —
+ *  Needs attention. */
 function isNeedsYouReason(reason: AttentionReason | null): boolean {
-  return reason === 'ready-to-start' || isOwnerItemReason(reason);
+  return reason === 'ready-to-start' || reason === 'done-request' || isOwnerItemReason(reason);
 }
 
 /** The coordinator's open request to start this project, when the read carries one. The server
  *  sends it only for a project nobody has started, so its presence is the whole answer. */
 function startRequestOf(project: AttentionProject): { waitingSince: string } | null {
   return project.attention?.startRequest ?? null;
+}
+
+/** The coordinator's open request to record this project done, when the read carries one. The
+ *  server sends it only while the project is OPEN and the request still describes it. */
+function doneRequestOf(project: AttentionProject): { waitingSince: string } | null {
+  return project.attention?.doneRequest ?? null;
 }
 
 type ProjectOwnerItem = NonNullable<ProjectAttentionSummary['ownerItems']>[number];
@@ -206,23 +219,35 @@ function leadOwnerItem(project: AttentionProject): ProjectOwnerItem | null {
   return lead;
 }
 
+type NeedsYouLead =
+  | { reason: OwnerItemPushKind; since: string; item: ProjectOwnerItem }
+  | { reason: 'ready-to-start' | 'done-request'; since: string; item: null };
+
 /**
- * Whether the row leads with the start request rather than with one of the four: the one that has
- * waited longest, as between the four — and on a tie the four, which come first in the fixed order
- * for the reason `leadOwnerItem` gives.
+ * What the row leads with among the things the owner is asked for in person: the one that has
+ * waited longest — and on a tie the four first, then the start request, then the done request, in
+ * that fixed order for the reason `leadOwnerItem` gives.
  */
-function startRequestLeads(project: AttentionProject): boolean {
-  const start = startRequestOf(project);
-  if (!start) return false;
-  const lead = leadOwnerItem(project);
-  return !lead || byInstantAsc(start.waitingSince, lead.oldestWaitingSince) < 0;
+function needsYouLead(project: AttentionProject): NeedsYouLead | null {
+  const item = leadOwnerItem(project);
+  let lead: NeedsYouLead | null = item
+    ? { reason: OWNER_ITEM_PUSH_KINDS[item.kind], since: item.oldestWaitingSince, item }
+    : null;
+  const requests = [
+    ['ready-to-start', startRequestOf(project)],
+    ['done-request', doneRequestOf(project)],
+  ] as const;
+  for (const [reason, request] of requests) {
+    if (request && (!lead || byInstantAsc(request.waitingSince, lead.since) < 0)) {
+      lead = { reason, since: request.waitingSince, item: null };
+    }
+  }
+  return lead;
 }
 
 /** Since when the owner has been asked for what the row names: the lead's own instant. */
 function needsYouSince(project: AttentionProject): string | null {
-  return startRequestLeads(project)
-    ? startRequestOf(project)!.waitingSince
-    : (leadOwnerItem(project)?.oldestWaitingSince ?? null);
+  return needsYouLead(project)?.since ?? null;
 }
 
 /**
@@ -265,10 +290,10 @@ export function attentionReasonOf(project: AttentionProject, now: number): Atten
   // that names a piece of work a person has to go and do, and the four of them are what mock 1's
   // chips print. Not `attention?.userBlockers` — a blocker is a tag somebody applied, and this is
   // an exception the platform routed to them and is waiting for. A coordinator asking to start the
-  // project is the fifth, in the same tier: whichever has waited longest is the one named.
-  if (startRequestLeads(project)) return 'ready-to-start';
-  const lead = leadOwnerItem(project);
-  if (lead) return OWNER_ITEM_PUSH_KINDS[lead.kind];
+  // project is the fifth, and asking to record it done the sixth, in the same tier: whichever has
+  // waited longest is the one named.
+  const lead = needsYouLead(project);
+  if (lead) return lead.reason;
 
   if (autoRemediationBlockerCount(project) > 0) return 'auto-remediation';
   if ((project.attention?.userBlockers ?? 0) > 0) return 'needs-user';
@@ -346,6 +371,7 @@ const ATTENTION_REASON_RANK: Record<AttentionReason, number> = {
   'escalated-to-you': 1,
   'fuse-paused': 1,
   'ready-to-start': 1,
+  'done-request': 1,
   'needs-user': 2,
   'auto-remediation': 3,
   'no-activity-running': 4,
@@ -388,7 +414,7 @@ const HOUR_MS = 60 * MINUTE_MS;
  * question is an errand, and the owner reads a half-hour wait and an eighteen-hour one differently.
  * Past a day the two agree, and both say `<n>d`.
  */
-function elapsedLabel(at: string | null | undefined, now: number): string | null {
+export function elapsedLabel(at: string | null | undefined, now: number): string | null {
   const rank = instantRank(at);
   if (rank === Number.NEGATIVE_INFINITY || rank > now) return null;
   const waited = now - rank;
@@ -399,7 +425,7 @@ function elapsedLabel(at: string | null | undefined, now: number): string | null
 }
 
 /** What the coordinator is doing with the item it holds, by the item's kind (§7.1 V2). */
-const COORDINATOR_LEAD_COPY: Record<CoordinatorLeadKind, string> = {
+export const COORDINATOR_LEAD_COPY: Record<CoordinatorLeadKind, string> = {
   INTEGRATION_CONFLICT: 'resolving a merge conflict',
   INTEGRATION_CHECK_FAILED: 'checks failed',
   INTEGRATION_ERROR: 'handling an integration error',
@@ -426,6 +452,10 @@ const OWNER_ITEM_SAYS: Record<OwnerItemKind, (item: ProjectOwnerItem) => string>
 /** The fifth, in the words the coordinator's session row and its pinned strip say it
  *  (`READY_TO_START`, lib/projectStart.ts): its coordinator has asked to start the project. */
 export const READY_TO_START_SAYS = `Needs you · ${READY_TO_START}`;
+
+/** The sixth, in the words the coordinator's session row and the project page say it
+ *  (`READY_TO_CLOSE`, lib/projectDone.ts): its coordinator has asked to record the project done. */
+export const READY_TO_CLOSE_SAYS = `Needs you · ${READY_TO_CLOSE}`;
 
 /** Returns a new array; the React Query cache's array is never sorted in place. */
 export function orderWithinSection<T extends AttentionProject>(
@@ -502,6 +532,12 @@ export function attentionChipOf(project: AttentionProject, now: number): Attenti
   if (reason === 'ready-to-start') {
     const age = elapsedLabel(startRequestOf(project)?.waitingSince, now);
     return { tone: 'warning', text: [READY_TO_START_SAYS, age].filter(Boolean).join(' · ') };
+  }
+
+  // The coordinator asked to record the project done, and has been waiting this long.
+  if (reason === 'done-request') {
+    const age = elapsedLabel(doneRequestOf(project)?.waitingSince, now);
+    return { tone: 'warning', text: [READY_TO_CLOSE_SAYS, age].filter(Boolean).join(' · ') };
   }
 
   // What the owner has to go and do, and how long it has been waiting for them. The four are one
@@ -613,9 +649,15 @@ export interface SidebarProject {
   title: string;
   status: 'OPEN' | 'DONE' | 'CANCELLED';
   createdAt: string;
+  /** Null for a project nobody has started; absent from a server that predates it. */
+  startedAt?: string | null;
   lastActivityAt: string | null;
   buckets: Pick<ProjectPanoramaBuckets, 'running'>;
-  attention?: Pick<ProjectAttentionSummary, 'ownerItems' | 'startRequest'> | null;
+  /** Absent on a server that predates sidebar task progress. */
+  taskCounts?: ProjectSidebarTaskCounts;
+  attention?: Pick<ProjectAttentionSummary, 'ownerItems' | 'startRequest'> &
+    Partial<Pick<ProjectAttentionSummary, 'doneRequest'>> &
+    Partial<Pick<ProjectAttentionSummary, 'coordinatorItems'>> | null;
   /** Absent from a server that predates it; null on a project with no coordinator bound. */
   coordinatorActivity?: ProjectListCoordinatorActivity | null;
   integration?: ProjectListIntegration | null;
@@ -635,14 +677,22 @@ function waitingStartRequest(project: SidebarProject): { waitingSince: string } 
   return project.attention?.startRequest ?? null;
 }
 
+/** The coordinator's request to record this project done, while it is open and waiting on the reader. */
+function waitingDoneRequest(project: SidebarProject): { waitingSince: string } | null {
+  if (project.status !== 'OPEN') return null;
+  return project.attention?.doneRequest ?? null;
+}
+
 /**
  * How many items wait on the reader in this project — a merge to approve, a question, an
- * escalation, a pause, and a coordinator asking to start it — together: the row's amber count. A
- * project that merely went quiet counts nothing; that is not something the reader was asked for.
+ * escalation, a pause, and a coordinator asking to start it or to record it done — together: the
+ * row's amber count. A project that merely went quiet counts nothing; that is not something the
+ * reader was asked for.
  */
 export function projectNeedsYouCount(project: SidebarProject): number {
   return waitingOwnerItems(project).reduce((sum, item) => sum + item.count, 0)
-    + (waitingStartRequest(project) ? 1 : 0);
+    + (waitingStartRequest(project) ? 1 : 0)
+    + (waitingDoneRequest(project) ? 1 : 0);
 }
 
 /** Work in flight: a task, the coordinator, or a queued/running integration job. */
@@ -661,9 +711,15 @@ function latestActivity(project: SidebarProject): string | null {
 
 /** When the reader was first asked — the oldest of the items waiting on them. */
 function oldestWait(project: SidebarProject): string | null {
-  let oldest: string | null = waitingStartRequest(project)?.waitingSince ?? null;
-  for (const item of waitingOwnerItems(project)) {
-    if (oldest === null || byInstantAsc(item.oldestWaitingSince, oldest) < 0) oldest = item.oldestWaitingSince;
+  let oldest: string | null = null;
+  const waits = [
+    waitingStartRequest(project)?.waitingSince,
+    waitingDoneRequest(project)?.waitingSince,
+    ...waitingOwnerItems(project).map((item) => item.oldestWaitingSince),
+  ];
+  for (const since of waits) {
+    if (since == null) continue;
+    if (oldest === null || byInstantAsc(since, oldest) < 0) oldest = since;
   }
   return oldest;
 }

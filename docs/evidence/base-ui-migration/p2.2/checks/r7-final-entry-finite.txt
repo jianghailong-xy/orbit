@@ -1,0 +1,127 @@
+[WebServer] (node:915629) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 40 tests using 1 worker
+
+(node:919026) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.5s)
+(node:922642) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   2 [chromium-light-desktop] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.1s)
+(node:922803) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   3 [chromium-light-desktop] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.0s)
+(node:923125) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   4 [chromium-light-desktop] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.0s)
+(node:923382) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   5 [chromium-light-desktop] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.0s)
+(node:923501) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   6 [chromium-light-phone] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.0s)
+(node:923668) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   7 [chromium-light-phone] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.1s)
+(node:923784) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   8 [chromium-light-phone] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.1s)
+(node:923930) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   9 [chromium-light-phone] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.0s)
+(node:924054) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  10 [chromium-light-phone] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.0s)
+(node:924185) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  11 [chromium-dark-desktop] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.0s)
+(node:924345) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  12 [chromium-dark-desktop] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.0s)
+(node:924526) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  13 [chromium-dark-desktop] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.1s)
+(node:924660) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  14 [chromium-dark-desktop] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.1s)
+(node:924783) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  15 [chromium-dark-desktop] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (1.9s)
+(node:924909) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  16 [chromium-dark-phone] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.0s)
+(node:925093) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  17 [chromium-dark-phone] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.0s)
+(node:925410) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  18 [chromium-dark-phone] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.0s)
+(node:925536) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  19 [chromium-dark-phone] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.0s)
+(node:925652) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  20 [chromium-dark-phone] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.0s)
+(node:925774) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  21 [webkit-light-desktop] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (1.9s)
+(node:925924) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  22 [webkit-light-desktop] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (1.9s)
+(node:926152) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  23 [webkit-light-desktop] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.0s)
+(node:926569) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  24 [webkit-light-desktop] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.1s)
+(node:926843) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  25 [webkit-light-desktop] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.1s)
+(node:927114) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  26 [webkit-light-phone] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.3s)
+(node:927966) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  27 [webkit-light-phone] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (3.3s)
+(node:929518) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  28 [webkit-light-phone] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.9s)
+(node:930929) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  29 [webkit-light-phone] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.1s)
+(node:931491) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  30 [webkit-light-phone] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (1.9s)
+(node:931791) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  31 [webkit-dark-desktop] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (1.9s)
+(node:931977) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  32 [webkit-dark-desktop] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (1.9s)
+(node:932163) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  33 [webkit-dark-desktop] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (1.9s)
+(node:932707) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  34 [webkit-dark-desktop] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (1.9s)
+(node:933015) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  35 [webkit-dark-desktop] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (2.0s)
+(node:933171) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  36 [webkit-dark-phone] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (1.9s)
+(node:933316) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  37 [webkit-dark-phone] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (1.9s)
+(node:933460) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  38 [webkit-dark-phone] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (1.9s)
+(node:933603) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  39 [webkit-dark-phone] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (1.9s)
+(node:933763) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  40 [webkit-dark-phone] › src/web/ui-migration/toasts.browser.mjs:242:1 › legacy AntApp confirmation still works with the same notification service (1.9s)
+
+  40 passed (1.6m)
