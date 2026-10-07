@@ -33,6 +33,10 @@ const CASES = [
   ['menu ⏎ Tab ⏎', { url: choices, trigger: 'Add attachment', window: true }, ['Enter', 'Tab', 'Enter'], { output: null, popups: 'dialog:Context', focus: 'dialog:Context' }],
   ['menu ⏎ Shift+Tab', { url: choices, trigger: 'Add attachment', window: true }, ['Enter', 'Shift+Tab'], { output: null, popups: 'none', focus: 'button:Add attachment' }],
   ['menu ↓ Tab', { url: choices, trigger: 'Add attachment', window: true }, ['ArrowDown', 'Tab'], { output: null, popups: 'none', focus: 'button:Open context' }],
+  // Added with the coordinator's second decision: Home and End before the focus move.
+  ['menu ⏎ End ⏎', { url: choices, trigger: 'Add attachment', window: true }, ['Enter', 'End', 'Enter'], { output: ['Action', 'command'], popups: 'none', focus: 'button:Add attachment' }],
+  ['menu ↓ End ⏎', { url: choices, trigger: 'Add attachment', window: true }, ['ArrowDown', 'End', 'Enter'], { output: ['Action', 'command'], popups: 'none', focus: 'button:Add attachment' }],
+  ['menu ↑ Home ⏎', { url: choices, trigger: 'Add attachment', window: true }, ['ArrowUp', 'Home', 'Enter'], { output: ['Action', 'file'], popups: 'none', focus: 'button:Add attachment' }],
   ['select ↓ Tab', { url: choices, trigger: 'Expires', role: 'combobox', window: true }, ['ArrowDown', 'Tab'], { output: null, popups: 'none', focus: 'combobox:Workspace' }],
   ['select ⏎ Tab', { url: choices, trigger: 'Expires', role: 'combobox', window: true }, ['Enter', 'Tab'], { output: null, popups: 'none', focus: 'combobox:Workspace' }],
   ['select ↓ Shift+Tab', { url: choices, trigger: 'Expires', role: 'combobox', window: true }, ['ArrowDown', 'Shift+Tab'], { output: null, popups: 'none', focus: 'combobox:Expires' }],

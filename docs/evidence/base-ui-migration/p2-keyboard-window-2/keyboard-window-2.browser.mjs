@@ -59,6 +59,11 @@ const SEQUENCES = [
   { name: 'menu-enter-tab-enter', keys: ['Enter', 'Tab', 'Enter'], targets: MENUS, control: 'menu-enter-enter' },
   { name: 'menu-enter-shift-tab', keys: ['Enter', 'Shift+Tab'], targets: MENUS, control: 'menu-enter' },
   { name: 'menu-enter-shift-tab-enter', keys: ['Enter', 'Shift+Tab', 'Enter'], targets: MENUS, control: 'menu-enter-enter' },
+  // Added after the first baseline (their own baseline chunk): Home and End after an arrow opened the menu.
+  { name: 'menu-down-enter', keys: ['ArrowDown', 'Enter'], targets: MENUS },
+  { name: 'menu-down-end-enter', keys: ['ArrowDown', 'End', 'Enter'], targets: MENUS, control: 'menu-down-enter' },
+  { name: 'menu-up-enter', keys: ['ArrowUp', 'Enter'], targets: MENUS },
+  { name: 'menu-up-home-enter', keys: ['ArrowUp', 'Home', 'Enter'], targets: MENUS, control: 'menu-up-enter' },
   { name: 'menu-space', keys: ['Space'], targets: MENUS },
   { name: 'menu-space-enter', keys: ['Space', 'Enter'], targets: MENUS, control: 'menu-space' },
   { name: 'menu-space-down-enter', keys: ['Space', 'ArrowDown', 'Enter'], targets: MENUS, control: 'menu-space-enter' },

@@ -236,6 +236,32 @@ describe('Tab and Shift+Tab after a menu opened from the keyboard', () => {
   });
 });
 
+describe('Home and End after a menu opened from the keyboard', () => {
+  // [keys, the item the reference runs]: End moves to the last item and Home to the first, as with focus in the menu.
+  const SEQUENCES: [keys: Key[], runs: string][] = [
+    [['Enter', 'End', 'Enter'], 'shell'],
+    [['ArrowDown', 'End', 'Enter'], 'shell'],
+    [['ArrowUp', 'Home', 'Enter'], 'file'],
+  ];
+  async function open() {
+    await render(<Menu trigger={<button type="button">Add attachment</button>} items={attachmentItems} />);
+    button('Add attachment')!.focus();
+  }
+  it.each(SEQUENCES)('%j with focus in the menu (the reference)', async (keys, runs) => {
+    await open();
+    const result = await play(keys, false, () => {});
+    expect(result.after).toEqual({ ran: [runs], focus: 'button:Add attachment' });
+  });
+  it.each(SEQUENCES)('%j before focus enters the menu runs what the reference runs', async (keys, runs) => {
+    await open();
+    const result = await play(keys, true, () => {
+      expect(shown('menu')).toBe(1);
+      expect(focus()).toBe('button:Add attachment');
+    });
+    expect(result).toEqual({ ran: [runs], focus: 'button:Add attachment', after: { ran: [runs], focus: 'button:Add attachment' } });
+  });
+});
+
 function Expires() {
   const [value, setValue] = useState<string | null>('never');
   return <><button type="button">Before</button>
