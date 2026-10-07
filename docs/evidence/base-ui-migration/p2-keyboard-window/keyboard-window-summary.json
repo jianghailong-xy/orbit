@@ -48216,5 +48216,329 @@
     }
    }
   }
+ },
+ "fix-held-frames-before": {
+  "scope": "before-fix tree 46a418fba (A/B), menu-held-frames.browser.mjs in all eight projects",
+  "playwright": {
+   "expected": 24,
+   "unexpected": 56,
+   "skipped": 0,
+   "flaky": 0
+  },
+  "targets": {
+   "attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image": {
+    "passed": [],
+    "failed": [
+     "chromium-light-desktop",
+     "chromium-light-phone",
+     "chromium-dark-desktop",
+     "chromium-dark-phone",
+     "webkit-light-desktop",
+     "webkit-light-phone",
+     "webkit-dark-desktop",
+     "webkit-dark-phone"
+    ],
+    "window": 8,
+    "handedOver": 0
+   },
+   "attachment-menu-ArrowDown-Enter-with-frames-held-runs-file": {
+    "passed": [],
+    "failed": [
+     "chromium-light-desktop",
+     "chromium-light-phone",
+     "chromium-dark-desktop",
+     "chromium-dark-phone",
+     "webkit-light-desktop",
+     "webkit-light-phone",
+     "webkit-dark-desktop",
+     "webkit-dark-phone"
+    ],
+    "window": 8,
+    "handedOver": 0
+   },
+   "attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command": {
+    "passed": [
+     "chromium-light-desktop",
+     "chromium-light-phone",
+     "chromium-dark-desktop",
+     "chromium-dark-phone",
+     "webkit-light-desktop",
+     "webkit-light-phone",
+     "webkit-dark-desktop",
+     "webkit-dark-phone"
+    ],
+    "failed": [],
+    "window": 8,
+    "handedOver": 0
+   },
+   "attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image": {
+    "passed": [],
+    "failed": [
+     "chromium-light-desktop",
+     "chromium-light-phone",
+     "chromium-dark-desktop",
+     "chromium-dark-phone",
+     "webkit-light-desktop",
+     "webkit-light-phone",
+     "webkit-dark-desktop",
+     "webkit-dark-phone"
+    ],
+    "window": 8,
+    "handedOver": 0
+   },
+   "attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command": {
+    "passed": [
+     "chromium-light-desktop",
+     "chromium-light-phone",
+     "chromium-dark-desktop",
+     "chromium-dark-phone",
+     "webkit-light-desktop",
+     "webkit-light-phone",
+     "webkit-dark-desktop",
+     "webkit-dark-phone"
+    ],
+    "failed": [],
+    "window": 8,
+    "handedOver": 0
+   },
+   "attachment-menu-Enter-Enter-with-frames-held-runs-file": {
+    "passed": [],
+    "failed": [
+     "chromium-light-desktop",
+     "chromium-light-phone",
+     "chromium-dark-desktop",
+     "chromium-dark-phone",
+     "webkit-light-desktop",
+     "webkit-light-phone",
+     "webkit-dark-desktop",
+     "webkit-dark-phone"
+    ],
+    "window": 8,
+    "handedOver": 0
+   },
+   "attachment-menu-ArrowUp-Enter-with-frames-held-runs-command": {
+    "passed": [],
+    "failed": [
+     "chromium-light-desktop",
+     "chromium-light-phone",
+     "chromium-dark-desktop",
+     "chromium-dark-phone",
+     "webkit-light-desktop",
+     "webkit-light-phone",
+     "webkit-dark-desktop",
+     "webkit-dark-phone"
+    ],
+    "window": 8,
+    "handedOver": 0
+   },
+   "attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell": {
+    "passed": [],
+    "failed": [
+     "chromium-light-desktop",
+     "chromium-light-phone",
+     "chromium-dark-desktop",
+     "chromium-dark-phone",
+     "webkit-light-desktop",
+     "webkit-light-phone",
+     "webkit-dark-desktop",
+     "webkit-dark-phone"
+    ],
+    "window": 8,
+    "handedOver": 0
+   },
+   "attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file": {
+    "passed": [
+     "chromium-light-desktop",
+     "chromium-light-phone",
+     "chromium-dark-desktop",
+     "chromium-dark-phone",
+     "webkit-light-desktop",
+     "webkit-light-phone",
+     "webkit-dark-desktop",
+     "webkit-dark-phone"
+    ],
+    "failed": [],
+    "window": 8,
+    "handedOver": 0
+   },
+   "row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row": {
+    "passed": [],
+    "failed": [
+     "chromium-light-desktop",
+     "chromium-light-phone",
+     "chromium-dark-desktop",
+     "chromium-dark-phone",
+     "webkit-light-desktop",
+     "webkit-light-phone",
+     "webkit-dark-desktop",
+     "webkit-dark-phone"
+    ],
+    "window": 8,
+    "handedOver": 0
+   }
+  },
+  "sequences": {}
+ },
+ "fix-held-frames-after": {
+  "scope": "fixed tree (A/B), menu-held-frames.browser.mjs in all eight projects",
+  "playwright": {
+   "expected": 80,
+   "unexpected": 0,
+   "skipped": 0,
+   "flaky": 0
+  },
+  "targets": {
+   "attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image": {
+    "passed": [
+     "chromium-light-desktop",
+     "chromium-light-phone",
+     "chromium-dark-desktop",
+     "chromium-dark-phone",
+     "webkit-light-desktop",
+     "webkit-light-phone",
+     "webkit-dark-desktop",
+     "webkit-dark-phone"
+    ],
+    "failed": [],
+    "window": 8,
+    "handedOver": 8
+   },
+   "attachment-menu-ArrowDown-Enter-with-frames-held-runs-file": {
+    "passed": [
+     "chromium-light-desktop",
+     "chromium-light-phone",
+     "chromium-dark-desktop",
+     "chromium-dark-phone",
+     "webkit-light-desktop",
+     "webkit-light-phone",
+     "webkit-dark-desktop",
+     "webkit-dark-phone"
+    ],
+    "failed": [],
+    "window": 8,
+    "handedOver": 8
+   },
+   "attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command": {
+    "passed": [
+     "chromium-light-desktop",
+     "chromium-light-phone",
+     "chromium-dark-desktop",
+     "chromium-dark-phone",
+     "webkit-light-desktop",
+     "webkit-light-phone",
+     "webkit-dark-desktop",
+     "webkit-dark-phone"
+    ],
+    "failed": [],
+    "window": 8,
+    "handedOver": 8
+   },
+   "attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image": {
+    "passed": [
+     "chromium-light-desktop",
+     "chromium-light-phone",
+     "chromium-dark-desktop",
+     "chromium-dark-phone",
+     "webkit-light-desktop",
+     "webkit-light-phone",
+     "webkit-dark-desktop",
+     "webkit-dark-phone"
+    ],
+    "failed": [],
+    "window": 8,
+    "handedOver": 8
+   },
+   "attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command": {
+    "passed": [
+     "chromium-light-desktop",
+     "chromium-light-phone",
+     "chromium-dark-desktop",
+     "chromium-dark-phone",
+     "webkit-light-desktop",
+     "webkit-light-phone",
+     "webkit-dark-desktop",
+     "webkit-dark-phone"
+    ],
+    "failed": [],
+    "window": 8,
+    "handedOver": 8
+   },
+   "attachment-menu-Enter-Enter-with-frames-held-runs-file": {
+    "passed": [
+     "chromium-light-desktop",
+     "chromium-light-phone",
+     "chromium-dark-desktop",
+     "chromium-dark-phone",
+     "webkit-light-desktop",
+     "webkit-light-phone",
+     "webkit-dark-desktop",
+     "webkit-dark-phone"
+    ],
+    "failed": [],
+    "window": 8,
+    "handedOver": 8
+   },
+   "attachment-menu-ArrowUp-Enter-with-frames-held-runs-command": {
+    "passed": [
+     "chromium-light-desktop",
+     "chromium-light-phone",
+     "chromium-dark-desktop",
+     "chromium-dark-phone",
+     "webkit-light-desktop",
+     "webkit-light-phone",
+     "webkit-dark-desktop",
+     "webkit-dark-phone"
+    ],
+    "failed": [],
+    "window": 8,
+    "handedOver": 8
+   },
+   "attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell": {
+    "passed": [
+     "chromium-light-desktop",
+     "chromium-light-phone",
+     "chromium-dark-desktop",
+     "chromium-dark-phone",
+     "webkit-light-desktop",
+     "webkit-light-phone",
+     "webkit-dark-desktop",
+     "webkit-dark-phone"
+    ],
+    "failed": [],
+    "window": 8,
+    "handedOver": 8
+   },
+   "attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file": {
+    "passed": [
+     "chromium-light-desktop",
+     "chromium-light-phone",
+     "chromium-dark-desktop",
+     "chromium-dark-phone",
+     "webkit-light-desktop",
+     "webkit-light-phone",
+     "webkit-dark-desktop",
+     "webkit-dark-phone"
+    ],
+    "failed": [],
+    "window": 8,
+    "handedOver": 8
+   },
+   "row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row": {
+    "passed": [
+     "chromium-light-desktop",
+     "chromium-light-phone",
+     "chromium-dark-desktop",
+     "chromium-dark-phone",
+     "webkit-light-desktop",
+     "webkit-light-phone",
+     "webkit-dark-desktop",
+     "webkit-dark-phone"
+    ],
+    "failed": [],
+    "window": 8,
+    "handedOver": 8
+   }
+  },
+  "sequences": {}
  }
 }
