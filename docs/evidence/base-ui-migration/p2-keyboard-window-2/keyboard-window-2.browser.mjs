@@ -24,6 +24,10 @@ const TARGETS = {
   'orbit-submenu': { kind: 'submenu', url: choices, field: button('Session actions'), open: ['ArrowDown', 'ArrowDown'], outputs: true },
   'orbit-submenu-sample': { kind: 'submenu', url: `${choices}?system=orbit&sample=submenu`, field: button('Add attachment'), open: ['Enter'] },
   'antd-submenu': { kind: 'submenu', url: `${choices}?system=antd&sample=submenu`, field: button('Add attachment'), open: ['Enter', 'Tab'] },
+  // The same pair inside a menu with other items around the submenu (the shape of the workspace menus), reporting the
+  // item picked. Provider is the second item.
+  'orbit-session': { kind: 'submenu', url: `${choices}?system=orbit&sample=session`, field: button('Session actions'), open: ['Enter', 'ArrowDown'], outputs: true },
+  'antd-session': { kind: 'submenu', url: `${choices}?system=antd&sample=session`, field: button('Session actions'), open: ['Enter', 'Tab', 'ArrowDown'], outputs: true },
   // Selects, as in the earlier probe.
   'orbit-field': { kind: 'select', url: choices, field: combobox('Expires'), read: output('Expiry value') },
   'orbit-sample': { kind: 'select', url: `${choices}?system=orbit&sample=expiry`, field: combobox('Sample choice'), read: sample },
@@ -38,7 +42,7 @@ const TARGETS = {
   'antd-confirm': { kind: 'dialog', url: overlays, field: button('AntD confirm') },
 };
 const MENUS = ['orbit-menu', 'orbit-menu-sample', 'antd-menu'];
-const SUBMENUS = ['orbit-submenu', 'orbit-submenu-sample', 'antd-submenu'];
+const SUBMENUS = ['orbit-submenu', 'orbit-submenu-sample', 'antd-submenu', 'orbit-session', 'antd-session'];
 const SELECTS = ['orbit-field', 'orbit-sample', 'antd-sample'];
 const POPCONFIRMS = ['orbit-popconfirm', 'antd-popconfirm'];
 const DIALOGS = ['orbit-dialog', 'antd-dialog', 'orbit-confirm', 'antd-confirm'];
@@ -54,6 +58,7 @@ const SEQUENCES = [
   { name: 'menu-enter-tab', keys: ['Enter', 'Tab'], targets: MENUS, control: 'menu-enter' },
   { name: 'menu-enter-tab-enter', keys: ['Enter', 'Tab', 'Enter'], targets: MENUS, control: 'menu-enter-enter' },
   { name: 'menu-enter-shift-tab', keys: ['Enter', 'Shift+Tab'], targets: MENUS, control: 'menu-enter' },
+  { name: 'menu-enter-shift-tab-enter', keys: ['Enter', 'Shift+Tab', 'Enter'], targets: MENUS, control: 'menu-enter-enter' },
   { name: 'menu-space', keys: ['Space'], targets: MENUS },
   { name: 'menu-space-enter', keys: ['Space', 'Enter'], targets: MENUS, control: 'menu-space' },
   { name: 'menu-space-down-enter', keys: ['Space', 'ArrowDown', 'Enter'], targets: MENUS, control: 'menu-space-enter' },
@@ -163,7 +168,8 @@ function observeKeys(stateSource) {
     const { popups, count, active, highlighted } = state();
     const target = event.target instanceof Element
       ? `${event.target.getAttribute('role') ?? event.target.tagName.toLowerCase()}:${(event.target.getAttribute('aria-label') ?? event.target.textContent ?? '').trim().slice(0, 24)}` : String(event.target);
-    window.keyLog.push({ key: event.key, shift: event.shiftKey, t: Math.round((performance.now() - start) * 10) / 10, target, trusted: event.isTrusted,
+    const inPopup = event.target instanceof Element && !!event.target.closest('[role="menu"],[role="listbox"],[role="dialog"],[role="alertdialog"],[role="tooltip"]');
+    window.keyLog.push({ key: event.key, shift: event.shiftKey, t: Math.round((performance.now() - start) * 10) / 10, target, inPopup, trusted: event.isTrusted,
       focused: active, popups, count, highlighted });
   }, true);
 }
@@ -171,11 +177,11 @@ function observeKeys(stateSource) {
 const read = async (page, target) => (await TARGETS[target].read(page)).trim().split('\n').map((line) => line.trim()).filter(Boolean).join(' | ');
 // The old AntD sample text repeats the selected label (`7 days | 7 days`); the value is its first part.
 const value = async (page, target) => (await read(page, target)).split(' | ')[0];
-// Pages without outputs: the last Enter or Space whose target was a menu item or a button, after which fewer popups
-// were shown than at that key, activated it. A submenu trigger (Provider) only opens its submenu.
+// Pages without outputs: the last Enter or Space whose target was a menu item or a button inside a popup, after which
+// fewer popups were shown than at that key, activated it. A submenu trigger (Provider) only opens its submenu.
 function activated(keyLog, after) {
   const press = keyLog.filter((key) => key.key === 'Enter' || key.key === ' ').at(-1);
-  if (!press || after.count >= press.count) return null;
+  if (!press || !press.inPopup || after.count >= press.count) return null;
   const split = press.target.indexOf(':');
   const [role, label] = [press.target.slice(0, split), press.target.slice(split + 1)];
   return ['menuitem', 'menuitemcheckbox', 'menuitemradio', 'button'].includes(role) && label !== 'Provider' ? `ran ${label}` : null;
