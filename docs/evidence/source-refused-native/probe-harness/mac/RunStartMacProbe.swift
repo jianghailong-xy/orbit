@@ -76,13 +76,19 @@ enum WindowFit {
                     seen.insert(before)
                     log("window (screen \(screen.frame), visible \(visible), backing \(window.backingScaleFactor)): \(frame) content \(window.contentView?.frame ?? .zero)")
                 }
-                // The whole visible frame, in both directions: what the picture needs is the most
-                // window this display allows, and a window the app opened smaller than that (or
-                // bigger — its own console page asks for more than the screen) is the same fault
-                // from either side.
+                // TALLER than the display, not the visible frame: the console page lays itself out
+                // ~1564 points tall (measured on the CI Mac: the split view spans y −386…1178
+                // while the window shows 31…708, the card at ~900 with nothing to scroll it — the
+                // band is the transcript's sibling, not inside it), and the display's whole visible
+                // frame is 677. A window the display can hold therefore cannot contain the card at
+                // all; a window taller than the screen can, and `-probe.shot` photographs the
+                // window's own bitmap rather than the screen, so what is below the screen's edge is
+                // still in the picture. Whether AppKit lets a titled window past the screen is what
+                // the log beside these lines answers.
                 var fit = visible
                 fit.origin.x = visible.minX
                 fit.origin.y = visible.minY
+                fit.size.height = max(visible.height, 1700)
                 guard fit != frame else { continue }
                 window.setFrame(fit, display: true)
                 log("fitWindow: \(frame) -> \(window.frame) content \(window.contentView?.frame ?? .zero)")
@@ -92,7 +98,7 @@ enum WindowFit {
 
     /// `-probe.windowLog <path>`: what the app did to its own windows, where the UI-test runner's
     /// sandbox cannot read it back — `run.sh` copies the file into the shots.
-    private static func log(_ line: String) {
+    static func log(_ line: String) {
         let args = ProcessInfo.processInfo.arguments
         guard let i = args.firstIndex(of: "-probe.windowLog"), args.count > i + 1,
               let data = "\(line)\n".data(using: .utf8) else { return }
@@ -125,13 +131,22 @@ enum WindowShot {
                   let image = CGWindowListCreateImage(.null, .optionIncludingWindow,
                                                       CGWindowID(window.windowNumber),
                                                       [.boundsIgnoreFraming, .bestResolution]) else {
+                WindowFit.log("shot: no image for \(NSApp.windows.count) windows")
                 FileHandle.standardError.write(Data("probe: no image for \(NSApp.windows.count) windows\n".utf8))
                 return
             }
             let rep = NSBitmapImageRep(cgImage: image)
             rep.size = window.frame.size
-            do { try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path)) }
-            catch { FileHandle.standardError.write(Data("probe: could not write \(path): \(error)\n".utf8)) }
+            do {
+                let data = rep.representation(using: .png, properties: [:])
+                try data?.write(to: URL(fileURLWithPath: path))
+                // The window's own size and the shot's, side by side: a picture narrower than the
+                // window is a picture of something else, and this is where that shows.
+                WindowFit.log("shot: \(path) \(data?.count ?? 0) bytes, image \(image.width)x\(image.height), window \(window.frame)")
+            } catch {
+                WindowFit.log("shot: could not write \(path): \(error)")
+                FileHandle.standardError.write(Data("probe: could not write \(path): \(error)\n".utf8))
+            }
         }
     }
 }

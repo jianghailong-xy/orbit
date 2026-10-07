@@ -21,11 +21,20 @@ final class RunStartShotTests: ProbeCase {
     func testMacShowsWhyTheRunNeverStarted() { drive("mac", bottom: 660) }
     #endif
 
+    /// Where the run's shots are collected (`TEST_RUNNER_SHOTS_DIR` reaches the runner as
+    /// `SHOTS_DIR`). The app writes the Mac window pictures here; the runner only names them.
+    private var shotsDir: String {
+        ProcessInfo.processInfo.environment["SHOTS_DIR"] ?? "/tmp"
+    }
+
     private func picture(_ app: XCUIApplication, _ name: String) {
         // A prompt that came up after the launch must not be in the picture: on the CI runner the
         // stub's first run raised one over the window, in the middle of `mac-1-refused`.
         dismissSystemPrompts()
         settle(1.2)
+        // A window that went away is a note, not the end of the pass: `screenshot()` on one that
+        // does not exist throws, and that took the tail of the pass with it once already.
+        guard app.windows.firstMatch.exists else { note("\(name): no window to photograph"); return }
         shot(app, name)
         write(app.debugDescription, "tree-\(name).txt")
     }
@@ -37,6 +46,7 @@ final class RunStartShotTests: ProbeCase {
     private func band(_ app: XCUIApplication, _ element: XCUIElement, _ top: CGFloat, _ bottom: CGFloat,
                       _ name: String) {
         #if os(macOS)
+        guard app.windows.firstMatch.exists else { note("\(name): no window to scroll in"); return }
         bring(app, element, between: top, and: bottom, name)
         #endif
     }
@@ -50,8 +60,13 @@ final class RunStartShotTests: ProbeCase {
                                "-probe.session", session,
                                "-ApplePersistenceIgnoreState", "YES"]
         #if os(macOS)
+        // The window the console needs is taller than the CI Mac's 1024×768 screen (see
+        // `WindowFit`), so the picture has to be the window's own bitmap, not the screen's — the
+        // app writes it (the UI-test runner's sandbox cannot), into the shots directory the run
+        // uploads. The XCUITest picture of the same launch is still taken.
         app.launchArguments += ["-shell.sidebarVisible", "NO",
-                                "-probe.fitWindow", "-probe.windowLog", "/tmp/sr-window-\(session).log"]
+                                "-probe.fitWindow", "-probe.windowLog", "/tmp/sr-window-\(session).log",
+                                "-probe.shot", "\(shotsDir)/mac-window-\(session).png"]
         #endif
         app.launch()
         dismissSystemPrompts()
@@ -121,10 +136,21 @@ final class RunStartShotTests: ProbeCase {
                                    "-ApplePersistenceIgnoreState", "YES"]
         #if os(macOS)
         project.launchArguments += ["-shell.sidebarVisible", "NO",
-                                    "-probe.fitWindow", "-probe.windowLog", "/tmp/sr-window-project.log"]
+                                    "-probe.fitWindow", "-probe.windowLog", "/tmp/sr-window-project.log",
+                                    "-probe.shot", "\(shotsDir)/mac-window-project.png"]
         #endif
         project.launch()
         dismissSystemPrompts()
+        #if os(macOS)
+        // The same fallback `open` makes: on this runner a launched app often has no window for a
+        // while (and run 37621304542's project launch never got one at all — the pass ended on
+        // "No matches found for … Descendants matching type Window", with no picture).
+        if !waitUntil(15, { project.windows.count > 0 }) {
+            note("\(platform)-project: no window after launch; pressing ⌘N")
+            project.typeKey("n", modifierFlags: .command)
+            _ = waitUntil(15, { project.windows.count > 0 })
+        }
+        #endif
         if !appears(project, "Its baseline is a branch that doesn't exist yet", timeout: 120) {
             write(project.debugDescription, "missing-\(platform)-project.txt")
             XCTFail("\(platform): the project page never drew the SOURCE_UNRESOLVED card")
