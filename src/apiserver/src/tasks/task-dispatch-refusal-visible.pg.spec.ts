@@ -72,7 +72,8 @@ import { TasksService } from './tasks.service';
  * worktree on the pin (admitted) or report the refusal through `RunnerApiController.finalize` in the
  * runner's own words (refused). Nothing below writes a refusal, a wake or a comment by hand.
  *
- *   (a) the prerequisite's work reached `main` directly and the project branch has not absorbed it:
+ *   (a) the prerequisite's work reached `main` directly and the project branch — a line that
+ *       exists, with one landing of its own and nothing from main yet (v1.2) — has not absorbed it:
  *       the start is refused, the TASK records it — code, time, the pinned commit, the missing
  *       commit and the prerequisite that landed it — the timeline says what to do instead of "run it
  *       again", and the project's standing coordinator conversation is sent one message naming the
@@ -353,6 +354,22 @@ async function prerequisite(
   return { taskId, landedSha: after };
 }
 
+/**
+ * The scene every DEPENDENCY_BASE_NOT_LANDED case below needs before it has a line to be about.
+ *
+ * v1.2 (`docs/project-source-contract.md` §4.1): P4's baseline spells the line the way P5's does —
+ * `integrationRef` once something has landed on it, `upstreamRef` until then — because §1.5 L10's
+ * first row says the project branch is created BY the first landing on it, and a landing is a
+ * receipt. A case whose prerequisite landed on `main` while nothing has landed on the line
+ * therefore resolves onto upstream, which contains that landing, and is admitted: the refusal it
+ * means to drive never happens. So the case has to say the line exists first. The fixture's
+ * `git branch` is not that statement — the readers ask the receipts table, not the repository.
+ */
+async function lineExists(stack: Stack, f: Fixture): Promise<void> {
+  const first = await prerequisite(stack, f, 'first-landing', { onto: 'line' });
+  assert.ok(first.landedSha, 'the scene-setting landing on the line did not land');
+}
+
 /** The dependent under test: waits on one prerequisite and is started by hand. */
 async function dependentOf(stack: Stack, f: Fixture, title: string, prerequisiteId: string) {
   return task(stack, f, title, { dependsOnTaskIds: [prerequisiteId] });
@@ -475,7 +492,10 @@ test('(a) a start whose pinned commit lacks the prerequisite\'s landed commit is
     const stack = await connect();
     const f = await fixture(stack, 'refused-start');
     try {
+      await lineExists(stack, f);
       // The prerequisite's work reached main directly; the project branch has not absorbed main.
+      // The line exists — one landing of its own, nothing from main yet — which is what makes this
+      // a case about the line's tip rather than about the line not existing (v1.2).
       const p = await prerequisite(stack, f, 'quota-by-account', { onto: 'main' });
       const dependent = await dependentOf(stack, f, 'duplicate-account-hint', p.taskId);
 
@@ -558,6 +578,9 @@ test('(b) doing the next step the refusal names — the line absorbs main — le
     const f = await fixture(stack, 'way-out');
     const checkouts: Array<string | null> = [];
     try {
+      // A line that exists (v1.2): one landing of its own, and it has not absorbed main, which is
+      // what the prerequisite's work went to.
+      await lineExists(stack, f);
       const p = await prerequisite(stack, f, 'landed-on-main', { onto: 'main' });
       const dependent = await dependentOf(stack, f, 'waits-for-it', p.taskId);
 
@@ -663,6 +686,7 @@ test('a refused start under a switched-off coordinator is recorded on the task a
     const stack = await connect();
     const f = await fixture(stack, 'switched-off', { coordinatorEnabled: false });
     try {
+      await lineExists(stack, f);
       const p = await prerequisite(stack, f, 'landed-on-main-off', { onto: 'main' });
       const dependent = await dependentOf(stack, f, 'refused-off', p.taskId);
       const sessionId = await start(stack, f, dependent);

@@ -178,7 +178,7 @@ resolveSource(input: SourceResolutionInput) -> SourceSelector | Refusal
   prerequisiteCheckpoints: Array<{ taskId, commitSha, kind }> }
 ```
 
-`integrationLineHasLanding`（v1.1 新增）是**本项目**在自己集成线上是否已有落地回执，由调用方从回执表读出后传入；它只被 P5 读（见 4.1 的 P5 行）。它是一个**关于项目的事实**，不是关于机器的事实：加进来的是"这条线上有没有东西"，不是"这台机器的 HEAD 在哪"，所以 SR17 禁的那五个字段仍然不可表达。
+`integrationLineHasLanding`（v1.1 新增）是**本项目**在自己集成线上是否已有落地回执，由调用方从回执表读出后传入；它被 P5 读（见 4.1 的 P5 行），自 v1.2 起也被 P4 读——这两序读的是同一条线。它是一个**关于项目的事实**，不是关于机器的事实：加进来的是"这条线上有没有东西"，不是"这台机器的 HEAD 在哪"，所以 SR17 禁的那五个字段仍然不可表达。
 
 **SR18（解析结论自带理由）**：返回值必须携带 `reason`：命中了哪一条优先级、依据的输入是什么。一个说不出为什么的基线，用户无法在 UI 上得到"这次运行为什么从这里开始"的回答（Project AC7）。
 
@@ -193,10 +193,12 @@ resolveSource(input: SourceResolutionInput) -> SourceSelector | Refusal
 | **P1** | `verifiesTaskId != null` | `VERIFICATION_SUBJECT` | subject 的 candidate commit | SHA 值 |
 | **P2** | `pinnedRevision != null` | `PINNED_REVISION` | 该 SHA，或该 ref 在权威处的解析结果 | SHA 值或 ref 值 |
 | **P3** | `attemptGeneration > 0` ∧ `inheritedKnownGoodSha != null` | `TASK_KNOWN_GOOD` | 该 SHA | SHA 值 |
-| **P4** | 存在 ≥1 个**代码**前置任务 | `DEPENDENCY_CLOSURE` | `integrationRef` 的 tip，且 `requiredContains` = 所有前置的 accepted checkpoint SHA | ref 值 + 包含约束 |
+| **P4** | 存在 ≥1 个**代码**前置任务 | `DEPENDENCY_CLOSURE` | `integrationLineHasLanding` 为真 → `integrationRef` 的 tip；否则 `upstreamRef` 的 tip；且 `requiredContains` = 所有前置的 accepted checkpoint SHA | ref 值 + 包含约束 |
 | **P5** | 以上皆否 | `PROJECT_UPSTREAM` | `integrationLineHasLanding` 为真 → `integrationRef` 的 tip；否则 `upstreamRef` 的 tip | ref 值 |
 
-P5 的两个取值不是回退（SR19 说的回退是"换一序"），而是**同一序下同一条线的两种写法**：`docs/project-integration-line-contract.md` §1.5 L10 第一行，项目分支要等第一条落地回执才被创建，在那之前它与 upstream 逐字节是同一棵树；第一条落地之后，upstream 就少了本项目已完成的每一件工作，再从它起跑等于让新任务把兄弟们解过的问题重解一遍。所以基线仍然只有一条——项目集成的那条线——只是它在被创建之前只能用 upstream 的名字称呼。`MAIN` 线项目两个 ref 相等，这条规则对它无差别。
+P4 与 P5 的两个取值不是回退（SR19 说的回退是"换一序"），而是**同一序下同一条线的两种写法**：`docs/project-integration-line-contract.md` §1.5 L10 第一行，项目分支要等第一条落地回执才被创建，在那之前它与 upstream 逐字节是同一棵树；第一条落地之后，upstream 就少了本项目已完成的每一件工作，再从它起跑等于让新任务把兄弟们解过的问题重解一遍。所以基线仍然只有一条——项目集成的那条线——只是它在被创建之前只能用 upstream 的名字称呼。`MAIN` 线项目两个 ref 相等，这条规则对它无差别。
+
+这段话对 P4 同样成立，因为 P4 与 P5 读的是**同一条线**：D5 说的"结构互斥"是两者的谓词（前置集非空 / 为空）不能同时为真，不是两条不同的线。而一个 P4 任务最常被派发的时刻，恰恰是它的前置刚在 upstream 落地的那一刻——那时本项目自己的线往往还没有第一条落地回执，只写 `integrationRef` 就是在钉一个还没被创建的 ref，runner 的 `git fetch` 得到 `BASE_REF_NOT_FOUND`（2026-10-07 实测于项目 `34bZ3i4AvgJaaoaw5E9tH`，三次 LAND_TASK 全部以 CHECK_FAILED 终态，工作径直并进 main，那条线从未被创建）。两种写法给出的仍是**同一棵树**，`requiredContains` 一个字都不变（SR25/SR26 的包含语义与 SR19 的拒绝纪律都不受影响）。
 
 **SR19（拒绝不回退）**：命中某一序后，若该序的输入不可用（P1 的 subject 没有 candidate、P3 的 SHA 不可达、P4 的前置没有 accepted checkpoint），**结果是拒绝，不是落到下一序**。回退会让一次本该停下来的运行拿到一个"看起来能跑"的基线 —— 这正是 §0 那三个降级分支的形状。
 
@@ -624,3 +626,4 @@ v1 冻结时这一条读作"尚未落地"，自检那时断言的是它的**缺�
 
 - **v1**（2026-08-25）：首版。冻结 SR1–SR53、十个错误码、五级优先级、六级准入闸、四状态机。
 - **v1.1**（2026-09-17）：SR17 的封闭输入集增加 `integrationLineHasLanding: boolean`，§4.1 的 P5 行随之改为「本项目集成线上已有落地回执 → `integrationRef` 的 tip；否则 `upstreamRef` 的 tip」。理由是 `docs/project-integration-line-contract.md` §1.5 L10 第一行，那条契约的实现任务（`34PAfnnE8wgD9kOGvgwwU`）按 SR17「加字段即契约变更」先改本文再改代码。优先级序、错误码表、闸门与状态机不变；被加进来的是关于项目的事实，不是关于机器的事实，SR1/SR2 禁的字段仍不可表达。
+- **v1.2**（2026-10-07）：§4.1 的 P4 行改为与 P5 同款的两种写法（`integrationLineHasLanding` 为真 → `integrationRef` 的 tip；否则 `upstreamRef` 的 tip），`requiredContains` 一字未动。理由是 §1.5 L10 第一行对 P4 同样成立：P4 与 P5 读的是**同一条线**（D5 只声明两者的谓词结构互斥，不是两条线），而项目分支要等这条线上的第一条落地回执才被创建。偏离只在派发时刻可见：2026-10-07 实测项目 `34bZ3i4AvgJaaoaw5E9tH` 的集成线从未被创建（三次 LAND_TASK 全以 CHECK_FAILED 终态，工作直接并进 main），走 P4 的任务据此钉到 `refs/heads/project/34bZ3i4AvgJaaoaw5E9tH`，runner 的 `git fetch` 得到 `fatal: couldn't find remote ref` → `BASE_REF_NOT_FOUND`。本次只改一条取值，不改输入集（`integrationLineHasLanding` 自 v1.1 起已在 SR17 的封闭集合内），优先级序、错误码表、闸门与状态机不变。

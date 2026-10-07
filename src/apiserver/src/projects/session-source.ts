@@ -155,9 +155,9 @@ export async function decideSessionSource(
   const closure = codebase && !task.codeless
     ? await prerequisiteLandingCommits(prisma, task.id, codebase)
     : { dependsOnTaskIds: [] as string[], checkpoints: [] as PrerequisiteCommit[] };
-  // P5's one input (§1.5 L10). Asked only where the answer can change a baseline: a project whose
-  // integration line IS its upstream resolves the same ref either way, and no other row of §4.1
-  // reads it — so the read is skipped rather than made and discarded.
+  // P4's and P5's one input (§1.5 L10, both rows read the same line). Asked only where the answer
+  // can change a baseline: a project whose integration line IS its upstream resolves the same ref
+  // either way, so the read is skipped rather than made and discarded.
   const integrationLineHasLanding = codebase && !task.codeless && task.projectId
     && codebase.integrationRef !== codebase.upstreamRef
     ? await integrationLineHasLandingReceipt(prisma, task.projectId, codebase.integrationRef)
@@ -291,8 +291,9 @@ async function prerequisiteLandingCommits(
  *
  * P4 no longer refuses, and the thing that changed is not this guard — it is that its input exists.
  * `prerequisiteLandingCommits` above reads each prerequisite's landing off the receipts, so a task
- * with prerequisites resolves DEPENDENCY_CLOSURE against the integration ref with a containment
- * requirement per prerequisite, rather than falling through to P5 with none.
+ * with prerequisites resolves DEPENDENCY_CLOSURE against the integration line — whichever of its
+ * two spellings exists yet (§4.1 P4) — with a containment requirement per prerequisite, rather
+ * than falling through to P5 with none.
  */
 async function assertCheckpointInputsAvailable(
   prisma: PrismaService,
