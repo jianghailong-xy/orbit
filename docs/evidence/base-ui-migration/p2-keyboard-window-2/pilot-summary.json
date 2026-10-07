@@ -149,5 +149,157 @@
    ]
   },
   "capturesWithStyleDeltas": 0
- }
+ },
+ "noise-after": {
+  "scope": "fixed run 1 vs fixed run 2 (same tree)",
+  "screenshots": {
+   "total": 256,
+   "identical": 234,
+   "antialias": 21,
+   "beyond": {
+    "chromium-dark-desktop/pilot-delete-confirm.png": {
+     "pixels": 21,
+     "pixelsAtMost2": 16,
+     "maxChannelDiff": 15
+    }
+   }
+  },
+  "traces": {
+   "traces": 64,
+   "identical": 57,
+   "requestsDiffer": [],
+   "snapshotOnly": [
+    {
+     "step": "chromium-dark-desktop :: task detail pilot › fields, pickers and the panel header :: suggested pick L",
+     "fields": [
+      "focus"
+     ]
+    },
+    {
+     "step": "chromium-dark-phone :: task detail pilot › dependencies, inputs and comments :: input removed",
+     "fields": [
+      "dialogs",
+      "focus"
+     ]
+    },
+    {
+     "step": "chromium-dark-phone :: task detail pilot › fields, pickers and the panel header :: list pick Later",
+     "fields": [
+      "focus"
+     ]
+    },
+    {
+     "step": "chromium-dark-phone :: task detail pilot › fields, pickers and the panel header :: model pick Sonnet",
+     "fields": [
+      "focus",
+      "listbox"
+     ]
+    },
+    {
+     "step": "chromium-light-desktop :: task detail pilot › dependencies, inputs and comments :: prerequisite added",
+     "fields": [
+      "listbox"
+     ]
+    },
+    {
+     "step": "chromium-light-phone :: task detail pilot › fields, pickers and the panel header :: suggested pick L",
+     "fields": [
+      "focus"
+     ]
+    },
+    {
+     "step": "chromium-light-phone :: task detail pilot › fields, pickers and the panel header :: model pick Sonnet",
+     "fields": [
+      "focus",
+      "listbox"
+     ]
+    },
+    {
+     "step": "webkit-light-desktop :: share dialog pilot › from Only you to a public link and back :: turned off",
+     "fields": [
+      "focus"
+     ]
+    },
+    {
+     "step": "webkit-light-phone :: share dialog pilot › from Only you to a public link and back :: expiry 30 days",
+     "fields": [
+      "focus"
+     ]
+    },
+    {
+     "step": "webkit-light-phone :: share dialog pilot › from Only you to a public link and back :: turned off",
+     "fields": [
+      "focus"
+     ]
+    }
+   ]
+  },
+  "capturesWithStyleDeltas": 0
+ },
+ "compare-again": {
+  "scope": "before-fix run 2 vs fixed run 2",
+  "screenshots": {
+   "total": 256,
+   "identical": 218,
+   "antialias": 37,
+   "beyond": {
+    "chromium-light-desktop/pilot-delete-confirm.png": {
+     "pixels": 75,
+     "pixelsAtMost2": 70,
+     "maxChannelDiff": 20
+    }
+   }
+  },
+  "traces": {
+   "traces": 64,
+   "identical": 58,
+   "requestsDiffer": [],
+   "snapshotOnly": [
+    {
+     "step": "chromium-dark-phone :: task detail pilot › dependencies, inputs and comments :: input removed",
+     "fields": [
+      "dialogs",
+      "focus"
+     ]
+    },
+    {
+     "step": "chromium-light-desktop :: task detail pilot › fields, pickers and the panel header :: model pick Sonnet",
+     "fields": [
+      "focus",
+      "listbox"
+     ]
+    },
+    {
+     "step": "chromium-light-phone :: task detail pilot › dependencies, inputs and comments :: input removed",
+     "fields": [
+      "dialogs",
+      "focus"
+     ]
+    },
+    {
+     "step": "chromium-light-phone :: task detail pilot › fields, pickers and the panel header :: model pick Sonnet",
+     "fields": [
+      "focus"
+     ]
+    },
+    {
+     "step": "webkit-light-desktop :: share dialog pilot › from Only you to a public link and back :: turned off",
+     "fields": [
+      "focus"
+     ]
+    },
+    {
+     "step": "webkit-light-phone :: task detail pilot › fields, pickers and the panel header :: list pick Later",
+     "fields": [
+      "focus"
+     ]
+    }
+   ]
+  },
+  "capturesWithStyleDeltas": 0
+ },
+ "beyondInCompareAlsoNoisyWithinATree": [],
+ "beyondInCompareOnly": [
+  "chromium-light-desktop/pilot-delete-confirm.png"
+ ]
 }
