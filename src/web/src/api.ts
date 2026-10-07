@@ -926,8 +926,14 @@ export const unpinSession = (sessionId: string) =>
 // from that window alone is how the button went missing on exactly the runs an outage kills.
 // `sessionMessage` is the card the words' echo carries when they are another Orbit session's: the
 // Retry then asks the server to re-send them (`resendSessionRetryMessage`).
+// `nothingToResend` says there is not even a turn of the failure's own kind for the sweep to
+// re-send, so a re-send is not what this session is waiting on: the card swaps its verb for
+// Continue (`CONTINUE_MESSAGE`, @orbit/shared) instead of offering a Retry that has nothing to
+// carry. Empty `text` without it means the sweep re-sends a reply or confirmation turn itself.
 export const getSessionRetryMessage = (sessionId: string) =>
-  api<{ text: string; sessionMessage?: SessionMessageCard }>(`/sessions/${sessionId}/retry-message`);
+  api<{ text: string; sessionMessage?: SessionMessageCard; nothingToResend?: boolean }>(
+    `/sessions/${sessionId}/retry-message`,
+  );
 
 // Re-send another session's message from the failure card (docs/session-request-reply-contract.md
 // §2.1): the server re-sends it as the automatic retry would — signed by that session, with the
