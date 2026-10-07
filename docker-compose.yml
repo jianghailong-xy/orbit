@@ -218,6 +218,34 @@ services:
       retries: 12
       start_period: 40s
 
+  # The wiki's model calls, run on the server (docs/wiki-server-execution-design.md §4.1; the account owner added this
+  # service on 2026-10-07): the apiserver's image and code with another entry point. It serves no port and applies no
+  # migration — it starts once the apiserver, which applies them on boot, is healthy. The System model's address and
+  # key are given to this service and no other: the apiserver reads the model's name and state from the row this one
+  # writes (wiki_model_status). Until the wiki's executor is switched to the server, probing the model is all it does.
+  wiki-worker:
+    image: orbit-apiserver:local
+    container_name: orbit-wiki-worker
+    restart: unless-stopped
+    logging: *logging
+    command: node src/apiserver/dist/wiki-worker/main.js
+    # Time to stop cleanly, not to drain: a deploy does not wait for a model request in flight (design §13, item 1).
+    stop_grace_period: 30s
+    environment:
+      DATABASE_URL: "postgresql://orbit:orbit@postgres:5432/orbit?schema=public"
+      # Optional: the System model — an endpoint speaking the Anthropic Messages API (vLLM's /v1/messages), its key, and
+      # the model's name; all three, or the wiki has no System model. Give an address this container can reach: its own
+      # 127.0.0.1 is itself, so a model on the host needs a LAN or tunnel address. These are not ANTHROPIC_* names, which
+      # an agent session carries and Compose would prefer to .env (src/apiserver/src/wiki/wiki-compose-env.spec.ts).
+      ORBIT_WIKI_MODEL_BASE_URL: "${ORBIT_WIKI_MODEL_BASE_URL:-}"
+      ORBIT_WIKI_MODEL_API_KEY: "${ORBIT_WIKI_MODEL_API_KEY:-}"
+      ORBIT_WIKI_MODEL: "${ORBIT_WIKI_MODEL:-}"
+      # Model requests in flight at once, across every space.
+      ORBIT_WIKI_MODEL_CONCURRENCY: "${ORBIT_WIKI_MODEL_CONCURRENCY:-4}"
+    depends_on:
+      apiserver:
+        condition: service_healthy
+
   web:
     build:
       context: .

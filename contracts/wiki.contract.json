@@ -1748,6 +1748,101 @@
     "tool": "none: no MCP tool reads or writes a document. Writing is a maintenance run's verb on the CLI; reading is the owner's, in the Wiki."
   },
 
+  "systemModel": {
+    "phase": "server execution, P1a",
+    "doc": "docs/wiki-contract.md section 23; docs/wiki-server-execution-design.md sections 2.1, 4.1, 4.5, 5.3 and 6",
+    "why": "The wiki's model calls move off the runner (design section 0): the server's wiki-worker calls the deployment's own System model, whose address and key are in that service's environment and nowhere else. At this phase the worker only probes the model and writes its state and heartbeat; the job table, the request queue and the executor switch are the next phase's (P1b), and no pipeline calls the model through it yet.",
+    "service": {
+      "name": "wiki-worker",
+      "image": "orbit-apiserver:local",
+      "command": "node src/apiserver/dist/wiki-worker/main.js",
+      "entry": "src/apiserver/src/wiki-worker/main.ts",
+      "context": "NestFactory.createApplicationContext over WikiWorkerModule: Prisma and the worker's own providers, no controller and no port; enableShutdownHooks().",
+      "dependsOn": "apiserver, service_healthy: the worker runs no migration, the apiserver applies them on boot.",
+      "restart": "unless-stopped",
+      "stopGracePeriodSeconds": 30
+    },
+    "env": {
+      "baseUrl": "ORBIT_WIKI_MODEL_BASE_URL",
+      "apiKey": "ORBIT_WIKI_MODEL_API_KEY",
+      "model": "ORBIT_WIKI_MODEL",
+      "concurrency": "ORBIT_WIKI_MODEL_CONCURRENCY"
+    },
+    "envRules": {
+      "configured": "baseUrl, apiKey and model all set: an http or https URL, a key, a model name. With any of them missing or unusable the state is unconfigured and nothing is probed or called.",
+      "defaultConcurrency": 4,
+      "concurrency": "Model requests in flight at once across every space, held by the request queue (P1b). A value that is not a positive whole number is read as the default.",
+      "onlyOn": "wiki-worker. The apiserver's environment holds none of the four (docker-compose.yml, test/compose-topology.test.mjs).",
+      "names": "None is ANTHROPIC_*: Compose prefers the shell's environment to .env, and an agent session's environment carries those names (src/apiserver/src/wiki/wiki-compose-env.spec.ts).",
+      "problems": "readWikiSystemModel(env) returns the configuration and the problems it found, and the worker logs them once. Neither the problems nor the log carry the key."
+    },
+    "request": {
+      "route": "POST {baseUrl}/v1/messages",
+      "headers": {
+        "authorization": "Bearer {apiKey}",
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+      },
+      "body": "{model, max_tokens, system, messages: [one user message], stream: true}. Every call gives its max_tokens explicitly; no tools are sent and thinking is not turned on.",
+      "events": ["message_start", "content_block_delta", "message_delta", "message_stop", "error"],
+      "eventRules": "The answer is the text of the text_delta deltas, in order. message_start carries the model and the first usage, message_delta the stop reason and the usage so far. A call has ended only at message_stop: a stream that closes before it is a dropped connection. ping, content_block_start, content_block_stop and any event not named here are read past.",
+      "usage": "inputTokens and outputTokens are the last values the stream reported: message_delta's, else message_start's.",
+      "idleTimeoutSeconds": 300,
+      "timeouts": "Each call has a budget of its own, its step's limit (verify, extract, import and articles 15 minutes, docs 20, plan 60), and is disconnected after idleTimeoutSeconds without a byte whatever its budget. Both, and a cancel, abort it through one AbortController.",
+      "partial": "The text received so far is handed to the caller after every delta, and carried by the error of a call that fails: what the request queue keeps as a request's partial (P1b).",
+      "errors": {
+        "retryable": "HTTP 5xx and 429; a connection refused, reset or closed, a name that does not resolve, a stream closed before message_stop, idleTimeoutSeconds without a byte; an SSE error event of type overloaded_error, api_error or rate_limit_error.",
+        "unauthorized": "HTTP 401, or an SSE error event of type authentication_error: the key was refused, and the state becomes auth_failed.",
+        "other": "Every other HTTP status and SSE error, an answer that is not an event stream, the call's own budget running out, and a cancel."
+      },
+      "connections": "Node's own fetch: connections are kept alive and reused, with no per-origin limit below the concurrency. After message_stop the stream is still read to its end, for a second at most, so that the connection goes back to the pool."
+    },
+    "health": {
+      "route": "GET {baseUrl}/health",
+      "headers": "authorization and anthropic-version, as a call sends them.",
+      "upStatuses": [200, 404],
+      "authFailedStatuses": [401],
+      "intervalSeconds": 10,
+      "timeoutSeconds": 5,
+      "rule": "An answer in upStatuses is up and one in authFailedStatuses auth_failed; any other status, no answer within timeoutSeconds, or no connection is down. Probed every intervalSeconds while configured, and each probe writes the state and the heartbeat together."
+    },
+    "status": {
+      "table": "wiki_model_status",
+      "migration": "src/apiserver/prisma/migrations/0398_wiki_model_status/migration.sql",
+      "row": "Exactly one, id 1, written by the worker alone with INSERT ... ON CONFLICT (id) DO UPDATE. The apiserver only reads it.",
+      "columns": ["state", "model", "since", "last_error", "checked_at", "worker_seen_at"],
+      "states": ["up", "down", "auth_failed", "unconfigured"],
+      "meaning": {
+        "up": "The probe answered one of health.upStatuses.",
+        "down": "The probe got no answer, or another status. Requests are not taken while down (P1b); the probe goes on, and the next up resumes them.",
+        "auth_failed": "The endpoint refused the key (401), to the probe or to a call. It holds until the worker restarts, which is when a corrected key is read: every later call would be refused the same way.",
+        "unconfigured": "env.baseUrl, env.apiKey or env.model is missing or unusable. Nothing is probed or called; the heartbeat is still written."
+      },
+      "since": "When the state began: kept while the state and the model stay what they were.",
+      "lastError": "Why the state is not up, in words that name neither the address nor the key: an HTTP status, a connection error's code, a variable's name. Null while up.",
+      "checkedAt": "When the probe last ran; null while unconfigured.",
+      "workerSeenAt": "The worker's heartbeat, written with every probe, every health.intervalSeconds.",
+      "workerStaleSeconds": 60
+    },
+    "read": {
+      "route": "GET /api/wiki/system-model",
+      "who": "Any account the wiki is on for (JwtAuthGuard and WikiRolloutGuard; a personal access token needs wiki:read): it is the deployment's model, not a space's. It writes nothing.",
+      "states": ["up", "down", "auth_failed", "unconfigured", "worker_not_running"],
+      "fields": ["state", "model", "since", "checkedAt", "workerSeenAt"],
+      "workerNotRunning": "No row, or a workerSeenAt older than status.workerStaleSeconds, reads as worker_not_running: what the settings page and the health line show as wiki worker not running. since is then the last heartbeat.",
+      "never": "The System model's address, its key, and last_error: the read says the model's name and its state, and nothing else."
+    },
+    "metrics": {
+      "route": "GET /api/metrics",
+      "series": {
+        "orbit_wiki_model_state": "gauge, label state (one of read.states): 1 for the state the read answers, 0 for the others.",
+        "orbit_wiki_worker_heartbeat_age_seconds": "gauge: seconds since workerSeenAt; absent while no worker has written.",
+        "orbit_wiki_model_calls_total": "counter, label outcome (succeeded, or one of request.errors): the queue's calls. The queue (P1b) fills it in; until then every outcome is 0.",
+        "orbit_wiki_model_call_duration_seconds": "summary, quantiles 0.5 and 0.95: how long the queue's calls ran. The queue (P1b) fills it in; until then it has no observation."
+      }
+    }
+  },
+
   "refusals": [
     { "code": "WIKI_DISABLED", "httpStatus": 404, "scope": "request", "when": "The wiki is off for this account (ORBIT_WIKI rollout)." },
     { "code": "WIKI_SPACE_UNBOUND", "httpStatus": 409, "scope": "request", "when": "The calling session's workspace is bound to no space and could not be bound on first use. The message says in one sentence how the owner binds it." },
@@ -1850,7 +1945,8 @@
           "POST /api/wiki/spaces/:id/plan/redraft",
           "GET /api/wiki/spaces/:id/docs",
           "GET /api/wiki/spaces/:id/docs/:slug",
-          "GET /api/wiki/spaces/:id/doc-index"
+          "GET /api/wiki/spaces/:id/doc-index",
+          "GET /api/wiki/system-model"
         ]
       },
       "runner": {

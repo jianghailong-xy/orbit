@@ -38,6 +38,12 @@ JSON 里是 `plan` 一节。
 生成时的 origin/main 提交；条目被拒、退役或锚点失效时经它引用的句子撤下；一个新拒绝码 `WIKI_DOC_INVALID`，见新增的 §22；
 迁移 `0326_wiki_docs`，JSON 里是 `docs` 一节。§18 的按主题文章保留，直到客户端切换。
 
+**服务端执行 P1a（项目「Wiki 服务端执行与 System model」，2026-10-07）：wiki-worker 与 System model**：新增 compose 服务
+`wiki-worker`（与 apiserver 同一镜像，换入口），System model 的地址和 key 只配给它；worker 每 10 秒探测 `{base}/health`，把模型状态
+和自己的心跳写进单行表 `wiki_model_status`；apiserver 经 `GET /api/wiki/system-model` 只给出模型名和状态，心跳过期时是
+`worker_not_running`。流式客户端（`/v1/messages`、SSE、单次超时、空闲断开、取消、错误分三类）也在这一期；作业表、请求队列和执行器开关在
+P1b。见新增的 §23，迁移 `0398_wiki_model_status`，JSON 里是 `systemModel` 一节。
+
 **权威来源**
 
 | 来源 | 位置 |
@@ -53,6 +59,7 @@ JSON 里是 `plan` 一节。
 | 案卷与游标的行为测试 | `src/apiserver/src/wiki/wiki-dossier.pg.spec.ts`（服务端），`src/runner-go/wiki_dossier_test.go`（`orbit wiki dossier` / `orbit wiki cursor advance`） |
 | 文章的行为测试 | `src/apiserver/src/wiki/wiki-articles.pg.spec.ts`（服务端），`src/runner-go/wiki_articles_test.go`（`orbit wiki articles`，假 vLLM 端点），`WikiArticlesContractTests.swift`（OrbitKit） |
 | plan 的行为测试 | `src/apiserver/src/wiki/wiki-plan.pg.spec.ts`（服务端：检查闸、版本、确认、修改建议、跨租户），`src/runner-go/wiki_plan_test.go`（runner 门三条路由与检查闸的错误），`WikiPlanContractTests.swift`（OrbitKit） |
+| System model 的行为测试 | `src/apiserver/src/wiki-worker/wiki-model-status.pg.spec.ts`（状态行、读接口、心跳与 worker 启停），`wiki-model-client.spec.ts`（本地 http 服务模拟 SSE），`test/compose-topology.test.mjs`（compose 里的 `wiki-worker`） |
 
 **本任务不做**：服务、控制器、MCP 工具、推送、实时事件的实现，以及任何 UI。它们各自的任务照本契约写。
 
@@ -1729,3 +1736,97 @@ orbit wiki docs build --space <id> [--doc <slug>] [--section <key>] [--repo <pat
 - **`POST /api/runner/wiki/spaces/:id/maintenance/docs/withdrawals`**（`docs.withdrawalPaths`，维护会话）：`{ repoSha, paths: [{ path, change:
   deleted | renamed, to? }] }`，`repoSha` 是这些路径已不在的 origin/main 提交（40 位），至多 `withdrawPathsMax` = 500 条；形状不对
   `WIKI_DOC_INVALID`，逐条列出。回答 `{ spaceId, withdrawn, sections: [{ doc, key }] }`：这次撤下的句子数（已撤的不再算）和它们所在的节。
+
+## 23. System model 与 wiki-worker（服务端执行 P1a）
+
+JSON 里是 `systemModel`；设计见 `docs/wiki-server-execution-design.md` §2.1、§4.1、§4.5、§5.3、§6。迁移 `0398_wiki_model_status`；
+worker 在 `src/apiserver/src/wiki-worker/`（入口 `main.ts`、配置 `wiki-system-model.ts`、客户端 `wiki-model-client.ts`、状态与心跳
+`wiki-model-status.ts`），读接口在 `src/apiserver/src/wiki/wiki-system-model.ts` 与 `wiki-system-model.controller.ts`，metrics 在
+`wiki/wiki-model-metrics.ts`；共享常量在 `src/shared/src/wikiSystemModel.ts`。本阶段 worker 只探测模型、写状态和心跳；作业表、请求队列
+和执行器开关在 P1b，还没有流水线经它调用模型。
+
+### 23.1 服务
+
+- compose 服务 `wiki-worker`：镜像 `orbit-apiserver:local`，`command: node src/apiserver/dist/wiki-worker/main.js`；`depends_on`
+  apiserver（`service_healthy`），自己不跑迁移；`restart: unless-stopped`，`stop_grace_period: 30s`；不监听端口，不挂卷。
+- 入口用 `NestFactory.createApplicationContext` 起 `WikiWorkerModule`：只有 Prisma 和 worker 自己的 provider，没有控制器。打开
+  `enableShutdownHooks([], { useProcessExit: true })`：容器里 node 是 PID 1，收到 SIGTERM 后停止探测、等最后一次写入完成、关闭数据库，
+  然后显式退出。
+- owner 2026-10-07 同意新增这个服务。`test/compose-topology.test.mjs` 的 (l) 逐行钉住它的定义，(k) 把它放在一边之后，仍要求 compose
+  比基线删的行多于加的行。
+
+### 23.2 配置（`systemModel.env`）
+
+| 变量 | 说明 |
+|---|---|
+| `ORBIT_WIKI_MODEL_BASE_URL` | 不带凭据的 http(s) 地址；去掉末尾的 `/` 后，调用发到 `{base}/v1/messages`，探测发到 `{base}/health` |
+| `ORBIT_WIKI_MODEL_API_KEY` | 以 Bearer 发送 |
+| `ORBIT_WIKI_MODEL` | 模型名 |
+| `ORBIT_WIKI_MODEL_CONCURRENCY` | 所有空间合计的在途请求上限，默认 4；不是正整数时用默认值 |
+
+- 前三项齐全且可用才算已配置；缺任何一项就是 `unconfigured`，不探测，也不调用。
+- 只配给 wiki-worker，apiserver 的环境里一项都没有。名字都不是 `ANTHROPIC_*`。
+- `readWikiSystemModel(env)` 是纯函数，返回配置、缺了哪几项（`missing`）和 `problems`。worker 启动时经 `currentWikiSystemModel()` 读一次，
+  问题只记一次日志。`problems` 和日志都不引用 key 和地址（日志只写地址的 origin）。
+
+### 23.3 调用（`systemModel.request`）
+
+- `POST {base}/v1/messages`，头是 `authorization: Bearer {key}`、`anthropic-version: 2023-06-01`、`content-type: application/json`；体是
+  `{model, max_tokens, system, messages: [一条 user], stream: true}`。`max_tokens` 由每次调用显式给出；不带 tools，不开 thinking。
+- 用 Node 自带的 fetch 流式读取，按 SSE 的规则逐行解析：`event:` 给事件名，多行 `data:` 用换行拼接，空行派发，`:` 开头是注释；CRLF 和
+  跨块切开的行照常读。`message_start` 给出模型名和初始用量；`content_block_delta` 里的 `text_delta` 依次拼成答案；`message_delta` 给出
+  `stop_reason` 和截至目前的用量；收到 `message_stop` 才算结束。`error` 事件按类型分类。`ping`、`content_block_start` / `stop`、不认识的事件，
+  以及不是对象的 data（如 `[DONE]`），都跳过。
+- 用量取流里最后报出的值：有 `message_delta` 的就用它的，否则用 `message_start` 的。
+- 中断：一个 `AbortController` 管三件事——单次调用的预算（各步骤的上限）、空闲断开（`idleTimeoutSeconds` = 300 秒没收到任何字节，
+  从发出请求起就开始计）、调用方的取消。
+- 部分文本：每个 delta 之后，把目前收到的全文交给 `onPartial`；失败时，错误也带着 `partial`。P1b 用它写请求的 partial。
+- 错误分三类（`WikiModelError.kind`）：
+
+| 类 | 包括 |
+|---|---|
+| `retryable` | HTTP 5xx、429；连接被拒、被重置、中途断开、域名解析失败；流在 `message_stop` 之前结束；空闲断开；SSE `error` 的 `overloaded_error`、`api_error`、`rate_limit_error` |
+| `unauthorized` | HTTP 401，或 SSE `error` 的 `authentication_error` |
+| `other` | 其余状态码和 SSE 错误、不是事件流的回答、预算用完、调用方取消 |
+
+- 错误消息里去掉 key、地址和主机名，可以原样存、原样显示。连接错误只写错误码（如 `ECONNREFUSED`），不写 Node 带地址的原文。
+- 连接用 fetch 自带的连接池：keep-alive 复用，每个 origin 不限连接数，所以不会低于并发上限。收到 `message_stop` 之后仍把流读到结束
+  （最多再等 1 秒），连接才能回到池里。
+
+### 23.4 探测与状态行（`systemModel.health`、`systemModel.status`）
+
+- 每 `intervalSeconds` = 10 秒 `GET {base}/health` 一次，带同样的 Bearer 和版本头，超时 5 秒：200 或 404 是 up，401 是 auth_failed，
+  其余状态、超时、连不上都是 down。
+- 每次探测（未配置时是每一拍）都写 `wiki_model_status` 唯一的一行（id = 1），语句是 `INSERT … ON CONFLICT (id) DO UPDATE`：
+
+| 列 | 含义 |
+|---|---|
+| `state` | `up` / `down` / `auth_failed` / `unconfigured` |
+| `model` | 模型名；只有未配置时可以为 NULL |
+| `since` | 这个状态从什么时候开始；状态和模型都没变时保持不动 |
+| `last_error` | 不是 up 的原因，不含地址和 key（HTTP 状态、连接错误码、变量名）；恰好在 up 时为 NULL |
+| `checked_at` | 最近一次探测；未配置时为 NULL |
+| `worker_seen_at` | worker 的心跳，随每次写入更新 |
+
+- `auth_failed` 一直保持到 worker 重启：`/health` 通常不校验 key，它恢复 200 并不说明 key 已经改好；重启时才会读到改好的 key。调用遇到 401
+  时，由请求队列（P1b）调 `WikiModelStatusProbe.keyRefused` 报告。
+- down 时请求留在队列里（P1b），探测继续，下一次 up 就恢复。
+- 只有 worker 写这一行（db-write inventory 里是一条 `ONE_ROW_BY_KEY` 语句），apiserver 只读。
+
+### 23.5 读：`GET /api/wiki/system-model`（`systemModel.read`）
+
+- JWT 门加 `WikiRolloutGuard`；个人访问令牌要有 `wiki:read`。读的是部署的模型，不分 space：wiki 对其开放的账号都读到同一个回答。只读。
+- 回答 `{ state, model, since, checkedAt, workerSeenAt }`（`WikiSystemModelStatus`）。`state` 比状态行多一个 `worker_not_running`：没有这一行，
+  或 `worker_seen_at` 已超过 `workerStaleSeconds` = 60 秒，就是它，设置页和健康行显示「wiki worker 未运行」；这时 `since` 是最后一次心跳。
+- 不返回地址和 key，也不返回 `last_error`。
+
+### 23.6 `/api/metrics`（`systemModel.metrics`）
+
+| 序列 | 类型 | 说明 |
+|---|---|---|
+| `orbit_wiki_model_state{state}` | gauge | 读接口给出的那个状态为 1，其余为 0 |
+| `orbit_wiki_worker_heartbeat_age_seconds` | gauge | 距最后一次心跳的秒数；还没有心跳时不输出 |
+| `orbit_wiki_model_calls_total{outcome}` | counter | `succeeded` / `retryable` / `unauthorized` / `other`；由 P1b 的请求队列填，在那之前都是 0 |
+| `orbit_wiki_model_call_duration_seconds` | summary | 0.5 与 0.95 分位、sum、count；由 P1b 填，在那之前没有观测 |
+
+- 调用都发生在不监听端口的 worker 里，所以这些数都在读 metrics 时从库里取，每个副本给出的都一样；标签值只来自闭集。

@@ -2002,7 +2002,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `task_completion_criterion` are not named, and no `project_acceptance_*` object is. No
       // INSERT, UPDATE or DELETE: the build reads every task row once and writes none, and the DROP
       // takes the index away inside the migration's own transaction, so no reader sees it missing.
-      '0395_project_rollup_covering_idx_columns'],
+      '0395_project_rollup_covering_idx_columns',
+      // The System model's state (0398): one new table, `wiki_model_status`, of exactly one row,
+      // with its primary key and four CHECKs (the single row, the closed set of states, a model
+      // named whenever one is configured, a reason exactly when the state is not up). Pure
+      // addition: no column, constraint, index, function, trigger or type of any table that
+      // exists is created, altered or dropped, so it is not another writer of the DONE fence and
+      // names none of the six preserved objects, neither 0177 relation, no `task`, `session` or
+      // `project` object and no `project_acceptance_*` one. No INSERT, UPDATE or DELETE: the
+      // wiki-worker writes the row on its first probe.
+      '0398_wiki_model_status'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
