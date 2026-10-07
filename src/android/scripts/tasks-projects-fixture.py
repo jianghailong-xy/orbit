@@ -61,7 +61,7 @@ def reset():
     generation = state.get('generation', 0) + 1
     state.update(case='normal', pending=True, denied=False, mode='', assignment=None, final=None,
                  denyTasks=False, denyProjects=False, readError=False, generation=generation, journal=old_journal,
-                 runTriggers={}, mutations=0, streamDown=False)
+                 runTriggers={}, mutations=0, streamDown=False, eventStorm=False, delays={}, dropNext={})
     state.update(shares={}, watches=[], attachments={})
     state['tasks'] = {
         OUTSIDE: task(OUTSIDE, 'A11 task checklist', labels=['Mobile', 'Sprint, one']),
@@ -84,6 +84,13 @@ def reset():
                    _count=dict(tasks=2), blockers=dict(open=[], resolved=[], resolvedCount=0), criteriaConfirmed=True)
     for criterion in project['acceptanceCriteriaItems']:
         criterion.update(key='cards', satisfied=False, landing='NONE', taskCount=1, doneCount=0, unmet=[dict(taskId=TID, title='A11 project delivery', status='OPEN')], heldUpBy=[], definitionId=criterion['id'])
+    # The owner's done door (`POST /projects/:id/done`) and the projection it is read beside (`derivedDone`).
+    project.update(doneBy=None, doneAt=None, acceptedGaps=[], derivedDone=dict(status='OPEN', done=False, withheld=['CRITERION_UNSATISFIED'],
+        criteria=[dict(definitionId=c['id'], satisfied=False, landing='UNKNOWN', independence='INDEPENDENT', conflicts=[], remedy=None,
+                       landingReason='NO_RECEIPT', withheld=['CRITERION_UNSATISFIED']) for c in project['acceptanceCriteriaItems']],
+        confirmation='CONFIRMED', counts=dict(criteria=len(project['acceptanceCriteriaItems']), met=0, landed=0, onMain=0,
+                                              byReason=dict(IN_FLIGHT=0, ON_PROJECT_BRANCH=0, NOTHING_TO_LAND=0,
+                                                            NO_RECEIPT=len(project['acceptanceCriteriaItems']), CODELESS=0))))
     state['project'] = project
     state['integration'] = dict(line='PROJECT_BRANCH', lineAbsentReason=None, ref='project/a11', upstreamRef='main', source='EXPLICIT',
                                 locked=False, startedAt=None, mergeCheckCommand='true', mergeCheckCommandAbsentReason=None,
@@ -303,7 +310,7 @@ class Handler(cards.Handler):
         try:
             while not state.get('streamDown'):
                 generation = state['generation']
-                value = dict(type='task.changed', sessionId=SID, data=dict(taskId=OUTSIDE)) if generation != previous else dict(type='ping')
+                value = dict(type='task.changed', sessionId=SID, data=dict(taskId=OUTSIDE)) if generation != previous or state.get('eventStorm') else dict(type='ping')
                 self.wfile.write(('data: ' + json.dumps(value) + '\n\n').encode())
                 self.wfile.flush()
                 previous = generation
@@ -322,7 +329,7 @@ class Handler(cards.Handler):
         if path == '/__control':
             with LOCK:
                 if body.get('reset'): reset()
-                for key in ('case', 'mode', 'pending', 'denied', 'denyTasks', 'denyProjects', 'readError', 'assignment', 'streamDown'):
+                for key in ('case', 'mode', 'pending', 'denied', 'denyTasks', 'denyProjects', 'readError', 'assignment', 'streamDown', 'eventStorm', 'delays', 'dropNext'):
                     if key in body: state[key] = body[key]
                 if 'case' in body: state['pending'] = body.get('pending', True)
                 if 'task' in body:
@@ -338,11 +345,23 @@ class Handler(cards.Handler):
         if path.startswith('/api/auth/'):
             return self.delegate_post(raw)
         if self.headers.get('Authorization') != 'Bearer a08-fixture-access': return self.reply({}, 401)
+        rule = f'{self.command} {path}'
+        with LOCK:
+            dropped = state['dropNext'].get(rule, 0) > 0
+            if dropped:
+                state['dropNext'][rule] -= 1
+                state['journal'].append(dict(method=self.command, path=path, case=state['case'], query={}, body=body, status='dropped'))
+        if dropped:
+            self.close_connection = True
+            self.connection.shutdown(socket.SHUT_RDWR); self.connection.close()
+            return
+        if state['delays'].get(rule): time.sleep(state['delays'][rule] / 1000)
         with LOCK:
             local = path.startswith('/api/tasks/') and '/owner-confirmation' not in path and '/evidence/' not in path
             local = local or path.startswith('/api/task-lists/') or path in ('/api/projects/' + PID, '/api/projects/' + PID + '/integration',
                 '/api/projects/' + PID + '/pause', '/api/projects/' + PID + '/resume', '/api/projects/' + PID + '/coordinator', '/api/projects/' + PID + '/coordinator/replace')
             local = local or (path == '/api/projects/' + PID + '/start' and state['case'] == 'own-start') or path.startswith('/api/projects/' + PID + '/blockers/')
+            local = local or path == '/api/projects/' + PID + '/done'
             local = local or path.endswith('/share') or path == '/api/watches' or path.startswith('/api/attachments/')
             if not local: return self.delegate_post(raw)
             self.journal(path, body=body)
@@ -416,6 +435,16 @@ class Handler(cards.Handler):
             project['pauseReason'] = 'OWNER' if project['pausedAt'] else None
             bump(project); return dict(projectId=PID, pausedAt=project['pausedAt'], pauseReason=project['pauseReason']), 200
         if '/coordinator' in path: return dict(projectId=PID, sessionId=SID, created=False, workspaceId=WS), 200
+        if path == '/api/projects/' + PID + '/done':
+            if body.get('criteriaDigest') != cards.CORPUS['snapshot']['standing']['acceptanceConfirmation']['currentVersion']['digest']:
+                return dict(code='CRITERIA_DIGEST_MOVED', message='The criteria changed since you read them; read them again.'), 409
+            if not isinstance(body.get('acceptedGaps'), list) or 'requestId' not in body:
+                return dict(message='criteriaDigest, acceptedGaps and requestId are required'), 400
+            project.update(status='DONE', doneBy='OWNER', doneAt=NOW, acceptedGaps=body['acceptedGaps'])
+            project['derivedDone'].update(status='DONE', done=True)
+            bump(project)
+            return dict(projectId=PID, status='DONE', doneBy='OWNER', doneAt=NOW, criteriaDigest=body['criteriaDigest'],
+                        acceptedGaps=body['acceptedGaps'], requestId=body['requestId']), 200
         if path == '/api/projects/' + PID + '/start':
             required = ('criteriaDigest', 'line', 'automatic', 'maxConcurrentTasks', 'mergeCheckCommand', 'requestId')
             if any(key not in body for key in required): return dict(message='Every start setting is required'), 400
@@ -465,6 +494,9 @@ class Handler(cards.Handler):
         if len(parts) == 1:
             if self.command == 'DELETE': del state['tasks'][parts[0]]; bump(); return {}, 200
             if body.get('status') == 'DONE': return dict(code='DIRECT_TASK_DONE_REFUSED', criterion=row['completionCriterion'], requiredAction='SUBMIT_EVIDENCE', message='Completion is derived by the declared criterion.'), 403
+            if state['mode'] == 'refuse-acceptance' and 'acceptanceCriteria' in body:
+                return dict(code='COMPLETION_CRITERION_OVERRIDE_REASON_REQUIRED',
+                            message='completionCriterionOverrideReason is required: this edit changes how the task is judged.'), 400
             if body.get('status') == 'OPEN' and row.get('terminalReason') and ('terminalReason' not in body or body.get('terminalReason') is not None or 'supersededByTaskId' not in body or body.get('supersededByTaskId') is not None):
                 return dict(code='TASK_RETIRED', message='Clear both retirement fields when reopening.'), 409
             row.update(body)

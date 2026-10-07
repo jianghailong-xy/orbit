@@ -313,6 +313,117 @@ class TasksProjectsDeviceTest {
         capture("project-blocker-resolved")
     }
 
+    // MARK: regressions from the coordinator's review of v1 (decision 5dshHuxUn20vj22RYT968k)
+    // Each journey uses only tags and words both the reviewed build (d621e29aa) and its fix carry, so the
+    // same test is run against each: red on the reviewed build, green on the fix.
+
+    /** P2-1: a write that lands after the filter changed must not refill the new filter with the old one's rows. */
+    @Test fun regressionP21_aWriteFinishedUnderAnEarlierFilterDoesNotRefillTheNewOne() = journey("p2-1-filter-race") {
+        login()
+        http("/__control", """{"task":{"id":"$prerequisiteId","status":"FAILED","runnable":false},"delays":{"POST /api/tasks/$taskId/execute":3000}}""")
+        drawer("Tasks"); awaitTag("tasks-list"); awaitText("A11 task checklist"); awaitTag("task-filter:FAILED")
+        compose.onNodeWithTag("task:$taskId").performTouchInput { longClick() }
+        compose.onNodeWithText("Run now").performClick()
+        compose.onNodeWithTag("task-filter:FAILED").performScrollTo().performClick()
+        awaitTag("task:$prerequisiteId")
+        compose.waitUntil(20_000) { journal().any { it.text("path") == "/api/tasks/$taskId/execute" && it["status"]?.toString() == "200" } }
+        SystemClock.sleep(3_000) // the refresh the write started
+        capture("p2-1-failed-filter-after-write")
+        compose.onAllNodesWithTag("task:$taskId").assertCountEquals(0)
+    }
+
+    /** P2-2: a draft abandoned with its dialog must not prefill the next dialog. */
+    @Test fun regressionP22_anAbandonedDialogDraftDoesNotPrefillTheNextDialog() = journey("p2-2-dialog-draft") {
+        login()
+        http("/__control", """{"project":{"blockers":{"open":[{"id":"blk1","kind":"DELIVERY_REVIEW","owner":"USER","severity":"WARNING",
+            "requiredAction":"Review the files this delivery changed outside its declared scope.","subjectTitle":"A11 project delivery",
+            "firstSeenAt":"2026-10-04T22:00:00.000Z","detail":{"reason":"OUTSIDE_DECLARED_SCOPE","paths":["src/android/app/build.gradle.kts"]}},
+            {"id":"blk2","kind":"WHO_NOT_IN_TEAM","owner":"USER","severity":"CRITICAL","requiredAction":"Add the assigned agent to this project team, or reassign the task.",
+            "subjectTitle":"A11 project prerequisite","firstSeenAt":"2026-10-03T12:00:00.000Z"}],"resolved":[],"resolvedCount":0}}}""".replace("\n", ""))
+        open("orbit-project:$projectId"); awaitTag("project-detail"); awaitText("A11 Android launch")
+        tap("blocker:blk1:resolve", "project-detail"); awaitTag("blocker-reason")
+        compose.onNodeWithTag("blocker-reason").performTextInput("Meant for the scope blocker only")
+        compose.activityRule.scenario.recreate()
+        awaitTag("project-detail"); awaitText("A11 Android launch")
+        tap("blocker:blk2:resolve", "project-detail"); awaitTag("blocker-reason")
+        capture("p2-2-second-dialog")
+        compose.onNodeWithTag("blocker-reason").assert(hasText("Meant for the scope blocker only", substring = true).not())
+    }
+
+    /** P2-3: an edit the server refuses keeps its sheet and what was typed. */
+    @Test fun regressionP23_aRefusedAcceptanceEditKeepsItsSheetAndDraft() = journey("p2-3-acceptance-refused") {
+        login(); http("/__control", """{"mode":"refuse-acceptance"}""")
+        open("orbit-task:$taskId"); awaitTag("task-detail"); awaitText("A11 task checklist")
+        tap("task-edit-acceptance", "task-detail"); awaitTag("task-acceptance-sheet")
+        compose.onNodeWithTag("task-acceptance-criteria").performTextReplacement("A criterion the server refuses to take as is")
+        tap("task-save-acceptance")
+        compose.waitUntil(20_000) { journal().any { it.text("method") == "PATCH" && it["status"]?.toString() == "400" } }
+        SystemClock.sleep(1_000)
+        capture("p2-3-after-refusal")
+        compose.onAllNodesWithTag("task-acceptance-sheet").assertCountEquals(1)
+        compose.onNodeWithTag("task-acceptance-criteria").assertTextContains("A criterion the server refuses to take as is")
+    }
+
+    /** P2-4: a setting pressed just before leaving the page is still written. */
+    @Test fun regressionP24_aSettingPressedJustBeforeLeavingIsStillWritten() = journey("p2-4-at-most-leave") {
+        login(); open("orbit-project:$projectId"); awaitTag("project-detail"); awaitText("A11 Android launch")
+        tap("project-at-most-plus", "project-detail")
+        back()
+        compose.waitUntil(10_000) { http("/__stats").obj("project")?.number("maxConcurrentTasks") == 3 }
+    }
+
+    /** P2-4: a Run pressed just before leaving still reaches the server under its one name. */
+    @Test fun regressionP24_aRunPressedJustBeforeLeavingStillStarts() = journey("p2-4-run-leave") {
+        login(); http("/__control", """{"dropNext":{"POST /api/tasks/$taskId/execute":2}}""")
+        open("orbit-task:$taskId"); awaitTag("task-detail"); awaitText("A11 task checklist")
+        scrollTo("task-detail", hasTestTag("task-run")); compose.onNodeWithTag("task-run").performClick()
+        back()
+        compose.waitUntil(15_000) { http("/__stats").obj("tasks")?.obj(taskId)?.flag("running") == true }
+        val presses = journal().filter { it.text("path") == "/api/tasks/$taskId/execute" }.mapNotNull { it.obj("body")?.text("triggerId") }.distinct()
+        assertEquals("every delivery carries the press's one name", 1, presses.size)
+    }
+
+    /** P2-4: the owner's start cannot be cancelled while it is being sent. */
+    @Test fun regressionP24_theOwnersStartCannotBeCancelledWhileItIsSent() = journey("p2-4-start-in-flight") {
+        login(case = "own-start")
+        http("/__control", """{"delays":{"POST /api/projects/$projectId/start":4000}}""")
+        open("orbit-project:$projectId"); awaitTag("project-detail"); awaitTag("project-start-own")
+        tap("project-start-own"); awaitTag("project-start-confirm")
+        compose.onNodeWithTag("project-start-confirm").performScrollTo().performClick()
+        capture("p2-4-start-in-flight")
+        compose.onNodeWithTag("project-start-cancel").assertIsNotEnabled()
+        compose.waitUntil(20_000) { http("/__stats").obj("project")?.text("startedAt") != null && http("/__stats").text("case") == "normal" }
+    }
+
+    /** P2-5: a steady stream of events still lets the list read what changed. */
+    @Test fun regressionP25_aStreamOfEventsStillRefreshesTheList() = journey("p2-5-event-storm") {
+        login(); drawer("Tasks"); awaitTag("tasks-list"); awaitText("A11 task checklist")
+        http("/__control", """{"eventStorm":true}""")
+        http("/__control", """{"task":{"id":"$taskId","title":"A11 task checklist, renamed elsewhere"}}""")
+        try { awaitText("A11 task checklist, renamed elsewhere", 10_000) }
+        finally { capture("p2-5-list-during-storm"); http("/__control", """{"eventStorm":false}""") }
+    }
+
+    /** P2-6: Record as done is the owner's done door, bound to the seal the owner read. */
+    @Test fun regressionP26_recordAsDoneIsTheOwnersDoneDoor() = journey("p2-6-record-done") {
+        login(); open("orbit-project:$projectId"); awaitTag("project-detail"); awaitText("A11 Android launch")
+        tap("project-menu"); compose.onNodeWithText("Record as done").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("project-done-record").fetchSemanticsNodes().isNotEmpty() ||
+            compose.onAllNodesWithTag("project-status-confirm").fetchSemanticsNodes().isNotEmpty() }
+        capture("p2-6-record-done-confirmation")
+        if (compose.onAllNodesWithTag("project-done-record").fetchSemanticsNodes().isNotEmpty())
+            compose.onNodeWithTag("project-done-record").performScrollTo().performClick()
+        else compose.onNodeWithTag("project-status-confirm").performClick()
+        compose.waitUntil(10_000) { journal().any { it.text("method") != "GET" && it.text("path")?.startsWith("/api/projects/$projectId") == true } }
+        SystemClock.sleep(1_000)
+        val writes = journal().filter { it.text("method") != "GET" && it.text("path")?.startsWith("/api/projects/$projectId") == true }
+        assertTrue("no status PATCH stands in for the done door: $writes", writes.none { it.text("method") == "PATCH" && it.obj("body")?.text("status") == "DONE" })
+        val done = writes.single { it.text("path") == "/api/projects/$projectId/done" }.obj("body")!!
+        assertEquals("seal1", done.text("criteriaDigest")); assertEquals(JsonNull, done["requestId"])
+        assertTrue(done["acceptedGaps"] is JsonArray)
+        assertEquals("OWNER", http("/__stats").obj("project")?.text("doneBy"))
+    }
+
     // MARK: screens for the owner (run again under dark mode and a large font)
 
     @Test fun screensTour() = journey("screens") {
