@@ -44,7 +44,7 @@ final class GeminiEntryParityTests: XCTestCase {
         XCTAssertTrue(web.contains(EngineAuth.antigravityBody(.notInstalled, runnerName: nil, runnerVersion: nil)))
         XCTAssertTrue(web.contains("Antigravity CLI isn't installed on ${machine}"))
         XCTAssertTrue(web.contains("${machine} runs Orbit runner ${help.runnerVersion || 'an unknown version'}; Antigravity needs 0.1.209 or newer. The runner updates itself when no session is running on it, and this session starts then."))
-        for label in ["Connect Gemini", "Switch to Gemini", "Install", "Open in Providers"] {
+        for label in ["Connect Gemini", "Switch to Gemini", "Install", "Open in Infrastructure"] {
             XCTAssertTrue(web.contains(label))
         }
         XCTAssertTrue(web.contains("export function antigravityRepair"))

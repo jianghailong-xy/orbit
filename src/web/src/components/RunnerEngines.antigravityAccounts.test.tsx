@@ -6,8 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsageBucket, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
-import { RunnerEngines, summaryOf } from './RunnerEngines';
-import { RunnerEnginesSection } from './RunnerEnginesSection';
+import { MachineEngines, RunnerEngines, summaryOf } from './RunnerEngines';
 import { openRunnerMenu, clickRunnerMenuItem } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
@@ -16,8 +15,7 @@ import type { Runner } from './TasksSidePanel';
  * (docs/mocks/antigravity-accounts/04-web-providers.png): Default and every account added, each its
  * own row with its own sign-in and its own quota — agy's buckets, read as what is left — NEXT on the
  * one Automatic starts, and "Add account" only where the runner can add a Google account at all. The
- * runner page says the same in its own words (01-ios-runner-row.png): "Signed in", "N accounts signed
- * in", "Signed out", or "env key" for a machine that runs agy on its Gemini key.
+ * runner's own page draws the same rows.
  *
  * Built here rather than in the clients' shared fixtures, which describe a runner before accounts.
  */
@@ -363,53 +361,28 @@ describe('a runner that runs agy on its Gemini key', () => {
   });
 });
 
-describe('the runner page’s Antigravity row', () => {
-  const render = (r: Runner) =>
-    renderToStaticMarkup(
+describe('the runner page’s Antigravity rows', () => {
+  /** What the runner's own page draws: the card's rows, as MachineEngines lays them out there. */
+  const machinePage = (r: Runner) => {
+    const box = document.createElement('div');
+    box.innerHTML = renderToStaticMarkup(
       <QueryClientProvider client={new QueryClient()}>
         <MemoryRouter>
-          <RunnerEnginesSection runner={r} />
+          <MachineEngines runner={r} signIn={null} onSignIn={() => {}} machinePage />
         </MemoryRouter>
       </QueryClientProvider>,
     );
-  /** The Antigravity row: its sign-in column, the account its quota is Next for, and its window. */
-  const row = (r: Runner) => {
-    const html = render(r);
-    const own = html.slice(html.indexOf('>Antigravity CLI<'));
-    return {
-      signIn: /class="rd-engine-auth (\w+)">([^<]*)</.exec(own)?.slice(1, 3),
-      next: /class="rd-quota-next">(Next: [^<]*)</.exec(own)?.[1] ?? null,
-      quota: [...own.matchAll(/class="rd-quota-pct">([^<]*)</g)].map(([, pct]) => pct),
-    };
+    return box;
   };
+  /** Antigravity's head and each account under it, as each row reads. */
+  const rows = (page: ParentNode) => [engineRow(page), ...accountRows(page)].map((row) => row.textContent);
 
-  it('says Signed in for one Google account, with the bucket closest to its limit', () => {
-    // Of its four buckets the row carries 3p-weekly, the least left; the engine page has all four.
-    expect(row(runner(antigravity({ accounts: [DEFAULT] })))).toEqual({
-      signIn: ['ok', 'Signed in'],
-      next: null,
-      quota: ['98% remaining'],
-    });
-  });
-
-  it('counts several, with the quota of the one a new session starts on, named', () => {
-    expect(row(runner())).toEqual({
-      signIn: ['ok', '2 accounts signed in'],
-      next: 'Next: Default',
-      quota: ['98% remaining'],
-    });
-  });
-
-  it('says Signed out when any account is', () => {
-    expect(row(runner(antigravity({ accounts: [DEFAULT, { ...WORK, auth: 'no' }] }))).signIn).toEqual(['warn', 'Signed out']);
-  });
-
-  it('keeps saying env key for a machine on its Gemini key, and never counts that Default out', () => {
-    expect(row(runner(envKey([{ ...DEFAULT, auth: 'no' }]))).signIn).toEqual(['ok', 'env key']);
-    expect(row(runner(envKey([{ ...DEFAULT, auth: 'no' }, WORK])))).toEqual({
-      signIn: ['ok', '2 accounts signed in'],
-      next: 'Next: Work',
-      quota: ['4% remaining'],
-    });
+  it.each([
+    ['one Google account', runner(antigravity({ accounts: [DEFAULT] }))],
+    ['two, Default the next', runner()],
+    ['one of them signed out', runner(antigravity({ accounts: [DEFAULT, { ...WORK, auth: 'no' }] }))],
+    ['a machine on its Gemini key', runner(envKey([{ ...DEFAULT, auth: 'no' }, WORK]))],
+  ])('are the card’s own: %s', (_, r) => {
+    expect(rows(machinePage(r))).toEqual(rows(mount(r)));
   });
 });

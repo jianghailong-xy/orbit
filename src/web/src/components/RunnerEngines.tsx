@@ -50,10 +50,11 @@ import {
   planUsageSnapshotForProvider,
   type PlanUsageDisplayRow,
 } from '../lib/planUsage';
+import { DSH_STATE_LABEL, dshRunnerState } from '../lib/dshRuntime';
 import { formatResetTime } from '../lib/providerPools';
 import { runnersQuery } from '../lib/queries';
 import { listAttentionLine, type AttentionItem } from '../lib/runnerAttention';
-import { ago, engineVersionNumber, updateNoteOf } from '../lib/runnerEngines';
+import { ENGINE_CLI_NAME, ago, engineVersionNumber, updateNoteOf } from '../lib/runnerEngines';
 import { ENGINE_PRESET, ENGINE_SLUGS } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 import { ProviderTile } from './ProviderGallery';
@@ -359,6 +360,7 @@ function EngineRow({
   signIn,
   onSignIn,
   focused,
+  machinePage,
 }: {
   runner: Runner;
   engine: LoginEngine;
@@ -370,6 +372,8 @@ function EngineRow({
   onSignIn: (panel: string | null) => void;
   /** This is the row a deep link came here for: mark it and bring it into view. */
   focused?: boolean;
+  /** On the machine's own page, where the way to update its engines is the page's, not this row's. */
+  machinePage?: boolean;
 }) {
   const message = useToast();
   const qc = useQueryClient();
@@ -592,10 +596,16 @@ function EngineRow({
           </div>
           {/* Points at the machine rather than naming a shell command: that is where updating
               lives now, and telling someone to open a terminal for something the UI can do was
-              only ever a symptom of the button being on the wrong page. */}
+              only ever a symptom of the button being on the wrong page. On that page its Update
+              engines is already above, and the link would only lead back to it. */}
           <div className="re-panel-hint">
-            Orbit tries every 30 min.{' '}
-            <Link to={`/runners/${encodeId(runner.id)}`}>Update this machine’s engines →</Link>
+            Orbit tries every 30 min.
+            {!machinePage && (
+              <>
+                {' '}
+                <Link to={`/runners/${encodeId(runner.id)}`}>Update this machine’s engines →</Link>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1054,7 +1064,6 @@ function RunnerEngineCard({
   const [signIn, setSignIn] = useState<string | null>(null);
   const { attributes, listeners, setActivatorNodeRef, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: runner.id, disabled: dragDisabled });
-  const engines = runner.engines ?? null;
   const name = runner.displayName || runner.name;
   // How many of its slots are taken, ahead of where it is: an offline machine takes none, and its
   // header says Offline instead.
@@ -1162,63 +1171,151 @@ function RunnerEngineCard({
           />
         </Dropdown>
       </div>
-      {collapsed ? null : engines ? (
-        ENGINE_SLUGS.map((engine) => {
-          const health = engineHealthOf(runner, engine);
-          const accounts = accountRowsOf(engine, health, runner.install);
-          // Read across the whole group, since a repeat is a fact about two of its rows.
-          const repeats = duplicateAccounts(accounts);
-          // The same question the server asks when a session starts with no account picked.
-          const next =
-            engineKeepsAccounts(engine) && accounts.length > 0
-              ? accountToStartOn(engine, accounts, withEnginePlanUsage(runner.planUsage, runner.engines), new Date())
-              : null;
-          return (
-            <Fragment key={engine}>
-              <EngineRow
-                runner={runner}
-                engine={engine}
-                health={health}
-                accounts={accounts}
-                signIn={signIn}
-                onSignIn={setSignIn}
-                focused={engine === focusEngine}
-              />
-              {accounts.map((account, index) => (
-                <AccountRow
-                  key={account.id}
-                  runner={runner}
-                  engine={engine}
-                  account={account}
-                  defaultName={accountNameOf(accounts.find((entry) => entry.id === 'default') ?? { id: 'default' })}
-                  next={account.id === next}
-                  duplicateOf={repeats.get(account.id)}
-                  lastOfGroup={index === accounts.length - 1}
-                  envKey={runsOnEnvKey(health, account)}
-                  signIn={signIn}
-                  onSignIn={setSignIn}
-                />
-              ))}
-            </Fragment>
-          );
-        })
-      ) : (
-        // Never three rows of "Unknown": this runner hasn't told us anything, which is a
-        // different fact from "nothing is installed" and has a different fix.
-        <>
-          <div className="re-unreported">
-            This runner hasn&apos;t reported its engines yet. Update it to the latest version — an
-            older runner can&apos;t be signed in or installed from here.
-          </div>
-          <div className="re-row" data-engine="antigravity"><div className="re-id"><ProviderTile slug="antigravity" label="Antigravity" size={28} /><div className="re-name">Antigravity</div></div><Tag>Update runner</Tag><div className="re-login-note">Update this runner to sign in with Google.</div></div>
-        </>
+      {!collapsed && (
+        <MachineEngines runner={runner} signIn={signIn} onSignIn={setSignIn} focusEngine={focusEngine} />
       )}
     </div>
   );
 }
 
+/** The sign-in panel of an engine's own login on this machine: its row's, or — where the row heads
+ *  its accounts — Default's, which is that login. What the machine page's Needs Attention opens for
+ *  an engine that is signed out. */
+export function ownSignInPanel(runner: Runner, engine: LoginEngine): string {
+  return accountRowsOf(engine, engineHealthOf(runner, engine), runner.install).length > 0
+    ? accountPanel(engine, 'default')
+    : engine;
+}
+
+/** A CLI on the machine that no row above signs in — OpenCode signs in per provider, and DeepSeek
+ *  Harness runs every session on an API key — as the machine's own page lists it: what is installed,
+ *  whether it is being kept current, and whether the machine can run Harness at all (dshRunnerState).
+ *  It has no quota and nothing to press, so it is one line. */
+function CliRow({ runner, health }: { runner: Runner; health: RunnerEngineHealth }) {
+  const name = ENGINE_CLI_NAME[health.engine] ?? health.engine;
+  const note = health.installed ? updateNoteOf(health.update) : null;
+  const harness = health.engine === 'dsh' ? dshRunnerState(runner) : null;
+  const status = harness
+    ? harness === 'ready' ? 'Uses API keys' : DSH_STATE_LABEL[harness]
+    : health.installed ? null : 'Not installed';
+  return (
+    <div className="re-row" data-engine={health.engine}>
+      <div className="re-id">
+        <ProviderTile slug={health.engine === 'dsh' ? 'deepseek-harness' : health.engine} label={name} size={28} />
+        <div style={{ minWidth: 0 }}>
+          <div className="re-name">{name}</div>
+          {/* A CLI that isn't there has no version to show; its status says it is missing. */}
+          {health.installed && (
+            <div className="re-meta">
+              {health.version ? engineVersionNumber(health.version) : 'version not reported'}
+              {note && (
+                <span className={`re-upd${note.tone === 'warn' && runner.online ? ' warn' : ''}`} title={health.update?.message}>
+                  {' '}
+                  · {note.text}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="re-status">{status && <Tag>{status}</Tag>}</div>
+    </div>
+  );
+}
+
 /**
- * The Providers page's first section: the engine CLIs signed in on the user's own machines.
+ * One machine's engines: a row each, with its accounts under it, and on every row what can be done
+ * there — Sign in, Install, Add account, and each account's own menu. A machine's card here holds
+ * them under its head, and the machine's own page (RunnerDetailPage) under its Engines, as
+ * `machinePage`: there every other CLI the machine reports is listed too (CliRow), because that
+ * page's Update engines updates all of them.
+ *
+ * The sign-in panel open among the rows is the holder's to keep, so that something beside them can
+ * open one: the machine page's Needs Attention does (ownSignInPanel).
+ */
+export function MachineEngines({
+  runner,
+  signIn,
+  onSignIn,
+  focusEngine,
+  machinePage = false,
+}: {
+  runner: Runner;
+  /** The sign-in panel open on this machine, if any: an engine's, or one of its accounts'. */
+  signIn: string | null;
+  onSignIn: (panel: string | null) => void;
+  /** The engine a deep link came here for: its row is marked and brought into view. */
+  focusEngine?: InstallEngine | null;
+  /** Laid out on the machine's own page, under the controls that update every CLI on it. */
+  machinePage?: boolean;
+}) {
+  const engines = runner.engines ?? null;
+  if (!engines) {
+    // Never three rows of "Unknown": this runner hasn't told us anything, which is a
+    // different fact from "nothing is installed" and has a different fix.
+    return (
+      <>
+        <div className="re-unreported">
+          This runner hasn&apos;t reported its engines yet. Update it to the latest version — an
+          older runner can&apos;t be signed in or installed from here.
+        </div>
+        <div className="re-row" data-engine="antigravity"><div className="re-id"><ProviderTile slug="antigravity" label="Antigravity" size={28} /><div className="re-name">Antigravity</div></div><Tag>Update runner</Tag><div className="re-login-note">Update this runner to sign in with Google.</div></div>
+      </>
+    );
+  }
+  const rowed = new Set<string>(ENGINE_SLUGS);
+  return (
+    <>
+      {ENGINE_SLUGS.map((engine) => {
+        const health = engineHealthOf(runner, engine);
+        const accounts = accountRowsOf(engine, health, runner.install);
+        // Read across the whole group, since a repeat is a fact about two of its rows.
+        const repeats = duplicateAccounts(accounts);
+        // The same question the server asks when a session starts with no account picked.
+        const next =
+          engineKeepsAccounts(engine) && accounts.length > 0
+            ? accountToStartOn(engine, accounts, withEnginePlanUsage(runner.planUsage, runner.engines), new Date())
+            : null;
+        return (
+          <Fragment key={engine}>
+            <EngineRow
+              runner={runner}
+              engine={engine}
+              health={health}
+              accounts={accounts}
+              signIn={signIn}
+              onSignIn={onSignIn}
+              focused={engine === focusEngine}
+              machinePage={machinePage}
+            />
+            {accounts.map((account, index) => (
+              <AccountRow
+                key={account.id}
+                runner={runner}
+                engine={engine}
+                account={account}
+                defaultName={accountNameOf(accounts.find((entry) => entry.id === 'default') ?? { id: 'default' })}
+                next={account.id === next}
+                duplicateOf={repeats.get(account.id)}
+                lastOfGroup={index === accounts.length - 1}
+                envKey={runsOnEnvKey(health, account)}
+                signIn={signIn}
+                onSignIn={onSignIn}
+              />
+            ))}
+          </Fragment>
+        );
+      })}
+      {machinePage &&
+        engines
+          .filter((health) => !rowed.has(health.engine))
+          .map((health) => <CliRow key={health.engine} runner={runner} health={health} />)}
+    </>
+  );
+}
+
+/**
+ * Infrastructure's first section, Machines: the engine CLIs signed in on the user's own machines.
  *
  * These are a different kind of identity from the API keys below — they live on one machine and
  * spend the subscription signed into there, rather than on the account and billed per token — so

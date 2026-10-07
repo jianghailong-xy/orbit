@@ -479,7 +479,7 @@ function PlanJobCard({ card, spaceSlug, solo }: { card: WikiPlanJobCard; spaceSl
       <SyncOutlined spin className="ic" />
     );
   const link = card.link;
-  const to = link?.to === 'run' && link.sessionId ? `/sessions/${encodeId(link.sessionId)}` : link?.to === 'settings' ? wikiSettingsPath(spaceSlug) : link?.to === 'runners' ? '/runners' : null;
+  const to = link?.to === 'run' && link.sessionId ? `/sessions/${encodeId(link.sessionId)}` : link?.to === 'settings' ? wikiSettingsPath(spaceSlug) : link?.to === 'runners' ? '/infrastructure' : null;
   return (
     <section className={`wk-pl-check wk-pl-job solo ${tone}${solo ? ' failed-solo' : ''}`} role="status">
       <div className="h">

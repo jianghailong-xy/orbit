@@ -327,7 +327,7 @@ describe('the Suggested tier in Details', { timeout: 60_000 }, () => {
 describe('Gemini task provider pins', () => {
   const gemini: ConfiguredProvider = { slug: 'gemini', label: 'Gemini', runtime: 'antigravity', presetSlug: 'gemini', models: [] };
 
-  it.each([false, true])('uses the workspace server key boolean %s and links unsupported Gemini to Providers', async (keyAvailable) => {
+  it.each([false, true])('uses the workspace server key boolean %s and links unsupported Gemini to Infrastructure', async (keyAvailable) => {
     await mount(detail(), { antigravityKeyAvailableByRunner: { [RUNNER]: keyAvailable } }, {
       antigravity: { supported: false, installed: true, version: '1.2.16', envKeyAvailable: true },
     }, [gemini]);
@@ -344,7 +344,7 @@ describe('Gemini task provider pins', () => {
     expect(provider.textContent).toContain('Antigravity');
     expect(provider.textContent).toContain('Update runner');
     await click(provider, 'Gemini needing a runner update');
-    expect(where).toBe('/providers');
+    expect(where).toBe('/infrastructure');
     expect(patches()).toEqual([]);
   });
 

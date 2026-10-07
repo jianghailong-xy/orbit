@@ -487,10 +487,10 @@ export function ProjectsPage() {
     }
 
     // Keep the no-workspace route identical to DefaultLanding: registration for a new account,
-    // the machine page when there is only one choice, otherwise the runner picker.
+    // the machine page when there is only one choice, otherwise Infrastructure's machines.
     if (runnerList.length === 0) navigate('/runners/register');
     else if (runnerList.length === 1) navigate(`/runners/${encodeId(runnerList[0].id)}`);
-    else navigate('/runners');
+    else navigate('/infrastructure');
   };
 
   return (

@@ -7,8 +7,8 @@ import { runnersQuery } from '../lib/queries';
 
 const loginKey = (runnerId: string) => ['runner-login', runnerId] as const;
 
-/** The CLI's own name, as its vendor spells it. Shared with the Providers page's engine rows so
- *  the same machine never gets two names for the same binary. */
+/** The CLI's own name, as its vendor spells it. Shared with a machine's engine rows (RunnerEngines)
+ *  so the same machine never gets two names for the same binary. */
 export const ENGINE_NAME: Record<LoginEngine, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
@@ -245,7 +245,7 @@ export function RunnerSignIn({
   useEffect(() => {
     if (status !== 'done') return;
     setAwaitingProbe(true);
-    // The runners query is usually already mounted by the Providers page. Mark it stale when the
+    // The runners query is usually already mounted by the page this card is on. Mark it stale when the
     // relay finishes so that this transition always starts a fresh list read; merely mounting a
     // second observer can otherwise reuse a just-read cache entry and leave the account rows old.
     void qc.invalidateQueries({ queryKey: runnersQuery().queryKey });
