@@ -557,11 +557,14 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     }
   };
   for (const [key, kase] of fieldCases) {
+    // One tenant of nothing per case, as B names the same objects of A's under every credential: a request
+    // that leaves something of its own behind — an import, say — meets it again on the next, on both sides.
+    const nothing = nobody();
     for (const as of kase.as) {
       await t.test(`${key} as ${as}: B's own request with A's in it writes nothing of A's and is answered as with nothing`, async () => {
         const route = routeOfField(key);
         const { reply, written } = await sent(holderB, as, route, kase.request(a, b));
-        const control = await sent(holderB2, as, route, kase.request(nobody(), b2));
+        const control = await sent(holderB2, as, route, kase.request(nothing, b2));
         assert.deepEqual(
           { answer: answerOf(reply), writtenOfA: namingA(written) },
           { answer: answerOf(control.reply), writtenOfA: [] },
@@ -571,7 +574,7 @@ test('tenant isolation: past the runner gate and through the share links, anothe
       await t.test(`${key} as ${as}: while A's ${kase.heldRow(a)[0]} is held, B's own request with A's in it neither waits for it nor is answered otherwise`, async () => {
         const route = routeOfField(key);
         const held = await whileHeld(kase.heldRow!(a), () => sent(holderB, as, route, kase.request(a, b)));
-        const control = await sent(holderB2, as, route, kase.request(nobody(), b2));
+        const control = await sent(holderB2, as, route, kase.request(nothing, b2));
         assert.deepEqual(
           { answered: held.whileHeld, answer: answerOf(held.reply), writtenOfA: namingA(held.written) },
           { answered: 'answered', answer: answerOf(control.reply), writtenOfA: [] },
