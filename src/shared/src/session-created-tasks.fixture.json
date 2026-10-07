@@ -1,6 +1,7 @@
 {
   "about": [
-    "The \"Tasks created here\" row above a session's composer: its fixed words and the sentence its",
+    "The Tasks card above a session's composer — Tasks created here, merged with what its watches",
+    "wait on: its fixed words and the sentence its",
     "collapsed form writes — one set of cases both clients are proved against. The shared",
     "`sessionCreatedTasks.spec.ts` checks `createdTasksCountLine` and `SESSION_CREATED_TASKS_COPY`",
     "(@orbit/shared, what the web renders) against this file; the native client reads the same file,",
@@ -16,14 +17,22 @@
     "",
     "`singleNamesTheTask`: when `total` is 1 the collapsed row writes no count sentence; it names",
     "the task and shows its status pill instead, as the Watching row does. With `total` 0 the session",
-    "created nothing and there is no row."
+    "created nothing and there is no row.",
+    "",
+    "`card`: `sessionTaskCard(created, watched)` — the created answer (`null` when there is none) and",
+    "the tasks the session's live watches wait on — to the card it draws, or `null` for no card. `rows`",
+    "is the order, each with its eye (`watched`), the eye's orange (`stale`) and whether it was created",
+    "elsewhere (no age; `copy.elsewhere` in its place). A watched id marks a created row by the row's",
+    "task or the task it replaces, in either spelling (UUID or base62). Watched rows come first; the",
+    "sentence counts the created tallies plus the watched tasks created elsewhere."
   ],
   "copy": {
-    "title": "Tasks created here",
+    "title": "Tasks",
     "viewAll": "View all in Tasks ›",
     "openProject": "Open project ›",
     "replacesPrefix": "Replaces ",
-    "createdInChip": "Created in "
+    "createdInChip": "Created in ",
+    "elsewhere": "elsewhere"
   },
   "singleNamesTheTask": true,
   "countLine": [
@@ -35,5 +44,15 @@
     { "running": 0, "failed": 0, "done": 0, "total": 4, "text": "0/4 done" },
     { "running": 0, "failed": 2, "done": 6, "total": 8, "text": "2 failed · 6/8 done" },
     { "running": 12, "failed": 3, "done": 97, "total": 118, "text": "12 running · 3 failed · 97/118 done" }
+  ],
+  "card": [
+    {"name": "nothing created, nothing watched: no card", "created": null, "watched": [], "card": null},
+    {"name": "created, none watched: rows as served", "created": {"running": 1, "failed": 0, "done": 1, "total": 2, "items": [{"id": "Ta1", "status": "IN_PROGRESS", "running": true, "queued": false, "replaces": null}, {"id": "Ta2", "status": "DONE", "running": false, "queued": false, "replaces": null}]}, "watched": [], "card": {"rows": [{"id": "Ta1", "watched": false, "stale": false, "elsewhere": false}, {"id": "Ta2", "watched": false, "stale": false, "elsewhere": false}], "counts": {"running": 1, "failed": 0, "done": 1, "total": 2}, "watching": 0, "stale": false}},
+    {"name": "watched rows move to the top, server order kept within each group", "created": {"running": 2, "failed": 0, "done": 2, "total": 4, "items": [{"id": "Ta1", "status": "OPEN", "running": true, "queued": false, "replaces": null}, {"id": "Ta2", "status": "OPEN", "running": true, "queued": false, "replaces": null}, {"id": "Ta3", "status": "DONE", "running": false, "queued": false, "replaces": null}, {"id": "Ta4", "status": "DONE", "running": false, "queued": false, "replaces": null}]}, "watched": [{"id": "Ta4", "status": "DONE", "running": false, "queued": false, "stale": false}, {"id": "Ta2", "status": "OPEN", "running": true, "queued": false, "stale": false}], "card": {"rows": [{"id": "Ta2", "watched": true, "stale": false, "elsewhere": false}, {"id": "Ta4", "watched": true, "stale": false, "elsewhere": false}, {"id": "Ta1", "watched": false, "stale": false, "elsewhere": false}, {"id": "Ta3", "watched": false, "stale": false, "elsewhere": false}], "counts": {"running": 2, "failed": 0, "done": 2, "total": 4}, "watching": 2, "stale": false}},
+    {"name": "a watch by UUID marks the row the server spells in base62", "created": {"running": 0, "failed": 0, "done": 0, "total": 2, "items": [{"id": "Ta1", "status": "OPEN", "running": false, "queued": false, "replaces": null}, {"id": "Ta2", "status": "OPEN", "running": false, "queued": false, "replaces": null}]}, "watched": [{"id": "00000000-0000-0000-0000-00000001bc2e", "status": "OPEN", "running": false, "queued": false, "stale": false}], "card": {"rows": [{"id": "Ta2", "watched": true, "stale": false, "elsewhere": false}, {"id": "Ta1", "watched": false, "stale": false, "elsewhere": false}], "counts": {"running": 0, "failed": 0, "done": 0, "total": 2}, "watching": 1, "stale": false}},
+    {"name": "a watch on the task a row replaces marks that row", "created": {"running": 1, "failed": 0, "done": 0, "total": 1, "items": [{"id": "Tb9", "status": "OPEN", "running": true, "queued": false, "replaces": "Ta1"}]}, "watched": [{"id": "Ta1", "status": "FAILED", "running": false, "queued": false, "stale": false}], "card": {"rows": [{"id": "Tb9", "watched": true, "stale": false, "elsewhere": false}], "counts": {"running": 1, "failed": 0, "done": 0, "total": 1}, "watching": 1, "stale": false}},
+    {"name": "a watched task created elsewhere joins after the created watched rows, and is counted", "created": {"running": 0, "failed": 0, "done": 1, "total": 2, "items": [{"id": "Ta1", "status": "OPEN", "running": false, "queued": false, "replaces": null}, {"id": "Ta2", "status": "DONE", "running": false, "queued": false, "replaces": null}]}, "watched": [{"id": "Tz1", "status": "IN_PROGRESS", "running": true, "queued": false, "stale": false}, {"id": "Ta1", "status": "OPEN", "running": false, "queued": false, "stale": false}], "card": {"rows": [{"id": "Ta1", "watched": true, "stale": false, "elsewhere": false}, {"id": "Tz1", "watched": true, "stale": false, "elsewhere": true}, {"id": "Ta2", "watched": false, "stale": false, "elsewhere": false}], "counts": {"running": 1, "failed": 0, "done": 1, "total": 3}, "watching": 2, "stale": false}},
+    {"name": "only watched tasks: still a card; failed and done counted from their standing", "created": null, "watched": [{"id": "Tz1", "status": "FAILED", "running": false, "queued": false, "stale": false}, {"id": "Tz2", "status": "DONE", "running": false, "queued": false, "stale": false}, {"id": "Tz3", "status": null, "running": false, "queued": false, "stale": false}], "card": {"rows": [{"id": "Tz1", "watched": true, "stale": false, "elsewhere": true}, {"id": "Tz2", "watched": true, "stale": false, "elsewhere": true}, {"id": "Tz3", "watched": true, "stale": false, "elsewhere": true}], "counts": {"running": 0, "failed": 1, "done": 1, "total": 3}, "watching": 3, "stale": false}},
+    {"name": "two watches over one task: one row, orange if either is unchecked", "created": {"running": 1, "failed": 0, "done": 0, "total": 1, "items": [{"id": "Ta1", "status": "OPEN", "running": true, "queued": false, "replaces": null}]}, "watched": [{"id": "Ta1", "status": "OPEN", "running": true, "queued": false, "stale": false}, {"id": "Ta1", "status": "OPEN", "running": true, "queued": false, "stale": true}], "card": {"rows": [{"id": "Ta1", "watched": true, "stale": true, "elsewhere": false}], "counts": {"running": 1, "failed": 0, "done": 0, "total": 1}, "watching": 1, "stale": true}}
   ]
 }

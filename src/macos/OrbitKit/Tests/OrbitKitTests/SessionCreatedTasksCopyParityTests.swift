@@ -37,6 +37,54 @@ final class SessionCreatedTasksCopyParityTests: XCTestCase {
         let copy: [String: String]
         let singleNamesTheTask: Bool
         let countLine: [CountLineCase]
+        let card: [CardCase]
+    }
+
+    /// `sessionTaskCard(created, watched)` → the card, or nil for none.
+    private struct CardCase: Decodable {
+        struct Created: Decodable {
+            struct Item: Decodable {
+                let id: String
+                let status: String
+                let running: Bool
+                let queued: Bool
+                let replaces: String?
+            }
+            let running: Int
+            let failed: Int
+            let done: Int
+            let total: Int
+            let items: [Item]
+        }
+        struct Watched: Decodable {
+            let id: String
+            let status: String?
+            let running: Bool
+            let queued: Bool
+            let stale: Bool
+        }
+        struct Card: Decodable, Equatable {
+            struct Row: Decodable, Equatable {
+                let id: String
+                let watched: Bool
+                let stale: Bool
+                let elsewhere: Bool
+            }
+            struct Counts: Decodable, Equatable {
+                let running: Int
+                let failed: Int
+                let done: Int
+                let total: Int
+            }
+            let rows: [Row]
+            let counts: Counts
+            let watching: Int
+            let stale: Bool
+        }
+        let name: String
+        let created: Created?
+        let watched: [Watched]
+        let card: Card?
     }
 
     private struct CountLineCase: Decodable, CustomStringConvertible {
@@ -93,6 +141,7 @@ final class SessionCreatedTasksCopyParityTests: XCTestCase {
             "openProject": SessionCreatedTasksCopy.openProject,
             "replacesPrefix": SessionCreatedTasksCopy.replacesPrefix,
             "createdInChip": SessionCreatedTasksCopy.createdInChip,
+            "elsewhere": SessionCreatedTasksCopy.elsewhere,
         ]
         XCTAssertEqual(Set(theirs.keys), Set(mine.keys),
                        "the fixture's words and this client's are not the same set of words")
@@ -179,5 +228,43 @@ final class SessionCreatedTasksCopyParityTests: XCTestCase {
                                       items: [row("t1"), row("t2")], projects: [])
         XCTAssertEqual(SessionCreatedTasksCopy.line(two),
                        .counted([SessionCreatedTasksCopy.CountPart(text: "2/2 done", failed: false)]))
+    }
+
+    // MARK: the card: created, and watched
+
+    func testEveryCardCaseIsTheCardThisClientDraws() throws {
+        let cases = try fixture().card
+        XCTAssertFalse(cases.isEmpty, "the fixture has no card cases, so this check checks nothing")
+        for c in cases {
+            let created = c.created.map { created in
+                SessionCreatedTasks(
+                    total: created.total, running: created.running, failed: created.failed, done: created.done,
+                    items: created.items.map { item in
+                        SessionCreatedTaskRow(id: item.id, title: "Task \(item.id)", status: item.status,
+                                              running: item.running, queued: item.queued,
+                                              createdAt: "2026-10-07T00:00:00.000Z", projectId: nil,
+                                              replaces: item.replaces.map {
+                                                  SessionCreatedTasks.Named(id: $0, title: "Task \($0)")
+                                              })
+                    },
+                    projects: [])
+            }
+            let watched = c.watched.map { task in
+                SessionWatchedTask(id: task.id, title: "Task \(task.id)",
+                                   standing: task.status.map {
+                                       WatchTargetStatus(status: $0, running: task.running, queued: task.queued)
+                                   },
+                                   stale: task.stale)
+            }
+            let card = SessionTaskCard(created: created, watched: watched).map { card in
+                CardCase.Card(
+                    rows: card.rows.map {
+                        .init(id: $0.id, watched: $0.watched, stale: $0.stale, elsewhere: $0.createdAt == nil)
+                    },
+                    counts: .init(running: card.running, failed: card.failed, done: card.done, total: card.total),
+                    watching: card.watching, stale: card.stale)
+            }
+            XCTAssertEqual(card, c.card, c.name)
+        }
     }
 }

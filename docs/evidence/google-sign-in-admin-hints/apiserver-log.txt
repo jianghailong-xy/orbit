@@ -1,0 +1,6 @@
+== apiserver with the key the secret was saved under (run-api.sh, no ROTATE) ==
+[Nest] 1400126  - 10/07/2026, 4:18:53 PM     LOG [NestApplication] Nest application successfully started +35ms
+
+== apiserver after PROVIDER_SECRET_KEY was replaced (ROTATE=1 run-api.sh) ==
+run-api: PROVIDER_SECRET_KEY replaced for this run
+[Nest] 1400812  - 10/07/2026, 4:19:12 PM     LOG [NestApplication] Nest application successfully started +34ms

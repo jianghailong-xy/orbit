@@ -379,7 +379,8 @@ final class RunnersPageWiringTests: XCTestCase {
                                          "await m.begin(accountName: accountName)", "await m.refresh()"],
                           "an Add Account card starts its sign-in on its first appearance only")
         let model = code(try appSource("RunnerSignInModel.swift"))
-        XCTAssertTrue(model.contains("api.startRunnerLogin(runnerID, engine: engine, account: account, accountName: name)"))
+        // …and, for Kimi, the site the card's press picked (KimiSite).
+        XCTAssertTrue(model.contains("api.startRunnerLogin(runnerID, engine: engine, account: account, accountName: name, region: site?.rawValue)"))
         XCTAssertTrue(model.contains("if adding { return startedHere }"),
                       "a card adding an account owns only the sign-in it started")
     }

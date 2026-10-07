@@ -122,7 +122,7 @@ func TestProjectRequestStartIsABaseToolThatSaysWhenToCallIt(t *testing.T) {
 		}
 		schema, _ := tool["inputSchema"].(map[string]interface{})
 		required, _ := schema["required"].([]string)
-		if strings.Join(required, ",") != "projectId,line,automatic,maxConcurrentTasks,why" {
+		if strings.Join(required, ",") != "projectId,line,maxConcurrentTasks,why" {
 			t.Fatalf("project_request_start requires %v", required)
 		}
 	}
@@ -195,8 +195,9 @@ func TestProjectRequestStartPostsTheSettingsAsTheCallingSession(t *testing.T) {
 		"34XstartReq0000000001", // the request, by the id the start door takes
 		"nothing is waiting on this call",
 		"task_start is refused",
-		"START_NO_MERGE_CHECK", // the warning the owner reads beside it
+		"START_NO_MERGE_CHECK", // the warning, which is the coordinator's and not on the owner's card
 		"do: Suggest a mergeCheckCommand",
+		"the owner's card does not show them",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("project_request_start's result does not say %q:\n%s", want, text)
@@ -228,6 +229,25 @@ func TestProjectRequestStartLeavesOutWhatWasNotSuggested(t *testing.T) {
 	}
 	if body["automatic"] != false || body["maxConcurrentTasks"] != float64(2) || body["line"] != "MAIN" {
 		t.Fatalf("project_request_start sent %#v", body)
+	}
+}
+
+// Automatic left out is on: the owner's card opens with it on whatever is sent, so leaving it out is a
+// suggestion rather than a refusal.
+func TestProjectRequestStartLeftOutAutomaticIsOn(t *testing.T) {
+	srv, seen := startRequestServer(t, http.StatusCreated, startRequestFiledBody)
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "343dlzsYWKo5z8l2M8tsB"}
+	res := mcp.callTool("project_request_start", map[string]interface{}{
+		"projectId":          "proj-1",
+		"line":               "PROJECT_BRANCH",
+		"maxConcurrentTasks": float64(3),
+		"why":                "B and C both build on A",
+	})
+	if res["isError"] == true {
+		t.Fatalf("project_request_start returned an error: %s", toolText(t, res))
+	}
+	if got := (*seen)[0].body["automatic"]; got != true {
+		t.Fatalf("project_request_start with no automatic sent automatic = %#v, want true", got)
 	}
 }
 
@@ -303,7 +323,6 @@ func TestProjectRequestStartRefusesABadShapeBeforeARoundTrip(t *testing.T) {
 		"no project":               func(a map[string]interface{}) { delete(a, "projectId") },
 		"no line":                  func(a map[string]interface{}) { delete(a, "line") },
 		"an unknown line":          func(a map[string]interface{}) { a["line"] = "SOMEWHERE" },
-		"no automatic":             func(a map[string]interface{}) { delete(a, "automatic") },
 		"automatic as a string":    func(a map[string]interface{}) { a["automatic"] = "yes" },
 		"no concurrency":           func(a map[string]interface{}) { delete(a, "maxConcurrentTasks") },
 		"zero concurrency":         func(a map[string]interface{}) { a["maxConcurrentTasks"] = float64(0) },
@@ -351,7 +370,7 @@ func TestProjectRequestStartCLISendsTheSameRequest(t *testing.T) {
 		t.Fatalf("request-start printed %q", out.String())
 	}
 
-	// --automatic=false is a suggestion too; leaving the flag out is not.
+	// --automatic=false is a suggestion too, and leaving the flag out suggests it on.
 	out.Reset()
 	if err := cmdProjectCLI([]string{
 		"request-start", "proj-1", "--line", "MAIN", "--automatic=false",
@@ -362,14 +381,13 @@ func TestProjectRequestStartCLISendsTheSameRequest(t *testing.T) {
 	if got := (*seen)[1].body["automatic"]; got != false {
 		t.Fatalf("--automatic=false sent automatic = %#v", got)
 	}
-	err := cmdProjectCLI([]string{
+	if err := cmdProjectCLI([]string{
 		"request-start", "proj-1", "--line", "MAIN", "--max-concurrent-tasks", "1", "--why", "one fix",
-	}, strings.NewReader(""), &out)
-	if err == nil || !strings.Contains(err.Error(), "--automatic is required") {
-		t.Fatalf("a request with no Automatic suggestion was accepted: %v", err)
+	}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
 	}
-	if len(*seen) != 2 {
-		t.Fatalf("a refused command reached the server: %#v", *seen)
+	if got := (*seen)[2].body["automatic"]; got != true {
+		t.Fatalf("a request with no Automatic flag sent automatic = %#v, want it on", got)
 	}
 }
 

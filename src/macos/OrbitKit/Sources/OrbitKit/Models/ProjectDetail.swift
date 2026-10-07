@@ -178,7 +178,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
                                                             text: $0.text)
                            },
                            derivedDone: derivedDone, doneBy: doneBy, doneAt: doneAt,
-                           acceptedGaps: acceptedGaps, tasksByStatus: tasksByStatus)
+                           acceptedGaps: acceptedGaps)
     }
 
     /// Whether the project has been started, read off `startedAt` and off nothing else — not off
@@ -332,6 +332,84 @@ public struct ProjectIntegrationInFlight: Codable, Equatable, Sendable {
     }
 }
 
+/// One job the integration view's two counts count (`inFlightJobs`), as the landing row's job list
+/// draws it: which task it lands, how far it got, and whether its runner stopped reporting.
+///
+/// `timedOut` is the server's judgement, made where the job is read and never stored; a timed-out
+/// job is still `RUNNING`. Retry is drawn from `retryable`, not from `timedOut`: which timed-out jobs
+/// a retry can end is the server's to say.
+public struct ProjectIntegrationJob: Codable, Equatable, Sendable {
+    public let jobId: String
+    /// `LAND_TASK`, `CHECK_PROMOTION` or `LAND_PROMOTION`.
+    public let kind: String
+    /// `RUNNING` or `QUEUED`.
+    public let state: String
+    /// The step it last reported, or the one a claim starts at; nil before its first claim. A
+    /// queued job may still carry an earlier claim's, so the job list reads it only off a running
+    /// or timed-out one.
+    public let phase: String?
+    /// The task it lands; nil for a promotion or a merge check, which land no single task.
+    public let taskId: String?
+    public let taskTitle: String?
+    /// Which landing of its subject this is, counting from 1.
+    public let generation: Int
+    /// What "for how long" counts from, as on `inFlight`: the claim, or the enqueue.
+    public let startedAt: String
+    /// When it joined the queue — for a retried job, when the retry was asked for.
+    public let queuedAt: String
+    /// Its runner's last report; nil before its first claim (a queued job may carry an earlier one).
+    public let heartbeatAt: String?
+    /// The runner holding the claim; nil while queued, or when that runner is gone.
+    public let runnerName: String?
+    /// `OWNER` or `COORDINATOR` when this run reruns a failed or timed-out one; nil otherwise.
+    public let retriedBy: String?
+    public let timedOut: Bool
+    /// How long the current step may go without a report; nil while queued.
+    public let limitSeconds: Int?
+    /// Whether the owner's Retry takes this job now.
+    public let retryable: Bool
+
+    public init(jobId: String, kind: String, state: String, phase: String? = nil, taskId: String? = nil,
+                taskTitle: String? = nil, generation: Int = 1, startedAt: String, queuedAt: String,
+                heartbeatAt: String? = nil, runnerName: String? = nil, retriedBy: String? = nil,
+                timedOut: Bool = false, limitSeconds: Int? = nil, retryable: Bool = false) {
+        self.jobId = jobId
+        self.kind = kind
+        self.state = state
+        self.phase = phase
+        self.taskId = taskId
+        self.taskTitle = taskTitle
+        self.generation = generation
+        self.startedAt = startedAt
+        self.queuedAt = queuedAt
+        self.heartbeatAt = heartbeatAt
+        self.runnerName = runnerName
+        self.retriedBy = retriedBy
+        self.timedOut = timedOut
+        self.limitSeconds = limitSeconds
+        self.retryable = retryable
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        jobId = try c.decodeIfPresent(String.self, forKey: .jobId) ?? ""
+        kind = try c.decodeIfPresent(String.self, forKey: .kind) ?? ""
+        state = try c.decodeIfPresent(String.self, forKey: .state) ?? "QUEUED"
+        phase = try c.decodeIfPresent(String.self, forKey: .phase)
+        taskId = try c.decodeIfPresent(String.self, forKey: .taskId)
+        taskTitle = try c.decodeIfPresent(String.self, forKey: .taskTitle)
+        generation = try c.decodeIfPresent(Int.self, forKey: .generation) ?? 1
+        startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt) ?? ""
+        queuedAt = try c.decodeIfPresent(String.self, forKey: .queuedAt) ?? ""
+        heartbeatAt = try c.decodeIfPresent(String.self, forKey: .heartbeatAt)
+        runnerName = try c.decodeIfPresent(String.self, forKey: .runnerName)
+        retriedBy = try c.decodeIfPresent(String.self, forKey: .retriedBy)
+        timedOut = try c.decodeIfPresent(Bool.self, forKey: .timedOut) ?? false
+        limitSeconds = try c.decodeIfPresent(Int.self, forKey: .limitSeconds)
+        retryable = try c.decodeIfPresent(Bool.self, forKey: .retryable) ?? false
+    }
+}
+
 /// The integration line plus what the queue has done with it — the facts the page's line row draws,
 /// and the settings How it runs edits.
 public struct ProjectIntegrationView: Codable, Equatable, Sendable {
@@ -359,13 +437,17 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
     /// The OLDEST job those two counts count, described; nil when there is none. What the Work
     /// overview card's live landing line is drawn from.
     public let inFlight: ProjectIntegrationInFlight?
+    /// Every job the two counts count, in `inFlight`'s order — running first, then the queue oldest
+    /// first — so the first is the job `inFlight` describes. What pressing the landing row lists.
+    /// Nil from a server that predates it, which is not the same as none in flight.
+    public let inFlightJobs: [ProjectIntegrationJob]?
 
     public init(line: IntegrationLine? = nil, ref: String? = nil, upstreamRef: String? = nil,
                 commitsAheadOfUpstream: Int? = nil, lastUpstreamSyncAt: String? = nil,
                 integratingCount: Int = 0, queuedCount: Int = 0, mergeCheckOnTip: String = "UNKNOWN",
                 inFlight: ProjectIntegrationInFlight? = nil, locked: Bool = false,
                 startedAt: String? = nil, mergeCheckCommand: String? = nil,
-                escalationSeconds: Int? = nil) {
+                escalationSeconds: Int? = nil, inFlightJobs: [ProjectIntegrationJob]? = nil) {
         self.line = line
         self.ref = ref
         self.upstreamRef = upstreamRef
@@ -379,6 +461,7 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
         self.queuedCount = queuedCount
         self.mergeCheckOnTip = mergeCheckOnTip
         self.inFlight = inFlight
+        self.inFlightJobs = inFlightJobs
     }
 
     public init(from decoder: Decoder) throws {
@@ -396,6 +479,9 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
         queuedCount = try c.decodeIfPresent(Int.self, forKey: .queuedCount) ?? 0
         mergeCheckOnTip = try c.decodeIfPresent(String.self, forKey: .mergeCheckOnTip) ?? "UNKNOWN"
         inFlight = try c.decodeIfPresent(ProjectIntegrationInFlight.self, forKey: .inFlight)
+        // A list this build cannot read is an older server's absence, not a failed integration
+        // read: the landing row and How it runs still draw from the rest.
+        inFlightJobs = try? c.decodeIfPresent([ProjectIntegrationJob].self, forKey: .inFlightJobs)
     }
 }
 

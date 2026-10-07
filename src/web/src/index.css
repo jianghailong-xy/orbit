@@ -3784,7 +3784,7 @@ html[data-theme='dark'] .session-tag-chip {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* "Tasks created here" (SessionCreatedTasksStrip.tsx) sits in the tray's shell above; these are
+/* The Tasks card (SessionCreatedTasksStrip.tsx) sits in the tray's shell above; these are
    only what a task list adds to it. Collapsed, the title never wraps and the sentence never gives
    way: beside the sentence the title is what truncates, beside a lone task's name the name does;
    the failed count is red. Opened, one row per task: a fixed status column, the title (with what it
@@ -3857,6 +3857,26 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .ct-replaces {
   color: var(--text-3);
+}
+/* What the session's watches wait on: a count on the folded line and an eye in its own column, so
+   the titles still start under each other; orange while a watch goes unchecked. */
+.ct-watching {
+  flex: none;
+  color: var(--brand);
+  white-space: nowrap;
+}
+.ct-eye {
+  flex: none;
+  width: 14px;
+  display: flex;
+  justify-content: center;
+}
+.ct-eye-ico {
+  color: var(--brand);
+}
+.ct-watching.is-stale,
+.ct-eye-ico.is-stale {
+  color: var(--warning);
 }
 .ct-age {
   flex: none;
@@ -8770,6 +8790,66 @@ button.chat-jump-start:hover {
   color: var(--success);
   font-size: 13px;
 }
+/* Kimi's two sites, as the choice that starts its sign-in: one press picks the site and begins. */
+.rsi-q {
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 500;
+}
+.rsi-sites {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.rsi-site {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 200px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.rsi-site:hover:not(:disabled) {
+  border-color: var(--brand-border);
+  background: var(--brand-tint);
+}
+.rsi-site:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.rsi-site-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 600;
+}
+.rsi-site-sub {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.rsi-site-tag {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--brand-tint);
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+}
+/* Cancel beside the device flow's way to the other Kimi site. */
+.rsi-links {
+  display: flex;
+  gap: 16px;
+}
 
 /* Takes a rejected configured key to the page that holds it. The runner-login shape has its own
    pair of buttons (.rsi-actions); this shape has only the one route. */
@@ -8823,6 +8903,30 @@ button.chat-jump-start:hover {
 .chat-authfix-retry:hover {
   border-color: var(--brand-border);
   color: var(--brand);
+}
+
+/* The refusal card over a conversation whose run never started (RunNeverStartedCard). Same
+   skeleton as the remedy cards above — that is the point, one fact one card — plus the three
+   lines they do not have: the line that names the situation (the weight the repair cards give
+   their title, carried here by the sentence under it), the ref the run was pinned to, and the one
+   step that changes the answer, set off by a rule because it is the card's conclusion. */
+.run-never-started-why {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.run-never-started-subject {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+.run-never-started-next {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--warning-border);
+  color: var(--text-1);
+}
+.run-never-started-foot {
+  margin-top: 9px;
 }
 
 /* Provider quota exhausted. Not an error — a pause — and the card's weight follows one
@@ -10234,9 +10338,10 @@ button.chat-jump-start:hover {
 }
 
 /* ── Start this project? ─────────────────────────────────────────────────────────────────
-   `StartProjectCard.tsx`: the settlement card's shell, with three sections under it — the
-   criteria, the plan, and How it runs, drawn with the integration settings card's own rows
-   (`.project-integration-setting`) in a raised panel. Mock: start-mock/board2-start-web.html. */
+   `StartProjectCard.tsx`: the settlement card's shell, answering three questions in order — what
+   done is (the criteria), how much is delegated and what still comes to the owner (How it runs),
+   and the plan by level — with Start held at the bottom of the scroll and a line under it saying
+   what the press does. Mocks: docs/mocks/start-card-redesign (v2, approved 2026-10-07). */
 /* On a phone the start card rises as a sheet (`ProjectStartDialog`), whose own title already asks
    the card's question: the card does not ask it twice. */
 .start-card-sheet .settlement-card-head {
@@ -10256,18 +10361,123 @@ button.chat-jump-start:hover {
 .start-card-section + .settlement-card-criteria {
   margin-top: 4px;
 }
-.start-card-section-aside {
-  margin-left: auto;
+.start-card-project {
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.35;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+/* The coordinator's own words, three lines until More. */
+.start-card-quote {
+  margin-top: 10px;
+  padding: 8px 12px 9px;
+  border-radius: 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+}
+.start-card-quote-head {
   font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--brand);
+  color: var(--text-3);
+}
+.start-card-quote-text {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-1);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.start-card-quote-text.is-open {
+  display: block;
+}
+.start-card-quote .start-card-link {
+  margin-left: 0;
+  font-size: 12.5px;
 }
 .start-card-plan {
   font-size: 13px;
   line-height: 1.65;
   color: var(--text-1);
+}
+/* The plan by level: a number per level, and the levels joined by a thin line down the left. */
+.start-card-levels {
+  position: relative;
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+}
+.start-card-levels::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 12px;
+  bottom: 12px;
+  width: 1px;
+  background: var(--border-subtle);
+}
+.start-card-level {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+}
+.start-card-level-number {
+  flex: none;
+  z-index: 1;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-raised);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 19px;
+  text-align: center;
+  color: var(--text-3);
+}
+.start-card-task {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.start-card-task b {
+  flex: none;
+  font-weight: 650;
+}
+.start-card-task-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.start-card-parallel {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.start-card-pill {
+  flex: none;
+  margin-left: auto;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 18px;
+}
+.start-card-pill.is-now {
+  color: var(--success);
+  background: var(--success-bg);
+}
+.start-card-pill.is-you {
+  color: var(--brand);
+  background: var(--brand-tint);
 }
 .start-card-link {
   margin-left: 6px;
@@ -10292,26 +10502,98 @@ button.chat-jump-start:hover {
   color: var(--warning);
 }
 .start-card-settings {
-  padding: 0 12px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 8px;
   background: var(--bg-raised);
 }
+/* One setting per row: its name, and its value or control at the end. */
+.start-card-row {
+  padding: 10px 12px;
+}
+.start-card-row + .start-card-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.start-card-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13.5px;
+  color: var(--text-1);
+}
+.start-card-row-button {
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.start-card-row-value {
+  color: var(--text-3);
+}
+.start-card-row .start-card-mono {
+  margin-top: 8px;
+}
+.start-card-hint {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.start-card-line {
+  min-width: 170px;
+}
+.start-card-line-option {
+  max-width: 340px;
+  white-space: normal;
+}
+.start-card-line-option .start-card-branch {
+  margin-left: 6px;
+}
+/* What a start with Automatic on does for a project with no coordinator: opens one. */
+.start-card-opens {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+/* What still comes to the owner, under the switch: the switch's consequence, as a list. */
+.start-card-comes {
+  margin-top: 10px;
+  padding: 8px 12px 9px;
+  border-radius: 8px;
+  background: var(--brand-tint);
+}
+.start-card-comes-head {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+.start-card-comes ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-1);
+}
+.start-card-comes-detail {
+  color: var(--text-3);
+}
 /* The two lines, one under the other; the class makes these rules outrank antd's own
-   `.ant-radio-group` / `.ant-radio-wrapper` ones, which would otherwise win on order. How it runs
-   (`.project-run-settings`) draws the same two. */
-.start-card-settings .start-card-lines,
+   `.ant-radio-group` / `.ant-radio-wrapper` ones, which would otherwise win on order. */
 .project-run-settings .project-run-lines {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.start-card-settings .start-card-lines .ant-radio-wrapper,
 .project-run-settings .project-run-lines .ant-radio-wrapper {
   align-items: flex-start;
   margin-inline-end: 0;
 }
-.start-card-settings .start-card-lines .ant-radio,
 .project-run-settings .project-run-lines .ant-radio {
   align-self: flex-start;
   margin-top: 3px;
@@ -10350,25 +10632,14 @@ button.chat-jump-start:hover {
   line-height: 1.5;
   color: var(--text-3);
 }
-.start-card-checked {
-  display: flex;
-  gap: 7px;
-  margin: 12px 0 0;
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--text-2);
-}
-.start-card-tick {
-  flex: none;
-  font-weight: 700;
-  color: var(--success);
-}
-/* 443px and the like: the settings rows go to one column at the integration card's own 640px
-   breakpoint, and the lines keep their names and lose their descriptions. */
-@media (max-width: 640px) {
-  .start-card-option-hint {
-    display: none;
-  }
+/* Start, with the line saying what pressing it does under it. (The card's own `overflow: hidden`
+   rules out holding it at the bottom of a scrolling dialog; iOS pins it.) */
+.start-card-caption {
+  margin: 4px 14px 8px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--text-3);
 }
 
 /* ── Confirm the new criteria? ───────────────────────────────────────────────────────────
@@ -14934,10 +15205,11 @@ button.chat-jump-start:hover {
      with the first of them. */
   align-items: start;
 }
-/* A group's head has no status or quota of its own — its accounts do — so its line runs the width
-   of the row, and its one action sits level with the name it belongs to. */
+/* An open group's head has no status or quota of its own — its accounts do — so its line runs the
+   width of the row, and its one action sits level with the name it belongs to. Folded, it speaks for
+   its accounts in those columns, and is laid out as any other row. */
 @media (min-width: 701px) {
-  .re-runner-card .re-row.re-grp {
+  .re-runner-card .re-row.re-grp:not(.folded) {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
   }
@@ -15149,6 +15421,59 @@ button.chat-jump-start:hover {
 .re-grp .re-meta b {
   color: var(--text-2);
   font-weight: 600;
+}
+/* The head folds its accounts away. The identity is the button, as a runner card's is, and its
+   chevron follows the engine's name. */
+.re-grp-toggle {
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.re-grp-toggle:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 4px;
+}
+.re-grp-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.re-grp-chev {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 3px;
+  vertical-align: -3px;
+  color: var(--text-3);
+  transition: color 0.15s;
+}
+.re-grp-chev svg {
+  transition: transform 0.15s;
+}
+.re-grp-chev.open svg {
+  transform: rotate(90deg);
+}
+.re-grp-toggle:hover .re-grp-chev {
+  color: var(--brand);
+}
+/* Folded, the identity shares the row with a status and a quota: the version line wraps rather than
+   clip, and the update note takes a line of its own. */
+.re-runner-card .re-grp.folded .re-meta {
+  white-space: normal;
+}
+.re-grp.folded .re-upd {
+  display: block;
+}
+/* "Next: …" over the window it names. */
+.re-quota-next {
+  overflow-wrap: anywhere;
 }
 /* An account row hangs off the engine above it: indented past the engine's tile, with a rail drawn
    up into the row before it and on down to where the next account's rail begins, so the tree reads
@@ -17068,6 +17393,54 @@ button.chat-jump-start:hover {
   color: var(--text-2);
   font-weight: 600;
 }
+/* A refused-start blocker (SOURCE_UNRESOLVED): the sentence that names the situation, the kind and
+   ref it is about, and the rows of the runs the line refused. Same type scale as the row's other
+   lines — this is one more thing the blocker says, not a card inside a card. */
+.project-blockers-why {
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.project-blockers-refusal {
+  margin-top: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace;
+  font-size: 11.5px;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+.project-blockers-tasks {
+  margin: 7px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.project-blockers-tasks li {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 3px 0;
+  font-size: 12.5px;
+}
+.project-blockers-task-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--danger, #c53b3b);
+  transform: translateY(-1px);
+}
+.project-blockers-task-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-blockers-task-state {
+  flex: none;
+  color: var(--text-3);
+  font-size: 12px;
+}
 .project-blockers-paths {
   margin-top: 6px;
   font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace;
@@ -17316,6 +17689,96 @@ button.chat-jump-start:hover {
 }
 .project-landing-state {
   margin-left: auto;
+}
+/* A job the server judged timed out (docs/mocks/landing-jobs-sheet/02-timeout-retry): a warning
+   mark that never spins in place of the ring, and the word, the state and the silence in amber.
+   "Timed out" carries the same fact without the colour. */
+.project-landing-timed-out .project-landing-ring {
+  color: var(--warning-solid);
+}
+.project-landing-timed-out .project-landing-word,
+.project-landing-timed-out .project-landing-state,
+.project-landing-timed-out .project-landing-clock {
+  color: var(--warning);
+}
+/* The landing row as a press that lists every job in flight (LandingRowButton): the row and a
+   chevron, with the row's own spacing and hairline drawn under both. */
+.project-landing-press {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0 0 14px;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.project-landing-press .project-landing {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.project-landing-press-chev,
+.landing-jobs-chev {
+  flex: none;
+  color: var(--text-4);
+  font-size: 11px;
+}
+/* The jobs the row counts, one row each (LandingJobsSheet): every row is the landing row itself, on
+   one grouped surface with hairlines between them. A task's row is a link with a chevron; a row
+   with no task is not a press, and keeps the chevron's width so the rows still line up. */
+.landing-jobs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: 10px;
+  background: var(--bg-subtle);
+}
+.landing-jobs-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+.landing-jobs-row + .landing-jobs-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.landing-jobs-open {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+div.landing-jobs-open {
+  padding-right: 19px;
+}
+.landing-jobs-body {
+  flex: 1;
+  min-width: 0;
+}
+.landing-jobs .project-landing {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.landing-jobs-detail {
+  margin-top: 6px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.landing-jobs-retry {
+  width: 100%;
+  border-radius: 999px;
+}
+.landing-jobs-error {
+  color: var(--error);
+  font-size: 12px;
 }
 .project-manual-task {
   display: -webkit-box;

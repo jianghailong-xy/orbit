@@ -6,6 +6,7 @@ import {
   createdTasksCountLine,
   watchDeadLetterNeedsAttention,
   type CreateWatchRequest,
+  type SessionWatchedTask,
   type UpdateWatchRequest,
   type WatchAction,
   type WatchDeliveryView,
@@ -470,6 +471,23 @@ export function watchingCountWord(
 
 /** A target by the name the watch carries for it, and by its short id when it carries none. */
 export const targetName = (t: WatchTargetView): string => t.targetTitle ?? linkId(t.targetResourceId).slice(0, 8);
+
+/**
+ * Whether a live watch belongs on the Watching strip: it waits on something that is not a task. A
+ * task the session waits on is drawn in its Tasks card instead, with an eye (`watchedTasks`).
+ */
+export const waitsBeyondTasks = (w: WatchView): boolean =>
+  w.targets.some((t) => t.state !== 'GONE' && t.targetKind !== 'TASK');
+
+/** The tasks the session's live watches wait on, as its Tasks card marks them (`sessionTaskCard`). */
+export function watchedTasks(waitingOn: readonly WatchView[], now: number): SessionWatchedTask[] {
+  return waitingOn.flatMap((w) => {
+    const stale = stripStaleLine(w, now) !== null;
+    return w.targets
+      .filter((t) => t.state !== 'GONE' && t.targetKind === 'TASK')
+      .map((t) => ({ id: t.targetResourceId, title: targetName(t), standing: t.targetStatus ?? null, stale }));
+  });
+}
 
 /** The noun a set of targets counts in: the one kind every target shares, and "targets" across kinds. */
 export const targetNoun = (watches: readonly WatchView[], count: number): string => {

@@ -188,14 +188,14 @@ from the next request without a restart. What the deployment itself must provide
      there. If you lose it, add a new secret to the client and enter that one in Orbit.
 3. Back in **Admin → Sign-in**, paste the **Client ID** and **Client secret**, switch on **Allow signing in with
    Google**, choose **Who can sign in with Google** (below), and **Save**. The badge beside **Google sign-in**
-   turns to **On**: Google sign-in is on only while it is switched on and both the client ID and the secret are
-   saved.
+   turns to **On**: Google sign-in is on only while it is switched on, both the client ID and the secret are
+   saved, and the saved secret can still be read with the deployment's `PROVIDER_SECRET_KEY`.
 4. In a private window, open the login page: it now offers **Continue with Google**.
 
 The client secret is encrypted with `PROVIDER_SECRET_KEY` and never shown again. Leave the field empty to keep
 the saved secret, or paste a new one to replace it. After `PROVIDER_SECRET_KEY` changes, the saved secret can no
-longer be read, although **Admin → Sign-in** still shows it as saved and the badge still says **On**: enter
-the secret again.
+longer be read: **Admin → Sign-in** says the saved client secret cannot be decrypted, the badge reads **Off**
+while the switch stays on, and no Google sign-in works until the secret is entered again.
 
 ### Who can sign in with Google
 
@@ -278,6 +278,7 @@ other review.
 | "Orbit couldn't confirm your sign-in with Google" | The apiserver log says why (below): most often a wrong client secret. |
 | "That Google sign-in expired or was finished in a different browser" | The sign-in started at an address other than `PUBLIC_ORIGIN`, took more than ten minutes, or the browser blocked its cookie. |
 | "Google sign-in is turned off on this Orbit server" | The switch is off, or the client ID or the secret is not saved. |
+| **Admin → Sign-in** warns that the saved client secret cannot be decrypted; the badge reads **Off** while the switch is on | `PROVIDER_SECRET_KEY` changed since the secret was saved. Enter the client secret again under **Admin → Sign-in**. Until then Google sign-in fails. |
 | "This Orbit account is disabled. Ask an administrator to enable it again." | An administrator disabled the account. **Admin → Users → Enable** lets it back in. |
 
 The apiserver logs why a sign-in failed after Google sent the browser back, under `GoogleSignIn`
@@ -288,7 +289,7 @@ of the request:
   secret together, most often because the secret is wrong or was replaced in the Google console.
 - `Google's token endpoint could not be reached`: the apiserver has no route to `oauth2.googleapis.com`.
 - `the saved Google client secret cannot be decrypted; an administrator must enter it again`: `PROVIDER_SECRET_KEY`
-  changed since the secret was saved.
+  changed since the secret was saved. **Admin → Sign-in** reports it too, and asks for the secret again.
 - `refused Google's ID token: its … claim did not pass`: the ID token Google returned does not fit this
   sign-in. The claim it names says how: `aud` names another client, and `exp` an expired token, which points
   at the apiserver's clock.

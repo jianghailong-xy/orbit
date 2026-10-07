@@ -9,7 +9,9 @@ import { ApiError } from '../api';
 /**
  * Admin → Sign-in (docs/google-sign-in-design.md §7.1): the Google OAuth client and the sign-up
  * policy, saved with PUT /admin/sign-in/google and read back with GET. The secret is written, never
- * read: the field is always empty and only says whether one is saved, and a save that leaves it
+ * read: the field is always empty and only says whether one is saved, and whether the key in force can
+ * still decrypt it — a rotation turns that answer into a warning asking for the secret again, not into
+ * an On badge. A save that leaves it
  * empty keeps the saved one. Choosing open sign-up says that any Google account can open an account
  * here; the redirect URI to register is shown with a Copy button. Over a stand-in for the server that
  * keeps the setting the way SignInProvidersService does.
@@ -22,7 +24,8 @@ vi.mock('../api', async (importOriginal) => ({
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() };
 vi.mock('../lib/toast', () => ({ useToast: () => toast }));
 const { api } = await import('../api');
-const { AdminSignInPage, INCOMPLETE_WARNING, OPEN_SIGNUP_WARNING } = await import('./AdminSignInPage');
+const { AdminSignInPage, INCOMPLETE_WARNING, OPEN_SIGNUP_WARNING, SECRET_UNREADABLE_WARNING } =
+  await import('./AdminSignInPage');
 
 const REDIRECT_URI = 'https://orbit.example.com/api/auth/google/callback';
 const SECRET = 'GOCSPX-never-shown-again';
@@ -30,6 +33,8 @@ const SECRET = 'GOCSPX-never-shown-again';
 /** The `sign_in_provider` row the stand-in keeps: the secret as stored, which no answer carries. */
 let stored: { enabled: boolean; clientId: string; secret: string; signupPolicy: 'EXISTING_ACCOUNTS' | 'OPEN' } | null;
 let readable: boolean;
+/** The row holds a secret the key in force cannot decrypt: what rotating PROVIDER_SECRET_KEY leaves. */
+let secretUnreadable: boolean;
 let puts: unknown[];
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
@@ -38,6 +43,7 @@ const settings = () => ({
   enabled: stored?.enabled ?? false,
   clientId: stored?.clientId ?? '',
   hasSecret: (stored?.secret ?? '') !== '',
+  secretUnreadable,
   signupPolicy: stored?.signupPolicy ?? 'EXISTING_ACCOUNTS',
   redirectUri: REDIRECT_URI,
 });
@@ -103,6 +109,7 @@ beforeEach(() => {
   for (const fn of Object.values(toast)) fn.mockReset();
   stored = null;
   readable = true;
+  secretUnreadable = false;
   puts = [];
   vi.mocked(api).mockReset();
   vi.mocked(api).mockImplementation(async (path: string, options: { method?: string; body?: unknown } = {}) => {
@@ -120,6 +127,8 @@ beforeEach(() => {
         secret: body.clientSecret ?? stored?.secret ?? '',
         signupPolicy: body.signupPolicy,
       };
+      // A secret entered again is one the key in force wrote: readable from here on.
+      if (body.clientSecret) secretUnreadable = false;
       return settings();
     }
     if (path === '/auth/methods') return { password: true, google: false, googleSignup: false };
@@ -173,6 +182,7 @@ describe('Admin → Sign-in', { timeout: 60_000 }, () => {
     expect(field('Client secret')?.value).toBe('');
     expect(field('Client secret')?.placeholder).toBe('Saved — enter a new one to replace it');
     expect(container!.textContent).toContain('A secret is saved. It is never shown again; leave this empty to keep it.');
+    expect(container!.querySelector('[role="alert"]')).toBeNull();
     expect(container!.innerHTML).not.toContain(SECRET);
     expect(button('Save')?.disabled).toBe(true);
 
@@ -193,6 +203,38 @@ describe('Admin → Sign-in', { timeout: 60_000 }, () => {
     expect(stored?.secret).toBe(SECRET);
     expect(status()).toBe('On');
     expect(container!.textContent).not.toContain(OPEN_SIGNUP_WARNING);
+  });
+
+  it('a saved secret PROVIDER_SECRET_KEY can no longer decrypt is called that, and the page asks for the secret again', async () => {
+    stored = {
+      enabled: true,
+      clientId: '1234-abc.apps.googleusercontent.com',
+      secret: SECRET,
+      signupPolicy: 'EXISTING_ACCOUNTS',
+    };
+    secretUnreadable = true;
+    await open();
+
+    // The switch still shows what is saved, but nothing on the page claims Google sign-in is working.
+    expect(switchControl()?.getAttribute('aria-checked')).toBe('true');
+    expect(status()).toBe('Off');
+    expect(container!.querySelector('[role="alert"]')?.textContent).toBe(SECRET_UNREADABLE_WARNING);
+    expect(container!.textContent).toContain('usually because PROVIDER_SECRET_KEY changed');
+    expect(container!.textContent).toContain('paste the client secret again and save');
+    expect(field('Client secret')?.placeholder).toBe('Not readable — paste the client secret again');
+    expect(container!.textContent).toContain('The saved secret cannot be decrypted. Paste the client secret again to replace it.');
+    expect(container!.textContent).not.toContain('A secret is saved. It is never shown again; leave this empty to keep it.');
+    expect(container!.innerHTML).not.toContain(SECRET);
+
+    // Entering the secret again is the fix the warning asks for; the save answers it readable.
+    await type(field('Client secret'), SECRET);
+    await click(button('Save'), 'Save');
+    expect(puts).toEqual([
+      { enabled: true, clientId: '1234-abc.apps.googleusercontent.com', signupPolicy: 'EXISTING_ACCOUNTS', clientSecret: SECRET },
+    ]);
+    expect(status()).toBe('On');
+    expect(container!.querySelector('[role="alert"]')).toBeNull();
+    expect(field('Client secret')?.placeholder).toBe('Saved — enter a new one to replace it');
   });
 
   it('Copy puts the redirect URI on the clipboard', async () => {

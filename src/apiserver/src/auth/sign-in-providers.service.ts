@@ -26,6 +26,12 @@ export interface GoogleSignInSettings {
   enabled: boolean;
   clientId: string;
   hasSecret: boolean;
+  /**
+   * A secret is saved and the current `PROVIDER_SECRET_KEY` cannot decrypt it (§7.1), so Google
+   * sign-in is not working: the administrator has to enter the secret again. Never the secret, nor
+   * anything derived from it.
+   */
+  secretUnreadable: boolean;
   signupPolicy: SignupPolicy;
   /** What to register in the Google console as the client's authorized redirect URI. */
   redirectUri: string;
@@ -53,11 +59,28 @@ function googleIsOn(row: SignInProvider | null): row is SignInProvider {
   return row !== null && row.enabled && row.clientId !== '' && row.clientSecretEnc !== '';
 }
 
+/**
+ * Whether a saved secret still decrypts with the `PROVIDER_SECRET_KEY` in force (§7.1). Rotating that
+ * key makes it unreadable, and the stored row alone cannot say so: try it, and answer rather than throw.
+ * Nothing about the attempt — not even why it failed — is kept.
+ */
+function secretIsUnreadable(stored: string): boolean {
+  if (stored === '') return false;
+  try {
+    decryptSecret(stored);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 function settingsOf(row: SignInProvider | null): GoogleSignInSettings {
+  const clientSecretEnc = row?.clientSecretEnc ?? '';
   return {
     enabled: row?.enabled ?? false,
     clientId: row?.clientId ?? '',
-    hasSecret: (row?.clientSecretEnc ?? '') !== '',
+    hasSecret: clientSecretEnc !== '',
+    secretUnreadable: secretIsUnreadable(clientSecretEnc),
     signupPolicy: (row?.signupPolicy ?? 'EXISTING_ACCOUNTS') as SignupPolicy,
     redirectUri: googleRedirectUri(),
   };

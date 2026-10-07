@@ -737,6 +737,10 @@ model Runner {
   // Codex only: the name of a NEW account the runner is to add and sign in, kept so every
   // redelivered start asks for the same one.
   loginAccountName String? @map("login_account_name")
+  // Kimi only: the site to sign in on, 'mainland-cn' (kimi.com) or 'global' (kimi.ai), kept so every
+  // redelivered start asks for the same one. NULL is a bare `kimi login`, which goes wherever the CLI
+  // decides — what every sign-in was before the choice, and what any other engine's is.
+  loginRegion   String?   @map("login_region")
   loginUrl      String?   @map("login_url")
   // The device flow's one-time code, which the user types on loginUrl's page. Runner → user,
   // the opposite direction from loginCode.
