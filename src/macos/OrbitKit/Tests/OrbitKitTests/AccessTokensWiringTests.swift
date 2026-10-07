@@ -90,7 +90,7 @@ final class AccessTokensWiringTests: XCTestCase {
         XCTAssertFalse(row.contains("revoke(token)"), "a swipe asks first; it never revokes by itself")
         XCTAssertTrue(row.contains("pendingRevoke = token"))
 
-        XCTAssertTrue(page.contains(".confirmationDialog(pendingRevoke.map(AccessTokensList.revokeTitle)"))
+        XCTAssertTrue(page.contains(".orbitConfirmation(AccessTokensList.revokeTitle, isPresented: revokeAsked,"))
         XCTAssertTrue(page.contains("Button(AccessTokensList.revoke, role: .destructive) { Task { await revoke(token) } }"))
         XCTAssertTrue(page.contains("Text(AccessTokensList.revokeDetail)"))
         XCTAssertTrue(page.contains("show(AccessTokensList.notRevoked(reason))"), "a failed revoke says why")
@@ -117,7 +117,7 @@ final class AccessTokensWiringTests: XCTestCase {
         XCTAssertTrue(section.contains("if AccessTokensList.canRevoke(token) {"))
         XCTAssertTrue(section.contains("Button(AccessTokensList.revoke + \"…\", role: .destructive) { pendingRevoke = token }"),
                       "the row's button only asks")
-        XCTAssertTrue(section.contains(".confirmationDialog(AccessTokensList.revokeTitle(token), isPresented: revokeAsked(token)) {"))
+        XCTAssertTrue(section.contains(".orbitConfirmation(AccessTokensList.revokeTitle(token), isPresented: revokeAsked(token)) {"))
         XCTAssertTrue(section.contains("Button(AccessTokensList.revoke, role: .destructive) { Task { await revoke(token) } }"))
         XCTAssertTrue(section.contains("Text(AccessTokensList.revokeDetail)"))
     }

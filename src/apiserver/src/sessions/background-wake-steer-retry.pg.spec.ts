@@ -16,8 +16,11 @@
  *      failed, or the engine had read it and carried on;
  *   2. a steer that missed its turn — at the target's completion (requeueUnreadCurrentWorkSteers), or
  *      handed back by the runner (steer_requeue) — is a wake turn of its own again, and when that turn
- *      fails on a 529 the retry re-sends nothing: least of all the person's message before it, which
- *      was answered.
+ *      fails on a 529 the retry has nothing of anybody's to re-send: not the person's message before
+ *      it, which was answered, and no reply or confirmation turn either. What the armed retry sends
+ *      there is the platform's continue (CONTINUE_MESSAGE, @orbit/shared) — the sentence the card's
+ *      Continue button sends by hand — and the door answers `nothingToResend`, which is what puts
+ *      that button on the card instead of a Retry.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/sessions/background-wake-steer-retry.pg.spec.ts
  *
@@ -35,6 +38,7 @@ import {
   SessionRunSource,
 } from '@prisma/client';
 import {
+  CONTINUE_MESSAGE,
   RunEventType,
   RunStatus as SharedRunStatus,
   SESSION_CURRENT_WORK_ROUTING_V1,
@@ -326,7 +330,7 @@ test('a transient failure of the turn a job\'s exit was steered into re-sends th
     }],
   ];
   for (const [how, jobId, misses] of missed) {
-    await t.test(`a job's exit ${how} fails as a wake turn of its own: the retry re-sends nothing`, async () => {
+    await t.test(`a job's exit ${how} fails as a wake turn of its own: the retry continues the session`, async () => {
       const id = await session(`Worker: a wake ${how}, then overloaded`);
       const words = 'rebuild the search index';
       const target = await running(id, words);
@@ -339,12 +343,16 @@ test('a transient failure of the turn a job\'s exit was steered into re-sends th
       await say(id, wake.turnId, RunEventType.USER, { text: wake.content });
       await overloaded(id, wake.turnId);
 
-      assert.deepEqual(await retries.retryMessage(ownerId, id), { text: '' });
+      // The door's answer is what the card renders: nothing of anybody's to re-send, so the control
+      // it offers is Continue rather than a dead Retry.
+      assert.deepEqual(await retries.retryMessage(ownerId, id), { text: '', nothingToResend: true });
       await sweep(id);
-      assert.deepEqual(await resentOf(id), [], 'the retry of a failed wake re-sent the message before it');
+      const resent = await resentOf(id);
+      assert.deepEqual(resent.map((turn) => turn.content), [CONTINUE_MESSAGE],
+        'the retry of a failed wake re-sent the message before it instead of continuing the session');
       const after = await prisma.session.findUniqueOrThrow({ where: { id } });
-      assert.equal(after.retryAt, null, 'the retry was not disarmed');
-      assert.equal(after.status, RunStatus.FAILED);
+      assert.equal(after.retryAt, null, 'the claimed retry was not cleared');
+      assert.equal(after.status, RunStatus.PENDING, `the session was not picked back up: ${after.status}`);
     });
   }
 });
