@@ -6,8 +6,12 @@
 
 - 扫描对象是项目分支 tip `7732f14f82d4e6b4406d7d164c4b672f63aa0f56`。它已完整包含 `origin/main` `216cc204f67bb88fed5425371745ba97899e1e7a`：`git rev-list --count 7732f14f8..origin/main` 为 0。审计 scopeHash 为 `bb238f9ed5588bd9e5c3ae2d4f32a9302b85fe7d219d5c05c6b1f16e024d5a2a`。本任务提交只改 `src/web/scripts` 和 `docs`，不在审计范围内，所以 scopeHash 在提交后不变。
 - 对比基线是 P0.1 的 `1068a14b899911838526111b6814394e99762aaf`（scopeHash `ddd5a6c0…`）。
-- tip 上 `node src/web/scripts/audit-antd.mjs --check-owners` 的结果：**0 个未归属使用点**。另有 9 个点等协调者决定，归成 4 个问题，都是 P4.3a 与 P4.3b 之间的分界，见[交给协调者](#交给协调者定的-4-个问题)。
-- `verify-record.mjs` 对照审计逐项核对了本记录：119 个文件条目和 73 个 index.css 条目与审计一致。拿掉本记录，缺口正好是它的 76 个新增/改动点；拿掉其中的重新归属，缺口正好是 119 个被重新归属的点。也就是说，每个条目都是必需的，也没有漏项。
+- 读入两份记录后，`node src/web/scripts/audit-antd.mjs --check-owners` 在 tip 和交付提交上都是 **0 个未归属、0 个待定**。第一份记录 [2026-10-07.json](2026-10-07.json) 留给协调者的 9 个点（4 个 P4.3a/P4.3b 分界问题），协调者 2026-10-07 已全部按建议判定，写在第二份记录 [2026-10-07b.json](2026-10-07b.json)，见[协调者的决定](#协调者的决定)。
+- `verify-record.mjs` 按读取顺序对照审计逐份核对：
+  - `2026-10-07.json` 的 119 个文件条目和 73 个 index.css 条目与审计一致。拿掉它的新增/改动条目，正好有这 76 个点失去归属；拿掉它的重新归属，正好有这 118 个点（文件和 index.css 行）改变状态。它单独读入时留下的待定点正好是那 4 个问题的 9 个点。
+  - `2026-10-07b.json` 的 6 个文件条目和 3 个 index.css 条目同样一致；拿掉它，正好是这 9 个点退回待定。
+
+  也就是说，每个条目都是必需的，也没有漏项。
 - main 在 P0.1 之后引入的使用点全部有了归属。P3.3 报告的 6 个文件都在其中：AccessTokenTable、NewAccessTokenDialog、AccessTokensPage（d233a6cd0），AccountPause（0ba581f31），WikiActivityPage（6c4e0ac0e），CliLoginPage（cf98836d4）。此外 main 还带来：
   - 1 个测试辅助文件 `RunnerEngines.test-helpers.ts`（审计按文件名记为生产）；
   - 22 个新增测试；
@@ -20,7 +24,7 @@
   - P3.2 写下的 2 行注释。
 - 已按协调者 2026-10-07 的补充处理：
   - `StatusTag.tsx` 核实为死代码，记为 P6 删除；
-  - 原 P4.3 的使用点全部细分到 P4.3a / P4.3b，分不清的单列给协调者。
+  - 原 P4.3 的使用点全部细分到 P4.3a / P4.3b，分不清的 4 个已由协调者判定（`2026-10-07b.json`）。
 
 | 文件口径（审计 counts） | P0.1 基线 | 本次 tip |
 | --- | ---: | ---: |
@@ -39,8 +43,10 @@ antd 的声明与锁定版本没有变化：`src/web/package.json` 的 declared 
 | 文件 | 用途 |
 | --- | --- |
 | [2026-10-07.json](2026-10-07.json) | 机器可读的增量记录。以后的批次和 P6 的 `--check-owners` 直接读它。 |
+| [2026-10-07b.json](2026-10-07b.json) | 协调者对第一份记录里 4 个问题的判定：9 个点的 owner。第一份记录保持原样。 |
 | [build-record.py](build-record.py) | 由审计 JSON 和 git 历史算出事实，再合入手工归属表（owner 与理由）生成记录。有使用点缺决定时直接失败退出。 |
-| [verify-record.mjs](verify-record.mjs) | 逐项核对记录与审计是否一致，并做反向对照：拿掉记录、拿掉重新归属、单独检查 P0.1 基线。 |
+| [build-decision.py](build-decision.py) | 从第一份记录复制 9 个待定条目的事实，写入协调者判定的 owner，生成 `2026-10-07b.json`。 |
+| [verify-record.mjs](verify-record.mjs) | 按读取顺序逐份核对记录与审计是否一致，并做反向对照：拿掉新增/改动、拿掉重新归属、单独检查 P0.1 基线；补充记录必须排在被补充的记录之后。 |
 | `src/web/scripts/audit-antd.mjs --check-owners` | 新增的只读检查模式；原有的默认、`--json`、`--check-retired` 输出逐字节不变。 |
 | [checks/](checks/) | 本次实际输出，详见文末[复现与验证](#复现与验证)。 |
 
@@ -63,6 +69,12 @@ antd 的声明与锁定版本没有变化：`src/web/package.json` 的 declared 
 - `inactiveOwners`：不能再关闭使用点的 owner，即已完成的阶段和已拆分的 P4.3。
 - `batches`：批次代码 → 任务 id 与范围。
 
+`2026-10-07b.json` 是对前一份的补充：
+- `amends` 指向被补充的记录，`decision` 写明判定来源；
+- 条目字段相同，另有 `basis`（判定依据）和 `alsoTestedBy`（改到渲染它的卡片或页面时也要跑它测试的批次）。
+
+记录按文件名排序读取，后读的覆盖先读的。同一天的后续记录要用 `2026-10-07b.json`、`2026-10-07c.json` 这类后缀；不能用 `2026-10-07-x.json`，因为 `-` 排在 `.` 之前，它会先于原记录被读到、再被原记录覆盖。`verify-record.mjs` 会检查带 `amends` 的记录确实排在被补充的记录之后。
+
 `types` 取值：
 - `antd-import`：直接导入，符号在 `antdImports`；
 - `antd-provider`：`<App>`/`<ConfigProvider>`，测试里多为 AntApp 包裹；
@@ -82,18 +94,20 @@ antd 的声明与锁定版本没有变化：`src/web/package.json` 的 declared 
 
 ## 归属结果
 
+两份记录合计（P4.3a、P4.3b 已含 `2026-10-07b.json` 判定的 9 个点）：
+
 | 批次 | 新增/改动文件 | 重新归属文件 | index.css 新增/改写行 | index.css 重新归属行 |
 | --- | ---: | ---: | ---: | ---: |
 | P4.1 登录、初始化、个人资料、设置 | 11 | 0 | 3 | 0 |
 | P4.2 Provider、Runner、账号池、用户管理 | 10 | 0 | 10 | 0 |
-| P4.3a 任务与项目的列表、详情页和工具栏 | 0 | 39 | 0 | 35 |
-| P4.3b 依赖图与业务决策卡片 | 1 | 16 | 2 | 13 |
+| P4.3a 任务与项目的列表、详情页和工具栏 | 0 | 44 | 0 | 38 |
+| P4.3b 依赖图与业务决策卡片 | 1 | 17 | 2 | 13 |
 | P4.4 Wiki、共享和其余非会话入口 | 4 | 0 | 2 | 0 |
 | P5.1 会话导航、搜索、输出 | 2 | 0 | 0 | 0 |
 | P5.2 Transcript 与富内容 | 1 | 0 | 0 | 0 |
 | P5.3 会话工作区 | 4 | 0 | 7 | 0 |
 | P6 运行时与遗留说明退役 | 18 | 7 | 2 | 0 |
-| 待协调者 | 0 | 6 | 0 | 3 |
+| 待协调者 | 0 | 0 | 0 | 0 |
 
 ### A. main 新增或改动的文件
 
@@ -197,17 +211,19 @@ antd 的声明与锁定版本没有变化：`src/web/package.json` 的 declared 
 - 页面级测试（`pages/ProjectsPage*.test.tsx` 等）随页面归 P4.3a。P4.3b 的组件出现在这些页面里时，P4.3b 也要跑这些测试。
 - StartProjectCard 与 ProjectRunSettings 在 index.css 共用两条单选规则（`.start-card-* , .project-run-* .ant-radio…`）。按选择器拆开：start-card 归 P4.3b，project-run 归 P4.3a，两批各删自己的选择器。规则前的两行说明记在 P4.3b，由后完成的一批删除，并写进关闭记录。ProjectRunSettings 只从 StartProjectCard 引用 `START_MAX_CONCURRENT_TASKS` 常量，不共用控件。
 
-- **P4.3a（39 个文件，index.css 35 行）**：
+- **P4.3a（44 个文件，index.css 38 行，含判定的 5 个文件和 3 行）**：
   - 页面：`pages/ProjectsPage`、`pages/TaskDetailPage`、`pages/TaskListView`、`pages/TaskRoute`；
   - 组件：`ProjectsToolbar`、`ProjectSections`、`ProjectShareControls`、`ProjectPanoramaHeader`、`ProjectGoalCard`、`ProjectAcceptanceCard`、`ProjectChainProgress`、`ProjectCoordinatorCard`、`ProjectReadyToRun`、`ProjectRunSettings`、`TaskScheduleEditor`、`TaskAttributionCard`、`MentionDeliveryNotes`；
+  - 协调者判定归入的：`ProjectBlockers`（含测试和 `.project-blockers-*` 三行）、`ProjectProgressStatus`（含测试）、`TaskDependencyList`；
   - 上述组件的 7 个测试，以及 15 个页面级测试（ProjectsPage*、ProjectCoordinatorSection、ProjectDetailPanorama、ProjectTasksTopology、TaskListView*、TaskRoute）；
   - index.css：TaskListView 范围菜单与过滤计数、项目详情元信息/目标/待运行/运行设置/任务行、验收卡、项目工具栏分段、WatchRelations 浮层。
-- **P4.3b（16 个文件，index.css 13 行）**：
+- **P4.3b（17 个文件，index.css 13 行，含判定的 1 个文件）**：
   - 决策、审阅、结算、确认类卡片：`AcceptanceConfirmationCard`、`ConfirmationReviewTurnCards`、`CoordinatorQuestionCard`、`CriteriaChangeCard`、`CriteriaDecisionCard`、`DecisionRail`、`EvidenceDecisionCard`、`OwnerConfirmationCard`、`OwnerConfirmationReopen`、`OwnerConfirmationReview`、`ProjectPromotionCard`、`StartProjectCard`；
   - 依赖图：`ProjectDependencyGraph`、`TaskDependencyGraph`、`ProjectTasksGraph`（及其测试）；
+  - 协调者判定归入的：`ProjectCrossingsCard`；
   - `ProjectSettlementCard` 因 main 有改动，列在 A 表；
   - index.css：依赖图标题与全屏弹窗、启动卡单选及其说明。
-- **待协调者（6 个文件，index.css 3 行）**：`ProjectBlockers`（含测试和 `.project-blockers-*` 三行）、`ProjectProgressStatus`（含测试）、`ProjectCrossingsCard`、`TaskDependencyList`，见下节。
+- **曾待协调者的 4 个问题**已判定，见下节。
 - **KEEP 复核批次**（`reviewPhases`，这些文件没有使用点）：
   - P4.3a：`ProjectIntegrationLine`、`ProjectPageBlocks`、`ProjectTaskLink`、`ProjectTaskPanel`、`TaskProgressBlock`、`TaskStatusPill`；
   - P4.3b：`BatchGraph`、`CardAction`、`CardHotkey`、`OpenItemDeliveryCard`、`ProjectStartedCard`、`RunSettingsSummary`。
@@ -240,18 +256,18 @@ antd 的声明与锁定版本没有变化：`src/web/package.json` 的 declared 
 
   这些不需要再迁移。P4.1 和 P4.2 开工时仍应复核相关测试与样式。
 
-## 交给协调者定的 4 个问题
+## 协调者的决定
 
-都是原 P4.3 内部的分界：组件按功能属于一批，却渲染在另一批的页面里。每个问题都附了建议。协调者决定之前，`--check-owners` 把它们单列为 `pending`：既不算未归属，也不算任何一批的 owner；P6 要求它为 0。
+第一份记录把 4 个原 P4.3 内部的分界问题（9 个点）列为 `pending`：组件按功能属于一批，却渲染在另一批的页面里。协调者 2026-10-07 在退回第 1 版证据（38IfqZvjjfRG2lpbvFKqOb）时全部按建议判定，写在 [2026-10-07b.json](2026-10-07b.json)：
 
-| 组件 | 涉及的点 | 候选 | 建议 | 为什么拿不准 |
+| 组件 | 涉及的点 | 决定 | 测试要求 | 原来拿不准的原因 |
 | --- | --- | --- | --- | --- |
-| `ProjectBlockers` | 组件、测试、`.project-blockers-*` 3 行 | P4.3a / P4.3b | P4.3a | 渲染在 ProjectsPage 详情页（P4.3a），也嵌在 ProjectPromotionCard 晋升确认卡里（P4.3b），还带“解决说明”表单。 |
-| `ProjectProgressStatus` | 组件、测试 | P4.3a / P4.3b | P4.3a | 在 ProjectsPage、ProjectCoordinatorCard（P4.3a）、ProjectPromotionCard（P4.3b）和 WorkspaceView（P5.3）里都会渲染。 |
-| `ProjectCrossingsCard` | 组件 | P4.3a / P4.3b | P4.3b | 带批准/拒绝确认，属决策类，但渲染在 ProjectsPage 详情页和 TaskAttributionCard 里。 |
-| `TaskDependencyList` | 组件 | P4.3a / P4.3b | P4.3a | 在 TaskDetailPanel 的依赖视图里与依赖图切换显示；它是列表，不是图。 |
+| `ProjectBlockers` | 组件、测试、`.project-blockers-*` 3 行 | **P4.3a** | P4.3b 改 ProjectPromotionCard 时跑它的测试 | 渲染在 ProjectsPage 详情页，也嵌在 ProjectPromotionCard 晋升确认卡里，还带“解决说明”表单。 |
+| `ProjectProgressStatus` | 组件、测试 | **P4.3a** | P4.3b、P5.3 改到渲染它的卡片或页面时跑它的测试 | 在 ProjectsPage、ProjectCoordinatorCard、ProjectPromotionCard 和 WorkspaceView 里都会渲染。 |
+| `ProjectCrossingsCard` | 组件 | **P4.3b**（决策卡，按功能） | P4.3a 改 ProjectsPage 详情页或 TaskAttributionCard 时跑相关测试 | 带批准/拒绝确认，但渲染在 ProjectsPage 详情页和 TaskAttributionCard 里。 |
+| `TaskDependencyList` | 组件 | **P4.3a**（列表，属任务详情） | — | 在 TaskDetailPanel 的依赖视图里与依赖图切换显示，它是列表不是图。 |
 
-协调者定了之后，在本目录新增一份带日期的记录（如 `2026-10-08.json`），对相应路径和 `css` 原文写上 `owner`。后读的记录覆盖先读的，本记录保持原样。
+现在两份记录合起来没有待定点。以后再有拿不准的点，照同样的做法处理：先在记录里列为 `pending`，协调者判定后再新增一份排在其后的记录。
 
 ## 复扫规则（各批开工和交证据前必做）
 
@@ -272,7 +288,7 @@ antd 的声明与锁定版本没有变化：`src/web/package.json` 的 declared 
    - `unowned` 必须为 0；本批开工后新出现的点要么已迁移，要么已报告协调者，并在证据里写明。
    - `owners` 里本批的计数应降为 0；还有剩余的，逐项写明原因。
    - 关闭记录可以照 [p3.2/inventory-closure.py](../p3.2/inventory-closure.py) 的做法，从同提交参照树和交付树两次 `--json` 生成。
-5. **不改原有基线**：不改 P0.1 原始文件，也不改已有的增量记录来消掉缺口。新事实写新的带日期记录，格式与本记录相同，可用 `build-record.py` 的做法生成，用 `verify-record.mjs` 核对。
+5. **不改原有基线**：不改 P0.1 原始文件，也不改已有的增量记录来消掉缺口。新事实写新的带日期记录，格式与本记录相同，可用 `build-record.py` / `build-decision.py` 的做法生成，用 `verify-record.mjs` 核对。新记录的文件名要排在它补充的记录之后（同一天用 `b`、`c` 后缀，见[记录怎么读](#记录怎么读)）。
 6. **P6**：
    - `--check-owners` 必须 0 `unowned`、0 `pending`；
    - `--check-retired` 必须退出 0；
@@ -299,38 +315,45 @@ antd 的声明与锁定版本没有变化：`src/web/package.json` 的 declared 
 
 ## 复现与验证
 
-从仓库根目录运行，只需 Node 和 git。`bash docs/evidence/base-ui-migration/inventory-delta/checks/run-checks.sh` 会一次跑完下面除构建/测试外的各项，并把输出写进 `checks/`。
+从仓库根目录运行，只需 Node 和 git。`bash docs/evidence/base-ui-migration/inventory-delta/checks/run-checks.sh` 会一次跑完下面除构建/测试外的各项，把输出写进 `checks/`，任一项不通过即退出非 0。
 
 ```sh
-# 记录由扫描于 7732f14f8 的审计生成：用保存的审计逐字节重建（git 历史须含该提交）。
-python3 docs/evidence/base-ui-migration/inventory-delta/build-record.py \
-  docs/evidence/base-ui-migration/inventory-delta/checks/antd-audit.json 2026-10-07 \
-  | cmp - docs/evidence/base-ui-migration/inventory-delta/2026-10-07.json
-# 新审计只要 scopeHash 与记录相同（本任务的提交不改 src/web/src），就能逐项核对记录。
+D=docs/evidence/base-ui-migration/inventory-delta
+# 两份记录都由扫描于 7732f14f8 的审计（checks/antd-audit.json，不会被重写）生成，逐字节重建；git 历史须含该提交。
+python3 $D/build-record.py $D/checks/antd-audit.json 2026-10-07 | cmp - $D/2026-10-07.json
+python3 $D/build-decision.py | cmp - $D/2026-10-07b.json
+# 新审计只要 scopeHash 与记录相同（本任务的提交不改 src/web/src），就能逐份核对记录。
 node src/web/scripts/audit-antd.mjs --json > /tmp/antd-current.json
-node docs/evidence/base-ui-migration/inventory-delta/verify-record.mjs /tmp/antd-current.json 2026-10-07.json
+node $D/verify-record.mjs /tmp/antd-current.json 2026-10-07.json
+node $D/verify-record.mjs /tmp/antd-current.json 2026-10-07b.json
 node src/web/scripts/audit-antd-selfcheck.mjs
 node src/web/scripts/verify-antd-inventory.mjs
 node src/web/scripts/audit-antd.mjs --check-owners
 npm run build -w @orbit/web && npm run test -w @orbit/web
 ```
 
-`src/web/src` 改动之后，`verify-record.mjs` 的 scopeHash 断言会失败，这是预期的：本记录只描述这一次扫描。以后各批用 `--check-owners` 检查归属，有新事实就写新记录。
+`src/web/src` 改动之后，`verify-record.mjs` 的 scopeHash 断言会失败，这是预期的：两份记录只描述这一次扫描。以后各批用 `--check-owners` 检查归属，有新事实就写新记录。
 
-本次结果（原始输出在 [checks/](checks/)）：
+本次结果（第 2 版，原始输出在 [checks/](checks/)）：
 
 | 检查 | 结果 |
 | --- | --- |
-| 审计两次 `--json` | 逐字节一致（`checks/antd-audit.json`，697 KB） |
+| 审计两次 `--json` | 逐字节一致；scopeHash 与记录所用的审计相同（`checks/audit-repeat.txt`；记录所用审计 `checks/antd-audit.json`，697 KB） |
 | `audit-antd-selfcheck.mjs` | 原有自检与新增 owner 自检都通过（`checks/selfcheck.txt`） |
 | `verify-antd-inventory.mjs`（P0.1 覆盖，不带参数） | 通过，149 个归属、37 种契约、287 个测试、187 个 CSS 命中，与修改前相同（`checks/p01-verify.txt`） |
-| `build-record.py` 重新生成 | 与 `2026-10-07.json` 逐字节一致（`checks/rebuild.txt`） |
-| `verify-record.mjs` | 通过，见上文结论（`checks/verify-record.txt`） |
-| `--check-owners` | 退出 0：0 `unowned`、9 `pending`（`checks/check-owners.json`） |
+| `build-record.py` / `build-decision.py` 重新生成 | 两份记录都逐字节一致（`checks/rebuild.txt`） |
+| `verify-record.mjs` | 两份记录都通过，见上文结论（`checks/verify-record.txt`） |
+| `--check-owners` | 退出 0：读两份记录，0 `unowned`、0 `pending`（`checks/check-owners.json`） |
 | 原有输出不变 | 五种调用逐字节相同（`checks/outputs-unchanged.txt`） |
 | P0.1 原始文件 | 与 tip 无差异（`checks/p01-unchanged.txt`） |
-| 项目合并检查 | 通过：`tsc -b && vite build` 成功，只有 Vite 的大 chunk 提示；Vitest 344 个测试文件、4379 个用例全部通过（269 s；bg_run `bgj_2f2e2ec273ae` 退出 0，`checks/merge-check.txt`） |
+| 项目合并检查 | 通过：`tsc -b && vite build` 成功，只有 Vite 的大 chunk 提示；Vitest 344 个测试文件、4379 个用例全部通过（262 s；bg_run `bgj_493a7111d3a8` 退出 0，`checks/merge-check.txt`） |
+
+第 1 版的合并检查（bg_run `bgj_2f2e2ec273ae`）也已通过：344 个测试文件、4379 个用例。
+
+本任务进行期间，项目分支又前进到 `058beb463`（P0 漂移第 3 批、P2/P3 补强和一次 main 吸收）。其中落在审计范围内的只有两处，合并后不会出现新的使用点，`--check-owners` 的结论不变：
+- `src/web/src/components/ui/README.md`：只改一行，命中种类和数量不变，仍是 antd-reference 11、ant-selector 2、ant-class 2；
+- 新增的 `src/web/src/components/ui/Select.test.tsx`：没有任何 antd 命中。
 
 ## 证据体积
 
-本目录全部为文本，合计约 872 KB，没有截图、trace 或报告附件。合并检查的完整原始日志留在 `/var/tmp/antd-delta-34bk/`，不提交，`checks/merge-check.txt` 只保留构建输出和测试汇总；运行本身由 Orbit 的 bg_run 作业 `bgj_2f2e2ec273ae` 记录。
+本目录全部为文本，合计约 927 KB，没有截图、trace 或报告附件。合并检查的完整原始日志留在 `/var/tmp/antd-delta-34bk/`，不提交；`checks/merge-check.txt` 只保留构建输出和测试汇总，运行本身由 Orbit 的 bg_run 作业记录。

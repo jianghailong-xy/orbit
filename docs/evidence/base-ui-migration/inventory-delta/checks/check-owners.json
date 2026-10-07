@@ -1,101 +1,20 @@
 {
   "baseline": {
-    "commit": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+    "commit": "7059b9994ff71b51cd7d11da98a318cdde237ba1",
     "scopeHash": "bb238f9ed5588bd9e5c3ae2d4f32a9302b85fe7d219d5c05c6b1f16e024d5a2a"
   },
   "records": [
-    "2026-10-07.json"
+    "2026-10-07.json",
+    "2026-10-07b.json"
   ],
   "unowned": [],
-  "pending": [
-    {
-      "path": "src/web/src/components/ProjectBlockers.test.tsx",
-      "candidates": [
-        "P4.3a",
-        "P4.3b"
-      ],
-      "record": "2026-10-07.json"
-    },
-    {
-      "path": "src/web/src/components/ProjectBlockers.tsx",
-      "candidates": [
-        "P4.3a",
-        "P4.3b"
-      ],
-      "record": "2026-10-07.json"
-    },
-    {
-      "path": "src/web/src/components/ProjectCrossingsCard.tsx",
-      "candidates": [
-        "P4.3a",
-        "P4.3b"
-      ],
-      "record": "2026-10-07.json"
-    },
-    {
-      "path": "src/web/src/components/ProjectProgressStatus.test.tsx",
-      "candidates": [
-        "P4.3a",
-        "P4.3b"
-      ],
-      "record": "2026-10-07.json"
-    },
-    {
-      "path": "src/web/src/components/ProjectProgressStatus.tsx",
-      "candidates": [
-        "P4.3a",
-        "P4.3b"
-      ],
-      "record": "2026-10-07.json"
-    },
-    {
-      "path": "src/web/src/components/TaskDependencyList.tsx",
-      "candidates": [
-        "P4.3a",
-        "P4.3b"
-      ],
-      "record": "2026-10-07.json"
-    },
-    {
-      "path": "src/web/src/index.css",
-      "line": 16999,
-      "kind": "ant-class",
-      "text": ".project-blockers-heading.ant-typography {",
-      "candidates": [
-        "P4.3a",
-        "P4.3b"
-      ],
-      "record": "2026-10-07.json"
-    },
-    {
-      "path": "src/web/src/index.css",
-      "line": 17009,
-      "kind": "ant-class",
-      "text": ".project-blockers-summary.ant-typography {",
-      "candidates": [
-        "P4.3a",
-        "P4.3b"
-      ],
-      "record": "2026-10-07.json"
-    },
-    {
-      "path": "src/web/src/index.css",
-      "line": 17038,
-      "kind": "ant-class",
-      "text": ".project-blockers-headline .ant-tag {",
-      "candidates": [
-        "P4.3a",
-        "P4.3b"
-      ],
-      "record": "2026-10-07.json"
-    }
-  ],
+  "pending": [],
   "owners": {
     "KEEP": 1,
     "P4.1": 18,
     "P4.2": 81,
-    "P4.3a": 74,
-    "P4.3b": 32,
+    "P4.3a": 82,
+    "P4.3b": 33,
     "P4.4": 50,
     "P5.1": 28,
     "P5.2": 11,
