@@ -7618,17 +7618,28 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     enabled: !!selectedId && retryMessageAskedFor === selectedId,
   }).data;
   const serverRetryText = serverRetry?.text ?? '';
-  const autoRetryText = retryText || serverRetryText;
+  // Whose words the window's answer is an answer for. Another Orbit session's are not the reader's
+  // to send again: through `send` they would go out in the owner's name, signed by nobody. So that
+  // press goes to the server's own chooser (`resendFromSession`, docs/session-request-reply-contract.md
+  // §2.1) — and where the promise belongs to the server, it has to BE the server's answer. The
+  // window cannot see turn attribution or whether a message was already answered, so on 2026-10-07 a
+  // card that promised the window's bubble had its press answered with "this session has no message
+  // for a retry to re-send" (session 34b78GE7Ud2aXWq8H1JsU: the failure had landed on a turn nobody
+  // sent, which the chooser refuses to walk past).
+  const retryIsTheReaders = !!retryText && !retry.sessionMessage;
+  // The words a re-send would carry: the reader's own when they are the reader's to send, and the
+  // server's answer whenever the press would be the server's own re-send — including when it
+  // answers with nothing, which is the one thing the window cannot rule out.
+  const autoRetryText = retryIsTheReaders ? retryText : serverRetryText;
   // …and whether the server said there is nothing at all for a re-send to carry. The card swaps
   // its verb for a continue then — and there is nothing to quote or to hand `send` as the reader's
-  // words, because the continue is the platform's own sentence (`CONTINUE_MESSAGE`).
-  const nothingToResend = !!serverRetry?.nothingToResend;
-  // Whose words those are. Another Orbit session's are not the reader's to send again: through
-  // `send` they would go out in the owner's name, signed by nobody. So the Retry asks the server to
-  // re-send them as the automatic retry would — that session's, with the request they were, charged
-  // to nobody's hourly limit (docs/session-request-reply-contract.md §2.1). Read off the same bubble
-  // as the words, or off the server's answer when the window held none.
-  const retryFromSession = retryText ? retry.sessionMessage : serverRetry?.sessionMessage;
+  // words, because the continue is the platform's own sentence (`CONTINUE_MESSAGE`). Only while the
+  // window is not holding words of the reader's: those are their own to send, and a frozen answer
+  // from an earlier look must not claim otherwise.
+  const nothingToResend = !retryIsTheReaders && !!serverRetry?.nothingToResend;
+  // Read off the same bubble as the words, or off the server's answer when the window held none or
+  // held somebody else's — the route and the words must never come from two different messages.
+  const retryFromSession = retryIsTheReaders ? undefined : serverRetry?.sessionMessage;
   const resendFromSession = useMutation({
     // With whatever the composer has picked — pressing Retry after choosing a provider means
     // "re-send this there", and the server moves the session as it would on a send.
@@ -7767,7 +7778,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   sendMutate({
                     content: autoRetryText,
                     images: [],
-                    attachmentIds: retry.attachmentIds,
+                    // The files of the bubble THOSE words came from — and none at all when they
+                    // came from the server's answer, which this page holds no bubble for.
+                    attachmentIds: retryIsTheReaders ? retry.attachmentIds : [],
                     source: 'autoRetry',
                   });
                 }
@@ -7777,6 +7790,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // re-send:" quote would read as the reader's own words.
       retryText: nothingToResend ? '' : autoRetryText,
       nothingToResend,
+      // Read off the WINDOW alone — false when it holds somebody else's message or none at all,
+      // which are the two cases the card asks the server about (see `retryIsTheReaders`).
+      retryWordsAreTheReaders: retryIsTheReaders,
       // The card's own Retry goes through `send`, so its refusal arrives in the same handler as a
       // typed message's. Handed to the card rather than left to the toast: it is the card's offer
       // to re-send that has stopped being true, so the card is where that has to show.
@@ -7809,6 +7825,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       detailForSelected?.retryAttempts,
       autoRetryText,
       nothingToResend,
+      retry,
+      retryIsTheReaders,
       retryInFlight,
       retryFromSession,
       runConflict?.conflict,
@@ -8280,6 +8298,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       setEffort(nextEffort);
     }
   };
+  // The sign-in card's Retry is the same press through the same two doors, so it makes the same
+  // promise: the window's words only while they are the reader's own to send. Another session's go
+  // to the server's chooser, and are quoted — and routed — only as the server answered them.
+  const authRetryText = retryIsTheReaders ? retryText : serverRetryText;
+  const authRetryFromSession = retryIsTheReaders ? undefined : serverRetry?.sessionMessage;
   const authErrorHelp: AuthErrorHelp = useMemo(
     () => ({
       provider: shownProvider,
@@ -8298,19 +8321,29 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       onEditDshKey: () => navigate(dshProviderRow ? `/providers/${encodeId(dshProviderRow.id)}` : '/providers'),
       onInstallDsh: runner.online && runner.capabilities?.includes(DSH_RUNNER_CAPABILITY) ? () => installDsh.mutate() : undefined,
       onRetry:
-        retryText && !selectedTrashed && !selectedMissing
-          ? retry.sessionMessage && selectedId
+        authRetryText && !selectedTrashed && !selectedMissing
+          ? authRetryFromSession && selectedId
             ? () => {
                 if (retryInFlight) return;
                 resendFromSessionMutate(selectedId);
               }
             : () => {
                 if (retryInFlight) return;
-                sendMutate({ content: retryText, images: [], attachmentIds: retry.attachmentIds });
+                sendMutate({
+                  content: authRetryText,
+                  images: [],
+                  // As the quota card's: only the words the reader's own bubble carries bring its
+                  // files; the server's answer comes without any this page could name.
+                  attachmentIds: retryIsTheReaders ? retry.attachmentIds : [],
+                });
               }
           : undefined,
       retryDisabled: retryInFlight,
-      retryText,
+      retryText: authRetryText,
+      // The card asks for the words when the window holds somebody else's (or none), for the same
+      // reason the quota card does: that press is the server's own re-send.
+      retryWordsAreTheReaders: retryIsTheReaders,
+      onNeedRetryText: selectedId ? () => setRetryMessageAskedFor(selectedId) : undefined,
       // The provider gallery, not a preset vendor: the engine narrows it to a runtime, not to
       // whose key the user actually holds.
       onUseApiKey: () => navigate('/providers'),
@@ -8343,7 +8376,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       live,
       configMut.mutate,
       retry,
-      retryText,
+      authRetryText,
+      authRetryFromSession,
+      retryIsTheReaders,
       retryInFlight,
       selectedId,
       selectedTrashed,
