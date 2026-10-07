@@ -17,7 +17,12 @@ mkdir -p "$output"
 export ANDROID_HOME="${ANDROID_HOME:-/opt/android-sdk}"
 export ANDROID_USER_HOME="${ANDROID_USER_HOME:-/var/lib/orbit/android/user}"
 export ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-/var/lib/orbit/android/avd}"
-adb="$ANDROID_HOME/platform-tools/adb"
+# Every adb call runs with the lock's fd closed: an adb server this script happens to start must not
+# inherit fd 9 and hold ui.lock after the script exits (a daemon that did held it for 40 minutes).
+adb="$(mktemp -d)/adb"
+printf '#!/bin/sh\nexec "%s" "$@" 9>&-\n' "$ANDROID_HOME/platform-tools/adb" > "$adb"
+chmod +x "$adb"
+"$adb" start-server
 package='io.orbitd.android.debug'
 runner='io.orbitd.android.debug.test/androidx.test.runner.AndroidJUnitRunner'
 emulator_pid=''
