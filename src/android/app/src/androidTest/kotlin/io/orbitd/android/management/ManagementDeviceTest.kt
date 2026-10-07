@@ -1,11 +1,14 @@
 package io.orbitd.android.management
 
+import android.app.UiAutomation
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.net.Uri
 import android.os.SystemClock
+import android.view.InputDevice
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.accessibility.AccessibilityManager
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.semantics.SemanticsActions
@@ -303,10 +306,13 @@ class ManagementDeviceTest {
     }
 
     /**
-     * TalkBack itself running (not a lint of the source): on each main page every control TalkBack can reach is read
-     * off the accessibility tree it reads, a press without words fails, TalkBack's focus is put on the page's key
-     * control and photographed, and that control is activated the way a double tap does (ACTION_CLICK on the
-     * accessibility node), with its effect checked. TalkBack's settings are put back after.
+     * TalkBack itself, driven by its own gestures. The instrumentation's UiAutomation is taken with
+     * FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES: the default one turns every accessibility service off while it is
+     * connected, which kept TalkBack from ever starting. On each main page TalkBack's swipe-right order is walked from
+     * the title and what it stops on is recorded with the words it reads, besides the whole tree it can reach; a press
+     * without words fails. The page's key control then gets TalkBack's focus by touch (explore by touch), is
+     * photographed with TalkBack's focus box, and is activated by a double tap, whose effect is checked: nothing else
+     * presses it. TalkBack's settings are put back after.
      */
     @Test fun talkBackReachesReadsAndActivatesTheMainPages() {
         start()
@@ -327,37 +333,46 @@ class ManagementDeviceTest {
                 report.appendLine("talkback_enabled=${manager.isEnabled} touch_exploration=${manager.isTouchExplorationEnabled} " +
                     "services=${manager.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK).map { it.id }}")
                 assertTrue("TalkBack must be running for this check", manager.isTouchExplorationEnabled)
-                // With TalkBack on, an injected touch explores rather than presses: navigation is by semantics actions.
+                SystemClock.sleep(2_000)
+                report.appendLine("active window: ${automation.rootInActiveWindow?.packageName}")
+                // Between pages: semantics actions and the back key. On each page: TalkBack's gestures only.
                 compose.onAllNodesWithContentDescription("Open navigation").onFirst().performSemanticsAction(SemanticsActions.OnClick)
                 compose.onNode(hasText("Settings") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
                 await("Default permission")
-                audit("settings-home", report, problems)
-                doubleTap("Runners", "talkback-settings-runners", report, problems); await("Add Runner")
-                audit("runners-list", report, problems)
-                doubleTap("Controlled remote", "talkback-runners-row", report, problems); await("Max Concurrent")
-                audit("runner", report, problems)
-                doubleTap("Increase Max Concurrent", "talkback-runner-capacity", report, problems)
+                page("settings-home", report, problems)
+                activate("Runners", "talkback-settings-runners", report, problems); await("Add Runner")
+                report.appendLine("double tap Runners -> the runners list opened")
+                page("runners-list", report, problems)
+                activate("Controlled remote", "talkback-runners-row", report, problems); await("Max Concurrent")
+                report.appendLine("double tap Controlled remote -> the runner page opened")
+                page("runner", report, problems)
+                activate("Increase Max Concurrent", "talkback-runner-capacity", report, problems)
                 compose.waitUntil(10_000) { calls.any { it == "PATCH /api/runners/$runnerId" } }
                 report.appendLine("double tap Increase Max Concurrent -> PATCH /api/runners/$runnerId sent")
                 back(); back(); await("Default permission")
-                doubleTap("Providers", "talkback-settings-providers", report, problems); await("Team Codex")
-                audit("providers", report, problems)
-                doubleTap("Team Codex", "talkback-providers-pool", report, problems); await("Who can use it")
-                audit("codex-pool", report, problems)
+                activate("Providers", "talkback-settings-providers", report, problems); await("Team Codex")
+                report.appendLine("double tap Providers -> the providers page opened")
+                page("providers", report, problems)
+                activate("Team Codex", "talkback-providers-pool", report, problems); await("Who can use it")
+                report.appendLine("double tap Team Codex -> the pool page opened")
+                page("codex-pool", report, problems)
                 back(); back(); await("Default permission")
-                doubleTap("Shared links", "talkback-settings-shared-links", report, problems); await("Fixture shared session")
-                audit("shared-links", report, problems)
-                doubleTap("Turn off", "talkback-shared-links-turn-off", report, problems); await("Turn off this link")
+                activate("Shared links", "talkback-settings-shared-links", report, problems); await("Fixture shared session")
+                report.appendLine("double tap Shared links -> the shared links page opened")
+                page("shared-links", report, problems)
+                activate("Turn off", "talkback-shared-links-turn-off", report, problems); await("Turn off this link")
                 report.appendLine("double tap Turn off -> the confirmation opened")
                 compose.onNode(hasText("Cancel") and hasClickAction() and hasAnyAncestor(isDialog())).performSemanticsAction(SemanticsActions.OnClick)
                 back(); await("Default permission")
-                doubleTap("Edit profile", "talkback-settings-profile", report, problems); await("Save profile")
-                audit("edit-profile", report, problems)
-                doubleTap("Choose photo", "talkback-profile-photo", report, problems); await("Photo library")
+                activate("Edit profile", "talkback-settings-profile", report, problems); await("Save profile")
+                report.appendLine("double tap Edit profile -> the profile card opened")
+                page("edit-profile", report, problems)
+                activate("Choose photo", "talkback-profile-photo", report, problems); await("Photo library")
                 report.appendLine("double tap Choose photo -> the photo menu opened")
                 back(); back(); await("Default permission")
-                doubleTap("Admin", "talkback-settings-admin", report, problems); await("Second user")
-                audit("admin-users", report, problems)
+                activate("Admin", "talkback-settings-admin", report, problems); await("Second user")
+                report.appendLine("double tap Admin -> the users list opened")
+                page("admin-users", report, problems)
                 File(app.filesDir, "a13-management").apply { mkdirs() }.resolve("talkback-problems.txt").writeText(problems.joinToString("\n"))
                 assertTrue("TalkBack problems: $problems", problems.isEmpty())
             } finally {
@@ -378,13 +393,23 @@ class ManagementDeviceTest {
 
     private val talkBack = "com.google.android.marvin.talkback/com.google.android.marvin.talkback.TalkBackService"
 
-    /** What TalkBack can reach on the active window, in its order, with the words it speaks for each. */
+    /** The UiAutomation every call here uses: the default one would switch TalkBack off while it is connected. */
+    private val automation: UiAutomation get() = instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
+
+    private fun words(node: AccessibilityNodeInfo) = listOfNotNull(node.contentDescription, node.text, node.stateDescription)
+        .map { it.toString().trim() }.filter { it.isNotEmpty() }
+
+    /** One page: the whole tree TalkBack can reach, then the order its swipes walk. */
+    private fun page(page: String, report: StringBuilder, problems: MutableList<String>) {
+        audit(page, report, problems)
+        traverse(page, report, problems)
+    }
+
+    /** What TalkBack can reach on the active window, with the words it speaks for each. */
     private fun audit(page: String, report: StringBuilder, problems: MutableList<String>) {
         compose.waitForIdle(); SystemClock.sleep(600)
-        val root = instrumentation.uiAutomation.rootInActiveWindow ?: run { problems += "$page: no active window"; return }
-        report.appendLine("## $page")
-        fun words(node: AccessibilityNodeInfo) = listOfNotNull(node.contentDescription, node.text, node.stateDescription)
-            .map { it.toString().trim() }.filter { it.isNotEmpty() }
+        val root = automation.rootInActiveWindow ?: run { problems += "$page: no active window"; return }
+        report.appendLine("## $page — the tree")
         fun walk(node: AccessibilityNodeInfo, depth: Int) {
             val reachable = node.isVisibleToUser && (node.isClickable || node.isFocusable || node.isCheckable)
             val said = words(node)
@@ -399,20 +424,70 @@ class ManagementDeviceTest {
         walk(root, 0)
     }
 
-    /** TalkBack's focus on the control named [words], photographed, then a double tap (ACTION_CLICK on its node). */
-    private fun doubleTap(words: String, shot: String, report: StringBuilder, problems: MutableList<String>) {
-        compose.waitForIdle(); SystemClock.sleep(400)
-        val root = instrumentation.uiAutomation.rootInActiveWindow
-        val target = root?.findAccessibilityNodeInfosByText(words)?.firstOrNull { it.isVisibleToUser }
-        if (target == null) { problems += "$shot: TalkBack found nothing named \"$words\""; return }
-        var press: AccessibilityNodeInfo? = target
-        while (press != null && !press.isClickable) press = press.parent
-        target.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
-        SystemClock.sleep(500)
-        report.appendLine("focus \"$words\" -> accessibilityFocused=${target.refresh() && target.isAccessibilityFocused}")
+    /** TalkBack's own order: a finger on the title, then swipe right after swipe right, with what it reads at each stop. */
+    private fun traverse(page: String, report: StringBuilder, problems: MutableList<String>) {
+        val root = automation.rootInActiveWindow ?: return
+        val screen = Rect().also(root::getBoundsInScreen)
+        val title = generateSequence(listOf(root)) { level -> level.flatMap { n -> (0 until n.childCount).mapNotNull(n::getChild) }.ifEmpty { null } }
+            .flatten().firstOrNull { it.isVisibleToUser && it.text?.isNotBlank() == true && Rect().also(it::getBoundsInScreen).top < screen.height() / 8 }
+        report.appendLine("## $page — TalkBack, swipe right from \"${title?.text}\"")
+        title?.let { val at = Rect().also(it::getBoundsInScreen); tap(at.exactCenterX(), at.exactCenterY()); SystemClock.sleep(1_000) }
+        val stops = mutableListOf<String>()
+        var unmoved = 0
+        for (step in 1..30) {
+            swipeRight(screen); SystemClock.sleep(800)
+            val node = focused() ?: run { report.appendLine("  (TalkBack's focus left this window)"); null } ?: break
+            val said = words(node).joinToString(" | ")
+            val stop = "${Rect().also(node::getBoundsInScreen)} $said"
+            if (stop == stops.lastOrNull()) { if (++unmoved >= 2) { report.appendLine("  (the last item)"); break } else continue }
+            if (stop in stops) { report.appendLine("  (back to an earlier item)"); break }
+            stops += stop; unmoved = 0
+            report.appendLine("  ${node.className?.toString()?.substringAfterLast('.')} \"$said\"" + if (node.isClickable) " — double tap to activate" else "")
+            if (node.isClickable && said.isEmpty()) problems += "$page: TalkBack stops on a press it has no words for"
+        }
+        if (stops.size < 3) problems += "$page: TalkBack's swipes reached ${stops.size} item(s)"
+    }
+
+    /**
+     * The control named [words]: on screen (scrolled to by its semantics, as a finger would scroll), TalkBack's focus put
+     * on it by touch and photographed, then TalkBack's double tap. The caller checks what the press did.
+     */
+    private fun activate(words: String, shot: String, report: StringBuilder, problems: MutableList<String>) {
+        try { compose.onAllNodes(hasText(words, substring = true) or hasContentDescription(words, substring = true)).onFirst().performScrollTo() }
+        catch (_: AssertionError) { }
+        compose.waitForIdle(); SystemClock.sleep(500)
+        val target = automation.rootInActiveWindow?.findAccessibilityNodeInfosByText(words)?.firstOrNull { it.isVisibleToUser }
+        if (target == null) { problems += "$shot: nothing on screen is named \"$words\""; return }
+        val at = Rect().also(target::getBoundsInScreen)
+        tap(at.exactCenterX(), at.exactCenterY()); SystemClock.sleep(1_000)
+        val focus = focused()
+        val said = focus?.let(::words).orEmpty().joinToString(" | ")
+        report.appendLine("touch \"$words\" -> TalkBack's focus on ${focus?.className?.toString()?.substringAfterLast('.')} \"$said\"")
+        if (focus == null || !said.contains(words, ignoreCase = true)) problems += "$shot: touching \"$words\" put TalkBack's focus on \"$said\""
         capture(shot)
-        report.appendLine("double tap \"$words\" -> ${press?.performAction(AccessibilityNodeInfo.ACTION_CLICK)}")
-        if (press == null) problems += "$shot: \"$words\" cannot be activated"
+        val on = Rect().also { (focus ?: target).getBoundsInScreen(it) }
+        doubleTap(on.exactCenterX(), on.exactCenterY())
+    }
+
+    private fun focused(): AccessibilityNodeInfo? = automation.rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY)
+
+    private fun touch(action: Int, x: Float, y: Float, down: Long) {
+        val event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, x, y, 0).apply { source = InputDevice.SOURCE_TOUCHSCREEN }
+        try { automation.injectInputEvent(event, true) } finally { event.recycle() }
+    }
+    private fun tap(x: Float, y: Float) {
+        val down = SystemClock.uptimeMillis()
+        touch(MotionEvent.ACTION_DOWN, x, y, down); SystemClock.sleep(30); touch(MotionEvent.ACTION_UP, x, y, down)
+    }
+    /** Two taps inside the double-tap timeout: TalkBack activates the item its focus is on. */
+    private fun doubleTap(x: Float, y: Float) { tap(x, y); SystemClock.sleep(70); tap(x, y); SystemClock.sleep(600) }
+    /** One quick finger across the middle of the screen: TalkBack's "next item". */
+    private fun swipeRight(screen: Rect) {
+        val y = screen.exactCenterY(); val from = screen.width() * 0.2f; val to = screen.width() * 0.8f
+        val down = SystemClock.uptimeMillis()
+        touch(MotionEvent.ACTION_DOWN, from, y, down)
+        for (i in 1..8) { SystemClock.sleep(12); touch(MotionEvent.ACTION_MOVE, from + (to - from) * i / 8, y, down) }
+        touch(MotionEvent.ACTION_UP, to, y, down)
     }
 
     private fun start() {
@@ -439,7 +514,7 @@ class ManagementDeviceTest {
         compose.waitForIdle()
     }
     private fun back() { instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK); compose.waitForIdle() }
-    private fun shell(command: String): String = instrumentation.uiAutomation.executeShellCommand(command).let { fd ->
+    private fun shell(command: String): String = automation.executeShellCommand(command).let { fd ->
         android.os.ParcelFileDescriptor.AutoCloseInputStream(fd).bufferedReader().readText()
     }
     private fun capture(label: String) {
@@ -447,7 +522,7 @@ class ManagementDeviceTest {
         // Semantics can be current a frame before the display is: let the frame reach the screen.
         android.os.SystemClock.sleep(700)
         val dir = File(app.filesDir, "a13-management").apply { mkdirs() }
-        instrumentation.uiAutomation.takeScreenshot().let { bitmap ->
+        automation.takeScreenshot().let { bitmap ->
             File(dir, "$label.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }; bitmap.recycle()
         }
     }

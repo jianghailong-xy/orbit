@@ -121,8 +121,15 @@ class ManagementLiveTest {
     private fun pick(row: String, option: String) { click(hasText(row) and hasClickAction()); click(hasText(option) and hasClickAction(), scroll = false) }
     private fun field(label: String) = compose.onNode(hasSetTextAction() and hasText(label))
     private fun back() = compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
-    private fun await(text: String, timeoutMs: Long = 20_000) =
-        compose.waitUntil(timeoutMs) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
+    /** Until [text] shows. The pages' own timers (the engine page reads again every 10 s) run on the test's clock: it
+     *  moves here with real time, as it does for a user. */
+    private fun await(text: String, timeoutMs: Long = 20_000) {
+        val until = System.currentTimeMillis() + timeoutMs
+        while (!shows(hasText(text, substring = true))) {
+            if (System.currentTimeMillis() > until) throw AssertionError("\"$text\" did not show within $timeoutMs ms")
+            compose.mainClock.advanceTimeBy(250); compose.waitForIdle(); Thread.sleep(250)
+        }
+    }
     private fun shows(matcher: SemanticsMatcher) = compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
     private fun click(matcher: SemanticsMatcher, scroll: Boolean = true) {
         compose.waitUntil(20_000) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
