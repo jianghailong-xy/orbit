@@ -37,7 +37,10 @@ class ProjectDataTest {
     @Test fun graphUsesPrerequisiteDirectionAndKeepsEveryFold() {
         val marks = listOf(obj("""{"id":"leaf","kind":"TASK"}"""), obj("""{"id":"fold","kind":"RUN","taskCount":4}"""), obj("""{"id":"root","kind":"TASK"}"""))
         val edges = listOf(obj("""{"sourceMarkId":"root","targetMarkId":"fold"}"""), obj("""{"sourceMarkId":"fold","targetMarkId":"leaf"}"""))
-        assertEquals(mapOf("root" to 0, "fold" to 1, "leaf" to 2), graphLevels(marks, edges))
+        val layout = ProjectGraphLayout.layout(marks.mapNotNull(GraphMark::of), edges.mapNotNull { e ->
+            GraphEdge(e.text("sourceMarkId")!!, e.text("targetMarkId")!!) }, ProjectGraphLayout.Direction.LEFT_TO_RIGHT, 400.0)
+        val x = layout.placements.associate { it.mark.id to it.box.x }
+        assertTrue(x.getValue("root") < x.getValue("fold") && x.getValue("fold") < x.getValue("leaf"))
         val page = ProjectPageData(obj("""{"maxConcurrentTasks":3}"""), mapOf("graph" to buildJsonObject { put("marks", JsonArray(marks)); put("edges", JsonArray(edges)) }, "integration" to obj("{}")), emptyMap())
         assertEquals("PROJECT_BRANCH", projectStartSettings(page).line)
         assertEquals(3, projectStartSettings(page).maxConcurrentTasks)

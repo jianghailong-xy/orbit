@@ -31,6 +31,7 @@ import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.navigation.*
+import io.orbitd.android.projects.TaskDependencyGraphView
 import io.orbitd.android.taskprojects.*
 import io.orbitd.android.text.*
 import io.orbitd.android.ui.LocalOrbitColors
