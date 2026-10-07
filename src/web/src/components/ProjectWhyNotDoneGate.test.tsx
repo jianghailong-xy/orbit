@@ -9,7 +9,6 @@ import { api } from '../api';
 import {
   ProjectWhyNotDoneCard,
   SessionProjectSettlementCard,
-  asksWhyNotDone,
   settlementHeldOnProject,
   type SettlementProjectDocument,
 } from './ProjectSettlementCard';
@@ -22,17 +21,23 @@ import {
 } from '../lib/projectDone';
 
 /**
- * "Why is this project not done?" is asked only of a project that LOOKS finished — OPEN and
- * started, every stated criterion met by its work, no task IN_PROGRESS — and that the unified read
- * does not call done: the owner's ruling of 2026-10-06 09:29Z, which put back the condition this
- * card had before 0f47238c1. A project with work still to do is not asked — "the work is not done
- * yet" is not news — and the three other drawings are as they were: the owner's card while a
- * DONE_REQUEST or this conversation's own receipt stands, Orbit's DONE as the card's terminal state,
- * the owner's DONE as its receipt.
+ * What "looks finished" means, and the tally the old card counts in — neither of which a
+ * conversation draws any more.
  *
- * And the card's tally adds up: each met criterion where its work is, each unmet one as "not met",
- * never by its landing lane. The native clients hold the same rule and words
- * (`ProjectWhyNotDoneGateTests.swift`, `ProjectDoneCopyParityTests.swift`).
+ * `settlementHeldOnProject` is the condition "Why is this project not done?" was asked of: OPEN and
+ * started, every stated criterion met by its work, no task IN_PROGRESS, and a projection that does
+ * not call it done — the owner's ruling of 2026-10-06 09:29Z, which put back the condition the card
+ * had before 0f47238c1. The owner's ruling of 2026-10-07 04:20Z then took the question out of the
+ * conversation altogether: NOTHING is drawn in that state, or in any other OPEN one — see
+ * `ProjectDoneConversation.test.tsx`, which draws the conversation state by state, and the three
+ * drawings that stay: the owner's card while a DONE_REQUEST or this conversation's own receipt
+ * stands, Orbit's DONE as the old card's terminal state, the owner's DONE as its receipt.
+ *
+ * The condition and the tally are kept because the components that state them are (the projection
+ * card's own hold, the terminal card's tally), which is what the cases below are about; the tally
+ * adds up: each met criterion where its work is, each unmet one as "not met", never by its landing
+ * lane. The native clients hold the same rule and words (`ProjectWhyNotDoneGateTests.swift`,
+ * `ProjectDoneConversationTests.swift`, `ProjectDoneCopyParityTests.swift`).
  */
 vi.mock('../api', () => ({ api: vi.fn() }));
 
@@ -127,29 +132,24 @@ function older(doc: Doc): Doc {
   return { ...doc, derivedDone: projection as Doc['derivedDone'] };
 }
 
-const asks = (doc: Doc | null | undefined): boolean =>
-  asksWhyNotDone(doc as unknown as SettlementProjectDocument | null | undefined);
 const held = (doc: Doc | null | undefined): boolean =>
   settlementHeldOnProject(doc as unknown as SettlementProjectDocument | null | undefined);
 
-describe('whether the conversation asks “Why is this project not done?”', () => {
-  it('asks of a started OPEN project with every criterion met, nothing running, and the read not done', () => {
-    expect(asks(finished())).toBe(true);
+describe('what “looks finished” means', () => {
+  it('holds of a started OPEN project with every criterion met, nothing running, and the read not done', () => {
     expect(held(finished())).toBe(true);
     // Only IN_PROGRESS holds it back: work that is not running is the projection's to explain.
-    expect(asks(finished({ tasksByStatus: { DONE: 4, OPEN: 1, FAILED: 1 } }))).toBe(true);
-    expect(asks(finished({ tasksByStatus: {} }))).toBe(true);
+    expect(held(finished({ tasksByStatus: { DONE: 4, OPEN: 1, FAILED: 1 } }))).toBe(true);
+    expect(held(finished({ tasksByStatus: {} }))).toBe(true);
   });
 
-  it('does not ask of a project with a criterion still unmet — the antd migration the owner reported', () => {
-    expect(asks(antdMigration())).toBe(false);
+  it('holds of nothing with a criterion still unmet — the antd migration the owner reported', () => {
     expect(held(antdMigration())).toBe(false);
     const oneUnmet = finished({}, [criterion('c1', true, null), criterion('c2', false, 'CODELESS')]);
-    expect(asks(oneUnmet)).toBe(false);
+    expect(held(oneUnmet)).toBe(false);
   });
 
-  it('does not ask while a task is IN_PROGRESS, every criterion met or not', () => {
-    expect(asks(finished({ tasksByStatus: { DONE: 4, IN_PROGRESS: 1 } }))).toBe(false);
+  it('holds of nothing while a task is IN_PROGRESS, every criterion met or not', () => {
     expect(held(finished({ tasksByStatus: { DONE: 4, IN_PROGRESS: 1 } }))).toBe(false);
   });
 
@@ -162,14 +162,12 @@ describe('whether the conversation asks “Why is this project not done?”', ()
       derivedDone: { ...finished().derivedDone!, status: 'DONE', done: true, withheld: [] },
     })],
     ['a read that has not answered', null],
-  ])('does not ask of %s', (_, doc) => {
-    expect(asks(doc)).toBe(false);
+  ])('holds of nothing for %s', (_, doc) => {
     expect(held(doc)).toBe(false);
   });
 
-  it('holds the older projection to the same condition, and leaves the grouped card to the unified read', () => {
+  it('holds the older projection to the same condition, counts or no counts', () => {
     expect(held(older(finished()))).toBe(true);
-    expect(asks(older(finished()))).toBe(false);
     expect(held(older(antdMigration()))).toBe(false);
     expect(held(older(finished({ tasksByStatus: { IN_PROGRESS: 2 } })))).toBe(false);
   });
@@ -393,45 +391,41 @@ describe('the coordinator conversation', () => {
     expect(node!.querySelector('.project-settlement')).toBeNull();
   });
 
-  it('draws the card for a project that looks finished while the read is not done, its tally adding up', async () => {
+  it('draws nothing for a project that looks finished while the read is not done — the state it was asked in', async () => {
+    // Where the card used to be up, with its tally and its two groups (2026-10-06 → 2026-10-07).
+    expect(held(server.document)).toBe(true);
     await mount();
-    const card = whyCard();
-    expect(card).not.toBeNull();
-    expect(card?.querySelector('.project-settlement-heading')?.textContent).toBe(PROJECT_DONE_COPY.whyHeading);
-    expect(card?.querySelector('.project-done-tally')?.textContent).toBe('2 criteria · 1 on main · 1 merged outside Orbit');
-    expect(text()).toContain(PROJECT_DONE_COPY.needsYourCall);
-  });
-
-  it('takes the card down when a task starts or a criterion stops being met, and asks nothing in its place', async () => {
-    await mount();
-    expect(whyCard()).not.toBeNull();
-
-    server.document = finished({ tasksByStatus: { DONE: 4, IN_PROGRESS: 1 } });
-    await act(async () => {
-      await qc!.invalidateQueries({ queryKey: ['project', PROJECT], exact: true });
-    });
-    await until(() => whyCard() === null, 'the card to come down once a task is running');
-    await read();
-    // Not the owner's card either: nobody asked, and nothing was recorded.
+    expect(whyCard()).toBeNull();
     expect(node!.querySelector('.project-settlement')).toBeNull();
+    expect(text()).not.toContain(PROJECT_DONE_COPY.whyHeading);
+    expect(text()).not.toContain(PROJECT_DONE_COPY.needsYourCall);
+    expect(text()).not.toContain(PROJECT_DONE_COPY.askCoordinator);
+    // Not the owner's card in its place either: nobody asked, and nothing was recorded.
     expect(text()).not.toContain(PROJECT_DONE_COPY.heading);
-
-    server.document = finished();
-    await act(async () => {
-      await qc!.invalidateQueries({ queryKey: ['project', PROJECT], exact: true });
-    });
-    await until(() => whyCard() !== null, 'the card to come back once nothing is running');
-
-    server.document = finished({}, [criterion('c1', true, null), criterion('c2', false, 'NO_RECEIPT')]);
-    await act(async () => {
-      await qc!.invalidateQueries({ queryKey: ['project', PROJECT], exact: true });
-    });
-    await until(() => whyCard() === null, 'the card to come down once a criterion is unmet');
-    await read();
-    expect(node!.querySelector('.project-settlement')).toBeNull();
   });
 
-  describe('the three drawings the gate does not touch', () => {
+  it('draws nothing as a task starts or a criterion stops being met, and nothing when they stop again', async () => {
+    await mount();
+    expect(whyCard()).toBeNull();
+
+    for (const document of [
+      finished({ tasksByStatus: { DONE: 4, IN_PROGRESS: 1 } }),
+      finished(),
+      finished({}, [criterion('c1', true, null), criterion('c2', false, 'NO_RECEIPT')]),
+      finished(),
+    ]) {
+      server.document = document;
+      await act(async () => {
+        await qc!.invalidateQueries({ queryKey: ['project', PROJECT], exact: true });
+      });
+      await read();
+      expect(whyCard(), 'the old question was drawn again').toBeNull();
+      expect(node!.querySelector('.project-settlement')).toBeNull();
+      expect(text()).not.toContain(PROJECT_DONE_COPY.heading);
+    }
+  });
+
+  describe('the three drawings that stay', () => {
     it('draws the closeout card for a DONE_REQUEST, even on a project with every criterion unmet', async () => {
       server.document = antdMigration({ tasksByStatus: { IN_PROGRESS: 2 } });
       server.openItems = DONE_REQUEST;

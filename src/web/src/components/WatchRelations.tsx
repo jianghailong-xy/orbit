@@ -23,6 +23,7 @@ import {
   targetHref,
   targetName,
   targetNoun,
+  waitsBeyondTasks,
   watchBucket,
   watchHref,
   watchProblem,
@@ -187,7 +188,8 @@ export function SessionWatchBadges({ sessionId }: { sessionId: string }) {
 }
 
 /**
- * Above the composer: the watches this session is waiting on, while any is live — in the Background
+ * Above the composer: the watches this session is waiting on beyond its tasks (a session, say), while
+ * any is live — a task it waits on is an eye in the Tasks card instead — in the Background
  * processes tray's own shell (`.bg-tray`), so the stack above the composer reads as one system, the
  * way Tasks created here does. Always one line first: a lone target by name with where it stands, in
  * its own list's pill; several by what the wait needs, with Tasks created here's sentence over where
@@ -200,7 +202,10 @@ export function SessionWatchStrip({ sessionId }: { sessionId: string }) {
   const watchesQ = useQuery(watchesQuery());
   const now = useNow();
   const [open, setOpen] = useState(false);
-  const waitingOn = watchesFollowing(rowsOf(watchesQ.data), sessionId).filter(isLiveWatch);
+  // Only what waits beyond tasks: a task the session waits on is an eye in its Tasks card.
+  const waitingOn = watchesFollowing(rowsOf(watchesQ.data), sessionId)
+    .filter(isLiveWatch)
+    .filter(waitsBeyondTasks);
   if (waitingOn.length === 0) return null;
   const { live, single, targetLine } = stripLine(waitingOn);
   const toggle = () => setOpen((o) => !o);
