@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869 && NO_COLOR=1 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.config.mjs --project chromium-dark-desktop --grep \" select-(down|down-enter|down-enter-from-7) (burst|paced) \"",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_fd73818f98dd",
+ "cwd": "/root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869",
+ "commit": "7ad82e10aa625ab8b26fccea79aba4fc685048f3",
+ "webTree": "1780d071a6b402eef7d34ea74185684d73db3a85",
+ "outputLastWritten": "2026-10-06T10:52:27.730843+00:00",
+ "exitCode": 1,
+ "outputSha256": "ae3eda2cc0f5070717a100bb9f0cbee16949b9498fb0b60f52b5f0ed23751ae8",
+ "outputBytes": 70074,
+ "note": "358 passed / 2 failed: orbit-field select-down-enter-from-7 paced 4 and 12 never mounted the fixture; their traces (baseline-select-a-traces.json) show 23 and 11 module requests aborted with net::ERR_NETWORK_CHANGED, and the last actions are newPage, goto and the theme expect, before any key. Rerun in baseline-rerun."
+}

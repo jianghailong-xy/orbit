@@ -1,0 +1,530 @@
+{
+  "dialog": {
+    "ant": {
+      "x": 8,
+      "y": 108,
+      "width": 374,
+      "height": 173.140625,
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "color": "rgb(31, 35, 41)",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "borderRadius": "10px",
+      "padding": "20px 24px",
+      "boxShadow": "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px",
+      "controls": [
+        {
+          "name": "Close",
+          "x": 330,
+          "y": 12,
+          "width": 32,
+          "height": 32,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        },
+        {
+          "name": "",
+          "x": 24,
+          "y": 74,
+          "width": 326,
+          "height": 35.140625,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false,
+          "borderColor": "rgb(222, 224, 227)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "none"
+        },
+        {
+          "name": "Cancel",
+          "x": 202.484375,
+          "y": 121.140625,
+          "width": 75.59375,
+          "height": 32,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        },
+        {
+          "name": "Save",
+          "x": 286.078125,
+          "y": 121.140625,
+          "width": 63.921875,
+          "height": 32,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        }
+      ]
+    },
+    "orbit": {
+      "x": 8,
+      "y": 108,
+      "width": 374,
+      "height": 173.140625,
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "color": "rgb(31, 35, 41)",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "borderRadius": "10px",
+      "padding": "20px 24px",
+      "boxShadow": "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px",
+      "controls": [
+        {
+          "name": "Close",
+          "x": 330,
+          "y": 12,
+          "width": 32,
+          "height": 32,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        },
+        {
+          "name": "",
+          "x": 24,
+          "y": 74,
+          "width": 326,
+          "height": 35.140625,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false,
+          "borderColor": "rgb(222, 224, 227)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "none"
+        },
+        {
+          "name": "Cancel",
+          "x": 202.484375,
+          "y": 121.140625,
+          "width": 75.59375,
+          "height": 32,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        },
+        {
+          "name": "Save",
+          "x": 286.078125,
+          "y": 121.140625,
+          "width": 63.921875,
+          "height": 32,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        }
+      ]
+    }
+  },
+  "right drawer": {
+    "ant": {
+      "x": 12,
+      "y": 0,
+      "width": 378,
+      "height": 844,
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "lineHeight": "16.1px",
+      "color": "rgb(31, 35, 41)",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "borderRadius": "0px",
+      "padding": "0px",
+      "boxShadow": "rgba(0, 0, 0, 0.08) -6px 0px 16px 0px, rgba(0, 0, 0, 0.12) -3px 0px 6px -4px, rgba(0, 0, 0, 0.05) -9px 0px 28px 8px",
+      "controls": [
+        {
+          "name": "Close",
+          "x": 24,
+          "y": 16,
+          "width": 24,
+          "height": 24,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        },
+        {
+          "name": "",
+          "x": 24,
+          "y": 97.09375,
+          "width": 330,
+          "height": 35.140625,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false,
+          "borderColor": "rgb(222, 224, 227)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "none"
+        },
+        {
+          "name": "Cancel",
+          "x": 16,
+          "y": 804,
+          "width": 75.59375,
+          "height": 32,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        },
+        {
+          "name": "Save",
+          "x": 91.59375,
+          "y": 804,
+          "width": 63.921875,
+          "height": 32,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        }
+      ],
+      "separators": {
+        "header": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        },
+        "footer": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        }
+      }
+    },
+    "orbit": {
+      "x": 12,
+      "y": 0,
+      "width": 378,
+      "height": 844,
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "lineHeight": "16.1px",
+      "color": "rgb(31, 35, 41)",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "borderRadius": "0px",
+      "padding": "0px",
+      "boxShadow": "rgba(0, 0, 0, 0.08) -6px 0px 16px 0px, rgba(0, 0, 0, 0.12) -3px 0px 6px -4px, rgba(0, 0, 0, 0.05) -9px 0px 28px 8px",
+      "controls": [
+        {
+          "name": "Close",
+          "x": 24,
+          "y": 16,
+          "width": 24,
+          "height": 24,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        },
+        {
+          "name": "",
+          "x": 24,
+          "y": 97.09375,
+          "width": 330,
+          "height": 35.140625,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false,
+          "borderColor": "rgb(222, 224, 227)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "none"
+        },
+        {
+          "name": "Cancel",
+          "x": 16,
+          "y": 804,
+          "width": 75.59375,
+          "height": 32,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        },
+        {
+          "name": "Save",
+          "x": 91.59375,
+          "y": 804,
+          "width": 63.921875,
+          "height": 32,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        }
+      ],
+      "separators": {
+        "header": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        },
+        "footer": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        }
+      }
+    }
+  },
+  "bottom drawer": {
+    "ant": {
+      "x": 0,
+      "y": 466,
+      "width": 390,
+      "height": 378,
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "lineHeight": "16.1px",
+      "color": "rgb(31, 35, 41)",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "borderRadius": "0px",
+      "padding": "0px",
+      "boxShadow": "rgba(0, 0, 0, 0.08) 0px -6px 16px 0px, rgba(0, 0, 0, 0.12) 0px -3px 6px -4px, rgba(0, 0, 0, 0.05) 0px -9px 28px 8px",
+      "controls": [
+        {
+          "name": "Close",
+          "x": 24,
+          "y": 16,
+          "width": 24,
+          "height": 24,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        },
+        {
+          "name": "",
+          "x": 24,
+          "y": 97.09375,
+          "width": 342,
+          "height": 35.140625,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false,
+          "borderColor": "rgb(222, 224, 227)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "none"
+        },
+        {
+          "name": "Cancel",
+          "x": 16,
+          "y": 338,
+          "width": 75.59375,
+          "height": 32,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        },
+        {
+          "name": "Save",
+          "x": 91.59375,
+          "y": 338,
+          "width": 63.921875,
+          "height": 32,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        }
+      ],
+      "separators": {
+        "header": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        },
+        "footer": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        }
+      },
+      "inputStates": {
+        "hover": {
+          "hovered": true,
+          "focused": false,
+          "focusVisible": false,
+          "borderColor": "rgb(92, 146, 255)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "none"
+        },
+        "focus": {
+          "hovered": false,
+          "focused": true,
+          "focusVisible": true,
+          "borderColor": "rgb(51, 112, 255)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "rgba(5, 122, 255, 0.06) 0px 0px 0px 2px"
+        }
+      }
+    },
+    "orbit": {
+      "x": 0,
+      "y": 466,
+      "width": 390,
+      "height": 378,
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "lineHeight": "16.1px",
+      "color": "rgb(31, 35, 41)",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "borderRadius": "0px",
+      "padding": "0px",
+      "boxShadow": "rgba(0, 0, 0, 0.08) 0px -6px 16px 0px, rgba(0, 0, 0, 0.12) 0px -3px 6px -4px, rgba(0, 0, 0, 0.05) 0px -9px 28px 8px",
+      "controls": [
+        {
+          "name": "Close",
+          "x": 24,
+          "y": 16,
+          "width": 24,
+          "height": 24,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        },
+        {
+          "name": "",
+          "x": 24,
+          "y": 97.09375,
+          "width": 342,
+          "height": 35.140625,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false,
+          "borderColor": "rgb(222, 224, 227)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "none"
+        },
+        {
+          "name": "Cancel",
+          "x": 16,
+          "y": 338,
+          "width": 75.59375,
+          "height": 32,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        },
+        {
+          "name": "Save",
+          "x": 91.59375,
+          "y": 338,
+          "width": 63.921875,
+          "height": 32,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        }
+      ],
+      "separators": {
+        "header": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        },
+        "footer": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        }
+      },
+      "inputStates": {
+        "hover": {
+          "hovered": true,
+          "focused": false,
+          "focusVisible": false,
+          "borderColor": "rgb(92, 146, 255)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "none"
+        },
+        "focus": {
+          "hovered": false,
+          "focused": true,
+          "focusVisible": true,
+          "borderColor": "rgb(51, 112, 255)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "rgba(5, 122, 255, 0.06) 0px 0px 0px 2px"
+        }
+      }
+    }
+  },
+  "confirm": {
+    "ant": {
+      "x": 8,
+      "y": 108,
+      "width": 374,
+      "height": 138,
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "color": "rgb(31, 35, 41)",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "borderRadius": "10px",
+      "padding": "20px 24px",
+      "boxShadow": "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px",
+      "controls": [
+        {
+          "name": "Cancel",
+          "x": 193.9375,
+          "y": 86,
+          "width": 75.59375,
+          "height": 32,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        },
+        {
+          "name": "Delete",
+          "x": 277.53125,
+          "y": 86,
+          "width": 72.46875,
+          "height": 32,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        }
+      ]
+    },
+    "orbit": {
+      "x": 8,
+      "y": 108,
+      "width": 374,
+      "height": 138,
+      "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "color": "rgb(31, 35, 41)",
+      "backgroundColor": "rgb(255, 255, 255)",
+      "borderRadius": "10px",
+      "padding": "20px 24px",
+      "boxShadow": "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px",
+      "controls": [
+        {
+          "name": "Cancel",
+          "x": 193.9375,
+          "y": 86,
+          "width": 75.59375,
+          "height": 32,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        },
+        {
+          "name": "Delete",
+          "x": 277.53125,
+          "y": 86,
+          "width": 72.46875,
+          "height": 32,
+          "hovered": false,
+          "focused": false,
+          "focusVisible": false
+        }
+      ]
+    }
+  }
+}
