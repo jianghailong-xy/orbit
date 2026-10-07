@@ -67,8 +67,18 @@ class ProbeCase: XCTestCase {
         for bundle in agents where running.contains(bundle) {
             let agent = XCUIApplication(bundleIdentifier: bundle)
             for title in ["Allow", "Don't Allow", "OK", "Ignore"] {
-                let button = agent.buttons[title]
-                if button.exists { note("dismissed a system prompt via \(title) (\(bundle))"); button.click(); return }
+                // The alert's own button, not the TouchBar's mirror of it: on the CI runner the
+                // notification prompt carries BOTH an `action-button-1` "Allow" in its dialog and a
+                // second, off-screen "Allow" on the TouchBar, and a plain subscript click on two
+                // matches throws ("Find single matching element") instead of pressing anything —
+                // which is what aborted the Mac pass of run 37611649783 before its first picture.
+                // Hittable first, so the off-screen mirror is never what gets clicked.
+                let matches = agent.buttons.matching(NSPredicate(format: "label == %@", title))
+                    .allElementsBoundByIndex
+                guard let button = matches.first(where: { $0.isHittable }) ?? matches.first else { continue }
+                note("dismissed a system prompt via \(title) (\(bundle)) at \(button.frame)")
+                button.click()
+                return
             }
         }
         #endif
