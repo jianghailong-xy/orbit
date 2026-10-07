@@ -60,6 +60,10 @@ class TasksProjectsDeviceTest {
     }
     private fun awaitTag(tag: String, timeout: Long = 20_000) { compose.waitUntil(timeout) { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() } }
     private fun awaitGone(tag: String, timeout: Long = 20_000) { compose.waitUntil(timeout) { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isEmpty() } }
+    /** Words inside one page: not the same words elsewhere on screen, nor the page's loading placeholder (it carries the tag). */
+    private fun awaitIn(page: String, text: String, timeout: Long = 20_000) {
+        compose.waitUntil(timeout) { compose.onAllNodes(hasText(text, substring = true) and hasAnyAncestor(hasTestTag(page))).fetchSemanticsNodes().isNotEmpty() }
+    }
     private fun scrollTo(list: String, matcher: SemanticsMatcher) = compose.onNodeWithTag(list).performScrollToNode(matcher)
     /** Scrolls to a row that arrives with a later read (a card once its conversation is fresh). */
     private fun awaitScrollTo(list: String, matcher: SemanticsMatcher, timeout: Long = 20_000) {
@@ -144,13 +148,13 @@ class TasksProjectsDeviceTest {
         instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
         scrollTo("transcript-list", hasText("Open A11 task"))
         compose.onNodeWithText("Open A11 task").performTouchInput { click() }
-        awaitTag("task-detail"); awaitText("A11 task checklist"); capture("task-from-conversation")
-        compose.activityRule.scenario.recreate(); awaitTag("task-detail"); awaitText("A11 task checklist")
+        awaitIn("task-detail", "A11 task checklist"); capture("task-from-conversation")
+        compose.activityRule.scenario.recreate(); awaitIn("task-detail", "A11 task checklist")
         back(); awaitTag("composer-input")
         compose.onNodeWithTag("composer-input").assertTextContains("A11 return draft")
         scrollTo("transcript-list", hasText("Open A11 project"))
         compose.onNodeWithText("Open A11 project").performTouchInput { click() }
-        awaitTag("project-detail"); awaitText("A11 Android launch"); capture("project-from-conversation")
+        awaitIn("project-detail", "A11 Android launch"); capture("project-from-conversation")
         back(); awaitTag("composer-input")
         compose.onNodeWithTag("composer-input").assertTextContains("A11 return draft")
         capture("original-conversation-and-draft")
@@ -173,7 +177,7 @@ class TasksProjectsDeviceTest {
             row.text("method") == "GET" && row.text("path") == "/api/tasks/page" && query != null &&
                 query.strings("q") == listOf("checklist") && query.strings("projectId") == listOf("none") && query.strings("labels") == listOf("Sprint, one")
         } }
-        tap("task:$taskId", "tasks-list"); awaitTag("task-detail"); awaitText("A11 task checklist")
+        tap("task:$taskId", "tasks-list"); awaitIn("task-detail", "A11 task checklist")
         back(); awaitTag("task-search")
         compose.onNodeWithTag("task-search").assertTextContains("checklist")
     }
@@ -181,7 +185,7 @@ class TasksProjectsDeviceTest {
     @Test fun taskDetailWritesGoThroughTheServersOwnRecord() = journey("task-detail-writes") {
         login()
         http("/__control", """{"task":{"id":"$taskId","runAt":"2030-01-01T00:00:00.000Z"}}""")
-        open("orbit-task:$taskId"); awaitTag("task-detail"); awaitText("A11 task checklist"); capture("task-detail")
+        open("orbit-task:$taskId"); awaitIn("task-detail", "A11 task checklist"); capture("task-detail")
         // A prerequisite, picked from the server's own candidates.
         tap("task-add-prerequisite", "task-detail"); awaitTag("task-dependency-picker")
         compose.onNodeWithTag("task-dependency-search").performTextInput("A11 prerequisite")
@@ -212,7 +216,7 @@ class TasksProjectsDeviceTest {
     }
 
     @Test fun anOfflineAccountWritesNothingAndAWithdrawnTaskIsNoLongerShown() = journey("task-offline-revocation") {
-        login(); open("orbit-task:$taskId"); awaitTag("task-detail"); awaitText("A11 task checklist")
+        login(); open("orbit-task:$taskId"); awaitIn("task-detail", "A11 task checklist")
         compose.onNodeWithTag("task-comment").performTextInput("Typed before the outage")
         scrollTo("task-detail", hasTestTag("task-run")); compose.onNodeWithTag("task-run").assertIsEnabled()
         compose.onNodeWithTag("task-post-comment").assertIsEnabled()
@@ -240,7 +244,7 @@ class TasksProjectsDeviceTest {
     @Test fun projectIndexProgressHowItRunsAndGraph() = journey("project-page") {
         login(); drawer("Projects")
         awaitTag("projects-list"); awaitText("A11 Android launch"); capture("projects-list")
-        tap("project:$projectId", "projects-list"); awaitTag("project-detail"); awaitText("A11 Android launch")
+        tap("project:$projectId", "projects-list"); awaitIn("project-detail", "A11 Android launch")
         awaitTag("project-overview"); capture("project-detail")
         scrollTo("project-detail", hasTestTag("project-settings")); capture("project-how-it-runs")
         // At most: the presses move the number now; one write carries where they stopped, fenced on the revision read.
@@ -258,13 +262,13 @@ class TasksProjectsDeviceTest {
         scrollTo("project-detail", hasText("Expand graph")); compose.onNodeWithText("Expand graph").performClick()
         awaitTag("project-graph-fullscreen"); compose.onNodeWithText("Zoom in").performClick(); capture("project-graph")
         compose.onNode(hasTestTag("graph-mark:$projectTaskId") and hasAnyAncestor(hasTestTag("project-graph-fullscreen"))).performClick()
-        awaitTag("task-detail"); awaitText("A11 project delivery")
-        back(); awaitTag("project-detail"); awaitText("A11 Android launch")
+        awaitIn("task-detail", "A11 project delivery")
+        back(); awaitIn("project-detail", "A11 Android launch")
         capture("graph-return-project")
     }
 
     @Test fun aStaleSettingIsRefusedAndAWithdrawnProjectIsNoLongerShown() = journey("project-conflict-permission") {
-        login(); open("orbit-project:$projectId"); awaitTag("project-detail"); awaitText("A11 Android launch")
+        login(); open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch")
         http("/__control", """{"mode":"conflict"}""")
         tap("project-at-most-plus", "project-detail")
         awaitText("${RunSettings.notSaved} — The resource changed on another client"); capture("project-stale-settings-refusal")
@@ -277,8 +281,8 @@ class TasksProjectsDeviceTest {
     }
 
     @Test fun anExceptionIsReviewedOnTheCoordinatorsCardAndThePageIsReturnedTo() = journey("project-review-handoff") {
-        login(case = "x1"); open("orbit-project:$projectId"); awaitTag("project-detail"); awaitText("A11 Android launch")
-        awaitTag("open-item:x1"); capture("project-open-items")
+        login(case = "x1"); open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch")
+        awaitScrollTo("project-detail", hasTestTag("open-item:x1")); capture("project-open-items")
         scrollTo("project-detail", hasTestTag("project-coordinator-section")); capture("project-coordinator-entry")
         scrollTo("project-detail", hasTestTag("open-item:x1")); compose.onNodeWithTag("open-item:x1").performClick()
         awaitTag("interaction-cards")
@@ -293,13 +297,13 @@ class TasksProjectsDeviceTest {
         } }
         assertFalse(http("/__stats").flag("pending")); capture("exception-recorded-after-handoff")
         assertTrue(journal().any { it.text("method") == "POST" && it.text("path") == "/api/projects/$projectId/coordinator" })
-        back(); awaitTag("project-detail"); awaitText("A11 Android launch")
+        back(); awaitIn("project-detail", "A11 Android launch")
         compose.waitUntil(20_000) { compose.onAllNodesWithTag("open-item:x1").fetchSemanticsNodes().isEmpty() }
         capture("review-return-project")
     }
 
     @Test fun theOwnerStartsAProjectNobodyAskedAbout() = journey("project-owner-start") {
-        login(case = "own-start"); open("orbit-project:$projectId"); awaitTag("project-detail"); awaitText("A11 Android launch")
+        login(case = "own-start"); open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch")
         awaitTag("project-start-own"); compose.onAllNodesWithTag("project-settings").assertCountEquals(0); capture("project-not-started")
         tap("project-start-own"); awaitTag("project-start-confirm"); capture("project-start-sheet")
         compose.onNodeWithTag("project-start-confirm").performScrollTo().assertTextContains(StartProjectCopy.action).performClick()
@@ -318,8 +322,8 @@ class TasksProjectsDeviceTest {
             "firstSeenAt":"2026-10-04T22:00:00.000Z","detail":{"reason":"OUTSIDE_DECLARED_SCOPE","paths":["src/android/app/build.gradle.kts","src/android/app/src/main/AndroidManifest.xml"]}},
             {"id":"blk2","kind":"WHO_NOT_IN_TEAM","owner":"USER","severity":"CRITICAL","requiredAction":"Add the assigned agent to this project team, or reassign the task.",
             "subjectTitle":"A11 project prerequisite","firstSeenAt":"2026-10-03T12:00:00.000Z"}],"resolved":[],"resolvedCount":0}}}""".replace("\n", ""))
-        open("orbit-project:$projectId"); awaitTag("project-detail"); awaitText("A11 Android launch")
-        scrollTo("project-detail", hasTestTag("blocker:blk1")); awaitText("Changed files it didn’t declare"); capture("project-blocker")
+        open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch")
+        awaitScrollTo("project-detail", hasTestTag("blocker:blk1")); awaitText("Changed files it didn’t declare"); capture("project-blocker")
         tap("blocker:blk1:resolve", "project-detail"); awaitTag("blocker-reason")
         compose.onNodeWithTag("blocker-reason").performTextInput("Both files belong to the declared Android shell change")
         instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK); capture("project-blocker-review")
@@ -360,11 +364,11 @@ class TasksProjectsDeviceTest {
             "firstSeenAt":"2026-10-04T22:00:00.000Z","detail":{"reason":"OUTSIDE_DECLARED_SCOPE","paths":["src/android/app/build.gradle.kts"]}},
             {"id":"blk2","kind":"WHO_NOT_IN_TEAM","owner":"USER","severity":"CRITICAL","requiredAction":"Add the assigned agent to this project team, or reassign the task.",
             "subjectTitle":"A11 project prerequisite","firstSeenAt":"2026-10-03T12:00:00.000Z"}],"resolved":[],"resolvedCount":0}}}""".replace("\n", ""))
-        open("orbit-project:$projectId"); awaitTag("project-detail"); awaitText("A11 Android launch")
+        open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch")
         tap("blocker:blk1:resolve", "project-detail"); awaitTag("blocker-reason")
         compose.onNodeWithTag("blocker-reason").performTextInput("Meant for the scope blocker only")
         compose.activityRule.scenario.recreate()
-        awaitTag("project-detail"); awaitText("A11 Android launch")
+        awaitIn("project-detail", "A11 Android launch")
         tap("blocker:blk2:resolve", "project-detail"); awaitTag("blocker-reason")
         capture("p2-2-second-dialog")
         compose.onNodeWithTag("blocker-reason").assert(hasText("Meant for the scope blocker only", substring = true).not())
@@ -373,7 +377,7 @@ class TasksProjectsDeviceTest {
     /** P2-3: an edit the server refuses keeps its sheet and what was typed. */
     @Test fun regressionP23_aRefusedAcceptanceEditKeepsItsSheetAndDraft() = journey("p2-3-acceptance-refused") {
         login(); http("/__control", """{"mode":"refuse-acceptance"}""")
-        open("orbit-task:$taskId"); awaitTag("task-detail"); awaitText("A11 task checklist")
+        open("orbit-task:$taskId"); awaitIn("task-detail", "A11 task checklist")
         tap("task-edit-acceptance", "task-detail"); awaitTag("task-acceptance-sheet")
         compose.onNodeWithTag("task-acceptance-criteria").performTextReplacement("A criterion the server refuses to take as is")
         tap("task-save-acceptance")
@@ -386,7 +390,7 @@ class TasksProjectsDeviceTest {
 
     /** P2-4: a setting pressed just before leaving the page is still written. */
     @Test fun regressionP24_aSettingPressedJustBeforeLeavingIsStillWritten() = journey("p2-4-at-most-leave") {
-        login(); open("orbit-project:$projectId"); awaitTag("project-detail"); awaitText("A11 Android launch")
+        login(); open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch")
         tap("project-at-most-plus", "project-detail")
         back()
         compose.waitUntil(10_000) { http("/__stats").obj("project")?.number("maxConcurrentTasks") == 3 }
@@ -396,7 +400,7 @@ class TasksProjectsDeviceTest {
     @Test fun regressionP24_aRunPressedJustBeforeLeavingStillStarts() = journey("p2-4-run-leave") {
         login(); http("/__control", """{"dropNext":{"POST /api/tasks/$taskId/execute":2}}""")
         val mark = journal().size
-        open("orbit-task:$taskId"); awaitTag("task-detail"); awaitText("A11 task checklist")
+        open("orbit-task:$taskId"); awaitIn("task-detail", "A11 task checklist")
         scrollTo("task-detail", hasTestTag("task-run")); compose.onNodeWithTag("task-run").performClick()
         back()
         compose.waitUntil(15_000) { http("/__stats").obj("tasks")?.obj(taskId)?.flag("running") == true }
@@ -428,7 +432,7 @@ class TasksProjectsDeviceTest {
     /** P2-6: Record as done is the owner's done door, bound to the seal the owner read. */
     @Test fun regressionP26_recordAsDoneIsTheOwnersDoneDoor() = journey("p2-6-record-done") {
         login(); val mark = journal().size
-        open("orbit-project:$projectId"); awaitTag("project-detail"); awaitText("A11 Android launch")
+        open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch")
         awaitTag("project-menu"); tap("project-menu"); compose.onNodeWithText("Record as done").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("project-done-record").fetchSemanticsNodes().isNotEmpty() ||
             compose.onAllNodesWithTag("project-status-confirm").fetchSemanticsNodes().isNotEmpty() }
@@ -449,7 +453,7 @@ class TasksProjectsDeviceTest {
     /** Point 5: the coordinator conversation opens onto the open item's card, even when that card starts off screen. */
     @Test fun regressionFocus_theCoordinatorConversationOpensOntoTheItemsCard() = journey("focus-item-card") {
         login(case = "x1"); http("/__control", """{"manyJobs":true}""")
-        open("orbit-project:$projectId"); awaitTag("project-detail"); awaitTag("open-item:x1")
+        open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch")
         tap("open-item:x1", "project-detail")
         awaitTag("interaction-cards")
         try { compose.waitUntil(15_000) { runCatching { compose.onNodeWithTag("item:x1").assertIsDisplayed() }.isSuccess } }
@@ -464,7 +468,7 @@ class TasksProjectsDeviceTest {
         awaitScrollTo("transcript-list", hasText("Show tasks")); compose.onNodeWithText("Show tasks").performClick()
         awaitScrollTo("transcript-list", hasTestTag("created-task:$taskId")); capture("created-task-row")
         compose.onNodeWithTag("created-task:$taskId").performClick()
-        awaitTag("task-detail"); awaitText("A11 task checklist")
+        awaitIn("task-detail", "A11 task checklist")
         back(); awaitTag("composer-input")
     }
 
@@ -473,7 +477,7 @@ class TasksProjectsDeviceTest {
     @Test fun screensTour() = journey("screens") {
         login(case = "x1"); drawer("Tasks")
         awaitTag("tasks-list"); awaitText("A11 task checklist"); capture("tour-1-tasks-list")
-        open("orbit-task:$projectTaskId"); awaitTag("task-detail"); awaitText("A11 project delivery"); capture("tour-2-task-detail")
+        open("orbit-task:$projectTaskId"); awaitIn("task-detail", "A11 project delivery"); capture("tour-2-task-detail")
         // At any font size Run now scrolls clear of the comment box under the page (decision 5dshHuxUn20vj22RYT968k, point 4).
         scrollTo("task-detail", hasTestTag("task-run"))
         val run = compose.onNodeWithTag("task-run").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
@@ -484,7 +488,8 @@ class TasksProjectsDeviceTest {
         tap("task-edit-acceptance", "task-detail"); awaitTag("task-acceptance-sheet"); capture("tour-4-task-edit")
         instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK); awaitGone("task-acceptance-sheet")
         drawer("Projects"); awaitTag("projects-list"); awaitText("A11 Android launch"); capture("tour-5-projects-list")
-        tap("project:$projectId", "projects-list"); awaitTag("project-detail"); awaitTag("open-item:x1"); capture("tour-6-project-detail")
+        tap("project:$projectId", "projects-list"); awaitIn("project-detail", "A11 Android launch")
+        awaitScrollTo("project-detail", hasTestTag("open-item:x1")); capture("tour-6-project-detail")
         scrollTo("project-detail", hasTestTag("project-overview")); capture("tour-7-project-progress")
         scrollTo("project-detail", hasTestTag("project-coordinator-section")); capture("tour-8-coordinator-entry")
         scrollTo("project-detail", hasTestTag("open-item:x1")); compose.onNodeWithTag("open-item:x1").performClick()

@@ -178,7 +178,7 @@ class RealStackDeviceTest {
         signIn(); drawer("Tasks"); awaitTag("tasks-list")
         val all = record("GET /tasks/page?projectId=none", page("projectId=none").map { "${it.text("id")} ${it.text("title")} ${it.text("status")}" })
         all.forEach { row -> awaitScrollTo("tasks-list", hasTestTag("task:${row.substringBefore(' ')}")) }
-        scrollTo("tasks-list", hasTestTag("task-search")); capture("stack-tasks-list")
+        compose.onNodeWithTag("tasks-list").performScrollToIndex(0); capture("stack-tasks-list")
         // Failed: the server's failed rows and only those.
         val failed = record("GET /tasks/page?projectId=none&status=FAILED", page("projectId=none&status=FAILED").map { it.text("id")!! }.toSet())
         assertTrue("a short list, composed whole", failed.size in 1..4)
@@ -235,7 +235,7 @@ class RealStackDeviceTest {
         awaitScrollTo("task-detail", hasTestTag("task-dependencies-section")); capture("stack-task-prerequisite")
         // Follow: a watch on this task.
         tap("task-follow", "task-detail"); awaitTag("task-follow-sheet"); capture("stack-task-follow")
-        compose.onNodeWithTag("task-follow-confirm").performScrollTo().performClick(); awaitGone("task-follow-sheet")
+        tap("task-follow-confirm"); awaitGone("task-follow-sheet")
         compose.waitUntil(30_000) { get("/watches").toString().contains(id) }
         record("GET /watches mentions the task", true)
     }
@@ -262,7 +262,7 @@ class RealStackDeviceTest {
 
     @Test fun s04_bulkDeleteLeavesNothingOnTheServer() = journey("stack-bulk-delete") {
         val word = "a11bulk$stamp"
-        val ids = (1..2).map { scratch("A11 $word scratch $it") }
+        val ids = (1..2).map { scratch("A11 $word scratch $it") { put("completionCriterion", "OWNER_CONFIRMED"); put("ownerConfirmationReason", "OWNER_TRADE_OFF") } }
         signIn(); drawer("Tasks"); awaitTag("tasks-list")
         compose.onNodeWithTag("task-search").performTextInput(word); instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
         compose.waitUntil(30_000) { shownTasks() == ids.toSet() }
@@ -288,7 +288,7 @@ class RealStackDeviceTest {
         compose.waitUntil(30_000) { compose.onAllNodes(hasTestTag("tasks-scope") and hasText(sprint.text("title")!!, substring = true)).fetchSemanticsNodes().isNotEmpty() }
         val rows = record("GET /tasks/page?listId=${sprint.text("id")}", page("listId=${sprint.text("id")}").map { it.text("id")!! })
         rows.forEach { awaitScrollTo("tasks-list", hasTestTag("task:$it")) }
-        scrollTo("tasks-list", hasTestTag("task-search")); capture("stack-task-list-scope")
+        compose.onNodeWithTag("tasks-list").performScrollToIndex(0); capture("stack-task-list-scope")
         // The list's link, as a conversation would carry it.
         open("orbit-list:${paused.text("id")}")
         compose.waitUntil(30_000) { compose.onAllNodes(hasTestTag("tasks-scope") and hasText(paused.text("title")!!, substring = true)).fetchSemanticsNodes().isNotEmpty() }
@@ -340,6 +340,19 @@ class RealStackDeviceTest {
         awaitTag("project-start-own"); capture("stack-project-not-started")
         tap("project-start-own"); awaitTag("project-start-confirm"); capture("stack-project-start-sheet")
         compose.onNodeWithTag("project-start-confirm").performScrollTo().performClick()
+        // The server decides what this project can start on: one with no repository is refused a project branch
+        // and told how it can start. The sheet keeps the owner's choices and shows the server's own words.
+        val refusal = hasText("That start was not recorded", substring = true)
+        compose.waitUntil(60_000) { projectRecord(id).text("startedAt") != null || compose.onAllNodes(refusal).fetchSemanticsNodes().isNotEmpty() }
+        if (projectRecord(id).text("startedAt") == null) {
+            record("refused (shown in the sheet)", compose.onAllNodes(refusal).fetchSemanticsNodes().first().config.getOrNull(SemanticsProperties.Text)?.joinToString())
+            record("startedAt after the refusal", projectRecord(id)["startedAt"])
+            compose.onNode(refusal).performScrollTo(); capture("stack-project-start-refused")
+            compose.onNodeWithTag("project-start-line").performScrollTo().performClick()
+            compose.waitUntil(30_000) { compose.onAllNodesWithText(RunSettings.lineMain).fetchSemanticsNodes().isNotEmpty() }
+            compose.onAllNodesWithText(RunSettings.lineMain).onFirst().performClick()
+            compose.onNodeWithTag("project-start-confirm").performScrollTo().performClick()
+        }
         compose.waitUntil(60_000) { projectRecord(id).text("startedAt") != null }
         val started = projectRecord(id)
         record("after Start", "startedAt=${started.text("startedAt")} automatic=${started["automatic"]} maxConcurrentTasks=${started.number("maxConcurrentTasks")}")

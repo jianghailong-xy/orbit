@@ -63,8 +63,10 @@ class TalkBackCheckTest {
         if (body != null) { requestMethod = "POST"; doOutput = true; outputStream.use { it.write(body.toByteArray()) } }
         try { check(responseCode == 200); Wire.json.parseToJsonElement(inputStream.bufferedReader().use { it.readText() }).jsonObject } finally { disconnect() }
     }
-    private fun awaitText(text: String) = compose.waitUntil(20_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
-    private fun awaitTag(tag: String) = compose.waitUntil(20_000) { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() }
+    /** False, not an error, while the app is not the resumed window (TalkBack can put its own screen over it). */
+    private fun has(matcher: SemanticsMatcher) = runCatching { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }.getOrDefault(false)
+    private fun awaitText(text: String) = compose.waitUntil(20_000) { has(hasText(text, substring = true)) }
+    private fun awaitTag(tag: String) = compose.waitUntil(20_000) { has(hasTestTag(tag)) }
     private fun press(node: SemanticsNodeInteraction) = node.performSemanticsAction(SemanticsActions.OnClick)
     private fun open(uri: String) = compose.activityRule.scenario.onActivity { activity ->
         val original = activity.intent
@@ -82,6 +84,17 @@ class TalkBackCheckTest {
         while (!manager.isTouchExplorationEnabled && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(250)
         report.appendLine("talkback_enabled=${manager.isEnabled} touch_exploration=${manager.isTouchExplorationEnabled} services=${shell("settings get secure enabled_accessibility_services")}")
         assertTrue("TalkBack did not start (touch exploration stayed off)", manager.isTouchExplorationEnabled)
+        // Starting TalkBack can open TalkBack's own screen over the app; this is a check of the app, so bring it back.
+        SystemClock.sleep(3_000)
+        val until = SystemClock.uptimeMillis() + 20_000
+        while (SystemClock.uptimeMillis() < until) {
+            val front = automation.rootInActiveWindow?.packageName?.toString()
+            if (front == app.packageName) break
+            report.appendLine("over the app after TalkBack started: $front")
+            if (front != null) capture("talkback-started-over-app")
+            app.startActivity(Intent(app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+            SystemClock.sleep(1_500)
+        }
     }
 
     @After fun talkBackBack() {
@@ -152,7 +165,9 @@ class TalkBackCheckTest {
         capture(shot)
     }
 
-    @Test fun tasksAndProjectsWithTalkBackOn() {
+    @Test fun tasksAndProjectsWithTalkBackOn() = try { walkThrough() } catch (error: Throwable) { runCatching { capture("talkback-failed") }; throw error }
+
+    private fun walkThrough() {
         login()
         // The task list.
         press(compose.onAllNodesWithContentDescription("Open navigation").onFirst()); awaitText("Tasks")
