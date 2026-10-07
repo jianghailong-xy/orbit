@@ -1927,9 +1927,11 @@ function deliveryReviewMessage(
 export async function readOpenItemDeliveryCard(
   prisma: Pick<PrismaService, 'projectOpenItem' | 'projectCodebase' | 'task'>,
   itemId: string,
+  /** The owner of the session the turn is on: an item of anybody else's is no card of this turn's. */
+  ownerId: string,
 ): Promise<OpenItemDeliveryCard | null> {
-  const item = await prisma.projectOpenItem.findUnique({
-    where: { id: itemId },
+  const item = await prisma.projectOpenItem.findFirst({
+    where: { id: itemId, ownerId },
     select: {
       id: true,
       kind: true,

@@ -113,10 +113,11 @@ export class IntegrationJobRelay {
     jobId: string,
     runnerId: string,
     body: IntegrationJobResultRequest,
+    ownerId?: string,
   ): Promise<{ answer: IntegrationJobResultResponse; after: IntegrationResultAftermath | null }> {
     return applyIntegrationJobResult(
       this.prisma,
-      { jobId, runnerId, body },
+      { jobId, runnerId, ownerId, body },
       loggedRetry(this.logger, 'integrationJob.applyResult'),
     );
   }
@@ -645,7 +646,8 @@ export interface IntegrationResultAftermath {
  */
 export async function applyIntegrationJobResult(
   prisma: PrismaService,
-  input: { jobId: string; runnerId?: string; body: IntegrationJobResultRequest },
+  /** `ownerId`, the reporting runner's owner: another account's job is answered as one that does not exist. */
+  input: { jobId: string; runnerId?: string; ownerId?: string; body: IntegrationJobResultRequest },
   onRetry?: Parameters<typeof withTransactionRetry>[2],
 ): Promise<{ answer: IntegrationJobResultResponse; after: IntegrationResultAftermath | null }> {
   const body = input.body;
@@ -662,8 +664,12 @@ export async function applyIntegrationJobResult(
   }
 
   return withTransactionRetry(prisma, async (tx) => {
-    const job = await tx.projectIntegrationJob.findUnique({
-      where: { id: input.jobId },
+    // Found among the reporting runner's owner's jobs only, before anything about it is answered: a
+    // runner of another account is told neither that the job exists, nor the state it ended in, nor
+    // that it is still live — an id that names nothing is what it gets (T2 of the tenant isolation
+    // census). A runner of the same owner meets the claim fence below, as J-T3 has it.
+    const job = await tx.projectIntegrationJob.findFirst({
+      where: { id: input.jobId, ...(input.ownerId != null ? { ownerId: input.ownerId } : {}) },
       select: {
         id: true, projectId: true, ownerId: true, kind: true, state: true,
         taskId: true, sessionId: true, promotionId: true, targetRef: true, sourceRef: true,

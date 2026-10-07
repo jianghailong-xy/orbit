@@ -303,13 +303,17 @@ export async function lockOwnerTaskGraph(
  */
 export async function lockCreatorSessions(
   tx: Prisma.TransactionClient,
+  ownerId: string,
   sessionIds: ReadonlyArray<string | null | undefined>,
 ): Promise<void> {
   const ids = orderedIds(sessionIds);
   if (ids.length === 0) return;
+  // The writer's own Sessions only. A Task of this owner can only name a creator Session of this
+  // owner, so nothing a write needs is left out — and an id a caller sent from another account
+  // (a session header, a predecessor's creator) takes no lock on that account's row.
   await tx.$queryRaw`
     SELECT "id" FROM "session"
-    WHERE "id" = ANY(${ids}::uuid[])
+    WHERE "id" = ANY(${ids}::uuid[]) AND "owner_id" = ${ownerId}::uuid
     ORDER BY "id"
     FOR KEY SHARE`;
 }
@@ -342,13 +346,15 @@ export async function lockTaskLists(
  */
 export async function creatorSessionsOf(
   tx: Prisma.TransactionClient,
+  ownerId: string,
   taskIds: ReadonlyArray<string | null | undefined>,
 ): Promise<string[]> {
   const ids = orderedIds(taskIds);
   if (ids.length === 0) return [];
+  // The owner's own Tasks: a Task id named from another account reads as no Task at all.
   const rows = await tx.$queryRaw<Array<{ creatorSessionId: string | null }>>`
     SELECT "creator_session_id" AS "creatorSessionId"
     FROM "task"
-    WHERE "id" = ANY(${ids}::uuid[]) AND "creator_session_id" IS NOT NULL`;
+    WHERE "id" = ANY(${ids}::uuid[]) AND "owner_id" = ${ownerId}::uuid AND "creator_session_id" IS NOT NULL`;
   return orderedIds(rows.map((r) => r.creatorSessionId));
 }

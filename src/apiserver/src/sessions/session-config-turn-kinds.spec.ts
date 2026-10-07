@@ -83,6 +83,8 @@ function serviceOn(current: {
       },
       count: async () => 0,
     },
+    // An admin, for whom a shared row resolves as any row of theirs does (usableProviderScope).
+    user: { findUnique: async () => ({ role: 'ADMIN' }) },
     modelProvider: {
       findFirst: async () => modelProvider ?? null,
       findMany: async () => (modelProvider ? [modelProvider] : []),
