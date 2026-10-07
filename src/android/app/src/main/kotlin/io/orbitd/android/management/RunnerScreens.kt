@@ -35,6 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
@@ -158,7 +159,8 @@ private fun StatusDot(presence: String, size: Int = 8) {
 }
 
 @Composable
-private fun Chevron() = Text("›", style = MaterialTheme.typography.titleLarge, color = Ink.muted.copy(alpha = .6f))
+/** A row's "opens a page" mark: drawn, not read (TalkBack would say the character's name). */
+private fun Chevron() = Text("›", Modifier.clearAndSetSemantics { }, style = MaterialTheme.typography.titleLarge, color = Ink.muted.copy(alpha = .6f))
 
 /** A sentence with the workspace names it names set bold and the command it quotes in monospace. */
 private fun styled(text: String, strong: List<String> = emptyList(), code: List<String> = emptyList()): AnnotatedString = buildAnnotatedString {
@@ -459,7 +461,7 @@ private fun RunnerHead(runner: JsonObject, now: Long) {
     val presence = RunnerPage.presence(runner, now)
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         Box(Modifier.size(56.dp).clip(RoundedCornerShape(15.dp)).background(Color(0xFF6E7076)), Alignment.BottomEnd) {
-            Text("▣", Modifier.align(Alignment.Center), color = Color.White, style = MaterialTheme.typography.titleLarge)
+            Text("▣", Modifier.align(Alignment.Center).clearAndSetSemantics { }, color = Color.White, style = MaterialTheme.typography.titleLarge)
             Box(Modifier.padding(3.dp)) { StatusDot(presence, 14) }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -480,7 +482,7 @@ private fun RunnerHead(runner: JsonObject, now: Long) {
 private fun AttentionRow(item: AttentionItem, now: Long, action: @Composable () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).background(Ink.tone(item.tone).copy(alpha = .13f)), Alignment.Center) {
-            Text("!", color = Ink.tone(item.tone), fontWeight = FontWeight.Bold)
+            Text("!", Modifier.clearAndSetSemantics { }, color = Ink.tone(item.tone), fontWeight = FontWeight.Bold)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(item.title, style = MaterialTheme.typography.titleMedium)
@@ -530,10 +532,13 @@ private fun RunnerCapacity(runner: JsonObject, workspaces: List<JsonObject>, mod
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(RunnerCopy.MAX_CONCURRENT, Modifier.weight(1f))
             Text("$maxConc", color = Ink.muted)
-            TextButton(onClick = { maxConc -= 1; pending = true; edits++ }, enabled = maxConc > 1,
-                modifier = Modifier.semantics { contentDescription = "Decrease ${RunnerCopy.MAX_CONCURRENT}" }) { Text("−") }
-            TextButton(onClick = { maxConc += 1; pending = true; edits++ }, enabled = maxConc < 64,
-                modifier = Modifier.semantics { contentDescription = "Increase ${RunnerCopy.MAX_CONCURRENT}" }) { Text("+") }
+            // The glyph carries the words, so TalkBack says them alone, not "…, minus".
+            TextButton(onClick = { maxConc -= 1; pending = true; edits++ }, enabled = maxConc > 1) {
+                Text("−", Modifier.clearAndSetSemantics { contentDescription = "Decrease ${RunnerCopy.MAX_CONCURRENT}" })
+            }
+            TextButton(onClick = { maxConc += 1; pending = true; edits++ }, enabled = maxConc < 64) {
+                Text("+", Modifier.clearAndSetSemantics { contentDescription = "Increase ${RunnerCopy.MAX_CONCURRENT}" })
+            }
         }
         RunnerPage.runnerDisk(workspaces)?.let { disk ->
             HorizontalDivider()
@@ -745,7 +750,7 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
             }
             RunnerPage.authStatus(line.auth)?.let { (text, tone) -> Text(text, style = MaterialTheme.typography.bodySmall, color = Ink.tone(tone)) }
             Box {
-                TextButton(onClick = { menu = true }, modifier = Modifier.semantics { contentDescription = "More for ${line.name}" }) { Text("⋯") }
+                TextButton(onClick = { menu = true }) { Text("⋯", Modifier.clearAndSetSemantics { contentDescription = "More for ${line.name}" }) }
                 DropdownMenu(menu, { menu = false }) {
                     DropdownMenuItem(text = { Text("Rename…") }, onClick = { menu = false; rename() })
                     if (!line.isDefault) DropdownMenuItem(text = { Text("Remove", color = if (offline) Ink.muted else Ink.red) }, enabled = !offline,

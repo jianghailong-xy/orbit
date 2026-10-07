@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
@@ -103,7 +104,7 @@ private fun ProvidersOverview(api: ManagementApi, revision: Long, open: (OrbitRo
                         Text(RunnerPage.displayName(runner))
                         Text(ProviderPools.runnerSummary(runner), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                     }
-                    Text("›", color = Ink.muted)
+                    Text("›", Modifier.clearAndSetSemantics { }, color = Ink.muted)
                 }
             }
         }
@@ -132,7 +133,7 @@ private fun ProvidersOverview(api: ManagementApi, revision: Long, open: (OrbitRo
                         Text(pool.label, Modifier.weight(1f), maxLines = 1)
                         Text(ProviderPools.poolSummary(pool, now), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                     }
-                    Text("›", color = Ink.muted)
+                    Text("›", Modifier.clearAndSetSemantics { }, color = Ink.muted)
                 }
             }
         }
@@ -520,7 +521,7 @@ private fun PoolKeyRow(key: JsonObject, pool: JsonObject, next: Boolean, tagged:
             Text(PoolPage.money(key), style = MaterialTheme.typography.labelMedium, color = Ink.muted)
             PoolPage.capPercent(key)?.let { Gauge(it / 100f, if (it >= 90) Ink.amber else MaterialTheme.colorScheme.primary, Modifier.width(96.dp)) }
             if (PoolPage.canRemove(key, pool) || PoolPage.canSwitch(key)) Box {
-                TextButton(onClick = { menu = true }, modifier = Modifier.semantics { contentDescription = "More for ${key.text("label")}" }) { Text("⋯") }
+                TextButton(onClick = { menu = true }) { Text("⋯", Modifier.clearAndSetSemantics { contentDescription = "More for ${key.text("label")}" }) }
                 DropdownMenu(menu, { menu = false }) {
                     if (PoolPage.canSwitch(key)) DropdownMenuItem(text = { Text(if (key.bool("enabled") == true) "Disable" else "Enable") }, onClick = { menu = false; switch() })
                     if (PoolPage.canRemove(key, pool)) DropdownMenuItem(text = { Text("Remove", color = Ink.red) }, onClick = { menu = false; remove() })
@@ -551,7 +552,7 @@ private fun PersonRow(person: JsonObject, pool: JsonObject, line: WhoCanUseIt.Pe
             }
         }
         if (manages) Box {
-            TextButton(onClick = { menu = true }, modifier = Modifier.semantics { contentDescription = "More for ${person.text("name")}" }) { Text("⋯") }
+            TextButton(onClick = { menu = true }) { Text("⋯", Modifier.clearAndSetSemantics { contentDescription = "More for ${person.text("name")}" }) }
             DropdownMenu(menu, { menu = false }) {
                 DropdownMenuItem(text = { Text("Remove from pool", color = Ink.red) }, onClick = { menu = false; remove() })
                 if (offersRoles) {
