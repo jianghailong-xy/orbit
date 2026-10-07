@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.*
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import io.orbitd.android.MainActivity
 import io.orbitd.android.TestOrbitApplication
@@ -275,7 +276,9 @@ class WikiPlanPageTest {
         compose.onNodeWithTag("wiki-plan-edit-title").performTextReplacement("会话运行模型")
         // Take out the overview, move the pitfalls up, add a section with a title of its own and a kind.
         compose.onNodeWithTag("wiki-plan-edit-remove:0").performClick()
-        compose.onNodeWithTag("wiki-plan-edit-up:1").performClick()
+        // Move up, the row's TalkBack action (the drag itself is WikiPlanEditDragTest's).
+        compose.runOnIdle { compose.onNodeWithTag("wiki-plan-edit-row:1").fetchSemanticsNode().config[SemanticsActions.CustomActions]
+            .first { it.label == WikiPlanCopy.moveUp }.action() }
         compose.onNodeWithTag("wiki-plan-edit-add").performClick()
         compose.onNodeWithTag("wiki-plan-edit-row-title:3").performTextInput("新的一节")
         compose.onNodeWithTag("wiki-plan-edit-kind:3").performClick()
