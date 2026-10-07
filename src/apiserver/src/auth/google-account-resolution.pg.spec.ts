@@ -10,8 +10,8 @@
  *   (1) 0392 made `user.password_hash` nullable and nothing else of `user` changed — each column's
  *       NULL or NOT NULL, the email's unique index still on the address as written, no index on
  *       lower(email) — and it runs again without touching a password;
- *   (2) §5.2's table (test-support/google-account-resolution-cases.ts), every row but
- *       ACCOUNT_DISABLED under both sign-up policies, end to end — /start, Google, the callback and
+ *   (2) §5.2's table (test-support/google-account-resolution-cases.ts), every row, ACCOUNT_DISABLED
+ *       (§5.5) included, under both sign-up policies, end to end — /start, Google, the callback and
  *       the exchange — read back from the tables: who is signed in, which identity is linked, which
  *       account is opened, the Activity row (credential_kind LOGIN) — and a refusal writes nothing;
  *   (3) first sign-ins of one Google account at once, made to meet at their INSERT by a lock this spec
@@ -133,6 +133,8 @@ test('Google account resolution on PostgreSQL: 0392, §5.2 row by row under both
       "role text NOT NULL DEFAULT 'MEMBER'::text",
       'claude_oauth_token_enc text NULL',
       'claude_oauth_token_set_at timestamp NULL',
+      // 0396, after it (§5.5): when an administrator disabled the account.
+      'disabled_at timestamp NULL',
     ];
     assert.deepEqual(await columns(), shape);
     const indexes = async () => (await rows(
@@ -254,7 +256,8 @@ test('Google account resolution on PostgreSQL: 0392, §5.2 row by row under both
     const accounts: Array<{ id: string; email: string }> = [];
     for (const account of entry.accounts) {
       const seeded = { id: randomUUID(), email: tagged(account.email, tag) };
-      await sql.query(`INSERT INTO "user" (id, email, name, password_hash) VALUES ($1, $2, 'Seeded', $3)`, [seeded.id, seeded.email, SEEDED_HASH]);
+      await sql.query(`INSERT INTO "user" (id, email, name, password_hash, disabled_at) VALUES ($1, $2, 'Seeded', $3, $4)`,
+        [seeded.id, seeded.email, SEEDED_HASH, account.disabled ? new Date() : null]);
       if (account.linkedTo) {
         await sql.query(
           `INSERT INTO user_identity (id, user_id, provider, subject, email) VALUES (gen_random_uuid(), $1, 'google', $2, $3)`,
@@ -319,7 +322,7 @@ test('Google account resolution on PostgreSQL: 0392, §5.2 row by row under both
     }]);
   };
 
-  await t.test('(2) §5.2 row by row, every row but ACCOUNT_DISABLED, under EXISTING_ACCOUNTS and under OPEN, end to end', async (t) => {
+  await t.test('(2) §5.2 row by row, ACCOUNT_DISABLED included, under EXISTING_ACCOUNTS and under OPEN, end to end', async (t) => {
     // Row 2 first, while the deployment has no account; then the administrator, and every other row.
     const ordered = [...RESOLUTION_CASES.entries()].sort(([, a], [, b]) => Number(a.accounts.length > 0) - Number(b.accounts.length > 0));
     for (const [index, entry] of ordered) {

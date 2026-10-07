@@ -2023,6 +2023,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // INSERT, UPDATE or DELETE: the build reads every task row once and writes none, and the DROP
       // takes the index away inside the migration's own transaction, so no reader sees it missing.
       '0395_project_rollup_covering_idx_columns',
+      // Disabled accounts (0396): one ADD COLUMN of a nullable TIMESTAMP(3) `disabled_at` on `user`,
+      // with no default, so the ALTER is catalog-only, and nothing else — no index, constraint,
+      // function, trigger or type. `user` is not a preserved relation; no task, project, acceptance
+      // or DONE fence object is named, and no row is written or backfilled: every account reads NULL,
+      // enabled. 0394 was held by a branch not yet on main when it was numbered.
+      '0396_user_disabled_at',
       // `runner.login_region` (0397): one nullable TEXT column, no default, on `runner`, beside the
       // sign-in relay's `login_account` (0296) — which of Kimi Code's two sites the relay signs in
       // on. Read against every claim above: one `ADD COLUMN` statement and nothing else — no
