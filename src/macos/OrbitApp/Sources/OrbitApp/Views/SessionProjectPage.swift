@@ -689,17 +689,13 @@ private struct ProjectMergeCardView: View {
         .padding(.vertical, 4)
     }
 
-    private func header(_ title: String, symbol: String?, badge: String? = nil) -> some View {
+    private func header(_ title: String, symbol: String, badge: String? = nil) -> some View {
         HStack(spacing: 8) {
-            if let symbol {
-                Image(systemName: symbol)
-                    .font(.orbitLabel.weight(.semibold))
-                    .foregroundStyle(tint)
-                    .frame(width: 26, height: 26)
-                    .background(tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 7))
-            } else {
-                ProgressView().controlSize(.small).tint(tint)
-            }
+            Image(systemName: symbol)
+                .font(.orbitLabel.weight(.semibold))
+                .foregroundStyle(tint)
+                .frame(width: 26, height: 26)
+                .background(tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 7))
             Text(title).font(.headline).foregroundStyle(shape == .asking ? Color.primary : tint)
                 .lineLimit(2)
             Spacer(minLength: 6)
@@ -756,8 +752,13 @@ private struct ProjectMergeCardView: View {
     }
 
     /// B: under way, and the reader may walk away; Cancel until the push begins.
+    ///
+    /// The head carries the same merge mark in its tile as A and D, rather than a spinner (owner
+    /// decision 2026-10-07): the card has one moving mark and it is the landing row's ring — the
+    /// project page's Integrating mark, sitting beside the word `fetching`. A spinner here said
+    /// "work is happening" a fourth time, in a mark neither this card nor this app uses elsewhere.
     @ViewBuilder private func merging(_ view: ProjectPromotionView) -> some View {
-        header(PromotionCards.pageTitle(view), symbol: nil)
+        header(PromotionCards.pageTitle(view), symbol: "arrow.triangle.merge")
         Text(PromotionCards.mergingStatusLine(view)).font(.orbitLabel)
         if let landing { ProjectLandingRow(line: landing) }
         Text(PromotionCards.pageNothingToDo).font(.orbitMeta).foregroundStyle(.secondary)

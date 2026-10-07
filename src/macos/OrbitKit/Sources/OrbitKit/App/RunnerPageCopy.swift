@@ -54,6 +54,7 @@ public enum RunnerPageCopy {
     public static func runnerEnginesChecked(when: String) -> String { "Checked \(when)" }
     public static func runnerEnginesReported(when: String) -> String { "Reported \(when)" }
     public static func runnerEngineAccountsSignedIn(count: Int) -> String { "\(count) accounts signed in" }
+    public static func runnerEngineNext(account: String) -> String { "Next: \(account)" }
     public static func runnerEngineUpdateFailed(version: String, when: String) -> String {
         "Update to \(version) failed \(when)"
     }

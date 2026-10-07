@@ -72,17 +72,26 @@ final class AgentsStackWiringTests: XCTestCase {
                        "no boolean push left on the Agents stack")
     }
 
-    /// The list this stack keeps mounted under whatever it pushes over it is not on screen then, so
-    /// its rows' animated cues — one 30Hz `TimelineView` per running row — are held back until it is
-    /// the page showing again. The switch is set at the one place that already knows what the stack
-    /// shows (`sectionAtRoot`, nothing pushed), and read by the two glyphs themselves, so every row
-    /// that draws one — a session's, a project's, a folder's — follows without threading a flag
-    /// through each. The drawer's cues are held back the same way by its own `live:`.
+    /// A surface this stack keeps mounted under another is not on screen then, so its rows' animated
+    /// cues — one 30Hz `TimelineView` per running row — are held back until it is the surface
+    /// showing again. Three surfaces get covered, and the shell answers for all three: the list at
+    /// the root (nothing pushed — `sectionAtRoot`), a page of its own (only while it is the top of
+    /// the stack: a conversation pushed over a project's or a folder's sessions covers it), and both
+    /// of them again under Settings' sheet. Every answer is read by the two glyphs themselves, so
+    /// every row that draws one — a session's, a project's, a folder's — follows without threading a
+    /// flag through each. The drawer's cues are held back the same way by its own `live:`.
     func testTheCoveredListHoldsItsAnimatedRowCuesBack() throws {
         let agents = code(try slice(try appSource("Views/CompactShell.swift"),
                                     from: "case .agents:", to: "// RUNNERS"))
-        XCTAssertTrue(agents.contains(".environment(\\.liveRowCues, model.sectionAtRoot)"),
-                      "nothing pushed is exactly when the list is the page showing")
+        XCTAssertTrue(agents.contains(".environment(\\.liveRowCues, model.sectionAtRoot && !model.settingsPresented)"),
+                      "nothing pushed and no sheet is exactly when the list is the page showing")
+        XCTAssertTrue(agents.contains("AgentsStackPage(node: node)"),
+                      "a pushed page goes through the wrapper that asks whether it is the top")
+        let page = code(try slice(try appSource("Views/CompactShell.swift"),
+                                  from: "private struct AgentsStackPage<Content: View>: View {", to: "\n}\n"))
+        XCTAssertTrue(page.contains(
+            "content.environment(\\.liveRowCues, model.nav.path.last == node && !model.settingsPresented)"),
+                      "the top of the stack is the page showing; Settings' sheet covers it too")
 
         let views = code(try appSource("Views/AgentsView.swift"))
         let spinner = try slice(views, from: "struct SpinnerGlyph: View {", to: "\n}\n")

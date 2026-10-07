@@ -42,22 +42,18 @@
   },
   "orders": {
     "homeBands": [
-      "statusLine",
+      "state",
       "search",
-      "reviewBanner",
       "principles",
-      "recentDecisions",
-      "recentlyChanged",
-      "agentsUsed"
+      "documents",
+      "more"
     ],
     "homeBandTitles": [
       null,
       null,
-      null,
       "Principles",
-      "Recent decisions",
-      "Recently changed",
-      "Agents used the wiki"
+      null,
+      null
     ],
     "articleSections": [
       "crumb",

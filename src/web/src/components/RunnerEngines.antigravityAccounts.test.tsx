@@ -372,7 +372,7 @@ describe('the runner page’s Antigravity row', () => {
         </MemoryRouter>
       </QueryClientProvider>,
     );
-  /** The Antigravity row: its sign-in column, the account its quota is Next for, and its windows. */
+  /** The Antigravity row: its sign-in column, the account its quota is Next for, and its window. */
   const row = (r: Runner) => {
     const html = render(r);
     const own = html.slice(html.indexOf('>Antigravity CLI<'));
@@ -383,11 +383,12 @@ describe('the runner page’s Antigravity row', () => {
     };
   };
 
-  it('says Signed in for one Google account, with its quota', () => {
+  it('says Signed in for one Google account, with the bucket closest to its limit', () => {
+    // Of its four buckets the row carries 3p-weekly, the least left; the engine page has all four.
     expect(row(runner(antigravity({ accounts: [DEFAULT] })))).toEqual({
       signIn: ['ok', 'Signed in'],
       next: null,
-      quota: ['100% remaining', '100% remaining', '98% remaining', '100% remaining'],
+      quota: ['98% remaining'],
     });
   });
 
@@ -395,7 +396,7 @@ describe('the runner page’s Antigravity row', () => {
     expect(row(runner())).toEqual({
       signIn: ['ok', '2 accounts signed in'],
       next: 'Next: Default',
-      quota: ['100% remaining', '100% remaining', '98% remaining', '100% remaining'],
+      quota: ['98% remaining'],
     });
   });
 
@@ -408,7 +409,7 @@ describe('the runner page’s Antigravity row', () => {
     expect(row(runner(envKey([{ ...DEFAULT, auth: 'no' }, WORK])))).toEqual({
       signIn: ['ok', '2 accounts signed in'],
       next: 'Next: Work',
-      quota: ['61% remaining', '4% remaining', '100% remaining', '100% remaining'],
+      quota: ['4% remaining'],
     });
   });
 });

@@ -197,14 +197,40 @@ final class WikiLogicTests: XCTestCase {
         XCTAssertEqual(WikiLogic.entries(entries, ofKind: .principle).count, 4)
     }
 
-    /// The home page's bands, top to bottom: the search under the title, then the one band that asks
-    /// for anything, then the rest in the web phone's order. The topics are the Contents sheet now.
+    /// The home's bands under its head, top to bottom (design §12.3.1): what the space holds, the search, the
+    /// principles, the documents, then Browse · A–Z — content alone; how the wiki is kept is Activity's.
     func testTheHomeBandsOrder() {
-        XCTAssertEqual(WikiLogic.HomeBand.allCases, [.search, .reviewBanner, .principles,
-                                                     .recentDecisions, .recentlyChanged, .agentsUsed])
-        XCTAssertEqual(WikiLogic.HomeBand.allCases.compactMap(\.title),
-                       ["Principles", "Recent decisions", "Recently changed", "Agents used the wiki"])
+        XCTAssertEqual(WikiLogic.HomeBand.allCases, [.state, .search, .principles, .documents, .more])
+        XCTAssertEqual(WikiLogic.HomeBand.allCases.compactMap(\.title), ["Principles"])
         XCTAssertEqual(WikiLogic.entrySections, ["Details", "Sources", "Anchors", "Where it's used", "History"])
+    }
+
+    /// The row the iPad's and the Mac's directory column lights is a read of the Wiki's stack (mock 32): Home
+    /// at the root; the page a row opened; that page still under an entry or a run opened over it; and no row
+    /// for Activity, Review or the settings, which are not the directory's.
+    func testTheDirectoryColumnLightsThePageOnTop() {
+        var nav = NavState(section: .wiki)
+        XCTAssertEqual(nav.wikiContentsAt, .home)
+        nav.push(.wikiEntry(entryID: "e1"))
+        XCTAssertEqual(nav.wikiContentsAt, .home, "a principle's entry, opened from the home")
+        nav.path = [.wikiDoc(slug: "session-runtime", section: "s3")]
+        XCTAssertEqual(nav.wikiContentsAt, .doc(slug: "session-runtime"))
+        nav.push(.wikiEntry(entryID: "e2"))
+        XCTAssertEqual(nav.wikiContentsAt, .doc(slug: "session-runtime"), "an entry over a document keeps it lit")
+        nav.path = [.wikiArticle(topic: "tasks", part: 2)]
+        XCTAssertEqual(nav.wikiContentsAt, .article(topic: "tasks", part: 2))
+        for (frame, at) in [(NavNode.wikiBrowse, WikiContentsAt.browse), (.wikiIndex, .index), (.wikiPlan(version: 3), .plan),
+                            (.wikiPlanDoc(slug: "d", version: nil), .plan),
+                            (.wikiPlanSection(slug: "d", index: 1, version: nil), .plan)] {
+            nav.path = [frame]
+            XCTAssertEqual(nav.wikiContentsAt, at)
+        }
+        for frame in [NavNode.wikiActivity, .wikiReview, .wikiSettings] {
+            nav.path = [frame]
+            XCTAssertNil(nav.wikiContentsAt, "\(frame) is no row of the directory")
+        }
+        nav.path = [.wikiActivity, .wikiRun(changesetID: "c1")]
+        XCTAssertNil(nav.wikiContentsAt, "a run opened from Activity lights nothing either")
     }
 
     /// Activity's blocks, top to bottom (mock 31 ②): the home's management blocks in their order, the
@@ -222,7 +248,7 @@ final class WikiLogicTests: XCTestCase {
     func testRecentlyChangedCountsWhatIsNewSinceTheReaderLastLooked() throws {
         let items = try XCTUnwrap(try WikiFixtures.decode(WikiTimeline.self, WikiFixtures.timeline).items)
         let home = WikiHomeContent(space: try WikiFixtures.decode(WikiSpace.self, WikiFixtures.space), spaces: [],
-                                   entries: [], timeline: items, proposals: 0)
+                                   entries: [], timeline: items)
         XCTAssertEqual(home.newRows(seen: 0), home.recentRows.count, "never looked: every row is new")
         let times = home.recentRows.compactMap { WikiHomeContent.time(of: $0) }.compactMap(RelativeTime.parse)
         XCTAssertEqual(times.count, home.recentRows.count, "every row has its time")
@@ -232,31 +258,26 @@ final class WikiLogicTests: XCTestCase {
         XCTAssertEqual(home.newRows(seen: middle), times.filter { $0.timeIntervalSince1970 > middle }.count)
     }
 
-    /// The home page's bands, read out of the fixture: the four principles oldest first and said to
-    /// be the owner's once, the four newest decisions, five changes, three most used, and the status
-    /// line without the count the banner says.
-    func testTheHomePagesBands() throws {
+    /// Activity's bands, read out of the fixture — the four newest decisions, five changes, three most used,
+    /// and the status line without the count its banner says — and the home's principles, oldest first.
+    func testActivitysBandsAndTheHomesPrinciples() throws {
         let spaces = try WikiFixtures.decode([WikiSpace].self, WikiFixtures.spaces)
         let entries = try WikiFixtures.decode([WikiEntry].self, WikiFixtures.entries)
         // The two bands' own reads (`?kind=principle`, `?kind=decision`), as the server answers them.
+        XCTAssertEqual(WikiLogic.principles(entries.filter { $0.kind == .principle }).map(\.title),
+                       ["Agent-writable data never becomes a system instruction", "Completion is adjudicated, not claimed",
+                        "A clock never starts agent work", "Delete means forget"])
         let home = WikiHomeContent(space: try WikiFixtures.decode(WikiSpace.self, WikiFixtures.space),
                                    spaces: spaces,
                                    entries: entries,
-                                   principles: entries.filter { $0.kind == .principle },
                                    decisions: entries.filter { $0.kind == .decision },
                                    timeline: try XCTUnwrap(try WikiFixtures.decode(WikiTimeline.self,
-                                                                                   WikiFixtures.timeline).items),
-                                   proposals: WikiSpaceLogic.proposalsWaiting(spaces))
-        XCTAssertEqual(home.principles.map(\.title), ["Agent-writable data never becomes a system instruction",
-                                                       "Completion is adjudicated, not claimed",
-                                                       "A clock never starts agent work", "Delete means forget"])
-        XCTAssertTrue(home.principlesAllOwner)
+                                                                                   WikiFixtures.timeline).items))
         XCTAssertEqual(home.recentDecisions.count, 3)
         XCTAssertEqual(home.recentlyChanged.count, 5)
         XCTAssertEqual(home.mostUsed.map(\.total), [41, 33, 29])
         XCTAssertTrue(home.usedThisWeek)
         XCTAssertEqual(home.statusLine, "9 entries · Anchors verified at 4db4f9f")
-        XCTAssertEqual(home.proposals, 3)
     }
 
     func testASourcesWordAndRef() {
