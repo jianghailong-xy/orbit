@@ -101,8 +101,8 @@
   `redirect_uri=${PUBLIC_ORIGIN}/api/auth/google/callback`、`scope=openid email profile`、`state`、`nonce`、
   `code_challenge`（Google 这一侧的 PKCE，与客户端那一对不是同一个）、`prompt=select_account`。
 - 未启用 Google：Web 302 回 `/login?google_error=GOOGLE_NOT_CONFIGURED`，原生回 `orbit://auth/google?error=…`。
-- 参数不合法（`code_challenge` 不是 S256 格式，或 `client_state` 超过 512 字符）、该 IP 超出限流、未完成的 flow
-  已达总量上限（7.4）时，也按 4.2 失败表 302 回跳而不回 JSON，错误码依次为 `GOOGLE_BAD_REQUEST`、
+- 参数不合法（`code_challenge` 缺失或不是 S256 格式，或 `client_state` 超过 512 字符）、该 IP 超出限流、未完成的
+  flow 已达总量上限（7.4）时，也按 4.2 失败表 302 回跳而不回 JSON，错误码依次为 `GOOGLE_BAD_REQUEST`、
   `GOOGLE_RATE_LIMITED`、`GOOGLE_SIGN_IN_BUSY`；这些回跳与上一条一样不设 cookie、不写库（连过期行也不清理），
   原生端只在 `client_state` 合法时带回它；`client` 缺失或不是 `web` / `native` 时无处可回，仍回 400。
 
