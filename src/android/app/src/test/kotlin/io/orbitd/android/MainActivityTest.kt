@@ -9,6 +9,9 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.isDialog
 import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.net.*
 import org.junit.Rule
@@ -77,10 +80,12 @@ class MainActivityTest {
         compose.waitUntil(5_000) { appSession().state.value is AuthState.SignedIn }
         compose.onNodeWithContentDescription("Open navigation").performClick()
         compose.onNodeWithText("Settings").performScrollTo().performClick()
-        compose.onNodeWithText("Edit profile").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Edit profile").assertIsDisplayed()
         compose.activityRule.scenario.recreate()
-        compose.onNodeWithText("Edit profile").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Edit profile").assertIsDisplayed()
         compose.onNodeWithText("Sign out").performScrollTo().performClick()
+        compose.onNodeWithText("Sign out of example.test?").assertIsDisplayed()
+        compose.onNode(hasText("Sign out") and hasAnyAncestor(isDialog())).performClick()
         awaitLogin()
         compose.onNodeWithText("Password").assertIsDisplayed()
         compose.onNodeWithText("fixture-password").assertDoesNotExist()
