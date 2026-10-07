@@ -30,6 +30,8 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.*
@@ -264,7 +266,7 @@ private fun DocReviewBanner(doc: WikiDoc, nextMarked: () -> Unit) {
     val amber = WikiPalette.amber
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).background(systemOrange.copy(alpha = 0.10f), RoundedCornerShape(12.dp))
         .padding(12.dp).testTag("wiki-doc-review"), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("⚠", style = WikiType.subtext, color = amber)
+        Text("⚠", Modifier.clearAndSetSemantics {}, style = WikiType.subtext, color = amber)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(buildAnnotatedString {
                 withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = amber)) { append(WikiDocCopy.needsReview) }
@@ -281,7 +283,8 @@ private fun DocReviewBanner(doc: WikiDoc, nextMarked: () -> Unit) {
                 }
                 Text(WikiDocCopy.nextMarked, style = WikiType.label, color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.clickable(role = Role.Button, onClick = nextMarked).heightIn(min = 48.dp)
-                        .wrapContentHeight(Alignment.CenterVertically).padding(horizontal = 4.dp).testTag("wiki-doc-next-marked"))
+                        .wrapContentHeight(Alignment.CenterVertically).padding(horizontal = 4.dp).testTag("wiki-doc-next-marked")
+                        .semantics { contentDescription = WikiDocCopy.nextMarked.removeSuffix(" ›") })
             }
         }
     }
@@ -310,7 +313,7 @@ private fun DocScope(doc: WikiDoc, open: Boolean, toggle: () -> Unit, openDoc: (
                 Text(WikiDocCopy.notCovered, style = WikiType.label, color = WikiPalette.secondary)
                 out.forEach { line ->
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("•", style = WikiType.subtext)
+                        Text("•", Modifier.clearAndSetSemantics {}, style = WikiType.subtext)
                         Text(line.text, Modifier.weight(1f, fill = false), style = WikiType.subtext)
                         line.docs.orEmpty().forEach { target ->
                             Text(WikiDocLogic.scopeTarget(target), style = WikiType.subtext, color = MaterialTheme.colorScheme.primary,
@@ -330,7 +333,7 @@ private fun DocScopeField(title: String, lines: List<String>) {
         Text(title, style = WikiType.label, color = WikiPalette.secondary)
         lines.forEach { line ->
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("•", style = WikiType.subtext)
+                Text("•", Modifier.clearAndSetSemantics {}, style = WikiType.subtext)
                 Text(line, style = WikiType.subtext)
             }
         }
@@ -369,7 +372,7 @@ private fun DocBlockView(row: DocRow.Block, notes: Map<Int, WikiDocFootnote>, op
             Text(block.text ?: "", Modifier.padding(10.dp), style = WikiType.mono, softWrap = false)
         }
         "item" -> Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("•", Modifier.alignByBaseline(), style = WikiType.prose)
+            Text("•", Modifier.alignByBaseline().clearAndSetSemantics {}, style = WikiType.prose)
             DocParagraph(row, notes, openNote, onNote, onMark, 5, Modifier.weight(1f).alignByBaseline().testTag(tag))
         }
         else -> DocParagraph(row, notes, openNote, onNote, onMark, 6, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag(tag))
@@ -458,10 +461,15 @@ private fun DocFootnoteRow(note: WikiDocFootnote, entry: WikiDocViaEntry?, open:
                     modifier = Modifier.background(tint.copy(alpha = 0.12f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 1.dp))
                 Text(WikiDocLogic.footnoteWhere(note), Modifier.weight(1f), style = if (WikiDocLogic.isRepo(note)) WikiType.mono else WikiType.subtext,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(WikiDocCopy.verdictList(note.verdict), style = WikiType.label, maxLines = 1,
+                // The row's words without the tick or the cross; the bare tick in the card's words ("quote verified").
+                Text(WikiDocCopy.verdictList(note.verdict), Modifier.semantics { contentDescription = listOf(WikiDocCopy.verdictList(note.verdict),
+                    WikiDocCopy.verdictCard(note.verdict)).map { words -> words.filter { it != '✓' && it != '✗' }.trim() }.first { it.isNotEmpty() } },
+                    style = WikiType.label, maxLines = 1,
                     color = if (checked) LocalOrbitColors.current.success else MaterialTheme.colorScheme.error)
             }
-            Text(note.quote?.let(WikiDocLogic::quoted) ?: WikiDocCopy.noQuoteGiven, style = WikiType.subtext, color = WikiPalette.secondary,
+            // Read without its typographic quotes: inside the row TalkBack spoke an opening “ on its own.
+            Text(note.quote?.let(WikiDocLogic::quoted) ?: WikiDocCopy.noQuoteGiven, Modifier.semantics { contentDescription = note.quote ?: WikiDocCopy.noQuoteGiven.removePrefix("— ") },
+                style = WikiType.subtext, color = WikiPalette.secondary,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, textDecoration = if (note.verdict == "not_found") TextDecoration.LineThrough else null)
             if (entry != null) Text("via ${entry.title}${WikiDocLogic.viaEntryStatus(entry)?.let { " · $it" } ?: ""}", style = WikiType.meta,
                 color = WikiPalette.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -544,7 +552,7 @@ internal fun WikiDocFootnoteSheet(footnote: WikiDocFootnote, entry: WikiDocViaEn
                 WikiDocLogic.CardPart.HEAD -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(WikiDocCopy.noteLabel(footnote.n), style = WikiType.label.copy(fontWeight = FontWeight.SemiBold, fontFeatureSettings = "tnum"),
                         color = MaterialTheme.colorScheme.primary)
-                    Text(wikiFootnoteGlyph(footnote.kind), style = WikiType.label, color = WikiPalette.secondary)
+                    Text(wikiFootnoteGlyph(footnote.kind), Modifier.clearAndSetSemantics {}, style = WikiType.label, color = WikiPalette.secondary)
                     Text(WikiDocCopy.footnoteKind(footnote.kind), style = WikiType.label.copy(fontWeight = FontWeight.SemiBold))
                     Row(Modifier.weight(1f)) {
                         WikiDocLogic.subLabel(footnote)?.let { Text("· $it", style = WikiType.label, color = WikiPalette.secondary, maxLines = 1,
@@ -582,7 +590,7 @@ internal fun WikiDocFootnoteSheet(footnote: WikiDocFootnote, entry: WikiDocViaEn
                     .heightIn(min = 48.dp).testTag("wiki-doc-via-entry"), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(WikiDocCopy.viaEntry, style = WikiType.label, color = WikiPalette.secondary)
-                    Text(wikiKindGlyph(entry.kind), style = WikiType.label, color = WikiPalette.secondary)
+                    Text(wikiKindGlyph(entry.kind), Modifier.clearAndSetSemantics {}, style = WikiType.label, color = WikiPalette.secondary)
                     Text(entry.title, Modifier.weight(1f), style = WikiType.subtext.copy(fontWeight = FontWeight.SemiBold), maxLines = 1,
                         overflow = TextOverflow.Ellipsis)
                     wikiKnownTrust(entry.trust)?.let { WikiBadge(WikiCopy.trustLabel(it), WikiLogic.trustTone(it)) }

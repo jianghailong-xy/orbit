@@ -18,6 +18,8 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -201,7 +203,7 @@ private fun WikiEntryPage(detail: WikiEntryDetail, now: Instant, busy: Boolean, 
                 if (anchors.isEmpty()) CardNote(WikiCopy.noAnchors)
                 anchors.forEach { anchor ->
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("◎", style = WikiType.meta, color = WikiPalette.secondary)
+                        Text("◎", Modifier.clearAndSetSemantics {}, style = WikiType.meta, color = WikiPalette.secondary)
                         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             SelectionContainer { Text(WikiLogic.anchorLabel(anchor), style = WikiType.mono) }
                             WikiMarkText(WikiLogic.anchorStateMark(anchor))
@@ -242,7 +244,7 @@ private fun WikiEntryPage(detail: WikiEntryDetail, now: Instant, busy: Boolean, 
 
 private fun LazyListScope.sectionHeader(title: String, count: Int? = null) {
     item(key = "header:$title") {
-        Row(Modifier.padding(start = 32.dp, end = 32.dp, top = 18.dp, bottom = 4.dp).semantics { heading() }, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.padding(start = 32.dp, end = 32.dp, top = 18.dp, bottom = 4.dp).semantics(mergeDescendants = true) { heading() }, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(title, style = WikiType.label.copy(fontWeight = FontWeight.SemiBold), color = WikiPalette.secondary)
             if (count != null) Text("$count", style = WikiType.label, color = WikiPalette.secondary)
         }
@@ -290,10 +292,13 @@ private fun EntryAnswers(entry: WikiEntry, busy: Boolean, confirm: () -> Unit, r
     var reasons by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         if (WikiModeLogic.canConfirm(entry.status, entry.trust)) Button(onClick = confirm, enabled = !busy,
-            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("wiki-entry-confirm")) { Text("✓ " + WikiModeCopy.confirm) }
+            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("wiki-entry-confirm")) {
+            // Said without its tick (TalkBack handed "✓ Confirm" to the voice as written).
+            Text("✓ " + WikiModeCopy.confirm, Modifier.semantics { contentDescription = WikiModeCopy.confirm }) }
         Box(Modifier.weight(1f)) {
             OutlinedButton(onClick = { reasons = true }, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("wiki-entry-reject"),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text(WikiCopy.reject + " ▾") }
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
+                Text(WikiCopy.reject + " ▾", Modifier.semantics { contentDescription = WikiCopy.reject }) }
             DropdownMenu(reasons, { reasons = false }) {
                 // The four reasons, headed by where the reason goes.
                 Text(WikiModeCopy.rejectOnRecord, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = WikiType.label, color = WikiPalette.secondary)
@@ -317,7 +322,7 @@ private fun MarkBar(detail: WikiEntryDetail, banner: WikiModeLogic.Banner, now: 
     val tone = WikiPalette.color(banner.tone)
     Row(Modifier.fillMaxWidth().background(if (banner.tone == WikiTone.AMBER) WikiPalette.amberWash else tone.copy(alpha = if (banner.tone == WikiTone.MUTED) 0.08f else 0.12f),
         RoundedCornerShape(10.dp)).padding(10.dp).testTag("wiki-entry-mark"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(when (banner.tone) { WikiTone.AMBER -> "🌐"; WikiTone.GREEN -> "✓"; else -> "ⓘ" }, color = tone, style = WikiType.label)
+        Text(when (banner.tone) { WikiTone.AMBER -> "🌐"; WikiTone.GREEN -> "✓"; else -> "ⓘ" }, Modifier.clearAndSetSemantics {}, color = tone, style = WikiType.label)
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(buildAnnotatedString {
                 withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = tone)) { append(banner.lead) }
@@ -368,7 +373,7 @@ private fun SourceRow(source: WikiSource, title: String?, openSession: (String) 
         if (ref != null) { if (source.kind == "task") openTask(ref) else if (source.kind == "turn") openSession(ref) }
     }.padding(horizontal = 16.dp, vertical = 10.dp).testTag("wiki-source:${source.id}"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(sourceGlyph(source.kind), style = WikiType.meta, color = MaterialTheme.colorScheme.primary)
+            Text(sourceGlyph(source.kind), Modifier.clearAndSetSemantics {}, style = WikiType.meta, color = MaterialTheme.colorScheme.primary)
             // A turn is shown as the session it is in when it names one, as the web's card does.
             Text(if (source.kind == "turn" && opens) "Session" else WikiLogic.sourceWord(source.kind), style = WikiType.label.copy(fontWeight = FontWeight.SemiBold))
             if (title == null) Text(WikiLogic.sourceRef(source), Modifier.weight(1f), style = WikiType.mono.copy(fontSize = WikiType.meta.fontSize), color = WikiPalette.secondary,
