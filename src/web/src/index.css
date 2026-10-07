@@ -14954,10 +14954,11 @@ button.chat-jump-start:hover {
      with the first of them. */
   align-items: start;
 }
-/* A group's head has no status or quota of its own — its accounts do — so its line runs the width
-   of the row, and its one action sits level with the name it belongs to. */
+/* An open group's head has no status or quota of its own — its accounts do — so its line runs the
+   width of the row, and its one action sits level with the name it belongs to. Folded, it speaks for
+   its accounts in those columns, and is laid out as any other row. */
 @media (min-width: 701px) {
-  .re-runner-card .re-row.re-grp {
+  .re-runner-card .re-row.re-grp:not(.folded) {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
   }
@@ -15169,6 +15170,59 @@ button.chat-jump-start:hover {
 .re-grp .re-meta b {
   color: var(--text-2);
   font-weight: 600;
+}
+/* The head folds its accounts away. The identity is the button, as a runner card's is, and its
+   chevron follows the engine's name. */
+.re-grp-toggle {
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.re-grp-toggle:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 4px;
+}
+.re-grp-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.re-grp-chev {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 3px;
+  vertical-align: -3px;
+  color: var(--text-3);
+  transition: color 0.15s;
+}
+.re-grp-chev svg {
+  transition: transform 0.15s;
+}
+.re-grp-chev.open svg {
+  transform: rotate(90deg);
+}
+.re-grp-toggle:hover .re-grp-chev {
+  color: var(--brand);
+}
+/* Folded, the identity shares the row with a status and a quota: the version line wraps rather than
+   clip, and the update note takes a line of its own. */
+.re-runner-card .re-grp.folded .re-meta {
+  white-space: normal;
+}
+.re-grp.folded .re-upd {
+  display: block;
+}
+/* "Next: …" over the window it names. */
+.re-quota-next {
+  overflow-wrap: anywhere;
 }
 /* An account row hangs off the engine above it: indented past the engine's tile, with a rail drawn
    up into the row before it and on down to where the next account's rail begins, so the tree reads

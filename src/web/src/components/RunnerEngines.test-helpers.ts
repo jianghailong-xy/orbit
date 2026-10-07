@@ -1,5 +1,16 @@
 import { act } from 'react';
 import { vi } from 'vitest';
+import { ACCOUNT_ENGINES } from '../lib/engineAccounts';
+
+/** Open these runners' cards, and every engine's accounts on them: the page as a user who opened them
+ *  sees it. Both start folded, and the section remembers the open ones in localStorage. */
+export function openRunnerCards(runners: readonly { id: string }[]) {
+  localStorage.setItem('orbit:providers-expanded-runners', JSON.stringify(runners.map((r) => r.id)));
+  localStorage.setItem(
+    'orbit:providers-open-accounts',
+    JSON.stringify(runners.flatMap((r) => ACCOUNT_ENGINES.map((engine) => `${r.id}/${engine}`))),
+  );
+}
 
 /** Open the row's real dropdown, including its portal, before choosing an action. */
 export async function openRunnerMenu(row: ParentNode): Promise<HTMLElement> {
