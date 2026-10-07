@@ -1099,6 +1099,15 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
       body: { question: 'Which first?', blocksTaskIds: [of.projectTaskId] },
     }),
   },
+  // The card the owner answered the skip on: B's own landing, A's approval.
+  'POST /runner/projects/:id/tasks/:taskId/integration/skip-merge-check body approvalId': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: mine.projectId, taskId: mine.projectTaskId },
+      headers: calling(mine.runner.coordinatorSessionId),
+      body: { reason: 'the census', approvalId: of.runner.allowedApprovalId },
+    }),
+  },
   ...Object.fromEntries(Object.entries(coordinatorRequests).map(([route, own]) => [
     `${route} header x-orbit-session-id`,
     fromTheirSession(RUNNER, own, (of) => of.runner.coordinatorSessionId),
@@ -1297,11 +1306,8 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/projects/:id/owner-questions body clientQuestionId':
     'the coordinator\'s own key for one question, a dedupe key within the project the path names '
     + '(project-open-item.service.ts:686)',
-  'POST /runner/projects/:id/tasks/:taskId/integration/skip-merge-check body approvalId':
-    'the card the account owner answered, looked up only among the cards of the caller\'s own sessions '
-    + '(project-open-item.service.ts:1824): another account\'s is refused as an id that names nothing is, with nothing '
-    + 'of it repeated (integration-skip-merge-check.pg.spec.ts). Read only past the landing checks, which the census\'s '
-    + 'landing in flight answers first, so it is held there rather than here',
+  // The skip door's `approvalId` is sent by the census itself (RUNNER_ISOLATION_FIELD_CASES above): a real case is
+  // the stronger registration, and the census refuses a key registered both ways.
 
   // ── the wiki: what a Record body carries (RUNNER_OPAQUE_BODIES) ─────────────────────────────────────
   'POST /runner/wiki/spaces/:id/articles/:slug body articles[].entries[]':
