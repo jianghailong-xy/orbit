@@ -9,6 +9,9 @@
 #            composition|Dialog Popover Select exits", eight projects), the whole choices matrix
 #            (npm run test:ui-choices) and the overlays matrix (npm run test:ui-overlays), by their npm scripts; raw
 #            results copied to /var/tmp/kw2-246921c8/runs/<step>-<label>, slim copy in <step>-<label>/ here
+#   choices-full:<project>  the whole choices matrix in one project (npm run test:ui-choices -- --project <project>),
+#            so that a run's trace scratch (about 1 MB a test until the run ends) stays small on the shared disk;
+#            raw results copied to /var/tmp/kw2-246921c8/runs/choices-full-<project>-<label>, slim copy here
 #   choices-list  the choices test list (playwright --list), to show no test was added, removed or renamed
 #   entry-repeat  the choices entry's "Dialog Popover Select exits" test ten times in chromium-light-desktop and
 #            webkit-dark-phone (--repeat-each 10), the two projects where it failed once under load; raw results
@@ -71,6 +74,11 @@ for step in "$@"; do
         rm -rf "$raw/runs/$step-$label" && cp -r "src/web/$results" "$raw/runs/$step-$label"
         cp src/web/.ui-migration-results/environment.json "$raw/runs/$step-$label/environment.json"
         python3 -B "$here/slim.py" "$raw/runs/$step-$label" "$here/$step-$label" > /dev/null ;;
+    choices-full:*) name=choices-full-${step#choices-full:}
+        run "$name" "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 npm run test:ui-choices -w @orbit/web -- --project ${step#choices-full:}'" || continue
+        rm -rf "$raw/runs/$name-$label" && cp -r src/web/.choices-results "$raw/runs/$name-$label"
+        cp src/web/.ui-migration-results/environment.json "$raw/runs/$name-$label/environment.json"
+        python3 -B "$here/slim.py" "$raw/runs/$name-$label" "$here/$name-$label" > /dev/null ;;
     choices-list) run choices-list 'cd src/web && NO_COLOR=1 npx playwright test --config ui-migration/choices.config.mjs --list' || continue ;;
     entry-repeat) run entry-repeat "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 npm run test:ui-choices -w @orbit/web -- --grep \"Dialog Popover Select exits\" --project chromium-light-desktop --project webkit-dark-phone --repeat-each 10'" || continue
         rm -rf "$raw/runs/entry-repeat-$label" && cp -r src/web/.choices-results "$raw/runs/entry-repeat-$label"
