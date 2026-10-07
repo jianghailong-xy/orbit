@@ -3461,6 +3461,9 @@ final class ConsoleModel {
     /// read is not OPEN either — and `ProjectCriteriaDocument.taskCount` is where a document that
     /// did not say the count is read as none.
     private(set) var projectTaskCount = 0
+    /// How long a problem waits on this project's coordinator before it reaches the owner, off the
+    /// same read — what the start card's list of what still comes to the owner says.
+    private(set) var projectEscalationSeconds = StartProject.defaultEscalationSeconds
     /// The coordinator's request the start card in this conversation is drawn for — kept while the
     /// card is on screen, so a request that stops standing leaves its card stale in place rather
     /// than blank (web's `delivered`), and let go of once the project is started.
@@ -3756,6 +3759,7 @@ final class ConsoleModel {
             projectStatus = document.status
             projectStarted = document.started
             projectTaskCount = document.taskCount
+            projectEscalationSeconds = document.exceptionEscalationSeconds ?? projectEscalationSeconds
             projectDone = document.doneSubject
             // A read asked for after a press here, and still not DONE: the project was reopened, so
             // the press's own record no longer makes the card a receipt (`ProjectDone.recorded`).
@@ -3885,7 +3889,7 @@ final class ConsoleModel {
     }
 
     /// The start card's settings as the owner has left them: their edits on this request, or the
-    /// coordinator's suggestion untouched.
+    /// coordinator's suggestion with Automatic on (`StartSettingsDraft(_:)`).
     func startDraft(for row: ProjectOpenItemRow) -> StartSettingsDraft {
         if let draft = startDrafts[row.itemId] { return draft }
         guard let request = row.startRequest else {

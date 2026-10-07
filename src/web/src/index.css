@@ -10338,9 +10338,10 @@ button.chat-jump-start:hover {
 }
 
 /* ── Start this project? ─────────────────────────────────────────────────────────────────
-   `StartProjectCard.tsx`: the settlement card's shell, with three sections under it — the
-   criteria, the plan, and How it runs, drawn with the integration settings card's own rows
-   (`.project-integration-setting`) in a raised panel. Mock: start-mock/board2-start-web.html. */
+   `StartProjectCard.tsx`: the settlement card's shell, answering three questions in order — what
+   done is (the criteria), how much is delegated and what still comes to the owner (How it runs),
+   and the plan by level — with Start held at the bottom of the scroll and a line under it saying
+   what the press does. Mocks: docs/mocks/start-card-redesign (v2, approved 2026-10-07). */
 /* On a phone the start card rises as a sheet (`ProjectStartDialog`), whose own title already asks
    the card's question: the card does not ask it twice. */
 .start-card-sheet .settlement-card-head {
@@ -10360,18 +10361,123 @@ button.chat-jump-start:hover {
 .start-card-section + .settlement-card-criteria {
   margin-top: 4px;
 }
-.start-card-section-aside {
-  margin-left: auto;
+.start-card-project {
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.35;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+/* The coordinator's own words, three lines until More. */
+.start-card-quote {
+  margin-top: 10px;
+  padding: 8px 12px 9px;
+  border-radius: 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+}
+.start-card-quote-head {
   font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--brand);
+  color: var(--text-3);
+}
+.start-card-quote-text {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-1);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.start-card-quote-text.is-open {
+  display: block;
+}
+.start-card-quote .start-card-link {
+  margin-left: 0;
+  font-size: 12.5px;
 }
 .start-card-plan {
   font-size: 13px;
   line-height: 1.65;
   color: var(--text-1);
+}
+/* The plan by level: a number per level, and the levels joined by a thin line down the left. */
+.start-card-levels {
+  position: relative;
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+}
+.start-card-levels::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 12px;
+  bottom: 12px;
+  width: 1px;
+  background: var(--border-subtle);
+}
+.start-card-level {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+}
+.start-card-level-number {
+  flex: none;
+  z-index: 1;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-raised);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 19px;
+  text-align: center;
+  color: var(--text-3);
+}
+.start-card-task {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.start-card-task b {
+  flex: none;
+  font-weight: 650;
+}
+.start-card-task-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.start-card-parallel {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.start-card-pill {
+  flex: none;
+  margin-left: auto;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 18px;
+}
+.start-card-pill.is-now {
+  color: var(--success);
+  background: var(--success-bg);
+}
+.start-card-pill.is-you {
+  color: var(--brand);
+  background: var(--brand-tint);
 }
 .start-card-link {
   margin-left: 6px;
@@ -10396,26 +10502,98 @@ button.chat-jump-start:hover {
   color: var(--warning);
 }
 .start-card-settings {
-  padding: 0 12px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 8px;
   background: var(--bg-raised);
 }
+/* One setting per row: its name, and its value or control at the end. */
+.start-card-row {
+  padding: 10px 12px;
+}
+.start-card-row + .start-card-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.start-card-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13.5px;
+  color: var(--text-1);
+}
+.start-card-row-button {
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.start-card-row-value {
+  color: var(--text-3);
+}
+.start-card-row .start-card-mono {
+  margin-top: 8px;
+}
+.start-card-hint {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.start-card-line {
+  min-width: 170px;
+}
+.start-card-line-option {
+  max-width: 340px;
+  white-space: normal;
+}
+.start-card-line-option .start-card-branch {
+  margin-left: 6px;
+}
+/* What a start with Automatic on does for a project with no coordinator: opens one. */
+.start-card-opens {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+/* What still comes to the owner, under the switch: the switch's consequence, as a list. */
+.start-card-comes {
+  margin-top: 10px;
+  padding: 8px 12px 9px;
+  border-radius: 8px;
+  background: var(--brand-tint);
+}
+.start-card-comes-head {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+.start-card-comes ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-1);
+}
+.start-card-comes-detail {
+  color: var(--text-3);
+}
 /* The two lines, one under the other; the class makes these rules outrank antd's own
-   `.ant-radio-group` / `.ant-radio-wrapper` ones, which would otherwise win on order. How it runs
-   (`.project-run-settings`) draws the same two. */
-.start-card-settings .start-card-lines,
+   `.ant-radio-group` / `.ant-radio-wrapper` ones, which would otherwise win on order. */
 .project-run-settings .project-run-lines {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.start-card-settings .start-card-lines .ant-radio-wrapper,
 .project-run-settings .project-run-lines .ant-radio-wrapper {
   align-items: flex-start;
   margin-inline-end: 0;
 }
-.start-card-settings .start-card-lines .ant-radio,
 .project-run-settings .project-run-lines .ant-radio {
   align-self: flex-start;
   margin-top: 3px;
@@ -10454,25 +10632,14 @@ button.chat-jump-start:hover {
   line-height: 1.5;
   color: var(--text-3);
 }
-.start-card-checked {
-  display: flex;
-  gap: 7px;
-  margin: 12px 0 0;
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--text-2);
-}
-.start-card-tick {
-  flex: none;
-  font-weight: 700;
-  color: var(--success);
-}
-/* 443px and the like: the settings rows go to one column at the integration card's own 640px
-   breakpoint, and the lines keep their names and lose their descriptions. */
-@media (max-width: 640px) {
-  .start-card-option-hint {
-    display: none;
-  }
+/* Start, with the line saying what pressing it does under it. (The card's own `overflow: hidden`
+   rules out holding it at the bottom of a scrolling dialog; iOS pins it.) */
+.start-card-caption {
+  margin: 4px 14px 8px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--text-3);
 }
 
 /* ── Confirm the new criteria? ───────────────────────────────────────────────────────────

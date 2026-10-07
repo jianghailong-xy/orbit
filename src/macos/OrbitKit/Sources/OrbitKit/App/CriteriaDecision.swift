@@ -565,6 +565,11 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
     public let doneBy: ProjectDoneBy?
     public let doneAt: String?
     public let acceptedGaps: [AcceptedGap]
+    /// The conversation that coordinates the project, if it has one — what the start card reads to
+    /// say a start with Automatic on opens one — and how long a problem waits on it before it reaches
+    /// the owner. Nil from a server that did not say.
+    public let coordinatorSessionId: String?
+    public let exceptionEscalationSeconds: Int?
 
     /// What the done cards read off this document.
     public var doneSubject: ProjectDoneSubject {
@@ -601,7 +606,8 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
                 coordinatorEnabled: Bool? = nil, counts: ProjectTaskCounts? = nil,
                 startedAt: String? = nil, startedAtRead: Bool = false,
                 derivedDone: ProjectDerivedDone? = nil, doneBy: ProjectDoneBy? = nil,
-                doneAt: String? = nil, acceptedGaps: [AcceptedGap] = []) {
+                doneAt: String? = nil, acceptedGaps: [AcceptedGap] = [],
+                coordinatorSessionId: String? = nil, exceptionEscalationSeconds: Int? = nil) {
         self.id = id
         self.acceptanceCriteriaItems = acceptanceCriteriaItems
         self.title = title
@@ -614,6 +620,8 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         self.doneBy = doneBy
         self.doneAt = doneAt
         self.acceptedGaps = acceptedGaps
+        self.coordinatorSessionId = coordinatorSessionId
+        self.exceptionEscalationSeconds = exceptionEscalationSeconds
     }
 
     public init(from decoder: Decoder) throws {
@@ -632,6 +640,8 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         doneBy = try? c.decodeIfPresent(ProjectDoneBy.self, forKey: .doneBy)
         doneAt = try? c.decodeIfPresent(String.self, forKey: .doneAt)
         acceptedGaps = ((try? c.decodeIfPresent([AcceptedGap].self, forKey: .acceptedGaps)) ?? nil) ?? []
+        coordinatorSessionId = try? c.decodeIfPresent(String.self, forKey: .coordinatorSessionId)
+        exceptionEscalationSeconds = try? c.decodeIfPresent(Int.self, forKey: .exceptionEscalationSeconds)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -647,11 +657,14 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         try c.encodeIfPresent(doneBy, forKey: .doneBy)
         try c.encodeIfPresent(doneAt, forKey: .doneAt)
         if !acceptedGaps.isEmpty { try c.encode(acceptedGaps, forKey: .acceptedGaps) }
+        try c.encodeIfPresent(coordinatorSessionId, forKey: .coordinatorSessionId)
+        try c.encodeIfPresent(exceptionEscalationSeconds, forKey: .exceptionEscalationSeconds)
     }
 
     enum CodingKeys: String, CodingKey {
         case id, acceptanceCriteriaItems, title, status, coordinatorEnabled, startedAt
         case derivedDone, doneBy, doneAt, acceptedGaps
+        case coordinatorSessionId, exceptionEscalationSeconds
         case counts = "_count"
     }
 }

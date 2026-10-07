@@ -521,7 +521,8 @@ export class StartProjectDto implements StartProjectRequestBody {
 /**
  * `POST /runner/projects/:id/start-requests` (`@orbit/shared` `ProjectStartRequestBody`): the
  * settings a project's coordinator suggests it start with — the ones `StartProjectDto` writes, under
- * the same rules — and why the plan is ready. The merge check may be left out, which suggests none.
+ * the same rules — and why the plan is ready. The merge check may be left out, which suggests none,
+ * and so may Automatic, which suggests it on.
  */
 export class RequestProjectStartDto implements ProjectStartRequestBody {
   @IsIn(INTEGRATION_LINES) line!: IntegrationLine;
@@ -530,7 +531,8 @@ export class RequestProjectStartDto implements ProjectStartRequestBody {
     message: 'CODEBASE_AUTHORITY_INVALID: projectBranchName must be a full branch ref such as refs/heads/project/next',
   })
   projectBranchName?: string;
-  @IsBoolean() automatic!: boolean;
+  /** Left out is on: the owner's card opens with Automatic on whatever is suggested. */
+  @IsOptional() @IsBoolean() automatic?: boolean;
   @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks!: number;
   @IsOptional() @ValidateIf((_object, value) => value !== null) @IsString()
   mergeCheckCommand?: string | null;

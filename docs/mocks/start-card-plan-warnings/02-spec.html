@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>规格：Start 卡片上的就绪检查提醒</title>
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  body { width: 1720px; }
+  .w-a { width: 1632px; }
+  .len .thumb { box-shadow: 0 0 0 1px rgba(0,0,0,.08); }
+</style>
+</head>
+<body>
+<h1>规格：Start 卡片上的就绪检查提醒</h1>
+<p class="lede">②③ 只改 iOS 和 Web；服务端的检查和它的句子都不动（协调者那边照旧收到原句）。英文是界面文案，两端共用：<code>lib/projectStart.ts</code> 和 OrbitKit 的 <code>StartProject</code>，由对照测试锁住。</p>
+<p class="lede">现在只有两种提醒被改写过：手动启动的任务（<code>START_TASKS_START_BY_HAND</code>）和没有合并检查（<code>START_NO_MERGE_CHECK</code>，画在 Merge check 那一行）。其余的，包括这次的 <code>START_CRITERION_CODELESS_UNDECLARED</code>，都直接画服务端原句。</p>
+
+<div class="panel w-a">
+  <h2>每种提醒怎么显示</h2>
+  <p class="hint">一种提醒一行，行与行之间用分隔线，放在 Plan 面板里 View tasks 下面。蓝底是新的。</p>
+  <table class="mx">
+    <thead><tr><th style="width:250px">提醒（code）</th><th style="width:330px">现在</th><th class="new" style="width:420px">方案 · 收起时</th><th>方案 · 点开后</th></tr></thead>
+    <tbody>
+      <tr>
+        <th><code>START_CRITERION_CODELESS_UNDECLARED</code><div class="m" style="font-weight:400;margin-top:4px">每条命中的标准一条</div></th>
+        <td>每条标准一段服务端原句，整段橙色。这个项目 6 段、每段 8 行。</td>
+        <td class="new en"><span class="o">⚠</span> <span class="k">Orbit can't tell if 11 tasks write code</span><br><span class="m">Fine if they do — if not, done can stall</span><div class="m" style="margin-top:6px;font-family:'Noto Sans SC',sans-serif">1 个任务时：Orbit can't tell if 1 task writes code</div></td>
+        <td class="new en">They're settled on evidence, not by a command, so Orbit can't see whether they'll commit. One that ends with no commit can keep its criterion from landing — and the project from done — until it's marked “No code to land”.<br><span class="m">Criteria</span> 1–5 and 7<br><span class="m">Tasks</span> P1a, P1b, P2, P3, P4, P5, P6, P7, P8, P9 and P11<br>Nothing to do if they all write code. If some won't, ask the coordinator to mark them.</td>
+      </tr>
+      <tr>
+        <th><code>START_TASKS_START_BY_HAND</code></th>
+        <td class="en">B, C, D and E are set to start by hand — they wait for the coordinator even after the project starts.<span class="m" style="font-family:'Noto Sans SC',sans-serif">（橙色一段）</span></td>
+        <td class="new en"><span class="o">⚠</span> <span class="k">4 tasks start by hand</span><br><span class="m">B, C, D and E wait for the coordinator, even after the start</span></td>
+        <td class="new">不展开：第二行已经写全，行尾不画箭头。</td>
+      </tr>
+      <tr>
+        <th><code>START_NO_MERGE_CHECK</code></th>
+        <td>画在 Merge check 那一行下面（标题变琥珀色）。</td>
+        <td colspan="2">不变。</td>
+      </tr>
+      <tr>
+        <th>这一版不认识的 code</th>
+        <td>服务端原句，整段橙色。</td>
+        <td class="new"><span class="o">⚠</span> 服务端原句，最多 2 行，文字用主色。</td>
+        <td class="new">原句全文。</td>
+      </tr>
+      <tr>
+        <th>④ 协调者附了说明（可选）</th>
+        <td class="m">现在没有这个字段。</td>
+        <td class="new"><span style="color:#8a8a92">ⓘ</span> 标题照旧；第二行换成 <span class="en">Coordinator: “…”</span>，引用原话。图标和文字都不用琥珀色。</td>
+        <td class="new">同上面这种提醒自己的展开内容。</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="cols">
+  <div style="flex:1;min-width:0">
+  <div class="panel">
+    <h2>规则</h2>
+    <p class="hint">②③ 的细节。</p>
+    <ul class="rules">
+      <li><b>合并</b>：按 code 合成一行。同一 code 的多条（每条标准一条）合起来，行的先后按服务端给的顺序。</li>
+      <li><b>数字</b>：任务数按 taskId 去重。标准号升序压成区间，写作 “1–5 and 7”、“1, 3 and 4”、“2”。</li>
+      <li><b>任务名</b>：用 Plan 一行里的编号（<code>planTaskLabel</code>）。超过 12 个时写前 12 个，再加 “and N more”。</li>
+      <li><b>颜色</b>：只有三角图标是琥珀色。标题主色 15pt（subheadline，medium），第二行次要色 13pt。展开后的说明 13pt 次要色，Criteria / Tasks 的值用主色。</li>
+      <li><b>交互</b>：整行是一个按钮，点一下展开或收起，箭头上下翻。VoiceOver 读“标题，第二行，按钮，已收起”。展开状态只在这张卡上，下次打开是收起的。</li>
+      <li><b>不变的</b>：服务端的检查和原句（协调者照旧收到）、Start 按钮、Merge check 行里的提醒、底部 “Orbit checked the plan” 那一行。</li>
+      <li><b>两处入口一样</b>：协调会话里的卡片，和项目页 Start… 打开的 sheet（截图这张）。</li>
+      <li><b>④（可选）</b>：服务端在 finding 上带回协调者的说明。有说明的行不用琥珀色，第二行引用原话，点开内容同 ③。</li>
+    </ul>
+  </div>
+  <div class="panel">
+    <h2>顺带修：Plan 一行的编号</h2>
+    <p class="hint">编号规则只认“大写字母 + 1–2 位数字”，P1a 这种带小写字母的认不出，整个标题被截到 23 个字符拼进来。</p>
+    <div class="reg">
+      <div><span class="c">现在</span>  /^([A-Z]\d{1,2})(?:[.):：]|\s)/u        P1 <span class="ok">✓</span>  D12 <span class="ok">✓</span>  P1a <span class="bad">✗</span></div>
+      <div><span class="c">方案</span>  /^([A-Z]\d{1,2}[a-z]?)(?:[.):：]|\s)/u  P1 <span class="ok">✓</span>  D12 <span class="ok">✓</span>  P1a <span class="ok">✓</span>  P12c <span class="ok">✓</span></div>
+      <div style="margin-top:10px"><span class="c">现在</span>  <span class="bad">P1a · wiki-worker 服务骨架与… starts now · P1b · wiki_job 作业表与模型请求… after P1a · wiki-worker 服务骨架与… · P2, P3 after …</span></div>
+      <div><span class="c">方案</span>  <span class="ok">P1a starts now · P1b after P1a · P2, P3 after P1b · P4, P5, P6, P7 after P1b and P2 · …</span></div>
+    </div>
+    <p class="hint" style="margin:10px 0 0">Web 是 <code>projectStart.ts</code> 里这条正则；iOS 的 <code>StartProject.leadingCode</code> 是同一规则手写的版本，同样多认一个小写字母。</p>
+  </div>
+  <div class="panel">
+    <h2>要改的文件</h2>
+    <p class="hint">②③ 不动服务端。</p>
+    <ul class="rules">
+      <li><b>OrbitKit</b> <code>App/StartProject.swift</code>：<code>ProjectStartFinding</code> 多解码 <code>criterion</code>；<code>warningLines</code> 改成按 code 分组的 <code>warningRows</code>（标题、第二行、展开内容）；<code>leadingCode</code> 多认一个小写字母。</li>
+      <li><b>iOS / macOS</b> <code>Views/ApprovalCards.swift</code>：<code>planSection</code> 里的 ⚠ 文字换成可展开的行。</li>
+      <li><b>Web</b> <code>lib/projectStart.ts</code>：<code>startWarningLines</code> → <code>startWarningRows</code>，加上编号正则；<code>components/StartProjectCard.tsx</code> 和样式：<code>.start-card-warn</code> 换成同样的行。</li>
+      <li><b>测试</b>：<code>StartProjectTests</code>、<code>StartProjectCardCopyParityTests</code>（读 projectStart.ts 里的句子）、<code>StartProjectCard.test.tsx</code>。</li>
+      <li><b>④ 另算</b>：<code>project_request_start</code> 加一个可选参数（MCP 工具、CLI、shared 类型、请求 payload），两端读它。</li>
+    </ul>
+  </div>
+  </div>
+  <div style="flex:none">
+  <div class="panel" style="width:470px">
+    <h2>整张卡有多长</h2>
+    <p class="hint">同一张卡的完整长度（虚线是每一屏），橙框是提醒占的地方。</p>
+    <div class="len">
+      <div class="col"><p class="cap">现在 <span data-fill="t-today"></span></p><div class="thumb" data-thumb="today"></div></div>
+      <div class="col"><p class="cap">方案 · 收起 <span data-fill="t-new"></span></p><div class="thumb" data-thumb="collapsed"></div></div>
+    </div>
+  </div>
+  </div>
+</div>
+
+<script>
+window.__layout = () => {
+  const SCALE = 0.3, VISIBLE = 794;
+  const out = {};
+  document.querySelectorAll('[data-thumb]').forEach((host) => {
+    const v = host.dataset.thumb;
+    thumb(host, v, SCALE);
+    const inner = host.querySelector('.inner');
+    const h = inner.querySelector('.cd').offsetHeight;
+    const base = inner.getBoundingClientRect().top;
+    const sel = v === 'today' ? '[data-mk-warns]' : '[data-mk-warn]';
+    const r = inner.querySelector(sel).getBoundingClientRect();
+    const hl = document.createElement('div');
+    hl.className = 'hl';
+    hl.style.top = `${r.top - base - 2}px`;
+    hl.style.height = `${r.height + 4}px`;
+    host.appendChild(hl);
+    for (let y = VISIBLE, n = 1; y < h; y += VISIBLE, n += 1) {
+      const fold = document.createElement('div');
+      fold.className = 'fold';
+      fold.style.top = `${y * SCALE}px`;
+      fold.innerHTML = `<span>第 ${n} 屏</span>`;
+      host.appendChild(fold);
+    }
+    out[v] = h;
+  });
+  const fmt = (h) => `约 ${(Math.round(h / 10) * 10).toLocaleString('en-US')} pt · ${(h / VISIBLE).toFixed(1)} 屏`;
+  document.querySelector('[data-fill="t-today"]').textContent = fmt(out.today);
+  document.querySelector('[data-fill="t-new"]').textContent = fmt(out.collapsed);
+};
+document.fonts.ready.then(() => window.__layout());
+</script>
+</body>
+</html>
