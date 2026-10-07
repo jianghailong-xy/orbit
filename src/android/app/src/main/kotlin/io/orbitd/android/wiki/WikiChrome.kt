@@ -31,19 +31,34 @@ import io.orbitd.android.navigation.OrbitRoute
 object PageBar {
     private var owner by mutableStateOf<OrbitRoute?>(null)
     private var title by mutableStateOf<String?>(null)
+    private var subtitle by mutableStateOf<String?>(null)
     private var actions by mutableStateOf<(@Composable RowScope.() -> Unit)?>(null)
 
+    /** [subtitle] is the second line iOS draws under a page's title in the bar (a `.principal` title block). */
     @Composable
-    internal fun Bind(route: OrbitRoute, title: String?, actions: (@Composable RowScope.() -> Unit)? = null) {
+    internal fun Bind(route: OrbitRoute, title: String?, subtitle: String? = null, actions: (@Composable RowScope.() -> Unit)? = null) {
         DisposableEffect(route) {
             owner = route
-            onDispose { if (owner == route) { owner = null; this@PageBar.title = null; this@PageBar.actions = null } }
+            onDispose { if (owner == route) { owner = null; this@PageBar.title = null; this@PageBar.subtitle = null; this@PageBar.actions = null } }
         }
-        SideEffect { if (owner == route) { this.title = title; this.actions = actions } }
+        SideEffect { if (owner == route) { this.title = title; this.subtitle = subtitle; this.actions = actions } }
     }
 
     /** The bar's title for a Wiki/Watch route, or null to keep the shell's own. */
     fun title(route: OrbitRoute): String? = if (owner == route) title else null
+
+    /** The bar's title as the page bound it — with its second line when it has one — else [fallback]. */
+    @Composable
+    fun Title(route: OrbitRoute, fallback: @Composable () -> Unit) {
+        val text = title(route) ?: return fallback()
+        val second = subtitle
+        if (second == null) Text(text, maxLines = 2, style = MaterialTheme.typography.titleMedium)
+        else Column(Modifier.semantics(mergeDescendants = true) {}) {
+            Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+            Text(second, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("page-bar-subtitle"))
+        }
+    }
 
     @Composable
     fun Actions(route: OrbitRoute, scope: RowScope) { if (owner == route) actions?.invoke(scope) }
@@ -190,8 +205,10 @@ private fun ContentsRow(title: String, icon: Int, lit: Boolean, tag: String, bad
  * Wiki/Watch host, so it survives the page that posted it being popped. */
 object WikiToast {
     internal var text by mutableStateOf<String?>(null)
+    private var subtitle by mutableStateOf<String?>(null)
     private var serial by mutableStateOf(0)
-    fun show(message: String) { text = message; serial++ }
+    /** [subtitle]: the second line under it — the entry an answer was about (iOS `showToast(_:subtitle:)`). */
+    fun show(message: String, subtitle: String? = null) { text = message; this.subtitle = subtitle; serial++ }
 
     @Composable
     internal fun Host(modifier: Modifier = Modifier) {
@@ -200,8 +217,11 @@ object WikiToast {
         Box(modifier.fillMaxSize().padding(bottom = 24.dp), contentAlignment = Alignment.BottomCenter) {
             Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.inverseSurface, tonalElevation = 4.dp,
                 modifier = Modifier.testTag("wiki-toast").semantics { liveRegion = LiveRegionMode.Polite }) {
-                Text(shown, Modifier.padding(horizontal = 18.dp, vertical = 10.dp), color = MaterialTheme.colorScheme.inverseOnSurface,
-                    style = WikiType.subtext)
+                Column(Modifier.padding(horizontal = 18.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(shown, color = MaterialTheme.colorScheme.inverseOnSurface, style = WikiType.subtext)
+                    subtitle?.let { Text(it, color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.75f), style = WikiType.label,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                }
             }
         }
     }

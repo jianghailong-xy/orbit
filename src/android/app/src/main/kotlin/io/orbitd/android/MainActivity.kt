@@ -168,7 +168,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                 }
             }) {
             Scaffold(topBar = {
-                TopAppBar(title = { Text(PageBar.title(route) ?: routeTitle(route, data), maxLines = 2, style = MaterialTheme.typography.titleMedium) },
+                TopAppBar(title = { PageBar.Title(route) { Text(routeTitle(route, data), maxLines = 2, style = MaterialTheme.typography.titleMedium) } },
                     navigationIcon = {
                         IconButton(onClick = { if (navigation.canGoBack) navigation = navigation.back() else scope.launch { focus.clearFocus(); drawer.open() } }) {
                             Icon(painterResource(if (navigation.canGoBack) R.drawable.ic_back else R.drawable.ic_menu), if (navigation.canGoBack) "Back" else "Open navigation")
