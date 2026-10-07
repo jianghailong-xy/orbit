@@ -15,6 +15,7 @@ import io.orbitd.android.BuildConfig
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.AuthState
+import io.orbitd.android.core.net.ServerAddress
 import io.orbitd.android.core.protocol.Wire
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.*
@@ -80,41 +81,53 @@ class WikiWatchDeviceTest {
     private fun launch(raw: String) = Intent(Intent.ACTION_VIEW, Uri.parse(raw), app, MainActivity::class.java)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
 
-    /** A cold start from [target]'s link, the login form, then [block]; the journal is kept whatever happens. */
-    private fun journey(name: String, target: (JsonObject) -> String, block: (ActivityScenario<MainActivity>, JsonObject) -> Unit) {
+    /** A cold start from [target]'s link, then [block]; the journal is kept whatever happens. A [throughLogin] journey
+     * signs in on the login form, which the link waits on across recreation; the others sign in before the Activity
+     * starts. AuthSession publishes SignedIn and SignedOut from its own thread, and under the Compose test rule (an
+     * unconfined test dispatcher) a live composition collecting that state can resume and recompose on that thread
+     * (CalledFromWrongThreadException at dark/200%, emulator-5554); the app's own dispatcher always resumes on the
+     * main thread. So only the journey about the login form signs in while a composition is up, and every journey
+     * signs out after its Activity is gone. */
+    private fun journey(name: String, target: (JsonObject) -> String, throughLogin: Boolean = false,
+        block: (ActivityScenario<MainActivity>, JsonObject) -> Unit) {
         http("/__control", """{"reset":true}""")
         val ids = http("/__ids")
         instrument.sendStatus(0, Bundle().apply { putString("a12_pid", Process.myPid().toString()) })
-        File(output, "$name-identity.txt").writeText("sha=${BuildConfig.SOURCE_SHA}\ndirty=${BuildConfig.SOURCE_DIRTY}\nfixture=loopback-18770\nlink=${target(ids)}\n")
+        File(output, "$name-identity.txt").writeText("sha=${BuildConfig.SOURCE_SHA}\ndirty=${BuildConfig.SOURCE_DIRTY}\nfixture=loopback-18770\n" +
+            "link=${target(ids)}\nlogin=${if (throughLogin) "form" else "before-launch"}\n")
         // Restore is the Activity's to start; it is idempotent, so the journey starts it, then signs out.
         runBlocking { app.session.restore(); app.session.logout() }
         assertTrue(app.session.state.value is AuthState.SignedOut)
-        ActivityScenario.launch<MainActivity>(launch(target(ids))).use { scenario ->
-            try {
-                await("Email")
-                // The link waits on the login form, across recreation.
-                scenario.recreate()
-                compose.onNodeWithText("Instance address").performTextReplacement(server)
-                compose.onNodeWithText("Email").performTextInput("a12@example.test")
-                compose.onNodeWithText("Password").performTextInput("a12-fixture-password")
-                compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
-                compose.waitUntil(20_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
-                block(scenario, ids)
-                File(output, "$name-result.txt").writeText("PASS · controlled HTTP only\n")
-            } catch (error: Throwable) {
-                // Written down first: a crash while the scenario closes would otherwise lose what failed.
-                File(output, "$name-failure.txt").writeText(error.stackTraceToString())
-                Log.e("A12", "journey $name failed", error)
-                capture("$name-failed"); throw error
+        if (!throughLogin) runBlocking { app.session.login(ServerAddress.parse(server, true), "a12@example.test", "a12-fixture-password") }
+        try {
+            ActivityScenario.launch<MainActivity>(launch(target(ids))).use { scenario ->
+                try {
+                    if (throughLogin) {
+                        await("Email")
+                        // The link waits on the login form, across recreation.
+                        scenario.recreate()
+                        compose.onNodeWithText("Instance address").performTextReplacement(server)
+                        compose.onNodeWithText("Email").performTextInput("a12@example.test")
+                        compose.onNodeWithText("Password").performTextInput("a12-fixture-password")
+                        compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
+                    }
+                    compose.waitUntil(20_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
+                    block(scenario, ids)
+                    File(output, "$name-result.txt").writeText("PASS · controlled HTTP only\n")
+                } catch (error: Throwable) {
+                    // Written down first: a crash while the scenario closes would otherwise lose what failed.
+                    File(output, "$name-failure.txt").writeText(error.stackTraceToString())
+                    Log.e("A12", "journey $name failed", error)
+                    capture("$name-failed"); throw error
+                }
             }
-            finally { File(output, "$name-journal.json").writeText(http("/__stats").toString()); runBlocking { app.session.logout() } }
-        }
+        } finally { File(output, "$name-journal.json").writeText(http("/__stats").toString()); runBlocking { app.session.logout() } }
     }
 
     // MARK: the Wiki
 
     /** `orbit://wiki/<space>` (the notification's space) opens that space's home, through login and recreation. */
-    @Test fun aSpaceLinkOpensItsHomeThroughLoginAndRecreation() = journey("space-link", { "orbit://wiki/${it.string("space")}" }) { scenario, ids ->
+    @Test fun aSpaceLinkOpensItsHomeThroughLoginAndRecreation() = journey("space-link", { "orbit://wiki/${it.string("space")}" }, throughLogin = true) { scenario, ids ->
         awaitTag("wiki-status-line")
         compose.onNodeWithTag("wiki-space-picker").assertTextContains("a12-fixture")
         compose.onNodeWithText("Principles").assertExists()
