@@ -1,5 +1,7 @@
 package io.orbitd.android.wiki
 
+import io.orbitd.android.directory.DirectoryData
+
 import androidx.activity.compose.setContent
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -119,7 +121,7 @@ class WikiReadingPagesTest {
             }
         }
         val record = WikiNavRecord()
-        show { WikiArticleScreen(store, OrbitRoute(Destination.WIKI_ARTICLE, "database"), record.nav) }
+        show { WikiArticleScreen(store, OrbitRoute(Destination.WIKI_ARTICLE, "database"), DirectoryData(), record.nav) }
         compose.onNodeWithText(WikiArticleCopy.noArticleYet).assertIsDisplayed()
         compose.onNodeWithTag("wiki-topic-title").assertTextEquals("数据库与 Prisma")
         compose.onNodeWithText(WikiArticleCopy.groupDecisions).assertIsDisplayed()
@@ -139,7 +141,7 @@ class WikiReadingPagesTest {
             }
         }
         val record = WikiNavRecord()
-        show { WikiArticleScreen(store, OrbitRoute(Destination.WIKI_ARTICLE, "database"), record.nav) }
+        show { WikiArticleScreen(store, OrbitRoute(Destination.WIKI_ARTICLE, "database"), DirectoryData(), record.nav) }
         compose.onNodeWithTag("wiki-article-block:0").performFirstLinkClick(link("note:1"))
         // The card read the entry: what backs it, and where its anchor was last checked.
         compose.onNode(hasText(WikiArticleCopy.sourcesLine(2, 1)) and inside("wiki-footnote-card")).assertExists()
@@ -160,7 +162,7 @@ class WikiReadingPagesTest {
                 else -> 404 to "{}"
             }
         }
-        show { WikiArticleScreen(store, OrbitRoute(Destination.WIKI_ARTICLE, "database"), WikiNavRecord().nav) }
+        show { WikiArticleScreen(store, OrbitRoute(Destination.WIKI_ARTICLE, "database"), DirectoryData(), WikiNavRecord().nav) }
         compose.onNodeWithText("The article couldn't be loaded").assertIsDisplayed()
         status = 200
         compose.onNodeWithText("Retry").performClick()
@@ -197,7 +199,7 @@ class WikiReadingPagesTest {
         }))).toString()
         val store = wikiTestStore { path -> if (path.drop(3) == listOf("docs", "session-runtime")) 200 to body else 404 to "{}" }
         val nav = WikiNavRecord()
-        show { WikiDocScreen(store, OrbitRoute(Destination.WIKI_DOC, "session-runtime"), nav.nav) }
+        show { WikiDocScreen(store, OrbitRoute(Destination.WIKI_DOC, "session-runtime"), DirectoryData(), nav.nav) }
         compose.onNodeWithTag("wiki-doc-title").assertTextEquals(read.str("title")!!)
         compose.onNodeWithTag("wiki-doc-list").performScrollToNode(hasTestTag("wiki-doc-footnote:44"))
         compose.onNodeWithTag("wiki-doc-footnote:44").performClick()
@@ -282,7 +284,7 @@ class WikiReadingPagesTest {
 
     @Test fun aDocumentThePlanDoesNotHaveSaysSo() {
         val store = wikiTestStore { 404 to """{"message":"Not found"}""" }
-        show { WikiDocScreen(store, OrbitRoute(Destination.WIKI_DOC, "gone"), WikiNavRecord().nav) }
+        show { WikiDocScreen(store, OrbitRoute(Destination.WIKI_DOC, "gone"), DirectoryData(), WikiNavRecord().nav) }
         compose.onNodeWithText("That document is not in this space’s plan.").assertIsDisplayed()
         compose.onNodeWithText(WikiCopy.title).assertIsDisplayed()
         compose.onNodeWithText("Retry").assertDoesNotExist()
@@ -295,7 +297,7 @@ class WikiReadingPagesTest {
         val store = wikiTestStore { path ->
             if (path.drop(3) == listOf("docs", "session-runtime")) status to (if (status == 200) body else """{"message":"Down"}""") else 404 to "{}"
         }
-        show { WikiDocScreen(store, OrbitRoute(Destination.WIKI_DOC, "session-runtime"), WikiNavRecord().nav) }
+        show { WikiDocScreen(store, OrbitRoute(Destination.WIKI_DOC, "session-runtime"), DirectoryData(), WikiNavRecord().nav) }
         compose.onNodeWithText("The document couldn't be loaded").assertIsDisplayed()
         compose.onNodeWithText("Check the connection, then try again.").assertIsDisplayed()
         status = 200

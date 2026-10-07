@@ -2,6 +2,8 @@
 
 package io.orbitd.android.wiki
 
+import io.orbitd.android.directory.DirectoryData
+
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -25,7 +27,7 @@ import kotlinx.coroutines.launch
 /** One of a topic's articles, or — while the topic has none — its entries alone (iOS `WikiArticleScreen`).
  * route.id = topic slug, route.wikiPart = part (0 = the topic article). */
 @Composable
-internal fun WikiArticleScreen(store: WikiStore, route: OrbitRoute, nav: WikiNav) {
+internal fun WikiArticleScreen(store: WikiStore, route: OrbitRoute, data: DirectoryData, nav: WikiNav) {
     val address = WikiArticleAddress(requireNotNull(route.id), route.wikiPart)
     val state by store.state.collectAsState()
     val scope = rememberCoroutineScope()
@@ -60,7 +62,7 @@ internal fun WikiArticleScreen(store: WikiStore, route: OrbitRoute, nav: WikiNav
             else -> WikiReadingPlaceholder("wiki-article-loading") { LoadingMessage("Loading…") }
         }
     }
-    if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Article(address.topic, address.part), runnerOnline = null,
+    if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Article(address.topic, address.part), runnerOnline = wikiMaintenanceRunnerOnline(store.state.value.currentSpace, data),
         close = { contentsShown = false }) { pick -> wikiGo(pick, nav) }
 }
 
@@ -72,7 +74,7 @@ private fun topicTitle(state: WikiState, topic: String): String =
 /** Browse by category (iOS `WikiBrowseScreen`): by the confirmed plan's documents when the space reads by them, else
  * by its topic articles. */
 @Composable
-internal fun WikiBrowseScreen(store: WikiStore, route: OrbitRoute, nav: WikiNav) {
+internal fun WikiBrowseScreen(store: WikiStore, route: OrbitRoute, data: DirectoryData, nav: WikiNav) {
     val state by store.state.collectAsState()
     val scope = rememberCoroutineScope()
     var contentsShown by rememberSaveable { mutableStateOf(false) }
@@ -94,12 +96,12 @@ internal fun WikiBrowseScreen(store: WikiStore, route: OrbitRoute, nav: WikiNav)
                 openContents = { contentsShown = true }))
         }
     }
-    if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Browse, runnerOnline = null, close = { contentsShown = false }) { pick -> wikiGo(pick, nav) }
+    if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Browse, runnerOnline = wikiMaintenanceRunnerOnline(store.state.value.currentSpace, data), close = { contentsShown = false }) { pick -> wikiGo(pick, nav) }
 }
 
 /** The A–Z index (iOS `WikiIndexScreen`): by document once a plan is confirmed, else by article. */
 @Composable
-internal fun WikiIndexScreen(store: WikiStore, route: OrbitRoute, nav: WikiNav) {
+internal fun WikiIndexScreen(store: WikiStore, route: OrbitRoute, data: DirectoryData, nav: WikiNav) {
     val state by store.state.collectAsState()
     val scope = rememberCoroutineScope()
     var contentsShown by rememberSaveable { mutableStateOf(false) }
@@ -122,7 +124,7 @@ internal fun WikiIndexScreen(store: WikiStore, route: OrbitRoute, nav: WikiNav) 
                 openContents = { contentsShown = true }))
         }
     }
-    if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Index, runnerOnline = null, close = { contentsShown = false }) { pick -> wikiGo(pick, nav) }
+    if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Index, runnerOnline = wikiMaintenanceRunnerOnline(store.state.value.currentSpace, data), close = { contentsShown = false }) { pick -> wikiGo(pick, nav) }
 }
 
 /** A reading page's bar: no title, as iOS's (`.navigationTitle("")` on the pages, none on their placeholders), and —

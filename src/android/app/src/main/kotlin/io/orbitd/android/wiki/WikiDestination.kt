@@ -78,10 +78,10 @@ fun WikiDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRo
             Destination.WIKI_REVIEW -> WikiReviewScreen(store, route, data, nav)
             Destination.WIKI_RUN -> WikiRunScreen(store, route, nav)
             Destination.WIKI_SETTINGS -> WikiSettingsScreen(store, route, data, nav)
-            Destination.WIKI_ARTICLE -> WikiArticleScreen(store, route, nav)
-            Destination.WIKI_BROWSE -> WikiBrowseScreen(store, route, nav)
-            Destination.WIKI_INDEX -> WikiIndexScreen(store, route, nav)
-            Destination.WIKI_DOC -> WikiDocScreen(store, route, nav)
+            Destination.WIKI_ARTICLE -> WikiArticleScreen(store, route, data, nav)
+            Destination.WIKI_BROWSE -> WikiBrowseScreen(store, route, data, nav)
+            Destination.WIKI_INDEX -> WikiIndexScreen(store, route, data, nav)
+            Destination.WIKI_DOC -> WikiDocScreen(store, route, data, nav)
             Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION -> WikiPlanScreen(store, route, data, nav)
             else -> Unit
         }

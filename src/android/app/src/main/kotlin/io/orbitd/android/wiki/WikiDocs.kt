@@ -2,6 +2,8 @@
 
 package io.orbitd.android.wiki
 
+import io.orbitd.android.directory.DirectoryData
+
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -21,7 +23,7 @@ import kotlinx.coroutines.launch
 /** One document of the confirmed plan, read by its slug; a 404 is a document the plan does not have (iOS
  * `WikiDocScreen`). route.id = document slug, route.wikiSection = section key to scroll to (or null). */
 @Composable
-internal fun WikiDocScreen(store: WikiStore, route: OrbitRoute, nav: WikiNav) {
+internal fun WikiDocScreen(store: WikiStore, route: OrbitRoute, data: DirectoryData, nav: WikiNav) {
     val slug = requireNotNull(route.id)
     val state by store.state.collectAsState()
     val scope = rememberCoroutineScope()
@@ -51,7 +53,7 @@ internal fun WikiDocScreen(store: WikiStore, route: OrbitRoute, nav: WikiNav) {
             else -> WikiReadingPlaceholder("wiki-doc-loading") { LoadingMessage("Loading…") }
         }
     }
-    if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Doc(slug), runnerOnline = null, close = { contentsShown = false }) { pick -> wikiGo(pick, nav) }
+    if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Doc(slug), runnerOnline = wikiMaintenanceRunnerOnline(store.state.value.currentSpace, data), close = { contentsShown = false }) { pick -> wikiGo(pick, nav) }
 }
 
 /** How many of the plan's documents are written, for a document not written yet. */

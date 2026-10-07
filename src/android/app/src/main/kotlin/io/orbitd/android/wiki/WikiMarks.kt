@@ -73,12 +73,14 @@ internal fun WikiMarkText(mark: WikiAnchorMark) {
 internal fun WikiRowLabel(title: String, time: String? = null, detail: String? = null, note: String? = null,
     struck: Boolean = false, mark: String? = null) {
     Column(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, Modifier.weight(1f, fill = false), style = WikiType.prose, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                textDecoration = if (struck) TextDecoration.LineThrough else null,
-                color = if (struck) WikiPalette.secondary else MaterialTheme.colorScheme.onSurface)
-            if (mark != null) WikiBadge(WikiCopy.trustLabel(mark), WikiLogic.trustTone(mark))
-            Spacer(Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // The title takes the room the time leaves, and the mark follows it (iOS: title, mark, Spacer, time).
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(title, Modifier.weight(1f, fill = false), style = WikiType.prose, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    textDecoration = if (struck) TextDecoration.LineThrough else null,
+                    color = if (struck) WikiPalette.secondary else MaterialTheme.colorScheme.onSurface)
+                if (mark != null) WikiBadge(WikiCopy.trustLabel(mark), WikiLogic.trustTone(mark))
+            }
             if (time != null) Text(time, style = WikiType.label, color = WikiPalette.secondary, maxLines = 1)
         }
         if (!detail.isNullOrEmpty()) Text(detail, style = WikiType.subtext, color = WikiPalette.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
