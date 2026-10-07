@@ -126,14 +126,19 @@ describe('signing Kimi in from its row', () => {
     expect(loginPosts()).toEqual([{ engine: 'kimi', region }]);
   });
 
-  it('names no site on a runner that cannot be told one, and keeps kimi.ai out of reach', async () => {
+  // A runner too old to be told a site: both can still be pressed. kimi.com is the bare `kimi login`
+  // it always was — a site in the body would only get it refused — and kimi.ai is named, which the
+  // control plane refuses for such a runner in words that say to update it.
+  it.each([
+    ['kimi.com', { engine: 'kimi' }],
+    ['kimi.ai', { engine: 'kimi', region: 'global' }],
+  ] as const)('lets %s be pressed on a runner too old to be told the site', async (domain, body) => {
     const page = mount(runner({}, { capabilities: ['session-worktree-ops-v1'] }));
     await click(button(kimiRow(page), 'Sign in'));
-    expect(site(kimiRow(page), 'kimi.ai').disabled).toBe(true);
-    // A bare `kimi login`, as before the choice: a site in the body would be refused at the runner's
-    // next heartbeat instead of signing in.
-    await click(site(kimiRow(page), 'kimi.com'));
-    expect(loginPosts()).toEqual([{ engine: 'kimi' }]);
+    expect(site(kimiRow(page), 'kimi.com').disabled).toBe(false);
+    expect(site(kimiRow(page), 'kimi.ai').disabled).toBe(false);
+    await click(site(kimiRow(page), domain));
+    expect(loginPosts()).toEqual([body]);
   });
 
   it("says on the row which site the login is on, and marks it when signing in again", async () => {
