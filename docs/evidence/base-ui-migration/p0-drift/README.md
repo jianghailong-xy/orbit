@@ -323,7 +323,13 @@ P3.2 另有 11 张截图的变化低于 P0 比较器阈值（深色 task-action-
 
    `generatedFrom.commit` 仍是 X。`expected-screenshots.mjs` 每次运行都校验这些字段，缺一项，整次运行失败。不满足这三条时仍按第 4、5 条：X 的树含未接受的迁移改动，该截图就不能登记。
 
-### 场景维护
+### 场景与固定数据维护
+
+main 的产品改动可能让 P0 用例在截图比对以外的地方失败。这时可以对场景或固定数据做最小的维护，只为让 P0 原测试继续截到同一页面；截图比对、断言和容差都不变，维护后的截图照常归因、登记。维护分两种：
+- **场景维护**：main 删掉了场景依赖的元素，场景停在截图前的等待或定位处（第 2 批加入）；
+- **固定数据维护**：main 让 P0 页面多发了一个请求，固定数据里没有它，用例停在固定数据校验「Every API call must have an explicit browser fixture」（第 3 批加入）。
+
+#### 场景维护
 
 main 删掉了 P0 场景依赖的元素，使场景在截图前的等待或定位处失败时，可以最小限度地改这个场景的等待或定位条件：
 1. **只改那一处等待或定位**：改成同一页面上取代被删元素的内容。截图名、截取的页面和区域（P0 是整页截图）、截图比对、断言内容和容差都不变。
@@ -340,6 +346,30 @@ main 删掉了 P0 场景依赖的元素，使场景在截图前的等待或定�
 | 提交 | 场景 | 原条件 | 新条件 | 删掉原元素的 main 提交 | 截取 |
 | --- | --- | --- | --- | --- | --- |
 | `d2479173b` | wiki：`wiki-home` 截图前的等待 | `.wk-card`：首页第一张卡片，P0.2 时是 Principles 卡 | `.wk-pl-doc.topic`：取代卡片的话题文章行，首页的读取都完成后才画出 | `2f9cc095f` refactor(wiki): list topic articles on the Wiki home, drop status cards | 仍是 `/wiki/orbit` 首页的整页截图 `wiki-home.png`。之后的 `wiki-contents`、`wiki-new-entry` 截图和全部断言都没有改 |
+
+#### 固定数据维护
+
+main 给 P0 页面新增了请求，固定数据没有对应的响应，用例因此停在固定数据校验时，可以为这个请求补一个确定的固定响应：
+1. **只补那一个请求**：在 `fixtures.mjs` 里加一条路由，方法和路径与新请求完全相同，响应是固定的值。已有的固定数据、断言、截图比对和容差都不变；其余没有建模的请求（包括写请求）照旧返回 501，并使校验失败。
+2. **引用 main 提交**：注释和提交说明都写明新增该请求的 main 提交。同环境运行要证明：该提交的 first-parent 前驱上，页面不发这个请求，固定数据校验通过；该提交上校验失败，`unhandled` 正是这个请求。请求经合并进入项目线时，按 main 漂移参考第 4 条 (a)(b) 的办法逐层下钻到该提交。
+3. **取值有依据**：响应取 P0 固定账号在真实产品里最合理的默认状态，并与已有固定数据一致，不能为了让截图通过而挑选取值。下面的清单写明取值依据：服务端在默认配置下实际回答什么，与已有固定数据的关系，页面因此显示什么。
+4. **单独提交**：只改 `fixtures.mjs`，不与登记或其他改动混在一起，可单独回退。
+5. **之后的截图照常归因、登记**：
+   - 补了固定响应后，截图若有变化，按 main 漂移参考第 4 条归因、登记；
+   - 参考图用补了固定响应的 P0 测试生成，它与 P0 原测试只差这一条响应；
+   - 在该 main 提交之前的树上，页面不发这个请求，归因运行用原测试。
+6. **不属于固定数据维护的情况**：迁移改动带来的新请求、修改已有的固定响应、截图差异和断言失败。
+
+已做的固定数据维护：
+
+| 提交 | 请求 | 固定响应 | 新增该请求的 main 提交 | 截图 |
+| --- | --- | --- | --- | --- |
+| `5d7801e47` | `GET /api/auth/methods`：资料页的 `SignInMethodsCard` 经 `lib/googleLink.ts` 的 `authMethodsQuery` 读取 | `{ password: true, google: false, googleSignup: false }` | `558a8ba1f` feat(auth): link and unlink Google from the profile page, admin unlink, signInMethods, Sign-in settings (S4)。经 Google 登录项目的合并 `98cdd37d0`、main 的合并 `eee179f5d` 和项目线吸收 main 的 `09cc5760d` 进入项目线 | 没有变化，不需要登记。补固定响应前后，tip 的 252 张截图 248 张逐字节相同，4 张是 Chromium 噪声；资料页 profile 8 张逐字节相同，profile-validation 6 张相同、2 张是 Chromium 噪声（9 和 90 像素，差 1）。吸收 main 的 `09cc5760d` 前后同样没有截图变化。见 [p0-drift-3](../p0-drift-3/README.md) |
+
+`5d7801e47` 的取值依据：
+- **服务端的默认回答**：`GET /auth/methods` 由 `SignInProvidersService.methods()`（`src/apiserver/src/auth/sign-in-providers.service.ts`）回答。没有 `sign_in_provider` 记录，或记录没开启、缺 client ID 或密钥时，回答就是 `{ password: true, google: false, googleSignup: false }`。Google 登录要管理员在 Admin → Sign-in 里打开才有（`7bb096cad` feat(auth): store Google sign-in settings, off until an administrator turns it on）。
+- **与已有固定数据一致**：P0 账号（`/users/me` 的固定数据）是普通成员，没有 `signInMethods` 字段。按 `lib/queries.ts` 的说明，这表示早于 Google 登录的服务端，账号只有密码。只能用密码登录、没有绑定 Google，与服务端没开 Google 登录相符。
+- **页面因此显示什么**：`SignInMethodsCard` 只在 Google 登录开着、账号已绑定 Google 或账号没有密码时才画出。真实产品里，一个只有密码的账号在没开 Google 的服务端上看不到这张卡片，资料页与 `558a8ba1f` 之前相同，Change password 卡片照常显示。P0 账号没有 `signInMethods`，卡片同样不画。反过来，如果取 `google: true`，真实产品会给这个账号显示带 Connect Google 的卡片，而 P0 页面不会，截图就不再是真实产品在这一状态下的样子。所以只有 `google: false` 同时符合服务端默认和已有固定数据。
 
 ### 已接受的迁移差异（`accepted/`）
 
