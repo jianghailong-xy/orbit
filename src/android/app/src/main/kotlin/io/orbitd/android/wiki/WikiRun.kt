@@ -185,5 +185,5 @@ private fun RunRowView(row: WikiModeLogic.RunRow, entries: List<WikiEntry>, open
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.error), contentAlignment = Alignment.CenterEnd) {
             Text(WikiCopy.reject, Modifier.padding(horizontal = 20.dp), color = Color.White, style = WikiType.subtext.copy(fontWeight = FontWeight.SemiBold))
         }
-    }) { Box(Modifier.background(MaterialTheme.colorScheme.surface)) { content() } }
+    }) { Box(Modifier.background(MaterialTheme.colorScheme.surfaceVariant)) { content() } }
 }

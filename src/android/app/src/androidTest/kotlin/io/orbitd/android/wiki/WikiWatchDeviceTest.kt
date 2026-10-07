@@ -64,7 +64,11 @@ class WikiWatchDeviceTest {
         press(tag)
     }
     private fun capture(name: String) {
-        File(output, "$name-semantics.txt").writeText(compose.onRoot().printToString())
+        // Let the frame on screen catch up with the tree the test just read.
+        compose.waitForIdle(); Thread.sleep(500)
+        // A dialog or a sheet is a second root: every root's tree is kept.
+        val roots = compose.onAllNodes(isRoot())
+        File(output, "$name-semantics.txt").writeText((0 until roots.fetchSemanticsNodes().size).joinToString("\n\n") { roots[it].printToString() })
         instrument.uiAutomation.takeScreenshot().let { bitmap ->
             File(output, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }; bitmap.recycle()
         }

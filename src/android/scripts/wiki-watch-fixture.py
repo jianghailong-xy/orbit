@@ -66,7 +66,7 @@ def reset():
     entry.update(title='A12 Wiki source entry', summary='**Controlled** Wiki source with an original session record.')
     entry['sources'] = [{'id': uid('a1'), 'kind': 'turn', 'state': 'live', 'ref': BASE.SESSION,
                          'locator': {'turnId': BASE.RECORD}, 'quote': 'Protected record 110'}]
-    entry['history'] = [{'revision': 1, 'authorKind': 'maintenance', 'createdAt': AT}]
+    entry['history'] = [{'id': uid('a4'), 'revision': 1, 'authorKind': 'maintenance', 'createdAt': AT}]
     entry['exposure'] = [{'id': uid('a2'), 'sessionId': BASE.SESSION, 'channel': 'get', 'at': AT}]
     entry['anchors'] = [{'type': 'path', 'path': 'src/android/README.md', 'check': {'state': 'verified', 'ref': 'a' * 40}}]
     doc = remap(copy.deepcopy(DOCS['docs']['doc']['read']))

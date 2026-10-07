@@ -204,16 +204,23 @@ private fun ContentsRow(title: String, icon: Int, lit: Boolean, tag: String, bad
 /** iOS's app toast (`model.showToast`): one short line that leaves by itself. Posted by a page, drawn by the
  * Wiki/Watch host, so it survives the page that posted it being popped. */
 object WikiToast {
+    private const val SHOWN_MS = 2_500L
     internal var text by mutableStateOf<String?>(null)
     private var subtitle by mutableStateOf<String?>(null)
     private var serial by mutableStateOf(0)
+    private var postedAt = 0L
     /** [subtitle]: the second line under it — the entry an answer was about (iOS `showToast(_:subtitle:)`). */
-    fun show(message: String, subtitle: String? = null) { text = message; this.subtitle = subtitle; serial++ }
+    fun show(message: String, subtitle: String? = null) {
+        text = message; this.subtitle = subtitle; postedAt = android.os.SystemClock.elapsedRealtime(); serial++
+    }
 
     @Composable
     internal fun Host(modifier: Modifier = Modifier) {
         val shown = text ?: return
-        LaunchedEffect(serial) { kotlinx.coroutines.delay(2_500); text = null }
+        // Its time runs whether or not a page is up to draw it: a toast never comes back with the next Wiki page.
+        val left = SHOWN_MS - (android.os.SystemClock.elapsedRealtime() - postedAt)
+        LaunchedEffect(serial) { if (left > 0) kotlinx.coroutines.delay(left); text = null }
+        if (left <= 0) return
         Box(modifier.fillMaxSize().padding(bottom = 24.dp), contentAlignment = Alignment.BottomCenter) {
             Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.inverseSurface, tonalElevation = 4.dp,
                 modifier = Modifier.testTag("wiki-toast").semantics { liveRegion = LiveRegionMode.Polite }) {
