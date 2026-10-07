@@ -89,8 +89,25 @@ enum WindowFit {
                 fit.origin.x = visible.minX
                 fit.origin.y = visible.minY
                 fit.size.height = max(visible.height, 1700)
-                guard fit != frame else { continue }
+                // The fit is measured against what is GRANTED, not what is asked for: a TITLED
+                // window is constrained to the screen's height (`NSWindow.constrainFrameRect`), so
+                // 1700 came back as 677 every second of run 37625558501's log. A borderless window
+                // is exempt from that constraint, so the title bar comes off for good: it is not put
+                // back, since a titled window is constrained again the moment its frame is set, and
+                // the picture is the window's own bitmap (`.boundsIgnoreFraming`) — the chrome was
+                // never in it. Nothing else needs the window key: the presses a phone pass exercises
+                // are already out of reach on this window (the card sits below the screen).
+                if window.styleMask.contains(.titled) {
+                    window.styleMask.remove(.titled)
+                    log("fitWindow: .titled removed")
+                }
                 window.setFrame(fit, display: true)
+                guard window.frame.height > visible.height else {
+                    if iteration < 5 {
+                        log("fitWindow: refused — asked \(fit.size.height), granted \(window.frame) (content \(window.contentView?.frame ?? .zero))")
+                    }
+                    continue
+                }
                 log("fitWindow: \(frame) -> \(window.frame) content \(window.contentView?.frame ?? .zero)")
             }
         }
