@@ -1,0 +1,137 @@
+
+Running 96 tests using 1 worker
+
+  ✓   1 [chromium-light-desktop] › ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions (8.1s)
+  ✓   2 [chromium-light-desktop] › ui-migration/overlays.browser.mjs:143:1 › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus (1.7s)
+  ✓   3 [chromium-light-desktop] › ui-migration/overlays.browser.mjs:175:1 › nested dialog and imperative confirmation close only the top layer (1.6s)
+  ✓   4 [chromium-light-desktop] › ui-migration/overlays.browser.mjs:214:42 › actual legacy modal, Popconfirm and Select work inside Orbit dialog (3.2s)
+  ✓   5 [chromium-light-desktop] › ui-migration/overlays.browser.mjs:214:42 › actual legacy modal, Popconfirm and Select work inside Orbit drawer (3.3s)
+  ✓   6 [chromium-light-desktop] › ui-migration/overlays.browser.mjs:256:42 › Orbit dialog and nested confirmation work inside a legacy modal (2.4s)
+  ✓   7 [chromium-light-desktop] › ui-migration/overlays.browser.mjs:256:42 › Orbit dialog and nested confirmation work inside a legacy drawer (2.7s)
+  ✓   8 [chromium-light-desktop] › ui-migration/overlays.browser.mjs:292:1 › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation (1.5s)
+  ✓   9 [chromium-light-desktop] › ui-migration/overlays.browser.mjs:337:1 › dismissal controls, retained form values, long content and bottom sheet remain usable (2.0s)
+  ✓  10 [chromium-light-desktop] › ui-migration/overlays.browser.mjs:375:1 › open portals inherit live theme changes and composing Escape preserves the dialog (1.6s)
+  ✓  11 [chromium-light-desktop] › ui-migration/overlays.browser.mjs:404:1 › confirmation owner unmount and immediate sequential prompts do not reuse stale state (1.4s)
+  ✓  12 [chromium-light-desktop] › ui-migration/overlays.browser.mjs:437:1 › explicit focus, native form validation, motion and document scroll restore correctly (1.8s)
+  ✓  13 [chromium-light-phone] › ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions (8.2s)
+  ✓  14 [chromium-light-phone] › ui-migration/overlays.browser.mjs:143:1 › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus (1.6s)
+  ✓  15 [chromium-light-phone] › ui-migration/overlays.browser.mjs:175:1 › nested dialog and imperative confirmation close only the top layer (1.6s)
+  ✓  16 [chromium-light-phone] › ui-migration/overlays.browser.mjs:214:42 › actual legacy modal, Popconfirm and Select work inside Orbit dialog (3.2s)
+  ✓  17 [chromium-light-phone] › ui-migration/overlays.browser.mjs:214:42 › actual legacy modal, Popconfirm and Select work inside Orbit drawer (2.6s)
+  ✓  18 [chromium-light-phone] › ui-migration/overlays.browser.mjs:256:42 › Orbit dialog and nested confirmation work inside a legacy modal (2.4s)
+  ✓  19 [chromium-light-phone] › ui-migration/overlays.browser.mjs:256:42 › Orbit dialog and nested confirmation work inside a legacy drawer (2.7s)
+  ✓  20 [chromium-light-phone] › ui-migration/overlays.browser.mjs:292:1 › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation (1.2s)
+  ✓  21 [chromium-light-phone] › ui-migration/overlays.browser.mjs:337:1 › dismissal controls, retained form values, long content and bottom sheet remain usable (1.6s)
+  ✓  22 [chromium-light-phone] › ui-migration/overlays.browser.mjs:375:1 › open portals inherit live theme changes and composing Escape preserves the dialog (1.0s)
+  ✓  23 [chromium-light-phone] › ui-migration/overlays.browser.mjs:404:1 › confirmation owner unmount and immediate sequential prompts do not reuse stale state (1.2s)
+  ✓  24 [chromium-light-phone] › ui-migration/overlays.browser.mjs:437:1 › explicit focus, native form validation, motion and document scroll restore correctly (1.8s)
+  ✓  25 [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions (7.1s)
+  ✓  26 [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:143:1 › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus (1.8s)
+  ✓  27 [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:175:1 › nested dialog and imperative confirmation close only the top layer (1.8s)
+  ✓  28 [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:214:42 › actual legacy modal, Popconfirm and Select work inside Orbit dialog (3.4s)
+  ✓  29 [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:214:42 › actual legacy modal, Popconfirm and Select work inside Orbit drawer (3.2s)
+  ✓  30 [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:256:42 › Orbit dialog and nested confirmation work inside a legacy modal (2.8s)
+  ✓  31 [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:256:42 › Orbit dialog and nested confirmation work inside a legacy drawer (2.8s)
+  ✓  32 [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:292:1 › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation (1.7s)
+  ✓  33 [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:337:1 › dismissal controls, retained form values, long content and bottom sheet remain usable (1.8s)
+  ✓  34 [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:375:1 › open portals inherit live theme changes and composing Escape preserves the dialog (2.1s)
+  ✓  35 [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:404:1 › confirmation owner unmount and immediate sequential prompts do not reuse stale state (2.5s)
+  ✘  36 [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:437:1 › explicit focus, native form validation, motion and document scroll restore correctly (17.0s)
+  ✓  37 [chromium-dark-phone] › ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions (13.7s)
+  ✓  38 [chromium-dark-phone] › ui-migration/overlays.browser.mjs:143:1 › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus (5.1s)
+  ✓  39 [chromium-dark-phone] › ui-migration/overlays.browser.mjs:175:1 › nested dialog and imperative confirmation close only the top layer (4.8s)
+  ✓  40 [chromium-dark-phone] › ui-migration/overlays.browser.mjs:214:42 › actual legacy modal, Popconfirm and Select work inside Orbit dialog (5.4s)
+  ✓  41 [chromium-dark-phone] › ui-migration/overlays.browser.mjs:214:42 › actual legacy modal, Popconfirm and Select work inside Orbit drawer (4.0s)
+  ✓  42 [chromium-dark-phone] › ui-migration/overlays.browser.mjs:256:42 › Orbit dialog and nested confirmation work inside a legacy modal (2.5s)
+  ✓  43 [chromium-dark-phone] › ui-migration/overlays.browser.mjs:256:42 › Orbit dialog and nested confirmation work inside a legacy drawer (2.6s)
+  ✓  44 [chromium-dark-phone] › ui-migration/overlays.browser.mjs:292:1 › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation (1.5s)
+  ✓  45 [chromium-dark-phone] › ui-migration/overlays.browser.mjs:337:1 › dismissal controls, retained form values, long content and bottom sheet remain usable (1.7s)
+  ✓  46 [chromium-dark-phone] › ui-migration/overlays.browser.mjs:375:1 › open portals inherit live theme changes and composing Escape preserves the dialog (1.1s)
+  ✓  47 [chromium-dark-phone] › ui-migration/overlays.browser.mjs:404:1 › confirmation owner unmount and immediate sequential prompts do not reuse stale state (1.3s)
+  ✓  48 [chromium-dark-phone] › ui-migration/overlays.browser.mjs:437:1 › explicit focus, native form validation, motion and document scroll restore correctly (1.8s)
+  ✓  49 [webkit-light-desktop] › ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions (7.1s)
+  ✓  50 [webkit-light-desktop] › ui-migration/overlays.browser.mjs:143:1 › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus (1.6s)
+  ✓  51 [webkit-light-desktop] › ui-migration/overlays.browser.mjs:175:1 › nested dialog and imperative confirmation close only the top layer (1.6s)
+  ✓  52 [webkit-light-desktop] › ui-migration/overlays.browser.mjs:214:42 › actual legacy modal, Popconfirm and Select work inside Orbit dialog (2.8s)
+  ✓  53 [webkit-light-desktop] › ui-migration/overlays.browser.mjs:214:42 › actual legacy modal, Popconfirm and Select work inside Orbit drawer (2.7s)
+  ✓  54 [webkit-light-desktop] › ui-migration/overlays.browser.mjs:256:42 › Orbit dialog and nested confirmation work inside a legacy modal (2.3s)
+  ✓  55 [webkit-light-desktop] › ui-migration/overlays.browser.mjs:256:42 › Orbit dialog and nested confirmation work inside a legacy drawer (2.8s)
+  ✓  56 [webkit-light-desktop] › ui-migration/overlays.browser.mjs:292:1 › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation (1.0s)
+  ✓  57 [webkit-light-desktop] › ui-migration/overlays.browser.mjs:337:1 › dismissal controls, retained form values, long content and bottom sheet remain usable (1.6s)
+  ✓  58 [webkit-light-desktop] › ui-migration/overlays.browser.mjs:375:1 › open portals inherit live theme changes and composing Escape preserves the dialog (960ms)
+  ✓  59 [webkit-light-desktop] › ui-migration/overlays.browser.mjs:404:1 › confirmation owner unmount and immediate sequential prompts do not reuse stale state (1.1s)
+  ✓  60 [webkit-light-desktop] › ui-migration/overlays.browser.mjs:437:1 › explicit focus, native form validation, motion and document scroll restore correctly (1.6s)
+  ✓  61 [webkit-light-phone] › ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions (6.8s)
+  ✓  62 [webkit-light-phone] › ui-migration/overlays.browser.mjs:143:1 › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus (1.6s)
+  ✓  63 [webkit-light-phone] › ui-migration/overlays.browser.mjs:175:1 › nested dialog and imperative confirmation close only the top layer (1.5s)
+  ✓  64 [webkit-light-phone] › ui-migration/overlays.browser.mjs:214:42 › actual legacy modal, Popconfirm and Select work inside Orbit dialog (2.8s)
+  ✓  65 [webkit-light-phone] › ui-migration/overlays.browser.mjs:214:42 › actual legacy modal, Popconfirm and Select work inside Orbit drawer (2.9s)
+  ✓  66 [webkit-light-phone] › ui-migration/overlays.browser.mjs:256:42 › Orbit dialog and nested confirmation work inside a legacy modal (2.4s)
+  ✓  67 [webkit-light-phone] › ui-migration/overlays.browser.mjs:256:42 › Orbit dialog and nested confirmation work inside a legacy drawer (2.9s)
+  ✓  68 [webkit-light-phone] › ui-migration/overlays.browser.mjs:292:1 › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation (1.2s)
+  ✓  69 [webkit-light-phone] › ui-migration/overlays.browser.mjs:337:1 › dismissal controls, retained form values, long content and bottom sheet remain usable (1.4s)
+  ✓  70 [webkit-light-phone] › ui-migration/overlays.browser.mjs:375:1 › open portals inherit live theme changes and composing Escape preserves the dialog (967ms)
+  ✓  71 [webkit-light-phone] › ui-migration/overlays.browser.mjs:404:1 › confirmation owner unmount and immediate sequential prompts do not reuse stale state (1.1s)
+  ✓  72 [webkit-light-phone] › ui-migration/overlays.browser.mjs:437:1 › explicit focus, native form validation, motion and document scroll restore correctly (1.6s)
+  ✓  73 [webkit-dark-desktop] › ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions (8.6s)
+  ✓  74 [webkit-dark-desktop] › ui-migration/overlays.browser.mjs:143:1 › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus (2.0s)
+  ✓  75 [webkit-dark-desktop] › ui-migration/overlays.browser.mjs:175:1 › nested dialog and imperative confirmation close only the top layer (1.6s)
+  ✓  76 [webkit-dark-desktop] › ui-migration/overlays.browser.mjs:214:42 › actual legacy modal, Popconfirm and Select work inside Orbit dialog (4.0s)
+  ✓  77 [webkit-dark-desktop] › ui-migration/overlays.browser.mjs:214:42 › actual legacy modal, Popconfirm and Select work inside Orbit drawer (2.7s)
+  ✓  78 [webkit-dark-desktop] › ui-migration/overlays.browser.mjs:256:42 › Orbit dialog and nested confirmation work inside a legacy modal (2.5s)
+  ✓  79 [webkit-dark-desktop] › ui-migration/overlays.browser.mjs:256:42 › Orbit dialog and nested confirmation work inside a legacy drawer (2.6s)
+  ✓  80 [webkit-dark-desktop] › ui-migration/overlays.browser.mjs:292:1 › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation (1.1s)
+  ✓  81 [webkit-dark-desktop] › ui-migration/overlays.browser.mjs:337:1 › dismissal controls, retained form values, long content and bottom sheet remain usable (1.4s)
+  ✓  82 [webkit-dark-desktop] › ui-migration/overlays.browser.mjs:375:1 › open portals inherit live theme changes and composing Escape preserves the dialog (976ms)
+  ✓  83 [webkit-dark-desktop] › ui-migration/overlays.browser.mjs:404:1 › confirmation owner unmount and immediate sequential prompts do not reuse stale state (1.1s)
+  ✓  84 [webkit-dark-desktop] › ui-migration/overlays.browser.mjs:437:1 › explicit focus, native form validation, motion and document scroll restore correctly (1.6s)
+  ✓  85 [webkit-dark-phone] › ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions (6.7s)
+  ✓  86 [webkit-dark-phone] › ui-migration/overlays.browser.mjs:143:1 › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus (1.5s)
+  ✓  87 [webkit-dark-phone] › ui-migration/overlays.browser.mjs:175:1 › nested dialog and imperative confirmation close only the top layer (1.3s)
+  ✓  88 [webkit-dark-phone] › ui-migration/overlays.browser.mjs:214:42 › actual legacy modal, Popconfirm and Select work inside Orbit dialog (2.5s)
+  ✓  89 [webkit-dark-phone] › ui-migration/overlays.browser.mjs:214:42 › actual legacy modal, Popconfirm and Select work inside Orbit drawer (2.5s)
+  ✓  90 [webkit-dark-phone] › ui-migration/overlays.browser.mjs:256:42 › Orbit dialog and nested confirmation work inside a legacy modal (2.4s)
+  ✓  91 [webkit-dark-phone] › ui-migration/overlays.browser.mjs:256:42 › Orbit dialog and nested confirmation work inside a legacy drawer (2.6s)
+  ✓  92 [webkit-dark-phone] › ui-migration/overlays.browser.mjs:292:1 › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation (980ms)
+  ✓  93 [webkit-dark-phone] › ui-migration/overlays.browser.mjs:337:1 › dismissal controls, retained form values, long content and bottom sheet remain usable (1.5s)
+  ✓  94 [webkit-dark-phone] › ui-migration/overlays.browser.mjs:375:1 › open portals inherit live theme changes and composing Escape preserves the dialog (991ms)
+  ✓  95 [webkit-dark-phone] › ui-migration/overlays.browser.mjs:404:1 › confirmation owner unmount and immediate sequential prompts do not reuse stale state (1.2s)
+  ✓  96 [webkit-dark-phone] › ui-migration/overlays.browser.mjs:437:1 › explicit focus, native form validation, motion and document scroll restore correctly (2.1s)
+
+
+  1) [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:437:1 › explicit focus, native form validation, motion and document scroll restore correctly 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator: getByTestId('theme')
+    Expected: "dark"
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toHaveText" getByTestId('theme') with timeout 15000ms
+      - waiting for getByTestId('theme')
+
+
+       7 |   page.on('pageerror', (error) => errors.get(page).push(error.message));
+       8 |   await page.goto(fixture);
+    >  9 |   await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);
+         |                                           ^
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 |   expect(await page.evaluate(() => ({ width: innerWidth, dpr: devicePixelRatio, scale: visualViewport.scale })))
+      12 |     .toEqual({ width: info.project.use.viewport.width, dpr: 1, scale: 1 });
+        at /root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/src/web/ui-migration/overlays.browser.mjs:9:43
+
+    Error Context: ../../../../../../var/tmp/p32-final/overlays/overlays.browser.mjs-expli-a78fb-nt-scroll-restore-correctly-chromium-dark-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32-final/overlays/overlays.browser.mjs-expli-a78fb-nt-scroll-restore-correctly-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32-final/overlays/overlays.browser.mjs-expli-a78fb-nt-scroll-restore-correctly-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:437:1 › explicit focus, native form validation, motion and document scroll restore correctly 
+  95 passed (4.5m)

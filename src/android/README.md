@@ -27,6 +27,7 @@ notifications and release signing belong to later tasks. The iOS installed versi
 | Android SDK / Build Tools | platform 36 / 36.0.0 | Covers the S1 upper API and reuses the prepared host SDK. |
 | Compose BOM | 2025.08.01 | Fixed stable UI family; no dynamic versions or automatic "latest" upgrades. |
 | Activity / Navigation Compose | 1.10.1 / 2.9.3 | Small stable activity and back-stack shell, compatible with this SDK/compiler. |
+| AndroidX Browser | 1.10.0 | Custom Tabs for Google sign-in (D1); needs compileSdk 36 and AGP 8.9.1+, both met. |
 | JUnit / Robolectric | 4.13.2 / 4.16.1 | Real JVM assertions and local execution of the Compose activity. |
 | Coroutines / serialization | 1.10.2 / 1.9.0 | Session-owned cancellation and JSON with the existing Kotlin 2.2.21 compiler. |
 | OkHttp | 4.12.0 | Cancellable JVM/Android HTTP and MockWebServer wire tests; no logging interceptor. |

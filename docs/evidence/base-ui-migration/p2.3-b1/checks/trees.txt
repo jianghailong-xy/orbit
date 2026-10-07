@@ -1,0 +1,43 @@
+# 2026-10-07T00:57:48Z — tree composition checks (repository: /root/.orbit/worktrees/bf593adf-7724-576c-968c-fcd10880a595)
+
+$ git log --oneline da13423d3..orbit/p0-p0-2-8cf913
+7f901366e docs(web): record the merge check on the P0 drift evidence commit
+c2557f75d docs(web): record the P0 drift takeover, layer controls and final runs
+99ec58928 test(web): compare P0 screenshots with accepted migration differences too
+88ba56756 docs(web): record P0 drift attribution, B1 and first verification runs
+edb3259af test(web): register main drift references for 121 P0 screenshots
+503f4d5c2 test(web): compare P0 screenshots with P0.2 or their registered main drift reference
+c1cc446b0 test(web): find the P0 save toasts inside the visible Notifications region
+
+$ git log --oneline --reverse dd1d197ef..77233e226   # the same 7 commits as rebased onto the project line
+523049498 test(web): find the P0 save toasts inside the visible Notifications region
+305c71b48 test(web): compare P0 screenshots with P0.2 or their registered main drift reference
+26ab81d06 test(web): register main drift references for 121 P0 screenshots
+ad9e3167d docs(web): record P0 drift attribution, B1 and first verification runs
+b45c20063 test(web): compare P0 screenshots with accepted migration differences too
+88ae3cdf3 docs(web): record the P0 drift takeover, layer controls and final runs
+77233e226 docs(web): record the merge check on the P0 drift evidence commit
+
+$ git diff --stat orbit/p0-p0-2-8cf913 77233e226 -- src/web/ui-migration docs/evidence/base-ui-migration   # empty: tests and evidence identical
+
+$ diff <(git diff da13423d3 dd1d197ef) <(git diff 7f901366e 77233e226) && echo IDENTICAL
+IDENTICAL
+$ git diff --shortstat da13423d3 dd1d197ef
+ 505 files changed, 45826 insertions(+), 2397 deletions(-)
+$ git rev-list --count dd1d197ef^1..dd1d197ef^2 ; git rev-list --count --no-merges dd1d197ef^1..dd1d197ef^2
+155
+71
+
+$ git -C /var/tmp/p23b1/trees/verify log --oneline -2   # verification tree
+43e1d0f44 fix(web): restore the success pill's original rasterization and phone width
+7f901366e docs(web): record the merge check on the P0 drift evidence commit
+
+# the fix patch on both trees, hunk line numbers stripped:
+$ diff <(git diff 77233e226 86db4c886 | grep -v "^index " | sed "s/^@@ .* @@/@@/") <(git -C /var/tmp/p23b1/trees/verify diff 7f901366e 43e1d0f44 | grep -v "^index " | sed "s/^@@ .* @@/@@/") && echo SAME-PATCH
+SAME-PATCH
+
+$ diff <(git diff 7f901366e 77233e226 -- src/web/src/index.css | grep "^[+-]") <(git -C /var/tmp/p23b1/trees/verify diff 43e1d0f44 86db4c886 -- src/web/src/index.css | grep "^[+-]") && echo SAME-CSS-DELTA
+SAME-CSS-DELTA
+
+$ git -C /var/tmp/p23b1/trees/fixab rev-parse HEAD   # scratch checkout used for the two tip + fix P0 rounds
+86db4c8862d18cfbecd678301690f12f3ff5dade

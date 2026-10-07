@@ -1,0 +1,90 @@
+[
+ {
+  "browser": "chromium",
+  "version": "153.0.8010.12",
+  "size": "phone",
+  "fits": {
+   "clientWidth": 390,
+   "innerWidth": 390,
+   "scrollHeight": 844,
+   "freshProbe": 390,
+   "early": 390
+  },
+  "overflow": {
+   "clientWidth": 390,
+   "innerWidth": 390,
+   "scrollHeight": 845,
+   "freshProbe": 390,
+   "freshColumn": 358,
+   "earlyProbe": 390,
+   "earlyColumn": 358,
+   "earlyColumnAfterItsOwnStyleChange": 358
+  }
+ },
+ {
+  "browser": "chromium",
+  "version": "153.0.8010.12",
+  "size": "desktop",
+  "fits": {
+   "clientWidth": 1280,
+   "innerWidth": 1280,
+   "scrollHeight": 900,
+   "freshProbe": 1280,
+   "early": 1280
+  },
+  "overflow": {
+   "clientWidth": 1280,
+   "innerWidth": 1280,
+   "scrollHeight": 901,
+   "freshProbe": 1280,
+   "freshColumn": 1248,
+   "earlyProbe": 1280,
+   "earlyColumn": 1248,
+   "earlyColumnAfterItsOwnStyleChange": 1248
+  }
+ },
+ {
+  "browser": "webkit",
+  "version": "26.6",
+  "size": "phone",
+  "fits": {
+   "clientWidth": 390,
+   "innerWidth": 390,
+   "scrollHeight": 844,
+   "freshProbe": 390,
+   "early": 390
+  },
+  "overflow": {
+   "clientWidth": 390,
+   "innerWidth": 390,
+   "scrollHeight": 845,
+   "freshProbe": 382,
+   "freshColumn": 350,
+   "earlyProbe": 390,
+   "earlyColumn": 358,
+   "earlyColumnAfterItsOwnStyleChange": 350
+  }
+ },
+ {
+  "browser": "webkit",
+  "version": "26.6",
+  "size": "desktop",
+  "fits": {
+   "clientWidth": 1280,
+   "innerWidth": 1280,
+   "scrollHeight": 900,
+   "freshProbe": 1280,
+   "early": 1280
+  },
+  "overflow": {
+   "clientWidth": 1272,
+   "innerWidth": 1280,
+   "scrollHeight": 901,
+   "freshProbe": 1272,
+   "freshColumn": 1240,
+   "earlyProbe": 1272,
+   "earlyColumn": 1240,
+   "earlyColumnAfterItsOwnStyleChange": 1240
+  }
+ }
+]

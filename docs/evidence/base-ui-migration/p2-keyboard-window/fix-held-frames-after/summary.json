@@ -1,0 +1,1372 @@
+{
+  "stats": {
+    "startTime": "2026-10-07T05:04:41.693Z",
+    "duration": 100066.272,
+    "expected": 80,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1551
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+          "sha256": "17d980cba000cfd837a843e04008bcd9d23e857a097f2d1f143e490c4cce9b72"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 951
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "16f55c9d7a9e2b123aa47bc2253108d464324581619b05fa9fbb6a0dd9d68348"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 935
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "15bc6a23772d7a7dd298202efc17233846b8c7d21deb63a422e0ea1c64ea1043"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 841
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+          "sha256": "b3af280baceaee76cc19d79c6d142d8469b1bbe6664b73b6656f28e96d6749f7"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1001
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "80cc7c22385b14fd746890954860258899751821fc02b3812c6b28c241edfb7b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--attachment-menu-Enter-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 969
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--attachment-menu-Enter-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "c986f71ac167026dca437e5b07719f0feaeb3346600e14d89036e74a27c7a29c"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 833
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "11a53992d7b1f75d4e93d195a946553857de87313a15ef2cc18f27c1edfae698"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 979
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell--menu-held-frames.json",
+          "sha256": "01a2401ed27d5a6212663ab11627e568dcd83677184dbb4ba5e105abf9c19448"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 917
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "a9c25ac24af974820546ebea43bd548e8af4fe9ef6fbcca6c8bfdc151d539bcb"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 974
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row--menu-held-frames.json",
+          "sha256": "6be7bb9515ff007d200949ea68cde9e17baccb05d33e2f47479dc55ca9a9acea"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 993
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+          "sha256": "17d980cba000cfd837a843e04008bcd9d23e857a097f2d1f143e490c4cce9b72"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 975
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "16f55c9d7a9e2b123aa47bc2253108d464324581619b05fa9fbb6a0dd9d68348"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 999
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "15bc6a23772d7a7dd298202efc17233846b8c7d21deb63a422e0ea1c64ea1043"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1014
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+          "sha256": "b3af280baceaee76cc19d79c6d142d8469b1bbe6664b73b6656f28e96d6749f7"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 874
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "80cc7c22385b14fd746890954860258899751821fc02b3812c6b28c241edfb7b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--attachment-menu-Enter-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 973
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--attachment-menu-Enter-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "c986f71ac167026dca437e5b07719f0feaeb3346600e14d89036e74a27c7a29c"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1088
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "11a53992d7b1f75d4e93d195a946553857de87313a15ef2cc18f27c1edfae698"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1102
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell--menu-held-frames.json",
+          "sha256": "01a2401ed27d5a6212663ab11627e568dcd83677184dbb4ba5e105abf9c19448"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 951
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "a9c25ac24af974820546ebea43bd548e8af4fe9ef6fbcca6c8bfdc151d539bcb"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 955
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row--menu-held-frames.json",
+          "sha256": "6be7bb9515ff007d200949ea68cde9e17baccb05d33e2f47479dc55ca9a9acea"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 982
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+          "sha256": "17d980cba000cfd837a843e04008bcd9d23e857a097f2d1f143e490c4cce9b72"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1003
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "16f55c9d7a9e2b123aa47bc2253108d464324581619b05fa9fbb6a0dd9d68348"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 963
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "15bc6a23772d7a7dd298202efc17233846b8c7d21deb63a422e0ea1c64ea1043"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 966
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+          "sha256": "b3af280baceaee76cc19d79c6d142d8469b1bbe6664b73b6656f28e96d6749f7"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1026
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "80cc7c22385b14fd746890954860258899751821fc02b3812c6b28c241edfb7b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--attachment-menu-Enter-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 923
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--attachment-menu-Enter-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "c986f71ac167026dca437e5b07719f0feaeb3346600e14d89036e74a27c7a29c"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1096
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "11a53992d7b1f75d4e93d195a946553857de87313a15ef2cc18f27c1edfae698"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1066
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell--menu-held-frames.json",
+          "sha256": "01a2401ed27d5a6212663ab11627e568dcd83677184dbb4ba5e105abf9c19448"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2669
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "a9c25ac24af974820546ebea43bd548e8af4fe9ef6fbcca6c8bfdc151d539bcb"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5185
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row--menu-held-frames.json",
+          "sha256": "6be7bb9515ff007d200949ea68cde9e17baccb05d33e2f47479dc55ca9a9acea"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1659
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+          "sha256": "17d980cba000cfd837a843e04008bcd9d23e857a097f2d1f143e490c4cce9b72"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1238
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "16f55c9d7a9e2b123aa47bc2253108d464324581619b05fa9fbb6a0dd9d68348"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1657
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "15bc6a23772d7a7dd298202efc17233846b8c7d21deb63a422e0ea1c64ea1043"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5556
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+          "sha256": "b3af280baceaee76cc19d79c6d142d8469b1bbe6664b73b6656f28e96d6749f7"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 6388
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "80cc7c22385b14fd746890954860258899751821fc02b3812c6b28c241edfb7b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--attachment-menu-Enter-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1273
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--attachment-menu-Enter-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "c986f71ac167026dca437e5b07719f0feaeb3346600e14d89036e74a27c7a29c"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1316
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "11a53992d7b1f75d4e93d195a946553857de87313a15ef2cc18f27c1edfae698"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 990
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell--menu-held-frames.json",
+          "sha256": "01a2401ed27d5a6212663ab11627e568dcd83677184dbb4ba5e105abf9c19448"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1122
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "a9c25ac24af974820546ebea43bd548e8af4fe9ef6fbcca6c8bfdc151d539bcb"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1092
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row--menu-held-frames.json",
+          "sha256": "6be7bb9515ff007d200949ea68cde9e17baccb05d33e2f47479dc55ca9a9acea"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1058
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+          "sha256": "17d980cba000cfd837a843e04008bcd9d23e857a097f2d1f143e490c4cce9b72"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1107
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "16f55c9d7a9e2b123aa47bc2253108d464324581619b05fa9fbb6a0dd9d68348"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 847
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "15bc6a23772d7a7dd298202efc17233846b8c7d21deb63a422e0ea1c64ea1043"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 841
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+          "sha256": "b3af280baceaee76cc19d79c6d142d8469b1bbe6664b73b6656f28e96d6749f7"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 841
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "80cc7c22385b14fd746890954860258899751821fc02b3812c6b28c241edfb7b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--attachment-menu-Enter-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 825
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--attachment-menu-Enter-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "c986f71ac167026dca437e5b07719f0feaeb3346600e14d89036e74a27c7a29c"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 851
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "11a53992d7b1f75d4e93d195a946553857de87313a15ef2cc18f27c1edfae698"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 821
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell--menu-held-frames.json",
+          "sha256": "01a2401ed27d5a6212663ab11627e568dcd83677184dbb4ba5e105abf9c19448"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 879
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "a9c25ac24af974820546ebea43bd548e8af4fe9ef6fbcca6c8bfdc151d539bcb"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 823
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row--menu-held-frames.json",
+          "sha256": "6be7bb9515ff007d200949ea68cde9e17baccb05d33e2f47479dc55ca9a9acea"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 827
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+          "sha256": "17d980cba000cfd837a843e04008bcd9d23e857a097f2d1f143e490c4cce9b72"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 858
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "16f55c9d7a9e2b123aa47bc2253108d464324581619b05fa9fbb6a0dd9d68348"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 862
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "15bc6a23772d7a7dd298202efc17233846b8c7d21deb63a422e0ea1c64ea1043"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 844
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+          "sha256": "b3af280baceaee76cc19d79c6d142d8469b1bbe6664b73b6656f28e96d6749f7"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 840
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "80cc7c22385b14fd746890954860258899751821fc02b3812c6b28c241edfb7b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--attachment-menu-Enter-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 894
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--attachment-menu-Enter-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "c986f71ac167026dca437e5b07719f0feaeb3346600e14d89036e74a27c7a29c"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 954
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "11a53992d7b1f75d4e93d195a946553857de87313a15ef2cc18f27c1edfae698"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 831
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell--menu-held-frames.json",
+          "sha256": "01a2401ed27d5a6212663ab11627e568dcd83677184dbb4ba5e105abf9c19448"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 856
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "a9c25ac24af974820546ebea43bd548e8af4fe9ef6fbcca6c8bfdc151d539bcb"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 867
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row--menu-held-frames.json",
+          "sha256": "6be7bb9515ff007d200949ea68cde9e17baccb05d33e2f47479dc55ca9a9acea"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 889
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+          "sha256": "17d980cba000cfd837a843e04008bcd9d23e857a097f2d1f143e490c4cce9b72"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 893
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "16f55c9d7a9e2b123aa47bc2253108d464324581619b05fa9fbb6a0dd9d68348"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 936
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "15bc6a23772d7a7dd298202efc17233846b8c7d21deb63a422e0ea1c64ea1043"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 916
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+          "sha256": "b3af280baceaee76cc19d79c6d142d8469b1bbe6664b73b6656f28e96d6749f7"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 959
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "80cc7c22385b14fd746890954860258899751821fc02b3812c6b28c241edfb7b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--attachment-menu-Enter-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 861
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--attachment-menu-Enter-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "c986f71ac167026dca437e5b07719f0feaeb3346600e14d89036e74a27c7a29c"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 927
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "11a53992d7b1f75d4e93d195a946553857de87313a15ef2cc18f27c1edfae698"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 952
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell--menu-held-frames.json",
+          "sha256": "01a2401ed27d5a6212663ab11627e568dcd83677184dbb4ba5e105abf9c19448"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 953
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "a9c25ac24af974820546ebea43bd548e8af4fe9ef6fbcca6c8bfdc151d539bcb"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 873
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row--menu-held-frames.json",
+          "sha256": "6be7bb9515ff007d200949ea68cde9e17baccb05d33e2f47479dc55ca9a9acea"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1028
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--attachment-menu-ArrowDown-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+          "sha256": "17d980cba000cfd837a843e04008bcd9d23e857a097f2d1f143e490c4cce9b72"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 863
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--attachment-menu-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "16f55c9d7a9e2b123aa47bc2253108d464324581619b05fa9fbb6a0dd9d68348"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 844
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--attachment-menu-ArrowDown-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "15bc6a23772d7a7dd298202efc17233846b8c7d21deb63a422e0ea1c64ea1043"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1001
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--attachment-menu-Enter-ArrowDown-Enter-with-frames-held-runs-image--menu-held-frames.json",
+          "sha256": "b3af280baceaee76cc19d79c6d142d8469b1bbe6664b73b6656f28e96d6749f7"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1067
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--attachment-menu-Enter-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "80cc7c22385b14fd746890954860258899751821fc02b3812c6b28c241edfb7b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--attachment-menu-Enter-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 932
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--attachment-menu-Enter-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "c986f71ac167026dca437e5b07719f0feaeb3346600e14d89036e74a27c7a29c"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 928
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--attachment-menu-ArrowUp-Enter-with-frames-held-runs-command--menu-held-frames.json",
+          "sha256": "11a53992d7b1f75d4e93d195a946553857de87313a15ef2cc18f27c1edfae698"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 879
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--attachment-menu-ArrowUp-ArrowUp-Enter-with-frames-held-runs-shell--menu-held-frames.json",
+          "sha256": "01a2401ed27d5a6212663ab11627e568dcd83677184dbb4ba5e105abf9c19448"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 840
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--attachment-menu-ArrowUp-ArrowDown-Enter-with-frames-held-runs-file--menu-held-frames.json",
+          "sha256": "a9c25ac24af974820546ebea43bd548e8af4fe9ef6fbcca6c8bfdc151d539bcb"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 821
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--row-actions-menu-ArrowDown-Enter-with-frames-held-runs-its-action-and-not-the-row--menu-held-frames.json",
+          "sha256": "6be7bb9515ff007d200949ea68cde9e17baccb05d33e2f47479dc55ca9a9acea"
+        }
+      ]
+    }
+  ]
+}

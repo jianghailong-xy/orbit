@@ -13,6 +13,7 @@ function makeService(
   configuredRows: Array<{ slug: string; runtime?: string }> = [],
   lastProviderBuiltin = true,
   pools: Array<{ slug: string; ownerId: string }> = [],
+  role = 'MEMBER',
 ) {
   const creates: Array<Record<string, unknown>> = [];
   const providerQueries: unknown[] = [];
@@ -32,8 +33,9 @@ function makeService(
         ? [{ workspace_id: 'workspace-1', provider: lastProvider, provider_builtin: lastProviderBuiltin }]
         : [],
     runner: { findFirst: async () => ({ id: 'runner-1' }) },
-    // create() reads the owner's account-level permission default when the caller names none.
-    user: { findUnique: async () => ({ preferences: {} }) },
+    // create() reads the owner's account-level permission default when the caller names none, and
+    // their role, which decides whether a shared provider is one they may name (usableProviderScope).
+    user: { findUnique: async () => ({ preferences: {}, role }) },
     modelProvider: {
       findFirst: async (args: unknown) => {
         providerQueries.push(args);
@@ -137,8 +139,21 @@ test('a configured provider the caller can reach overrides the seed', async () =
 
   assert.equal(fixture.creates[0].provider, 'deepseek');
   assert.equal(fixture.creates[0].providerBuiltin, false);
-  // Owner-scoped and enabled-only: a disabled row, or another user's, must not resolve.
+  // Owner-scoped and enabled-only: a disabled row, or another user's, must not resolve — and a shared
+  // one only for an admin.
   assert.deepEqual((fixture.providerQueries[0] as { where: unknown }).where, {
+    slug: 'deepseek',
+    enabled: true,
+    ownerId: 'owner-1',
+  });
+  const admin = makeService('claude', [{ slug: 'deepseek' }], true, [], 'ADMIN');
+  await admin.service.create('owner-1', {
+    prompt: 'Fix the login timeout',
+    title: 'Fix login',
+    workspaceId: 'workspace-1',
+    provider: 'deepseek',
+  });
+  assert.deepEqual((admin.providerQueries[0] as { where: unknown }).where, {
     slug: 'deepseek',
     enabled: true,
     OR: [{ ownerId: null }, { ownerId: 'owner-1' }],
@@ -184,7 +199,7 @@ test('a seeded configured provider is looked up for the runtime it borrows', asy
   assert.deepEqual((fixture.providerQueries[0] as { where: unknown }).where, {
     slug: 'moonshot',
     enabled: true,
-    OR: [{ ownerId: null }, { ownerId: 'owner-1' }],
+    ownerId: 'owner-1',
   });
 });
 

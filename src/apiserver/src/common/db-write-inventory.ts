@@ -312,6 +312,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary. A rerun that committed is refused INTEGRATION_RETRY_IN_FLIGHT on a re-issue, never queued twice.',
   },
   {
+    at: 'projects/project-open-item.service.ts#skipIntegrationMergeCheck',
+    shape: 'TX_RETRIED',
+    locks: 'task FOR NO KEY UPDATE (rank 50) — the row lock the DONE transaction holds when it queues a landing (projects/project-integration-job.ts#enqueueForDoneTask), so a skip and a DONE of one task are ordered and read one generation counter — under which the project, the task\'s newest LAND_TASK, its OPEN integration items, its open owner blockers, the confirmation card it names (approval, by primary key) and the project_codebase (rank 55) are read unlocked; then project_integration_job (rank 60): one new LAND_TASK through projects/project-integration-job.ts#queueLandingRetry, whose foreign keys take the held task and the session FOR KEY SHARE; then project_open_item (rank 60): the coordinator\'s or owner\'s OPEN integration items of that task, marked as being handled by that generation through projects/project-open-item.ts#markOpenItemsHandling — still OPEN, ended by the generation\'s own result (§4.7 H1).',
+    identity: 'The task, the acting coordinator session or owner user, the reason and the approval card, all fixed before the closure. One task holds at most one QUEUED-or-RUNNING landing — J3\'s partial unique index — and a generation is keyed `ij:v1:LAND_TASK:<taskId>:<generation>`, so a call retried after a lost response finds the generation it queued in flight and is refused INTEGRATION_RETRY_IN_FLIGHT rather than queueing a second. The card is read, not consumed: a second call naming the same ALLOWED card meets that same in-flight refusal, and the card can never buy a second skip.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every input is re-read under the task lock on each attempt: the task\'s status, which conversation coordinates the project and whether it is Automatic, the newest landing, its state and the failure class the door is about, the open items and blockers, the approval row with the status and the landing it asked about, and the branch the task\'s work is on. A retried attempt refuses or queues exactly as a first attempt against those rows would have.',
+    effects: 'None. The landing it queued is handed out by the next heartbeat (runner-api/integration-job-relay.ts#dispatchIntegrationJobs) from the committed row, with no MERGE_CHECK built for it (0393).',
+    answer: 'Typed 503 from the global boundary. A skip that committed is refused INTEGRATION_RETRY_IN_FLIGHT on a re-issue, never queued twice.',
+  },
+  {
     at: 'projects/project-open-item.service.ts#retryPromotionCheck',
     shape: 'TX_RETRIED',
     locks: 'project_promotion FOR NO KEY UPDATE (rank 60) — the row every other writer of a candidate takes by updating it (the job-result transaction through applyPromotionJobResult, the owner\'s doors, the supersession of a new landing), so a re-check and any of them are ordered — under which the project, the candidate\'s newest job and its OPEN integration items are read unlocked; then project_integration_job (rank 60): one new CHECK_PROMOTION through projects/project-promotion.service.ts#requeuePromotionCheck, whose foreign keys take the held candidate and the session FOR KEY SHARE, and the held candidate written back to CHECKING; then project_open_item (rank 60): the coordinator\'s or owner\'s OPEN items about the candidate, marked as being handled by that check (projects/project-open-item.ts#markOpenItemsHandling).',
@@ -564,6 +575,29 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     replay: "Not retried: a unique violation is the answer, not a conflict to absorb. The loser rolls back whole — no account without its identity, no link without its Activity row — and GoogleLoginService.exchange reads once more (§5.2's last line), where the linked account is found by case 1, or the account with that email is answered by case 3. No deadlock with another first sign-in: each waits only on the unique keys of rows the other is inserting, and holds nothing the other waits on but rows only it inserted. A transaction that locks the `user` row FOR UPDATE waits behind the FOR KEY SHARE, never the other way round.",
     effects: "None inside. After commit, the exchange issues the session through AuthService.completeLogin.",
     answer: "A unique violation (P2002) is read again once by the exchange. Anything else — a second violation included — reaches the global boundary, a typed 503 for a transient conflict and a 500 otherwise, with nothing written; the ticket was spent at its first presentation, so the person signs in again.",
+  },
+  // Linking Google from the profile page, and unlinking it (docs/google-sign-in-design.md §5.3).
+  {
+    at: 'auth/google-login.service.ts#linkFromSettings',
+    shape: 'TX_BARE',
+    locks: "Inserts only; the reads before it take no lock. One user_identity row, under its two unique indexes, (provider, subject) and (user_id, provider), taking FOR KEY SHARE through its foreign key on the `user` row of the account signed in; then one `activity` row, which has no foreign key and no trigger. Neither table has a trigger. It waits only on a concurrent insert of one of those unique keys, until that transaction ends.",
+    identity: "The Google account's (provider, subject), and the (user_id, provider) of the account it links to: what a second confirmation of the same link, a link of the same Google account to another account, or another Google account linked to this one collides on.",
+    isolation: '',
+    attempts: 1,
+    replay: "Not retried: a unique violation is the answer, not a conflict to absorb. The loser rolls back whole — no link without its Activity row — and GoogleLoginService.confirmLink reads once more, where the link that won is found: this account's (nothing more to do), another account's (GOOGLE_ALREADY_LINKED), or another Google account on this one (GOOGLE_LINK_EXISTS). No deadlock: it waits only on unique keys of rows another link is inserting and holds nothing that one waits on but the rows only it inserted.",
+    effects: "None.",
+    answer: "A unique violation (P2002) is read again once by the confirmation. Anything else reaches the global boundary, a typed 503 for a transient conflict and a 500 otherwise, with nothing written; the ticket was spent at its first presentation, so the person connects Google again.",
+  },
+  {
+    at: 'auth/google-login.service.ts#removeGoogle',
+    shape: 'TX_BARE',
+    locks: "One user_identity row DELETEd by its primary key — a row lock on it and on its unique index entries; its foreign key to `user` is only read, so the user row is not locked. Then, only when the DELETE took the row, one `activity` row, which has no foreign key and no trigger. Neither table has a trigger.",
+    identity: "The identity row's id, read just before: of two unlinks of it at once, the one whose DELETE takes the row writes the Activity row, and the other deletes nothing and records nothing.",
+    isolation: '',
+    attempts: 1,
+    replay: "Not retried, and nothing to retry: the DELETE is conditional on the row still being there, so a second run removes nothing and records nothing. The account's own unlink is refused before the transaction while the account has no password; a password is never taken away once set, so that read cannot go stale in the refusing direction.",
+    effects: "None.",
+    answer: "A conflict reaches the global boundary — a typed 503 for a transient one, a 500 otherwise — with nothing written; the unlink can simply be asked again.",
   },
   {
     at: 'providers/pool-login-gateway.service.ts#rotate',
@@ -1949,11 +1983,11 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "auth/pat-device-login.service.ts#release", class: "ONE_ROW_CAS", statements: 1, note: "Puts back the claim `poll` took when the token could not be issued, guarded on DELIVERED, so the request reads APPROVED again and the refusal is what the CLI is answered." },
   // Sign-in providers (migration 0390, docs/google-sign-in-design.md §7.1).
   // Signing in with Google (migration 0391, docs/google-sign-in-design.md §4).
-  { at: "auth/google-login.service.ts#start", class: "INSERT", statements: 1, note: "One flow per sign-in /start opens: hashes of its state, binding cookie and nothing else secret but the nonce and Google's code verifier. A LOGIN flow names no user, so the INSERT has no foreign-key parent to lock. The cap on PENDING flows is counted before it, not under a lock, so starts racing at the last place can both land; it bounds a flood, and every start after it is crossed is refused 503." },
+  { at: "auth/google-login.service.ts#open", class: "INSERT", statements: 1, note: "One flow per sign-in /start opens, or per link the profile page opens (POST /auth/google/link, §5.3): hashes of its state, binding cookie and nothing else secret but the nonce and Google's code verifier. A LOGIN flow names no user, so its INSERT has no foreign-key parent to lock; a LINK flow names the account signed in, and its INSERT takes FOR KEY SHARE on that `user` row through link_user_id's foreign key, which waits only on a transaction deleting that user or changing its key. The cap on PENDING flows is counted before it, not under a lock, so starts racing at the last place can both land; it bounds a flood, and every start after it is crossed is refused 503." },
   { at: "auth/google-login.service.ts#sweep", class: "MANY_ROWS", statements: 1, note: "Each /start first deletes the flows past `expires_at`, every one of which nothing will read again. Two sweeps racing take the same expired rows, which no other writer touches, so the worst they meet is each other; one waits, then deletes what is left, and the request answers as if it had swept." },
   { at: "auth/google-login.service.ts#burn", class: "ONE_ROW_CAS", statements: 1, note: "Ends a flow whose callback was refused, guarded on PENDING: an AUTHENTICATED flow's ticket stays its client's, and a flow already ended is left ended. A DELETE: the LINK flow's user foreign key is only read, and nothing points at the row." },
   { at: "auth/google-login.service.ts#authenticate", class: "ONE_ROW_CAS", statements: 1, note: "Writes the verified identity and the ticket's hash onto a flow, guarded on PENDING, so of two callbacks presenting one state only one is handed a ticket; the other is told GOOGLE_FLOW_EXPIRED." },
-  { at: "auth/google-login.service.ts#redeem", class: "ONE_ROW_CAS", statements: 1, note: "The exchange's DELETE … WHERE ticket_hash = $1 AND status = 'AUTHENTICATED' RETURNING (§4.3): the ticket is spent by the statement that reads it, so of two exchanges at once one gets the row and the other none. Hand-written because Prisma's delete answers a row by reading it first." },
+  { at: "auth/google-login.service.ts#redeem", class: "ONE_ROW_CAS", statements: 1, note: "The DELETE … WHERE ticket_hash = $1 AND status = 'AUTHENTICATED' RETURNING that the exchange (§4.3) and a link's confirmation (§5.3) take their flow with: the ticket is spent by the statement that reads it, so of two presentations at once one gets the row and the other none. Hand-written because Prisma's delete answers a row by reading it first." },
   { at: "auth/google-login.service.ts#signInLinked", class: "ONE_ROW_BY_KEY", statements: 1, note: "Brings a linked Google identity up to date at sign-in — the email, Workspace domain and time Google reported — by its primary key. The `user_id` foreign key is not written, so it takes no parent lock." },
   { at: "auth/sign-in-providers.service.ts#updateGoogle", class: "ONE_ROW_BY_KEY", statements: 1, note: "An administrator's save of the Google sign-in setting: one INSERT … ON CONFLICT (provider) DO UPDATE of the one `google` row, keyed by its primary key. `sign_in_provider` has no foreign key and no trigger, so the statement takes that row and nothing else. Two saves racing both land, the later one whole, as two saves one after the other would." },
   { at: "auth/pat-request-audit.ts#record", class: "INSERT", statements: 1, note: "The request-level audit (PAT design §6.4): one `activity` row for each write a personal access token makes, `pat.request` or `pat.request.denied`, written after the answer has gone out. `activity` has no foreign key and no trigger, so the INSERT locks nothing but its own new row. Deliberately a statement of its own, in no transaction the request's writes are in, and never retried: a record that cannot be written is logged and dropped, and the answer the caller already has is unchanged." },
@@ -2380,5 +2414,9 @@ export const EXCLUDED_SOURCES: readonly ExcludedSource[] = [
   {
     path: 'projects/project-contract-test-helper.ts',
     why: 'A PostgreSQL-spec fixture helper. It seeds a goal and one acceptance criterion so a fixture has a real completion contract, and is not reachable from an application module or HTTP route.',
+  },
+  {
+    path: 'auth/tenant-isolation-fixtures.ts',
+    why: 'The tenant isolation census\'s fixtures: the accounts and every object they hold, written straight into their tables as each spec of their own writes them, for the census\'s two PostgreSQL specs to send across accounts. Imported by those specs alone, never by an application module or reachable from an HTTP route.',
   },
 ];

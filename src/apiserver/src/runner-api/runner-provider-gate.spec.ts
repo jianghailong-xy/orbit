@@ -12,6 +12,10 @@ const RUNNER = {
   ownerId: '22222222-2222-4222-8222-222222222222',
 };
 
+/** The runner's owner as usableProviderScope reads them: an admin, for whom the configured rows on a runtime
+ *  include the shared ones. A member's is shared-provider-admin-only.pg.spec.ts's. */
+const admin = { findUnique: async () => ({ role: 'ADMIN' }) };
+
 /** Whether a session query asks for `slug`'s rows: the preflights name every slug on a runtime. */
 const asksFor = (where: Record<string, unknown>, slug: string) =>
   (where.provider as { in?: string[] } | undefined)?.in?.includes(slug) ?? false;
@@ -32,6 +36,7 @@ test('legacy claim explains the pending OpenCode stall without stranding other w
         return { count: 1 };
       },
     },
+    user: admin,
     modelProvider: { findMany: async () => [] },
   } as never;
   const queue = {
@@ -70,6 +75,7 @@ test('an OpenCode-capable runner that does not name Antigravity has its Antigrav
         return { count: 1 };
       },
     },
+    user: admin,
     modelProvider: { findMany: async () => [] },
   } as never;
   const queue = {
@@ -122,6 +128,7 @@ test('a Gemini key borrows Antigravity, so a runner that does not name it has th
         return { count: 1 };
       },
     },
+    user: admin,
     modelProvider: {
       findMany: async (args: unknown) => {
         providerLookups.push(args);
@@ -167,6 +174,7 @@ test('a row already carrying the notice is not written again on every long poll'
         return { count: 1 };
       },
     },
+    user: admin,
     modelProvider: { findMany: async () => [] },
   } as never;
   const queue = { claimSessionForRunner: async () => null } as never;

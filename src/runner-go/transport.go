@@ -1541,6 +1541,32 @@ func (t *Transport) retryIntegration(sessionID, id, taskID, reason string) (json
 	return out, err
 }
 
+// skipIntegrationMergeCheck queues one of a DONE task's landings again with the project's merge
+// check NOT RUN (contract §2.4 J-S5), as the acting session — which the server checks against the
+// project's coordinator pointer exactly as it does for a rerun.
+//
+// The approval id travels with it and is the whole reason this door is not the retry door: the
+// server reads that card back, and queues nothing unless it is an ALLOWED one raised by this same
+// conversation about this same landing. Empty means the caller had no card, which the server refuses
+// on this channel — the account owner's own channel is the user route, which takes none.
+func (t *Transport) skipIntegrationMergeCheck(sessionID, id, taskID, reason, approvalID string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if err := validatePathSegmentID(taskID); err != nil {
+		return nil, err
+	}
+	body := map[string]interface{}{"reason": reason}
+	if approvalID != "" {
+		body["approvalId"] = approvalID
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST",
+		"/runner/projects/"+url.PathEscape(id)+"/tasks/"+url.PathEscape(taskID)+"/integration/skip-merge-check",
+		body, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 // retryPromotionCheck asks for a blocked candidate's check to run again, as the acting session
 // (contract §4.7 H1) — retryIntegration's door for an item that names no task. The session header is
 // the authority the server checks against the project's coordinator pointer; the reason travels as

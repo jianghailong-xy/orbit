@@ -43,7 +43,7 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
     file: 'tasks.service.ts',
     method: 'linkSupersededBy',
     statements: ['UPDATE "task"'],
-    holds: ['await this.lockTaskForSupersessionWrite(tx, predecessorId);'],
+    holds: ['await this.lockTaskForSupersessionWrite(tx, ownerId, predecessorId);'],
     note:
       'The predecessor\'s retirement, reached from `create` and from `update`. Its own rank-50 lock ' +
       'is NOWAIT rather than blocking, which is the one place in this inventory where a lock is ' +
@@ -57,7 +57,7 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
     statements: ['task.create', 'taskDependency.createMany'],
     holds: [
       'await lockTaskLists(tx, [dto.listId]);',
-      'await this.preLockCreatorSessions(tx, [sessionId], [dto.supersedesTaskId]);',
+      'await this.preLockCreatorSessions(tx, ownerId, [sessionId], [dto.supersedesTaskId]);',
       'if (dto.supersedesTaskId && dto.projectId) {',
       'await this.refenceProjectScope(',
     ],
@@ -127,7 +127,7 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
     holds: [
       'if (restructures) await this.lockDependencyGraph(tx, ownerId);',
       'await lockTaskLists(tx, [dto.listId]);',
-      'if (rewritesTaskRow) await this.preLockCreatorSessions(tx, [], [id]);',
+      'if (rewritesTaskRow) await this.preLockCreatorSessions(tx, ownerId, [], [id]);',
       'const acceptanceProjects = touchesAcceptanceFacts || supersession',
       'tx, ownerId, actingSessionId, scopeWorld, [scopeFence], acceptanceProjects,',
     ],

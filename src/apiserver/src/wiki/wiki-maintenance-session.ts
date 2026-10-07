@@ -36,7 +36,7 @@ import { wikiMaintenanceProviderProblem, wikiMaintenanceSpaceOf } from './wiki-m
  * the reclaim leaves it out, the way a pinned SOURCE is withheld from a runner that cannot pin (SR35).
  */
 
-type RunReader = Pick<Prisma.TransactionClient, 'session' | 'wikiSpace' | 'modelProvider' | 'providerPool' | 'wikiPlanJob'>;
+type RunReader = Pick<Prisma.TransactionClient, 'session' | 'wikiSpace' | 'modelProvider' | 'providerPool' | 'wikiPlanJob' | 'user'>;
 
 /**
  * The run a session is claimed with when it is a maintenance session, or null for every other session.
