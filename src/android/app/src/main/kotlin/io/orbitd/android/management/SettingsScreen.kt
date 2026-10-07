@@ -43,7 +43,8 @@ fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: 
         "workspace" -> WorkspaceSettings(api, route.workspaceId, revision, back, workspaceDeleted, changed)
         "runners" -> RunnersList(api, revision, runner)
         "sharing" -> SharingSettings(api, revision)
-        "admin" -> AdminSettings(api, revision)
+        "share" -> route.recordId?.split(':', limit = 2)?.takeIf { it.size == 2 }?.let { (kind, id) -> ShareResourceSettings(api, revision, kind, id) }
+        "admin" -> AdminSettings(api, revision, route.recordId, open, back)
         "notifications" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             notifications()
@@ -53,7 +54,8 @@ fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: 
     }
 }
 
-fun settingsTitle(page: String?): String = when (page) {
+fun settingsTitle(page: String?, record: String? = null): String = when (page) {
+    "share" -> ShareCopy.title(record?.substringBefore(':') ?: "SESSION")
     "profile" -> "Edit profile"; "password" -> "Change password"; "providers" -> "Providers"
     "workspace" -> "Workspace settings"; "runners" -> "Runners"; "sharing" -> "Shared links"
     "admin" -> "Admin"; "notifications" -> "Notifications"; else -> "Settings"
