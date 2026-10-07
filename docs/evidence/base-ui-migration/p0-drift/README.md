@@ -233,7 +233,7 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 迁移批次可能按设计改变 P0 截图，且这项改变已被协调者在该批证据里判定接受。例如 P3.2 让 task 场景有 8 个用例按设计不同：More 菜单和分享对话框的焦点约定，以及 WebKit 下 Share… 图标约 30 像素的行高精度差。这类差异不是 main 漂移，不能进参考层；也不是缺陷，不该靠人逐条解释。这一层专门收它们。
 
 - **位置**：与 main 漂移层分开，三处：
-  - [accepted/registry.json](accepted/registry.json)，本次为空；
+  - [accepted/registry.json](accepted/registry.json)，第 1 批为空，之后的登记见本节「已登记的条目」；
   - `accepted/screenshots/{project}/{name}.png`：接受后的期望图，即同提交对照的 after 原件；
   - `accepted/before/{project}/{name}.png`：同提交对照的 before 原件。
 - **组装顺序**：P0 回归先取 P0.2 原图，再用 main 漂移层替换登记的截图，最后用这一层替换登记的截图。同一张截图可以先有 main 漂移参考，再叠一条已接受的迁移差异。
@@ -258,6 +258,14 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
   - after 原件与 before 不一致。
 
   检查通过后复制两张原件、写入条目，同一截图的旧条目移入 `previous`。
+
+- **已登记的条目**：
+
+| 批次与判定 | 截图 | 条数 | 替换的期望 | 同提交原件 | 登记证据 |
+| --- | --- | ---: | --- | --- | --- |
+| P3.2（[34Za39ACSBoCkYKc80Md8](orbit-task:34Za39ACSBoCkYKc80Md8)）第 2 版证据，`evidenceDigest` `302ca1f5…09bc`，CONFIRM，文档 [p3.2/README.md](../p3.2/README.md) | task-share-dialog（8 个项目）；task-action-menu（4 个浅色项目） | 12 | 第 1 批 A4 的 main 漂移参考（`4088d37e6`） | before `fffcdb532`（P3.2 落地前的项目 tip），after `2925958ae` | [p3.2-accepted](../p3.2-accepted/README.md) |
+
+P3.2 另有 11 张截图的变化低于 P0 比较器阈值（深色 task-action-menu 4 张，webkit-dark-phone 的 task-detail、task-action-hover、task-action-focus，WebKit 桌面的 breakpoint-599/601-dialog 4 张）。登记工具不收这类截图，它们仍对照 main 漂移参考并通过，逐张见 p3.2-accepted。
 
 ## 维护规则
 
@@ -474,7 +482,7 @@ main 删掉了 P0 场景依赖的元素，使场景在截图前的等待或定�
 
 ```sh
 bash scripts/worktree-overlay.sh
-NO_COLOR=1 npm run test:ui-migration -w @orbit/web     # 第 2 批之后：只剩 P3.2 待登记的 8 个 task 用例（见 p0-drift-2）
+NO_COLOR=1 npm run test:ui-migration -w @orbit/web     # P3.2 的差异登记之后应全部通过（见 p3.2-accepted）
 npm run build -w @orbit/web && npm run test -w @orbit/web
 node docs/evidence/base-ui-migration/p0-drift/tools/validator-checks.mjs "$PWD" /tmp/p0-validator-checks
 ```
