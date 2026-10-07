@@ -219,6 +219,58 @@ describe('provider write approval', () => {
   });
 });
 
+describe('merge-check skip approval', () => {
+  const skip = (over: Record<string, unknown> = {}): ApprovalInfo =>
+    ({
+      id: 's1',
+      toolName: 'orbit_integration_skip_merge_check',
+      input: {
+        projectId: 'p1',
+        projectTitle: 'Checkout rewrite',
+        taskId: 't1',
+        taskTitle: 'Port the payment form',
+        checkCommand: 'npm test && go test ./...',
+        failure: 'Checks failed on the combined tree: the merge check exited 1 (expected 0)',
+        generation: '1',
+        reason: '本机 bash 3.2 没有 mapfile，也没有 GNU `timeout`，这条命令在这里必红。',
+        ...(over.input as object),
+      },
+      ...over,
+    }) as ApprovalInfo;
+
+  it('leads with the command that would not run, then the agent\'s claim about it', () => {
+    const html = render(skip());
+
+    expect(html).toContain('Confirm: land Port the payment form without the merge check?');
+    expect(html).toContain('In Checkout rewrite');
+    // The command itself, verbatim: the decision is whether THAT command should hold up THAT
+    // landing, and a card that paraphrased it would be asking about something nobody can see.
+    expect(html).toContain('npm test &amp;&amp; go test ./...');
+    // What it said last time, and that it did not run this time.
+    expect(html).toContain('the merge check exited 1 (expected 0)');
+    expect(html).toContain('This landing runs without the merge check');
+    // The agent's reason is marked as the agent's, because it is a claim being judged.
+    expect(html).toContain('The agent says this red is the check');
+    expect(html).toContain('GNU');
+    expect(html).toContain('Land it without the check');
+    // Once, said on the card: a skip is not the project's check being turned off.
+    expect(html).toContain('Once, and only this landing');
+    // Declining is "not this, and here is what instead", as it is on Orbit's other asks.
+    expect(html).toContain('Chat about this');
+    expect(html).not.toContain('orbit_integration_skip_merge_check');
+  });
+
+  it('offers no standing yes', () => {
+    // "Always let this conversation land past the check" is every later landing unchecked, which is
+    // the project's setting — not a rule one card may leave behind.
+    expect(render(skip())).not.toContain('Always allow');
+  });
+
+  it('says what is not being skipped when it is declined', () => {
+    expect(decliningPrefix('orbit_integration_skip_merge_check')).toBe('Checking it after all: ');
+  });
+});
+
 describe('blocker resolution approval', () => {
   const resolve = (over: Record<string, unknown> = {}): ApprovalInfo =>
     ({

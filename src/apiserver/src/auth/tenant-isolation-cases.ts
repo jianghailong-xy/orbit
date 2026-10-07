@@ -255,6 +255,10 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     request: (of) => ({ params: { id: of.projectId, taskId: of.projectTaskId }, body: { reason: 'the census' } }),
     nested: ['taskId'],
   },
+  'POST /projects/:id/tasks/:taskId/integration/skip-merge-check': {
+    request: (of) => ({ params: { id: of.projectId, taskId: of.projectTaskId }, body: { reason: 'the census' } }),
+    nested: ['taskId'],
+  },
   'GET /projects/:id/handoffs': { request: (of) => ({ params: { id: of.projectId } }) },
   'POST /projects/:id/handoffs/:handoffId/decision': {
     request: (of) => ({ params: { id: of.projectId, handoffId: of.handoffId }, body: { decision: 'DENY' } }),

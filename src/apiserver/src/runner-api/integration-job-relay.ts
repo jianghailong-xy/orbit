@@ -26,6 +26,8 @@ import {
   isTerminalJobState,
   jobLanded,
   landingFailureClass,
+  skippedMergeCheck,
+  type SkippedMergeCheckRecord,
   landingJudgedTooEarly,
   landingLeftWorkBehind,
   openItemKindForJobState,
@@ -150,6 +152,8 @@ interface ClaimedRow {
   mergeCheckCommand: string | null;
   mergeCheckTimeoutSeconds: number | null;
   cancelRequestedAt: Date | null;
+  /** This generation runs no merge check (0393): the account owner approved skipping it. */
+  skipMergeCheck: boolean;
   /** A promotion job's frozen source, and the two facts M-S3 compares before it lands. */
   jobSourceSha: string | null;
   promotionId: string | null;
@@ -260,8 +264,17 @@ export async function dispatchIntegrationJobs(
  *
  * A task with no acceptance command contributes none. That is not a gap: an EVIDENCE_JUDGMENT or
  * OWNER_CONFIRMED task was settled by somebody looking at it, and there is no command to re-run.
+ *
+ * ONE GENERATION MAY SKIP ITS CHECK. `integration_skip_merge_check` queues a landing with the merge
+ * check NOT RUN, because the account owner agreed the check is what is red rather than the delivery
+ * (§2.4 J-S5, 0393) — so no MERGE_CHECK spec is built and the runner's CHECK phase does not happen
+ * at all. The task's own acceptance is deliberately NOT skipped with it: the check the owner was
+ * asked about is the project's, and a task whose own criterion cannot pass on the combined tree is a
+ * statement about that task that no approval here chose to waive. This is the only place a check
+ * disappears, and it disappears for the job whose row says so — the next generation is queued with
+ * the flag false and is handed its check like any other.
  */
-function checksFor(row: ClaimedRow): IntegrationCheckSpec[] {
+export function checksFor(row: ClaimedRow): IntegrationCheckSpec[] {
   const checks: IntegrationCheckSpec[] = [];
   // Which checks a job runs is decided by WHAT IT IS PUTTING WHERE (§3.4 M-S3). A landing on the
   // project branch runs the task's own acceptance on the combined tree, and so does a `TASK_BRANCH`
@@ -280,7 +293,11 @@ function checksFor(row: ClaimedRow): IntegrationCheckSpec[] {
       timeoutSeconds: row.acceptanceTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS,
     });
   }
-  if (row.mergeCheckCommand) {
+  // The kind is checked as well as the flag even though 0393's CHECK makes the combination
+  // impossible: what skips a check is one task's landing onto the project's own branch, and a row
+  // that arrived saying otherwise — a hand-written fixture, a build ahead of the migration — keeps
+  // the check it was queued for rather than landing unchecked.
+  if (row.mergeCheckCommand && !(row.kind === 'LAND_TASK' && row.skipMergeCheck)) {
     checks.push({
       name: 'MERGE_CHECK',
       command: row.mergeCheckCommand,
@@ -419,6 +436,9 @@ async function claimOne(
       cb."merge_check_command" AS "mergeCheckCommand",
       cb."merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
       j."cancel_requested_at" AS "cancelRequestedAt",
+      -- §2.4 J-S5 / 0393: a generation whose merge check was approved away. It travels with the
+      -- claim because the command this beat builds is where the check would have been handed over.
+      j."skip_merge_check" AS "skipMergeCheck",
       j."source_sha" AS "jobSourceSha",
       j."promotion_id" AS "promotionId",
       j."confirmed_automatically" AS "confirmedAutomatically",
@@ -651,6 +671,10 @@ export async function applyIntegrationJobResult(
         generation: true, retryOfJobId: true, retryFailureClass: true, retryReason: true,
         retryRequestedBySessionId: true,
         retryRequestedByUserId: true,
+        // 0393: what this generation ran instead of its merge check, so the failure it goes on to
+        // open can say so — a red reported by a landing whose check never ran must not read as a
+        // check that failed.
+        skipMergeCheck: true, skipReason: true, skipApprovedByUserId: true, skipApprovalId: true,
         session: { select: { baseSha: true } },
         task: { select: { title: true, assigneeId: true, creatorType: true, creatorId: true } },
       },
@@ -990,6 +1014,7 @@ export async function applyIntegrationJobResult(
                 requestedByUserId: job.retryRequestedByUserId,
               }
             : null,
+          skippedCheck: skippedMergeCheck(job),
         }),
       });
       openItemId = opened?.itemId ?? openItemId;
@@ -1112,6 +1137,13 @@ function nothingToLandComment(input: {
       requestedBySessionId: string | null;
       requestedByUserId: string | null;
     } | null;
+    /**
+     * The merge check this generation did NOT run, when the account owner approved skipping it
+     * (§2.4 J-S5, 0393). A failure of such a generation is about the rest of its work, and the item
+     * has to say so: without it, a tree that came back red on the TASK_ACCEPTANCE alone would read
+     * as the very check the owner had just taken off it.
+     */
+    skippedCheck: SkippedMergeCheckRecord | null;
   },
 ): Record<string, unknown> {
   // What every failure says about itself beside its own facts: the class its next step turns on
@@ -1121,6 +1153,7 @@ function nothingToLandComment(input: {
     failureClass: landingFailureClass({ state, checks: detail.checks }),
     generation: detail.generation,
     ...(detail.retry ? { retry: detail.retry } : {}),
+    ...(detail.skippedCheck ? { skippedCheck: detail.skippedCheck } : {}),
   };
   if (state === 'CONFLICT') {
     return {
