@@ -530,8 +530,11 @@ class ManagementDeviceTest {
         if (target == null) { capture("$shot-missing"); problem(report, problems, "$shot: nothing on screen is named \"$words\""); return }
         val at = Rect().also(target::getBoundsInScreen)
         report.appendLine("touch \"$words\" at $at")
-        tap(at.exactCenterX(), at.exactCenterY()); SystemClock.sleep(1_000)
-        val focus = focused()
+        tap(at.exactCenterX(), at.exactCenterY())
+        // TalkBack moves its focus a moment after the touch ends (it first waits to see whether a second tap follows).
+        val until = SystemClock.uptimeMillis() + 3_000
+        var focus = focused()
+        while (focus?.let(::spoken)?.contains(words, ignoreCase = true) != true && SystemClock.uptimeMillis() < until) { SystemClock.sleep(200); focus = focused() }
         val said = focus?.let(::spoken).orEmpty()
         report.appendLine("touch \"$words\" -> TalkBack's focus on ${focus?.className?.toString()?.substringAfterLast('.')} \"$said\"")
         if (focus == null || !said.contains(words, ignoreCase = true)) problem(report, problems, "$shot: TalkBack's focus is on \"$said\", not \"$words\"")
