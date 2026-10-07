@@ -127,13 +127,17 @@
         <div class="none zh">（现在没有这个状态：只有一个按钮，永远是 CLI 自己选站点）</div>
       </div>
       <div>
-        <div class="lbl zh"><span class="m-k new">改后</span>runner 不支持选站点</div>
+        <div class="lbl zh"><span class="m-k new">改后</span>两个都能点</div>
         <div class="shot">
           <img src="01i-old-runner.png" alt="">
-          <span class="ring" style="left:243px;top:116px;width:215px;height:73px"></span><span class="n" style="left:447px;top:105px">7</span>
-          <span class="ring" style="left:35px;top:183px;width:458px;height:29px"></span>
+          <span class="ring" style="left:33px;top:116px;width:425px;height:73px"></span><span class="n" style="left:447px;top:105px">7</span>
         </div>
-        <p class="m-cap zh"><b>7</b> runner 没声明 <code>kimi-login-region/v1</code>（Orbit runner 版本旧）时，它只会跑不带参数的 <code>kimi login</code>：kimi.ai 置灰，下面一句话说清楚要升级这台 runner。服务端同样拒绝给这种 runner 下发 <code>region</code>，不会悄悄登到 kimi.com。</p>
+        <div class="step zh"><b>在这种 runner 上点 kimi.ai</b></div>
+        <div class="shot">
+          <img src="01j-old-runner-kimi-ai.png" alt="">
+          <span class="ring" style="left:35px;top:88px;width:400px;height:28px"></span><span class="n" style="left:424px;top:77px">8</span>
+        </div>
+        <p class="m-cap zh"><b>7</b> runner 没声明 <code>kimi-login-region/v1</code>（Orbit runner 版本旧）时，两个按钮照样都能点；点 kimi.com 就是现在这种不带参数的 <code>kimi login</code>。<b>8</b> 点 kimi.ai：旧 runner 认不出站点，放行就会悄悄登到 kimi.com，所以服务端在它下一次心跳时拒绝，卡片上写「This runner is too old to choose a Kimi site — update it, then try again.」。runner 自动更新到新版本后，kimi.ai 直接就能登。</p>
       </div>
     </div>
   </div>
@@ -146,6 +150,7 @@
         <li><span class="m-n">a</span><span><b>不默认、不记忆。</b>站点是账号的属性，不是偏好：猜错一次，用户就要在别人的登录页里白跑一趟。kimi.com 和 kimi.ai 两个选项并排，和 Kimi 自己的登录对话框一样（「Sign in with your kimi.com account」/「… kimi.ai account」）。</span></li>
         <li><span class="m-n">b</span><span><b>放在面板里，不放在行上的 Sign in。</b>行上的按钮不变；面板原本那个「Sign in to Kimi Code」换成两个选项，点击数不变，Claude / Codex / Antigravity 完全不受影响。</span></li>
         <li><span class="m-n">c</span><span><b>不选的备选方案：</b>① 默认 kimi.com、设备码页给「切到 kimi.ai」——每个 kimi.ai 用户都要先白等一次 runner 心跳（最长一分钟）；② 在 Providers 页给 Kimi 加一个全局「地区」设置——地区是每台 runner 上那个登录的事，同一个人可能两台机器登两个站点；③ 用 kimi.ai 的安装脚本重装——只影响「第一次登录」，登过一次就不再看它。</span></li>
+        <li><span class="m-n">c′</span><span><b>站点跟着登录走，不跟着安装走。</b>核实过（2026-10-08）：code.kimi.com 和 code.kimi.ai 发的是同一个二进制——2.1.1 两边的 manifest 逐字节相同，从 kimi.ai 下载的 <code>kimi</code> sha256 和本机从 kimi.com 装的一样；两种安装只差安装脚本写进 <code>~/.kimi-code/region</code> 的标记，而这个标记只在第一次登录前起作用。所以安装时不用选，登录时选。</span></li>
         <li><span class="m-n">d</span><span><b>iOS / macOS</b> 共用 <code>RunnerSignInView.swift</code>，同样改（见 02-ios）。<code>orbit doctor</code> 的终端登录也要先问站点，再跑 <code>kimi login --region …</code>。</span></li>
       </ul>
       <ul class="m-notes zh">

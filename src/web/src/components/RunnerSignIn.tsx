@@ -164,6 +164,10 @@ export function RunnerSignIn({
   });
   const choosesSite = !!kimiRunner.data?.capabilities?.includes(KIMI_LOGIN_REGION_V1);
   const currentSite = kimiRunner.data?.engines?.find((e) => e.engine === 'kimi')?.kimiRegion;
+  // Both sites can always be pressed. A runner too old to be told a site signs in where its CLI
+  // decides — kimi.com, on an install Orbit made — so kimi.com goes to it unnamed; kimi.ai is named
+  // either way, and such a runner is refused it in words that say to update it (RunnerApiController).
+  const kimiSiteToName = (region: KimiRegion) => (choosesSite || region === 'global' ? region : undefined);
   const [code, setCode] = useState('');
   // Set once a pasted code is on its way to the runner — see `verifying` below.
   const [sent, setSent] = useState(false);
@@ -434,10 +438,10 @@ export function RunnerSignIn({
         </div>
         {/* The wrong site is the one mistake the user can't see until they are on its page: their
             account isn't there. Starting over on the other one is a single press. */}
-        {site && choosesSite ? (
+        {site ? (
           <div className="rsi-links">
             {cancelLink}
-            <button className="rsi-link" onClick={() => begin(other)} type="button">
+            <button className="rsi-link" onClick={() => begin(kimiSiteToName(other))} type="button">
               Use {KIMI_SITE[other].domain} instead
             </button>
           </div>
@@ -509,10 +513,8 @@ export function RunnerSignIn({
               key={region}
               className="rsi-site"
               type="button"
-              disabled={start.isPending || kimiRunner.isPending || (region === 'global' && !choosesSite)}
-              // A runner that can't be told a site signs in where its CLI decides — kimi.com, on an
-              // install Orbit made — so that press names none rather than be refused for naming one.
-              onClick={() => begin(choosesSite ? region : undefined)}
+              disabled={start.isPending || kimiRunner.isPending}
+              onClick={() => begin(kimiSiteToName(region))}
             >
               <span className="rsi-site-name">
                 {KIMI_SITE[region].domain}
@@ -532,11 +534,7 @@ export function RunnerSignIn({
             </button>
           )}
         </div>
-        <div className="rsi-hint">
-          {kimiRunner.data && !choosesSite
-            ? 'This runner signs in on kimi.com only. Update it to sign in with a kimi.ai account.'
-            : 'The two sites keep separate accounts — pick the one you signed up on.'}
-        </div>
+        <div className="rsi-hint">The two sites keep separate accounts — pick the one you signed up on.</div>
         {onUseApiKey && (
           <div className="rsi-hint">
             Signing in fixes this runner. A key is account-wide — switch to its model to use it.

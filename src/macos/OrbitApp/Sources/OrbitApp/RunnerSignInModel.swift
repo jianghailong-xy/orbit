@@ -114,8 +114,6 @@ final class RunnerSignInModel {
     /// The runner's own last word — a rejected code, or why an attempt failed.
     var relayMessage: String? { mine ? relay?.message : nil }
 
-    /// Kimi: whether this runner signs in on the site a start names.
-    var choosesSite: Bool { KimiSite.choosable(on: runner) }
     /// Kimi: the site the runner's login is on now, marked on the choice.
     var currentSite: KimiSite? { KimiSite.current(on: runner) }
     /// Kimi: the site of the page the one-time code is for, read off its address.

@@ -155,8 +155,8 @@ struct RunnerSignInView: View {
             // account isn't there. Starting over on the other one is a single press.
             HStack(spacing: 16) {
                 cancelButton(model)
-                if let site, model.choosesSite {
-                    Button(site.other.useInstead) { Task { await model.begin(site: site.other) } }
+                if let site {
+                    Button(site.other.useInstead) { Task { await model.begin(site: KimiSite.named(site.other, on: model.runner)) } }
                         .buttonStyle(.borderless)
                         .font(.orbitLabel)
                         .disabled(model.busy)
@@ -189,9 +189,7 @@ struct RunnerSignInView: View {
             Text(KimiSite.question).font(.orbitLabel)
             ForEach(KimiSite.allCases) { site in
                 Button {
-                    // A runner that can't be told a site signs in where its CLI decides — kimi.com, on
-                    // an install Orbit made — so that press names none rather than be refused for it.
-                    Task { await model.begin(site: model.choosesSite ? site : nil) }
+                    Task { await model.begin(site: KimiSite.named(site, on: model.runner)) }
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         VStack(alignment: .leading, spacing: 1) {
@@ -211,9 +209,9 @@ struct RunnerSignInView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.bordered)
-                .disabled(model.busy || !model.runnerRead || (site == .global && !model.choosesSite))
+                .disabled(model.busy || !model.runnerRead)
             }
-            Text(model.runner != nil && !model.choosesSite ? KimiSite.olderRunner : KimiSite.separateAccounts)
+            Text(KimiSite.separateAccounts)
                 .font(.orbitLabel)
                 .foregroundStyle(.secondary)
         }
