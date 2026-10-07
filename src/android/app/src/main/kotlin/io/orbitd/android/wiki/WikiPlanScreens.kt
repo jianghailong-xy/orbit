@@ -92,6 +92,7 @@ internal fun WikiPlanScreen(store: WikiStore, route: OrbitRoute, data: Directory
             }
             is WikiStore.PlanWrite.Refused -> notice = answer.errors.joinToString("\n") { "${it.path} ${it.message}" }
             is WikiStore.PlanWrite.Failed -> notice = answer.message
+            is WikiStore.PlanWrite.AcceptedNotConfirmed -> notice = WikiPlanCopy.acceptedNotConfirmed(answer.version, answer.why)
         }
     }
     /** Accept: with no other draft waiting, one press accepts and confirms — two requests, the second only once the gate
@@ -109,6 +110,8 @@ internal fun WikiPlanScreen(store: WikiStore, route: OrbitRoute, data: Directory
             }
             is WikiStore.PlanWrite.Refused -> refused = refused + (proposal.id to accepted.errors)
             is WikiStore.PlanWrite.Failed -> notice = accepted.message
+            // The change is in a draft that is now waiting on the owner; the plan page shows it with its Confirm.
+            is WikiStore.PlanWrite.AcceptedNotConfirmed -> notice = WikiPlanCopy.acceptedNotConfirmed(accepted.version, accepted.why)
         }
     }
     suspend fun reject(proposal: WikiPlanProposal) {
@@ -120,6 +123,7 @@ internal fun WikiPlanScreen(store: WikiStore, route: OrbitRoute, data: Directory
         is WikiStore.PlanWrite.Done -> { WikiToast.show(WikiPlanCopy.draftSaved(answer.version)); null }
         is WikiStore.PlanWrite.Refused -> answer.errors.map { "${it.path} ${it.message}" }
         is WikiStore.PlanWrite.Failed -> listOf(answer.message)
+        is WikiStore.PlanWrite.AcceptedNotConfirmed -> listOf(WikiPlanCopy.acceptedNotConfirmed(answer.version, answer.why))
     }
 
     val actions = WikiPlanActions(

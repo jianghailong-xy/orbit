@@ -4,7 +4,9 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -15,6 +17,10 @@ import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.directory.DirectoryData
 import io.orbitd.android.navigation.*
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 
 /** Where a press on a Wiki page goes. Every page rides the stack it was opened on, so what a page opens — a
  * session at a quoted record, a task, a project — is pushed over it and Back returns to the same Wiki page. */
@@ -56,14 +62,16 @@ internal fun OrbitNavigation.replaceTop(route: OrbitRoute): OrbitNavigation =
 
 /** The Wiki section's pages over the account's one Wiki store (iOS `AppModel.wiki`). */
 @Composable
-fun WikiDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, data: DirectoryData, revision: Long,
+fun WikiDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, data: DirectoryData,
     open: (OrbitRoute) -> Unit, navigate: ((OrbitNavigation) -> OrbitNavigation) -> Unit) {
     val store = remember(handle) { WikiStore.of(app.session, handle, app.processScope) }
     if (!store.live()) return
-    // The account stream says something changed, or it reconnected: re-read what the Wiki has loaded. The
-    // stream's events reach this client only as a revision, so any of them nudges while a Wiki page is up.
-    var seen by remember(store) { mutableLongStateOf(revision) }
-    LaunchedEffect(store, revision) { if (revision != seen) { seen = revision; store.nudge() } }
+    // `wiki.changed` arrived, or the stream reconnected (it replays nothing): re-read what the Wiki has loaded, as
+    // iOS's `AppModel` does. Other account events are not about the Wiki and read nothing here.
+    LaunchedEffect(store) {
+        app.realtime.state.filter { it.handle === handle }.map { (it.accountEvents[WIKI_CHANGED] ?: 0L) to it.controlConnects }
+            .distinctUntilChanged().drop(1).collect { store.nudge() }
+    }
     val context = LocalContext.current
     val nav = remember(store, open, navigate) {
         WikiNav(open, navigate, handle.account.server) { raw ->
@@ -71,7 +79,9 @@ fun WikiDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRo
             catch (_: ActivityNotFoundException) { WikiToast.show("No application can open this link.") }
         }
     }
-    Box(Modifier.fillMaxSize().testTag("wiki-destination")) {
+    Column(Modifier.fillMaxSize().testTag("wiki-destination")) {
+      WikiNoticeBanner(store)
+      Box(Modifier.fillMaxWidth().weight(1f)) {
         when (route.destination) {
             Destination.WIKI -> WikiHomeScreen(store, route, data, nav)
             Destination.WIKI_ENTRY -> WikiEntryScreen(store, route, data, nav)
@@ -86,8 +96,12 @@ fun WikiDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRo
             else -> Unit
         }
         WikiToast.Host()
+      }
     }
 }
+
+/** The account event that says a wiki space changed (contract `realtime.event`). */
+private const val WIKI_CHANGED = "wiki.changed"
 
 /** The drawer's Wiki row's amber number: the proposals waiting for review, summed over every space — the home
  * banner's and Review's own count — and nothing at zero (iOS `CompactShell.wikiRow`). The drawer reads the spaces

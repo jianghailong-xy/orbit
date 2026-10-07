@@ -269,6 +269,17 @@ internal object WikiLogic {
         "reject" -> if (op == "retire") WikiCopy.decidedKept else WikiCopy.rejected
         else -> if (op == "retire") WikiCopy.retired else WikiCopy.decidedAccepted
     }
+    /** What the server recorded for the op a decide answered: the changeset it returns lists every op with its
+     * `decision`. Null when the answer does not say. */
+    fun recordedDecision(answer: JsonElement?, opId: String): String? = (answer as? JsonObject)?.get("ops")?.let { it as? JsonArray }
+        ?.filterIsInstance<JsonObject>()?.firstOrNull { sameWikiId(it["id"].text(), opId) }?.get("decision").text()
+    /** A recorded decision that applied nothing, as the refusal to show (`conflict`: the entry moved past the op, or —
+     * for a challenge — is no longer active; `withdrawn`); null when the answer did what was asked. */
+    fun decisionRefusal(decision: String?, op: String?): String? = when (decision) {
+        "conflict" -> if (op == "challenge") WikiCopy.inactiveRefused else WikiCopy.conflictRefused
+        "withdrawn" -> WikiCopy.withdrawnRefused
+        else -> null
+    }
     fun cardTitle(card: ReviewCard, entry: WikiEntry?) = knownTitle(card, entry) ?: WikiCopy.entryWord
     fun knownTitle(card: ReviewCard, entry: WikiEntry?): String? {
         card.op.payload["entry"]["title"].text()?.let { return it }

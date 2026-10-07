@@ -65,6 +65,33 @@ object PageBar {
     fun Actions(route: OrbitRoute, scope: RowScope) { if (owner == route) actions?.invoke(scope) }
 }
 
+/** A Wiki sheet that holds while its write is on its way: no swipe, scrim tap or Back closes it until the answer
+ * (iOS `.interactiveDismissDisabled`); its Cancel is the sheet bar's, disabled meanwhile. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun WikiSheet(saving: Boolean, close: () -> Unit, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val holding by rememberUpdatedState(saving)
+    val state = rememberModalBottomSheetState(skipPartiallyExpanded = true, confirmValueChange = { it != SheetValue.Hidden || !holding })
+    ModalBottomSheet(onDismissRequest = { if (!holding) close() }, sheetState = state, modifier = modifier,
+        properties = ModalBottomSheetProperties(shouldDismissOnBackPress = !saving, shouldDismissOnClickOutside = !saving), content = content)
+}
+
+/** What a write came to after the page that asked had gone, at the top of the Wiki page now up until it is dismissed. */
+@Composable
+internal fun WikiNoticeBanner(store: WikiStore) {
+    val state by store.state.collectAsState()
+    val notice = state.notice ?: return
+    Row(Modifier.fillMaxWidth().background(if (notice.refused) WikiPalette.amber.copy(alpha = 0.16f) else MaterialTheme.colorScheme.secondaryContainer)
+        .padding(start = 16.dp, end = 4.dp, top = 2.dp, bottom = 2.dp).testTag("wiki-notice")
+        .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }, verticalAlignment = Alignment.CenterVertically) {
+        Text(notice.text, Modifier.weight(1f).padding(vertical = 8.dp), style = WikiType.subtext,
+            color = if (notice.refused) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSecondaryContainer)
+        TextButton(onClick = { store.dismissNotice(notice.serial) }, modifier = Modifier.heightIn(min = 48.dp).testTag("wiki-notice-dismiss")) {
+            Text(WikiCopy.dismiss)
+        }
+    }
+}
+
 @Composable
 internal fun BarIcon(icon: Int, description: String, tag: String, enabled: Boolean = true, onClick: () -> Unit) {
     IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.testTag(tag)) { Icon(painterResource(icon), description) }

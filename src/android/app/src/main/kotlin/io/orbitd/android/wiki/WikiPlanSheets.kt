@@ -1,6 +1,9 @@
 package io.orbitd.android.wiki
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.verticalDrag
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
@@ -12,15 +15,27 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import io.orbitd.android.R
 import kotlinx.coroutines.launch
 
@@ -42,10 +57,9 @@ internal fun WikiPlanRedraftSheet(note: String, protectedDocs: List<String>, bus
     var words by rememberSaveable { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    ModalBottomSheet(onDismissRequest = close, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        modifier = Modifier.testTag("wiki-plan-redraft-sheet")) {
+    WikiSheet(sending, close, Modifier.testTag("wiki-plan-redraft-sheet")) {
         SheetBar(WikiPlanCopy.redraftTitle, WikiPlanCopy.cancel, WikiPlanCopy.redraftGo, confirmEnabled = !sending && !busy,
-            confirmTag = "wiki-plan-redraft-go", cancel = close) {
+            confirmTag = "wiki-plan-redraft-go", cancel = close, cancelEnabled = !sending) {
             sending = true
             scope.launch { val done = redraft(words); sending = false; if (done) close() }
         }
@@ -78,10 +92,16 @@ internal fun WikiPlanEditSheet(number: String, stored: WikiPlanDoc, nextVersion:
     fun sections(change: MutableList<WikiPlanLogic.DocForm.Section>.() -> Unit) {
         form = form.copy(sections = form.sections.toMutableList().apply(change))
     }
-    ModalBottomSheet(onDismissRequest = close, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        modifier = Modifier.testTag("wiki-plan-edit-sheet")) {
+    // A section is moved by dragging its handle, as iOS's list in edit mode (the owner's decision, card
+    // 34bs0PdYUHHwiKHYn3rCp): rows trade places as it passes half of the next one, and the order is the form's once it
+    // is let go. The drag is measured on the list, which stays put, not on the row, which moves with the finger.
+    var drag by remember { mutableStateOf<WikiSectionDrag?>(null) }
+    val handles = remember { mutableMapOf<String, Rect>() }
+    val heights = remember { mutableMapOf<String, Int>() }
+    var list by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    WikiSheet(saving, close, Modifier.testTag("wiki-plan-edit-sheet")) {
         SheetBar(WikiPlanCopy.editTitle(number), WikiPlanCopy.cancel, WikiPlanCopy.saveDraft, confirmEnabled = !saving && !busy,
-            confirmTag = "wiki-plan-edit-save", cancel = close) {
+            confirmTag = "wiki-plan-edit-save", cancel = close, cancelEnabled = !saving) {
             saving = true
             val input = WikiPlanLogic.docEdit(stored, form)
             scope.launch { val answer = save(input); saving = false; if (answer != null) refused = answer else close() }
@@ -118,11 +138,35 @@ internal fun WikiPlanEditSheet(number: String, stored: WikiPlanDoc, nextVersion:
             item(key = "sections-header") { WikiPlanSectionHead(WikiPlanCopy.sections) }
             item(key = "sections") {
                 WikiCard(Modifier.testTag("wiki-plan-edit-sections")) {
-                    form.sections.forEachIndexed { i, row ->
-                        key(row.id) {
-                            if (i > 0) HorizontalDivider(Modifier.padding(start = 16.dp))
-                            PlanEditRow(i, row, form.sections.size, change = { updated -> sections { this[i] = updated } },
-                                remove = { sections { removeAt(i) } }, move = { to -> sections { add(to, removeAt(i)) } })
+                    val shown = drag?.order?.mapNotNull { id -> form.sections.firstOrNull { it.id == id } } ?: form.sections
+                    Column(Modifier.onPlaced { list = it }.pointerInput(Unit) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            // Only the handle of a section shown now: a removed one's handle lay where the next moved to.
+                            val current = form.sections.map { it.id }
+                            val id = handles.entries.firstOrNull { it.key in current && it.value.contains(down.position) }?.key ?: return@awaitEachGesture
+                            drag = WikiSectionDrag(id, current, 0f)
+                            try {
+                                val ended = verticalDrag(down.id) { change -> drag = drag?.moved(change.positionChange().y, heights); change.consume() }
+                                val order = drag?.order
+                                if (ended && order != null && order != current) form = form.copy(sections = order.mapNotNull { at -> form.sections.firstOrNull { it.id == at } })
+                            } finally { drag = null }
+                        }
+                    }) {
+                        shown.forEachIndexed { i, row ->
+                            key(row.id) {
+                                // A section that goes takes its handle with it.
+                                DisposableEffect(row.id) { onDispose { handles.remove(row.id); heights.remove(row.id) } }
+                                if (i > 0) HorizontalDivider(Modifier.padding(start = 16.dp))
+                                val dragged = drag?.id == row.id
+                                Box(Modifier.onSizeChanged { heights[row.id] = it.height }.zIndex(if (dragged) 1f else 0f)
+                                    .graphicsLayer { translationY = if (dragged) drag?.offset ?: 0f else 0f }) {
+                                    PlanEditRow(i, row, shown.size, change = { updated -> sections { this[indexOfFirst { it.id == row.id }] = updated } },
+                                        remove = { sections { removeAt(indexOfFirst { it.id == row.id }) } },
+                                        move = { by -> sections { val at = indexOfFirst { it.id == row.id }; add(at + by, removeAt(at)) } },
+                                        handle = Modifier.onGloballyPositioned { at -> list?.takeIf { it.isAttached }?.let { handles[row.id] = it.localBoundingBoxOf(at) } })
+                                }
+                            }
                         }
                     }
                     if (form.sections.isNotEmpty()) HorizontalDivider(Modifier.padding(start = 16.dp))
@@ -140,12 +184,16 @@ internal fun WikiPlanEditSheet(number: String, stored: WikiPlanDoc, nextVersion:
     }
 }
 
-/** One section of the Edit sheet: taken out, its title (written only for one added here), its kind, and moved. */
+/** One section of the Edit sheet: taken out, its title (written only for one added here), its kind, and moved — by
+ * its handle, or, for TalkBack, which cannot drag, by the row's Move up and Move down actions. */
 @Composable
 private fun PlanEditRow(index: Int, row: WikiPlanLogic.DocForm.Section, count: Int, change: (WikiPlanLogic.DocForm.Section) -> Unit,
-    remove: () -> Unit, move: (Int) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp).testTag("wiki-plan-edit-row:$index"),
-        verticalAlignment = Alignment.CenterVertically) {
+    remove: () -> Unit, move: (Int) -> Unit, handle: Modifier) {
+    Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp).testTag("wiki-plan-edit-row:$index")
+        .semantics {
+            customActions = listOfNotNull(CustomAccessibilityAction(WikiPlanCopy.moveUp) { move(-1); true }.takeIf { index > 0 },
+                CustomAccessibilityAction(WikiPlanCopy.moveDown) { move(1); true }.takeIf { index < count - 1 })
+        }, verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = remove, modifier = Modifier.testTag("wiki-plan-edit-remove:$index")) {
             Icon(painterResource(R.drawable.ic_remove_circle), "Delete", tint = MaterialTheme.colorScheme.error)
         }
@@ -153,16 +201,11 @@ private fun PlanEditRow(index: Int, row: WikiPlanLogic.DocForm.Section, count: I
             if (row.key == null) OutlinedTextField(row.title, { change(row.copy(title = it)) }, Modifier.fillMaxWidth().testTag("wiki-plan-edit-row-title:$index"),
                 placeholder = { Text(WikiPlanCopy.editTitleField) }, singleLine = true)
             else Text(row.title, Modifier.padding(top = 6.dp), style = WikiType.prose, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                PlanKindMenu(row.kind, "wiki-plan-edit-kind:$index") { change(row.copy(kind = it)) }
-                Spacer(Modifier.weight(1f))
-                IconButton(onClick = { move(index - 1) }, enabled = index > 0, modifier = Modifier.testTag("wiki-plan-edit-up:$index")) {
-                    Icon(painterResource(R.drawable.ic_arrow_up), "Move up")
-                }
-                IconButton(onClick = { move(index + 1) }, enabled = index < count - 1, modifier = Modifier.testTag("wiki-plan-edit-down:$index")) {
-                    Icon(painterResource(R.drawable.ic_arrow_down), "Move down")
-                }
-            }
+            PlanKindMenu(row.kind, "wiki-plan-edit-kind:$index") { change(row.copy(kind = it)) }
+        }
+        // The handle iOS's edit mode draws at a row's trailing edge; the drag itself is the list's.
+        Box(handle.size(48.dp).testTag("wiki-plan-edit-drag:$index").clearAndSetSemantics { }, contentAlignment = Alignment.Center) {
+            Icon(painterResource(R.drawable.ic_reorder), null, tint = WikiPalette.secondary)
         }
     }
 }
@@ -180,10 +223,9 @@ internal fun WikiPlanSectionEditSheet(index: Int, stored: WikiPlanSection, nextV
     var refused by remember { mutableStateOf<List<String>?>(null) }
     var saving by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    ModalBottomSheet(onDismissRequest = close, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        modifier = Modifier.testTag("wiki-plan-section-edit-sheet")) {
+    WikiSheet(saving, close, Modifier.testTag("wiki-plan-section-edit-sheet")) {
         SheetBar(WikiPlanCopy.editTitle("§${index + 1}"), WikiPlanCopy.cancel, WikiPlanCopy.saveDraft, confirmEnabled = !saving && !busy,
-            confirmTag = "wiki-plan-section-edit-save", cancel = close) {
+            confirmTag = "wiki-plan-section-edit-save", cancel = close, cancelEnabled = !saving) {
             saving = true
             scope.launch { val answer = save(title, kind, covers, length); saving = false; if (answer != null) refused = answer else close() }
         }
@@ -240,5 +282,23 @@ private fun PlanNumberField(text: String, tag: String, change: (String) -> Unit)
 private fun PlanRefusedLines(lines: List<String>, tag: String) {
     WikiCard(Modifier.padding(top = 8.dp).testTag(tag)) {
         lines.take(8).forEach { Text(it, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), style = WikiType.label, color = MaterialTheme.colorScheme.error) }
+    }
+}
+
+/** One drag of the Edit sheet: the section being moved, the order as it stands, and how far the row is from its slot
+ * (A13's runner drag, for sections). */
+internal data class WikiSectionDrag(val id: String, val order: List<String>, val offset: Float) {
+    /** Moved by [dy]: it takes the next row's place once past half of it, the offset kept relative to its new slot. */
+    fun moved(dy: Float, heights: Map<String, Int>): WikiSectionDrag {
+        var order = order; var offset = offset + dy
+        while (true) {
+            val at = order.indexOf(id)
+            if (at < 0) return this // not a row of this order: nothing moves
+            val next = order.getOrNull(at + 1)?.let { heights[it] }
+            val previous = order.getOrNull(at - 1)?.let { heights[it] }
+            if (next != null && offset > next / 2f) { order = order.toMutableList().apply { add(at + 1, removeAt(at)) }; offset -= next }
+            else if (previous != null && offset < -previous / 2f) { order = order.toMutableList().apply { add(at - 1, removeAt(at)) }; offset += previous }
+            else return WikiSectionDrag(id, order, offset)
+        }
     }
 }

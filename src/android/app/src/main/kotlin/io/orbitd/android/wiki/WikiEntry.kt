@@ -132,10 +132,9 @@ private fun WikiEntryForm(edit: Boolean, entry: WikiEntry, close: () -> Unit, su
     var saving by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val blank = title.isBlank() || summary.isBlank()
-    ModalBottomSheet(onDismissRequest = close, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        modifier = Modifier.testTag("wiki-entry-form")) {
+    WikiSheet(saving, close, Modifier.testTag("wiki-entry-form")) {
         SheetBar(if (edit) WikiCopy.edit else WikiCopy.supersede, "Cancel", if (edit) WikiCopy.save else WikiCopy.supersedeConfirm,
-            confirmEnabled = !blank && !saving, confirmTag = "wiki-entry-form-save", cancel = close) {
+            confirmEnabled = !blank && !saving, confirmTag = "wiki-entry-form-save", cancel = close, cancelEnabled = !saving) {
             saving = true
             val newTitle = title.trim(); val newSummary = summary.trim()
             scope.launch { val landed = submit(newTitle, newSummary); saving = false; if (landed) close() }
@@ -153,9 +152,9 @@ private fun WikiEntryForm(edit: Boolean, entry: WikiEntry, close: () -> Unit, su
 /** A sheet's own bar: Cancel, the title, and the confirming action (iOS's sheet navigation bar). */
 @Composable
 internal fun SheetBar(title: String, cancelLabel: String, confirmLabel: String?, confirmEnabled: Boolean, confirmTag: String,
-    cancel: () -> Unit, confirm: () -> Unit) {
+    cancel: () -> Unit, cancelEnabled: Boolean = true, confirm: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        TextButton(onClick = cancel, modifier = Modifier.testTag("$confirmTag-cancel")) { Text(cancelLabel) }
+        TextButton(onClick = cancel, enabled = cancelEnabled, modifier = Modifier.testTag("$confirmTag-cancel")) { Text(cancelLabel) }
         Text(title, Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (confirmLabel != null) TextButton(onClick = confirm, enabled = confirmEnabled, modifier = Modifier.testTag(confirmTag)) {
             Text(confirmLabel, fontWeight = FontWeight.SemiBold)

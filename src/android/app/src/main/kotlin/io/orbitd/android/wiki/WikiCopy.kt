@@ -62,6 +62,19 @@ internal object WikiCopy {
     const val superseded = "Superseded"
     const val retired = "Retired"
     const val refused = "The server refused it"
+    /** A decide the server recorded `conflict`: the entry had moved past the op (a newer revision), so nothing was
+     * applied. iOS shows the action's own toast here — an iOS defect, not copied. */
+    const val conflictRefused = "Nothing was applied: the entry changed after this was proposed."
+    /** A challenge answered for an entry that is no longer active: recorded `conflict`, nothing applied. */
+    const val inactiveRefused = "Nothing was applied: the entry is no longer active."
+    const val withdrawnRefused = "Nothing was applied: the proposal was withdrawn."
+    /** The banner for a write whose page had gone when it answered. */
+    fun landed(done: String, subject: String?) = if (subject.isNullOrBlank()) done else "$done — $subject"
+    fun refusedFor(subject: String?, why: String) = if (subject.isNullOrBlank()) why else "$subject: $why"
+    const val dismiss = "Dismiss"
+    /** A link named a space this account does not have — deleted, or another account's: nothing of it is shown. */
+    const val spaceUnavailable = "That space is not available."
+    const val spaceUnavailableNote = "It may have been deleted, or it belongs to another account."
     fun editedRationale(title: String) = "the owner edited “$title”"
     fun replacedRationale(title: String) = "the owner replaced “$title”"
     fun retiredRationale(title: String) = "the owner retired “$title”"

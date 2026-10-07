@@ -28,12 +28,12 @@ import java.time.Instant
  * record (iOS `WatchDetailView`) — an older or deep-linked one the list doesn't hold is fetched before it is called
  * missing. Following has no drawer row, as on iOS: it is reached through a watch's link. */
 @Composable
-fun WatchDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, revision: Long, open: (OrbitRoute) -> Unit) =
-    WatchDestination(app, handle, route, revision, navigate = {}, open = open)
+fun WatchDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, open: (OrbitRoute) -> Unit) =
+    WatchDestination(app, handle, route, navigate = {}, open = open)
 
 /** The same, with the shell's navigation, so a linked watch can put Following under itself. */
 @Composable
-fun WatchDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, revision: Long,
+fun WatchDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute,
     navigate: ((OrbitNavigation) -> OrbitNavigation) -> Unit, open: (OrbitRoute) -> Unit) {
     val store = remember(handle) { WatchStore.of(app.session, handle, app.processScope) }
     if (!store.live()) return
@@ -46,7 +46,7 @@ fun WatchDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitR
         else WatchDetailScreen(store, route, id, sessionTitle, open)
     }
     // After the page, so Following's own read on appearing is the one the 30 s floor counts from.
-    WatchFeed(app, handle, store, revision)
+    WatchFeed(app, handle, store)
 }
 
 /** A watch's record with Following under it, where the link was followed from below that (iOS's Following section,
