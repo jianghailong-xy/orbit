@@ -1,0 +1,242 @@
+{
+ "chromium-dark-desktop/profile-validation.png": {
+  "section": {
+   "x": 904,
+   "y": 16,
+   "width": 360,
+   "height": 36,
+   "top": 16,
+   "right": 1264,
+   "bottom": 52,
+   "left": 904
+  },
+  "inlineStyle": "left: calc(1280px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;",
+  "host": "DIV.toast-layer",
+  "cards": [
+   {
+    "className": "toast toast--pill",
+    "rect": {
+     "x": 1128.28125,
+     "y": 16,
+     "width": 135.71875,
+     "height": 36,
+     "top": 16,
+     "right": 1264,
+     "bottom": 52,
+     "left": 1128.28125
+    },
+    "willChange": "auto"
+   }
+  ]
+ },
+ "chromium-dark-phone/profile-validation.png": {
+  "section": {
+   "x": 16,
+   "y": 56,
+   "width": 358,
+   "height": 36,
+   "top": 56,
+   "right": 374,
+   "bottom": 92,
+   "left": 16
+  },
+  "inlineStyle": null,
+  "host": "DIV.toast-layer",
+  "cards": [
+   {
+    "className": "toast toast--pill",
+    "rect": {
+     "x": 127.140625,
+     "y": 56,
+     "width": 135.71875,
+     "height": 36,
+     "top": 56,
+     "right": 262.859375,
+     "bottom": 92,
+     "left": 127.140625
+    },
+    "willChange": "auto"
+   }
+  ]
+ },
+ "chromium-light-desktop/profile-validation.png": {
+  "section": {
+   "x": 904,
+   "y": 16,
+   "width": 360,
+   "height": 36,
+   "top": 16,
+   "right": 1264,
+   "bottom": 52,
+   "left": 904
+  },
+  "inlineStyle": "left: calc(1280px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;",
+  "host": "DIV.toast-layer",
+  "cards": [
+   {
+    "className": "toast toast--pill",
+    "rect": {
+     "x": 1128.28125,
+     "y": 16,
+     "width": 135.71875,
+     "height": 36,
+     "top": 16,
+     "right": 1264,
+     "bottom": 52,
+     "left": 1128.28125
+    },
+    "willChange": "auto"
+   }
+  ]
+ },
+ "chromium-light-phone/profile-validation.png": {
+  "section": {
+   "x": 16,
+   "y": 56,
+   "width": 358,
+   "height": 36,
+   "top": 56,
+   "right": 374,
+   "bottom": 92,
+   "left": 16
+  },
+  "inlineStyle": null,
+  "host": "DIV.toast-layer",
+  "cards": [
+   {
+    "className": "toast toast--pill",
+    "rect": {
+     "x": 127.140625,
+     "y": 56,
+     "width": 135.71875,
+     "height": 36,
+     "top": 56,
+     "right": 262.859375,
+     "bottom": 92,
+     "left": 127.140625
+    },
+    "willChange": "auto"
+   }
+  ]
+ },
+ "webkit-dark-desktop/profile-validation.png": {
+  "section": {
+   "x": 896,
+   "y": 16,
+   "width": 360,
+   "height": 36,
+   "top": 16,
+   "right": 1256,
+   "bottom": 52,
+   "left": 896
+  },
+  "inlineStyle": "left: calc(1272px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;",
+  "host": "DIV.toast-layer",
+  "cards": [
+   {
+    "className": "toast toast--pill",
+    "rect": {
+     "x": 1120.28125,
+     "y": 16,
+     "width": 135.71875,
+     "height": 36,
+     "top": 16,
+     "right": 1256,
+     "bottom": 52,
+     "left": 1120.28125
+    },
+    "willChange": "auto"
+   }
+  ]
+ },
+ "webkit-dark-phone/profile-validation.png": {
+  "section": {
+   "x": 16,
+   "y": 56,
+   "width": 350,
+   "height": 36,
+   "top": 56,
+   "right": 366,
+   "bottom": 92,
+   "left": 16
+  },
+  "inlineStyle": null,
+  "host": "DIV.toast-layer",
+  "cards": [
+   {
+    "className": "toast toast--pill",
+    "rect": {
+     "x": 123.140625,
+     "y": 56,
+     "width": 135.71875,
+     "height": 36,
+     "top": 56,
+     "right": 258.859375,
+     "bottom": 92,
+     "left": 123.140625
+    },
+    "willChange": "auto"
+   }
+  ]
+ },
+ "webkit-light-desktop/profile-validation.png": {
+  "section": {
+   "x": 896,
+   "y": 16,
+   "width": 360,
+   "height": 36,
+   "top": 16,
+   "right": 1256,
+   "bottom": 52,
+   "left": 896
+  },
+  "inlineStyle": "left: calc(1272px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;",
+  "host": "DIV.toast-layer",
+  "cards": [
+   {
+    "className": "toast toast--pill",
+    "rect": {
+     "x": 1120.28125,
+     "y": 16,
+     "width": 135.71875,
+     "height": 36,
+     "top": 16,
+     "right": 1256,
+     "bottom": 52,
+     "left": 1120.28125
+    },
+    "willChange": "auto"
+   }
+  ]
+ },
+ "webkit-light-phone/profile-validation.png": {
+  "section": {
+   "x": 16,
+   "y": 56,
+   "width": 350,
+   "height": 36,
+   "top": 56,
+   "right": 366,
+   "bottom": 92,
+   "left": 16
+  },
+  "inlineStyle": null,
+  "host": "DIV.toast-layer",
+  "cards": [
+   {
+    "className": "toast toast--pill",
+    "rect": {
+     "x": 123.140625,
+     "y": 56,
+     "width": 135.71875,
+     "height": 36,
+     "top": 56,
+     "right": 258.859375,
+     "bottom": 92,
+     "left": 123.140625
+    },
+    "willChange": "auto"
+   }
+  ]
+ }
+}

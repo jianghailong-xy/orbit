@@ -1,0 +1,65 @@
+{
+  "target": "orbit-menu",
+  "sequence": "menu-up-down-enter",
+  "control": null,
+  "mode": "burst",
+  "run": 18,
+  "keys": [
+    "ArrowUp",
+    "ArrowDown",
+    "Enter"
+  ],
+  "from": null,
+  "before": "none",
+  "after": "file",
+  "result": "ran File",
+  "listOpen": false,
+  "active": "button:Add attachment",
+  "keyLog": [
+    {
+      "key": "ArrowUp",
+      "t": 25.1,
+      "target": "button:Add attachment",
+      "trusted": true,
+      "focused": "button:Add attachment",
+      "listbox": false,
+      "highlighted": null
+    },
+    {
+      "key": "ArrowDown",
+      "t": 44.1,
+      "target": "button:Add attachment",
+      "trusted": true,
+      "focused": "button:Add attachment",
+      "listbox": true,
+      "highlighted": "/Command"
+    },
+    {
+      "key": "ArrowDown",
+      "t": 44.3,
+      "target": "menuitem:/Command",
+      "trusted": false,
+      "focused": "button:Add attachment",
+      "listbox": true,
+      "highlighted": "/Command"
+    },
+    {
+      "key": "Enter",
+      "t": 45.2,
+      "target": "button:Add attachment",
+      "trusted": true,
+      "focused": "button:Add attachment",
+      "listbox": true,
+      "highlighted": "File"
+    },
+    {
+      "key": "Enter",
+      "t": 45.2,
+      "target": "menuitem:File",
+      "trusted": false,
+      "focused": "button:Add attachment",
+      "listbox": true,
+      "highlighted": "File"
+    }
+  ]
+}

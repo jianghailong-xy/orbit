@@ -1,0 +1,1809 @@
+{
+  "config": {
+    "argv": [
+      "/usr/local/bin/node",
+      "/var/tmp/p2kw-c2604b/after2/node_modules/@playwright/test/cli.js",
+      "test",
+      "--config",
+      "docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.config.mjs",
+      "--project",
+      "chromium-dark-desktop",
+      "--grep",
+      " select-down-space-from-null "
+    ],
+    "configFile": "/var/tmp/p2kw-c2604b/after2/docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.config.mjs",
+    "rootDir": "/var/tmp/p2kw-c2604b/after2/docs/evidence/base-ui-migration/p2-keyboard-window",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": "/var/tmp/p2kw-c2604b/after2/src/web/ui-migration/environment.mjs",
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/after2/src/web/.choices-results/p2-keyboard-window",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-light-desktop",
+        "name": "chromium-light-desktop",
+        "testDir": "/var/tmp/p2kw-c2604b/after2/docs/evidence/base-ui-migration/p2-keyboard-window",
+        "testIgnore": [],
+        "testMatch": [
+          "keyboard-window.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/after2/src/web/.choices-results/p2-keyboard-window",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-light-phone",
+        "name": "chromium-light-phone",
+        "testDir": "/var/tmp/p2kw-c2604b/after2/docs/evidence/base-ui-migration/p2-keyboard-window",
+        "testIgnore": [],
+        "testMatch": [
+          "keyboard-window.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/after2/src/web/.choices-results/p2-keyboard-window",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-dark-desktop",
+        "name": "chromium-dark-desktop",
+        "testDir": "/var/tmp/p2kw-c2604b/after2/docs/evidence/base-ui-migration/p2-keyboard-window",
+        "testIgnore": [],
+        "testMatch": [
+          "keyboard-window.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/after2/src/web/.choices-results/p2-keyboard-window",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-dark-phone",
+        "name": "chromium-dark-phone",
+        "testDir": "/var/tmp/p2kw-c2604b/after2/docs/evidence/base-ui-migration/p2-keyboard-window",
+        "testIgnore": [],
+        "testMatch": [
+          "keyboard-window.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/after2/src/web/.choices-results/p2-keyboard-window",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-light-desktop",
+        "name": "webkit-light-desktop",
+        "testDir": "/var/tmp/p2kw-c2604b/after2/docs/evidence/base-ui-migration/p2-keyboard-window",
+        "testIgnore": [],
+        "testMatch": [
+          "keyboard-window.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/after2/src/web/.choices-results/p2-keyboard-window",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-light-phone",
+        "name": "webkit-light-phone",
+        "testDir": "/var/tmp/p2kw-c2604b/after2/docs/evidence/base-ui-migration/p2-keyboard-window",
+        "testIgnore": [],
+        "testMatch": [
+          "keyboard-window.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/after2/src/web/.choices-results/p2-keyboard-window",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-dark-desktop",
+        "name": "webkit-dark-desktop",
+        "testDir": "/var/tmp/p2kw-c2604b/after2/docs/evidence/base-ui-migration/p2-keyboard-window",
+        "testIgnore": [],
+        "testMatch": [
+          "keyboard-window.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/after2/src/web/.choices-results/p2-keyboard-window",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-dark-phone",
+        "name": "webkit-dark-phone",
+        "testDir": "/var/tmp/p2kw-c2604b/after2/docs/evidence/base-ui-migration/p2-keyboard-window",
+        "testIgnore": [],
+        "testMatch": [
+          "keyboard-window.browser.mjs"
+        ],
+        "timeout": 90000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "/var/tmp/p2kw-c2604b/after2/src/web/.choices-results/p2-keyboard-window/report.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "none",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": {
+      "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+      "cwd": "/var/tmp/p2kw-c2604b/after2/src/web/",
+      "url": "http://127.0.0.1:4177",
+      "reuseExistingServer": false,
+      "timeout": 30000
+    }
+  },
+  "suites": [
+    {
+      "title": "keyboard-window.browser.mjs",
+      "file": "keyboard-window.browser.mjs",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "orbit-field select-down-space-from-null burst sample 0",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2150,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:19:26.771Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJidXJzdCIsCiAgInJ1biI6IDAsCiAgImtleXMiOiBbCiAgICAiQXJyb3dEb3duIiwKICAgICJTcGFjZSIKICBdLAogICJmcm9tIjogbnVsbCwKICAiYmVmb3JlIjogIm51bGwiLAogICJhZnRlciI6ICJudWxsIiwKICAicmVzdWx0IjogIm51bGwgfCBsaXN0IGNsb3NlZCIsCiAgImxpc3RPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogNjEsCiAgICAgICJ0YXJnZXQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiICIsCiAgICAgICJ0IjogOTEuNywKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiTmV2ZXIiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-4082c15540f5d9f515ae",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null burst sample 1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1852,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:19:29.017Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJidXJzdCIsCiAgInJ1biI6IDEsCiAgImtleXMiOiBbCiAgICAiQXJyb3dEb3duIiwKICAgICJTcGFjZSIKICBdLAogICJmcm9tIjogbnVsbCwKICAiYmVmb3JlIjogIm51bGwiLAogICJhZnRlciI6ICJudWxsIiwKICAicmVzdWx0IjogIm51bGwgfCBsaXN0IGNsb3NlZCIsCiAgImxpc3RPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogNDYuOSwKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICIgIiwKICAgICAgInQiOiA3OC40LAogICAgICAidGFyZ2V0IjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJOZXZlciIKICAgIH0KICBdCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-7f5ba90fb9a6f31162bb",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null burst sample 2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1887,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:19:30.876Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJidXJzdCIsCiAgInJ1biI6IDIsCiAgImtleXMiOiBbCiAgICAiQXJyb3dEb3duIiwKICAgICJTcGFjZSIKICBdLAogICJmcm9tIjogbnVsbCwKICAiYmVmb3JlIjogIm51bGwiLAogICJhZnRlciI6ICJudWxsIiwKICAicmVzdWx0IjogIm51bGwgfCBsaXN0IGNsb3NlZCIsCiAgImxpc3RPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogNTYuNSwKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICIgIiwKICAgICAgInQiOiA3Ny44LAogICAgICAidGFyZ2V0IjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJOZXZlciIKICAgIH0KICBdCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-c757a3073d772cf3662c",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null burst sample 3",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2147,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:19:32.769Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJidXJzdCIsCiAgInJ1biI6IDMsCiAgImtleXMiOiBbCiAgICAiQXJyb3dEb3duIiwKICAgICJTcGFjZSIKICBdLAogICJmcm9tIjogbnVsbCwKICAiYmVmb3JlIjogIm51bGwiLAogICJhZnRlciI6ICJudWxsIiwKICAicmVzdWx0IjogIm51bGwgfCBsaXN0IGNsb3NlZCIsCiAgImxpc3RPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogNTIuNiwKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICIgIiwKICAgICAgInQiOiA4NS44LAogICAgICAidGFyZ2V0IjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJOZXZlciIKICAgIH0KICBdCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-ad86f014a68f2355c968",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null burst sample 4",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2183,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:19:34.923Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJidXJzdCIsCiAgInJ1biI6IDQsCiAgImtleXMiOiBbCiAgICAiQXJyb3dEb3duIiwKICAgICJTcGFjZSIKICBdLAogICJmcm9tIjogbnVsbCwKICAiYmVmb3JlIjogIm51bGwiLAogICJhZnRlciI6ICJudWxsIiwKICAicmVzdWx0IjogIm51bGwgfCBsaXN0IGNsb3NlZCIsCiAgImxpc3RPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogNjAuMSwKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICIgIiwKICAgICAgInQiOiA4Ni44LAogICAgICAidGFyZ2V0IjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJOZXZlciIKICAgIH0KICBdCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-ef7ad7ad5804a514975c",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null burst sample 5",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1865,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:19:37.112Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJidXJzdCIsCiAgInJ1biI6IDUsCiAgImtleXMiOiBbCiAgICAiQXJyb3dEb3duIiwKICAgICJTcGFjZSIKICBdLAogICJmcm9tIjogbnVsbCwKICAiYmVmb3JlIjogIm51bGwiLAogICJhZnRlciI6ICJudWxsIiwKICAicmVzdWx0IjogIm51bGwgfCBsaXN0IGNsb3NlZCIsCiAgImxpc3RPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogNTcsCiAgICAgICJ0YXJnZXQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiICIsCiAgICAgICJ0IjogODEuMiwKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiTmV2ZXIiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-39e949e58074d9aa0f98",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null burst sample 6",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1922,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:19:38.983Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJidXJzdCIsCiAgInJ1biI6IDYsCiAgImtleXMiOiBbCiAgICAiQXJyb3dEb3duIiwKICAgICJTcGFjZSIKICBdLAogICJmcm9tIjogbnVsbCwKICAiYmVmb3JlIjogIm51bGwiLAogICJhZnRlciI6ICJudWxsIiwKICAicmVzdWx0IjogIm51bGwgfCBsaXN0IGNsb3NlZCIsCiAgImxpc3RPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogNDQuMywKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICIgIiwKICAgICAgInQiOiA3Mi40LAogICAgICAidGFyZ2V0IjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJOZXZlciIKICAgIH0KICBdCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-2715e2e9d90b7f28b241",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null burst sample 7",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1922,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:19:40.911Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJidXJzdCIsCiAgInJ1biI6IDcsCiAgImtleXMiOiBbCiAgICAiQXJyb3dEb3duIiwKICAgICJTcGFjZSIKICBdLAogICJmcm9tIjogbnVsbCwKICAiYmVmb3JlIjogIm51bGwiLAogICJhZnRlciI6ICJudWxsIiwKICAicmVzdWx0IjogIm51bGwgfCBsaXN0IGNsb3NlZCIsCiAgImxpc3RPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogNDkuMiwKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICIgIiwKICAgICAgInQiOiA3Mi41LAogICAgICAidGFyZ2V0IjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJOZXZlciIKICAgIH0KICBdCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-c1115064da3ce660aafe",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null burst sample 8",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2050,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:19:42.838Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJidXJzdCIsCiAgInJ1biI6IDgsCiAgImtleXMiOiBbCiAgICAiQXJyb3dEb3duIiwKICAgICJTcGFjZSIKICBdLAogICJmcm9tIjogbnVsbCwKICAiYmVmb3JlIjogIm51bGwiLAogICJhZnRlciI6ICJudWxsIiwKICAicmVzdWx0IjogIm51bGwgfCBsaXN0IGNsb3NlZCIsCiAgImxpc3RPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogNjEuOSwKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICIgIiwKICAgICAgInQiOiA5NS40LAogICAgICAidGFyZ2V0IjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJOZXZlciIKICAgIH0KICBdCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-280f8ebe9379f0205e1d",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null burst sample 9",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1843,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:19:44.893Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJidXJzdCIsCiAgInJ1biI6IDksCiAgImtleXMiOiBbCiAgICAiQXJyb3dEb3duIiwKICAgICJTcGFjZSIKICBdLAogICJmcm9tIjogbnVsbCwKICAiYmVmb3JlIjogIm51bGwiLAogICJhZnRlciI6ICJudWxsIiwKICAicmVzdWx0IjogIm51bGwgfCBsaXN0IGNsb3NlZCIsCiAgImxpc3RPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogNDQuNiwKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICIgIiwKICAgICAgInQiOiA2Ny40LAogICAgICAidGFyZ2V0IjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJOZXZlciIKICAgIH0KICBdCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-60d517fe9abe335f36e5",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null burst sample 10",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1707,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:19:46.740Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJidXJzdCIsCiAgInJ1biI6IDEwLAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiU3BhY2UiCiAgXSwKICAiZnJvbSI6IG51bGwsCiAgImJlZm9yZSI6ICJudWxsIiwKICAiYWZ0ZXIiOiAibnVsbCIsCiAgInJlc3VsdCI6ICJudWxsIHwgbGlzdCBjbG9zZWQiLAogICJsaXN0T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgImtleUxvZyI6IFsKICAgIHsKICAgICAgImtleSI6ICJBcnJvd0Rvd24iLAogICAgICAidCI6IDU3LjYsCiAgICAgICJ0YXJnZXQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiICIsCiAgICAgICJ0IjogODksCiAgICAgICJ0YXJnZXQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIk5ldmVyIgogICAgfQogIF0KfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-9dfeb6308c9384ba48a2",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null burst sample 11",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1660,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:19:48.452Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJidXJzdCIsCiAgInJ1biI6IDExLAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiU3BhY2UiCiAgXSwKICAiZnJvbSI6IG51bGwsCiAgImJlZm9yZSI6ICJudWxsIiwKICAiYWZ0ZXIiOiAibnVsbCIsCiAgInJlc3VsdCI6ICJudWxsIHwgbGlzdCBjbG9zZWQiLAogICJsaXN0T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgImtleUxvZyI6IFsKICAgIHsKICAgICAgImtleSI6ICJBcnJvd0Rvd24iLAogICAgICAidCI6IDQ5LjgsCiAgICAgICJ0YXJnZXQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiICIsCiAgICAgICJ0IjogNzQuOSwKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiTmV2ZXIiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-af02e5ae7416fda5ba28",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null burst sample 12",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1610,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:19:50.116Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJidXJzdCIsCiAgInJ1biI6IDEyLAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiU3BhY2UiCiAgXSwKICAiZnJvbSI6IG51bGwsCiAgImJlZm9yZSI6ICJudWxsIiwKICAiYWZ0ZXIiOiAibnVsbCIsCiAgInJlc3VsdCI6ICJudWxsIHwgbGlzdCBjbG9zZWQiLAogICJsaXN0T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgImtleUxvZyI6IFsKICAgIHsKICAgICAgImtleSI6ICJBcnJvd0Rvd24iLAogICAgICAidCI6IDQ0LjYsCiAgICAgICJ0YXJnZXQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiICIsCiAgICAgICJ0IjogNjMuNSwKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiTmV2ZXIiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-03d78ec10bd1df1ab688",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null burst sample 13",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1786,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:19:51.732Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJidXJzdCIsCiAgInJ1biI6IDEzLAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiU3BhY2UiCiAgXSwKICAiZnJvbSI6IG51bGwsCiAgImJlZm9yZSI6ICJudWxsIiwKICAiYWZ0ZXIiOiAibnVsbCIsCiAgInJlc3VsdCI6ICJudWxsIHwgbGlzdCBjbG9zZWQiLAogICJsaXN0T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgImtleUxvZyI6IFsKICAgIHsKICAgICAgImtleSI6ICJBcnJvd0Rvd24iLAogICAgICAidCI6IDQzLjYsCiAgICAgICJ0YXJnZXQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiICIsCiAgICAgICJ0IjogNjMuMywKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiTmV2ZXIiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-75fd67ee8f6cc68bde60",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null burst sample 14",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1629,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:19:53.522Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJidXJzdCIsCiAgInJ1biI6IDE0LAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiU3BhY2UiCiAgXSwKICAiZnJvbSI6IG51bGwsCiAgImJlZm9yZSI6ICJudWxsIiwKICAiYWZ0ZXIiOiAibnVsbCIsCiAgInJlc3VsdCI6ICJudWxsIHwgbGlzdCBjbG9zZWQiLAogICJsaXN0T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgImtleUxvZyI6IFsKICAgIHsKICAgICAgImtleSI6ICJBcnJvd0Rvd24iLAogICAgICAidCI6IDMwLjYsCiAgICAgICJ0YXJnZXQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiICIsCiAgICAgICJ0IjogNTAuOSwKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiTmV2ZXIiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-62e877722cc6b9a3583f",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null burst sample 15",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1703,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:19:55.156Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJidXJzdCIsCiAgInJ1biI6IDE1LAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiU3BhY2UiCiAgXSwKICAiZnJvbSI6IG51bGwsCiAgImJlZm9yZSI6ICJudWxsIiwKICAiYWZ0ZXIiOiAibnVsbCIsCiAgInJlc3VsdCI6ICJudWxsIHwgbGlzdCBjbG9zZWQiLAogICJsaXN0T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgImtleUxvZyI6IFsKICAgIHsKICAgICAgImtleSI6ICJBcnJvd0Rvd24iLAogICAgICAidCI6IDQxLjUsCiAgICAgICJ0YXJnZXQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiICIsCiAgICAgICJ0IjogNjAuMiwKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiTmV2ZXIiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-0f307211aa0f7e4b3612",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null burst sample 16",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1567,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:19:56.863Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJidXJzdCIsCiAgInJ1biI6IDE2LAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiU3BhY2UiCiAgXSwKICAiZnJvbSI6IG51bGwsCiAgImJlZm9yZSI6ICJudWxsIiwKICAiYWZ0ZXIiOiAibnVsbCIsCiAgInJlc3VsdCI6ICJudWxsIHwgbGlzdCBjbG9zZWQiLAogICJsaXN0T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgImtleUxvZyI6IFsKICAgIHsKICAgICAgImtleSI6ICJBcnJvd0Rvd24iLAogICAgICAidCI6IDM4LjMsCiAgICAgICJ0YXJnZXQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiICIsCiAgICAgICJ0IjogNTAuMywKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiTmV2ZXIiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-9394a8422251535a2fe2",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null burst sample 17",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1552,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:19:58.434Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJidXJzdCIsCiAgInJ1biI6IDE3LAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiU3BhY2UiCiAgXSwKICAiZnJvbSI6IG51bGwsCiAgImJlZm9yZSI6ICJudWxsIiwKICAiYWZ0ZXIiOiAibnVsbCIsCiAgInJlc3VsdCI6ICJudWxsIHwgbGlzdCBjbG9zZWQiLAogICJsaXN0T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgImtleUxvZyI6IFsKICAgIHsKICAgICAgImtleSI6ICJBcnJvd0Rvd24iLAogICAgICAidCI6IDM2LjcsCiAgICAgICJ0YXJnZXQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiICIsCiAgICAgICJ0IjogNTcuOCwKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiTmV2ZXIiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-e2c503958c478226b97f",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null burst sample 18",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1705,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:19:59.990Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJidXJzdCIsCiAgInJ1biI6IDE4LAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiU3BhY2UiCiAgXSwKICAiZnJvbSI6IG51bGwsCiAgImJlZm9yZSI6ICJudWxsIiwKICAiYWZ0ZXIiOiAibnVsbCIsCiAgInJlc3VsdCI6ICJudWxsIHwgbGlzdCBjbG9zZWQiLAogICJsaXN0T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgImtleUxvZyI6IFsKICAgIHsKICAgICAgImtleSI6ICJBcnJvd0Rvd24iLAogICAgICAidCI6IDM2LjksCiAgICAgICJ0YXJnZXQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiICIsCiAgICAgICJ0IjogNTguMywKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiTmV2ZXIiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-678aab977964cc6aebf7",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null burst sample 19",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1678,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:20:01.699Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJidXJzdCIsCiAgInJ1biI6IDE5LAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiU3BhY2UiCiAgXSwKICAiZnJvbSI6IG51bGwsCiAgImJlZm9yZSI6ICJudWxsIiwKICAiYWZ0ZXIiOiAibnVsbCIsCiAgInJlc3VsdCI6ICJudWxsIHwgbGlzdCBjbG9zZWQiLAogICJsaXN0T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgImtleUxvZyI6IFsKICAgIHsKICAgICAgImtleSI6ICJBcnJvd0Rvd24iLAogICAgICAidCI6IDQ3LAogICAgICAidGFyZ2V0IjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAibGlzdGJveCI6IGZhbHNlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiBudWxsCiAgICB9LAogICAgewogICAgICAia2V5IjogIiAiLAogICAgICAidCI6IDY0LjcsCiAgICAgICJ0YXJnZXQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIk5ldmVyIgogICAgfQogIF0KfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-1c0b279e9da3e47a26ba",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null paced sample 0",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2277,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:20:03.381Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJwYWNlZCIsCiAgInJ1biI6IDAsCiAgImtleXMiOiBbCiAgICAiQXJyb3dEb3duIiwKICAgICJTcGFjZSIKICBdLAogICJmcm9tIjogbnVsbCwKICAiYmVmb3JlIjogIm51bGwiLAogICJhZnRlciI6ICJuZXZlciIsCiAgInJlc3VsdCI6ICJuZXZlciB8IGxpc3QgY2xvc2VkIiwKICAibGlzdE9wZW4iOiBmYWxzZSwKICAiYWN0aXZlIjogImNvbWJvYm94OkV4cGlyZXMiLAogICJrZXlMb2ciOiBbCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiA0My45LAogICAgICAidGFyZ2V0IjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAibGlzdGJveCI6IGZhbHNlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiBudWxsCiAgICB9LAogICAgewogICAgICAia2V5IjogIiAiLAogICAgICAidCI6IDM3My44LAogICAgICAidGFyZ2V0IjogIm9wdGlvbjpOZXZlciIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAib3B0aW9uOk5ldmVyIiwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiTmV2ZXIiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-7bd959d1051734172b53",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null paced sample 1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2270,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:20:05.665Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJwYWNlZCIsCiAgInJ1biI6IDEsCiAgImtleXMiOiBbCiAgICAiQXJyb3dEb3duIiwKICAgICJTcGFjZSIKICBdLAogICJmcm9tIjogbnVsbCwKICAiYmVmb3JlIjogIm51bGwiLAogICJhZnRlciI6ICJuZXZlciIsCiAgInJlc3VsdCI6ICJuZXZlciB8IGxpc3QgY2xvc2VkIiwKICAibGlzdE9wZW4iOiBmYWxzZSwKICAiYWN0aXZlIjogImNvbWJvYm94OkV4cGlyZXMiLAogICJrZXlMb2ciOiBbCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiAzMS40LAogICAgICAidGFyZ2V0IjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAibGlzdGJveCI6IGZhbHNlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiBudWxsCiAgICB9LAogICAgewogICAgICAia2V5IjogIiAiLAogICAgICAidCI6IDM1OS4zLAogICAgICAidGFyZ2V0IjogIm9wdGlvbjpOZXZlciIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAib3B0aW9uOk5ldmVyIiwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiTmV2ZXIiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-3c41931f1b1208ea96c8",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null paced sample 2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2200,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:20:07.938Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJwYWNlZCIsCiAgInJ1biI6IDIsCiAgImtleXMiOiBbCiAgICAiQXJyb3dEb3duIiwKICAgICJTcGFjZSIKICBdLAogICJmcm9tIjogbnVsbCwKICAiYmVmb3JlIjogIm51bGwiLAogICJhZnRlciI6ICJuZXZlciIsCiAgInJlc3VsdCI6ICJuZXZlciB8IGxpc3QgY2xvc2VkIiwKICAibGlzdE9wZW4iOiBmYWxzZSwKICAiYWN0aXZlIjogImNvbWJvYm94OkV4cGlyZXMiLAogICJrZXlMb2ciOiBbCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiAzNSwKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICIgIiwKICAgICAgInQiOiAzNjAuNCwKICAgICAgInRhcmdldCI6ICJvcHRpb246TmV2ZXIiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogIm9wdGlvbjpOZXZlciIsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIk5ldmVyIgogICAgfQogIF0KfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-eb75d61960fbe9b1fee1",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null paced sample 3",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2313,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:20:10.143Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJwYWNlZCIsCiAgInJ1biI6IDMsCiAgImtleXMiOiBbCiAgICAiQXJyb3dEb3duIiwKICAgICJTcGFjZSIKICBdLAogICJmcm9tIjogbnVsbCwKICAiYmVmb3JlIjogIm51bGwiLAogICJhZnRlciI6ICJuZXZlciIsCiAgInJlc3VsdCI6ICJuZXZlciB8IGxpc3QgY2xvc2VkIiwKICAibGlzdE9wZW4iOiBmYWxzZSwKICAiYWN0aXZlIjogImNvbWJvYm94OkV4cGlyZXMiLAogICJrZXlMb2ciOiBbCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiAzMi43LAogICAgICAidGFyZ2V0IjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAibGlzdGJveCI6IGZhbHNlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiBudWxsCiAgICB9LAogICAgewogICAgICAia2V5IjogIiAiLAogICAgICAidCI6IDM1OC45LAogICAgICAidGFyZ2V0IjogIm9wdGlvbjpOZXZlciIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAib3B0aW9uOk5ldmVyIiwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiTmV2ZXIiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-e0ffd0952b65c10ab6cc",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null paced sample 4",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2229,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:20:12.460Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJwYWNlZCIsCiAgInJ1biI6IDQsCiAgImtleXMiOiBbCiAgICAiQXJyb3dEb3duIiwKICAgICJTcGFjZSIKICBdLAogICJmcm9tIjogbnVsbCwKICAiYmVmb3JlIjogIm51bGwiLAogICJhZnRlciI6ICJuZXZlciIsCiAgInJlc3VsdCI6ICJuZXZlciB8IGxpc3QgY2xvc2VkIiwKICAibGlzdE9wZW4iOiBmYWxzZSwKICAiYWN0aXZlIjogImNvbWJvYm94OkV4cGlyZXMiLAogICJrZXlMb2ciOiBbCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiAzMi41LAogICAgICAidGFyZ2V0IjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAibGlzdGJveCI6IGZhbHNlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiBudWxsCiAgICB9LAogICAgewogICAgICAia2V5IjogIiAiLAogICAgICAidCI6IDM1OS41LAogICAgICAidGFyZ2V0IjogIm9wdGlvbjpOZXZlciIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAib3B0aW9uOk5ldmVyIiwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiTmV2ZXIiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-53fbb882308ea3b5a35f",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null paced sample 5",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2406,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:20:14.695Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJwYWNlZCIsCiAgInJ1biI6IDUsCiAgImtleXMiOiBbCiAgICAiQXJyb3dEb3duIiwKICAgICJTcGFjZSIKICBdLAogICJmcm9tIjogbnVsbCwKICAiYmVmb3JlIjogIm51bGwiLAogICJhZnRlciI6ICJuZXZlciIsCiAgInJlc3VsdCI6ICJuZXZlciB8IGxpc3QgY2xvc2VkIiwKICAibGlzdE9wZW4iOiBmYWxzZSwKICAiYWN0aXZlIjogImNvbWJvYm94OkV4cGlyZXMiLAogICJrZXlMb2ciOiBbCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiAzNi4xLAogICAgICAidGFyZ2V0IjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAibGlzdGJveCI6IGZhbHNlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiBudWxsCiAgICB9LAogICAgewogICAgICAia2V5IjogIiAiLAogICAgICAidCI6IDM2MC42LAogICAgICAidGFyZ2V0IjogIm9wdGlvbjpOZXZlciIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAib3B0aW9uOk5ldmVyIiwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiTmV2ZXIiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-b85810efe03ed91d76cb",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null paced sample 6",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2313,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:20:17.105Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJwYWNlZCIsCiAgInJ1biI6IDYsCiAgImtleXMiOiBbCiAgICAiQXJyb3dEb3duIiwKICAgICJTcGFjZSIKICBdLAogICJmcm9tIjogbnVsbCwKICAiYmVmb3JlIjogIm51bGwiLAogICJhZnRlciI6ICJuZXZlciIsCiAgInJlc3VsdCI6ICJuZXZlciB8IGxpc3QgY2xvc2VkIiwKICAibGlzdE9wZW4iOiBmYWxzZSwKICAiYWN0aXZlIjogImNvbWJvYm94OkV4cGlyZXMiLAogICJrZXlMb2ciOiBbCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiAyOS4zLAogICAgICAidGFyZ2V0IjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAibGlzdGJveCI6IGZhbHNlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiBudWxsCiAgICB9LAogICAgewogICAgICAia2V5IjogIiAiLAogICAgICAidCI6IDM1MS43LAogICAgICAidGFyZ2V0IjogIm9wdGlvbjpOZXZlciIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAib3B0aW9uOk5ldmVyIiwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiTmV2ZXIiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-24d5185b8b4bb74d7142",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null paced sample 7",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2519,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:20:19.422Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJwYWNlZCIsCiAgInJ1biI6IDcsCiAgImtleXMiOiBbCiAgICAiQXJyb3dEb3duIiwKICAgICJTcGFjZSIKICBdLAogICJmcm9tIjogbnVsbCwKICAiYmVmb3JlIjogIm51bGwiLAogICJhZnRlciI6ICJuZXZlciIsCiAgInJlc3VsdCI6ICJuZXZlciB8IGxpc3QgY2xvc2VkIiwKICAibGlzdE9wZW4iOiBmYWxzZSwKICAiYWN0aXZlIjogImNvbWJvYm94OkV4cGlyZXMiLAogICJrZXlMb2ciOiBbCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiA0Ni44LAogICAgICAidGFyZ2V0IjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAibGlzdGJveCI6IGZhbHNlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiBudWxsCiAgICB9LAogICAgewogICAgICAia2V5IjogIiAiLAogICAgICAidCI6IDM3Ny4zLAogICAgICAidGFyZ2V0IjogIm9wdGlvbjpOZXZlciIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAib3B0aW9uOk5ldmVyIiwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiTmV2ZXIiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-de9ce37420cc69b382c3",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null paced sample 8",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2935,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:20:21.946Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJwYWNlZCIsCiAgInJ1biI6IDgsCiAgImtleXMiOiBbCiAgICAiQXJyb3dEb3duIiwKICAgICJTcGFjZSIKICBdLAogICJmcm9tIjogbnVsbCwKICAiYmVmb3JlIjogIm51bGwiLAogICJhZnRlciI6ICJuZXZlciIsCiAgInJlc3VsdCI6ICJuZXZlciB8IGxpc3QgY2xvc2VkIiwKICAibGlzdE9wZW4iOiBmYWxzZSwKICAiYWN0aXZlIjogImNvbWJvYm94OkV4cGlyZXMiLAogICJrZXlMb2ciOiBbCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiA0OS41LAogICAgICAidGFyZ2V0IjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAibGlzdGJveCI6IGZhbHNlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiBudWxsCiAgICB9LAogICAgewogICAgICAia2V5IjogIiAiLAogICAgICAidCI6IDM4Ny4xLAogICAgICAidGFyZ2V0IjogIm9wdGlvbjpOZXZlciIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAib3B0aW9uOk5ldmVyIiwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiTmV2ZXIiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-53641ca8943cac2e757b",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null paced sample 9",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2148,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:20:24.886Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJwYWNlZCIsCiAgInJ1biI6IDksCiAgImtleXMiOiBbCiAgICAiQXJyb3dEb3duIiwKICAgICJTcGFjZSIKICBdLAogICJmcm9tIjogbnVsbCwKICAiYmVmb3JlIjogIm51bGwiLAogICJhZnRlciI6ICJuZXZlciIsCiAgInJlc3VsdCI6ICJuZXZlciB8IGxpc3QgY2xvc2VkIiwKICAibGlzdE9wZW4iOiBmYWxzZSwKICAiYWN0aXZlIjogImNvbWJvYm94OkV4cGlyZXMiLAogICJrZXlMb2ciOiBbCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiAyOC4yLAogICAgICAidGFyZ2V0IjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogImNvbWJvYm94OkV4cGlyZXMiLAogICAgICAibGlzdGJveCI6IGZhbHNlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiBudWxsCiAgICB9LAogICAgewogICAgICAia2V5IjogIiAiLAogICAgICAidCI6IDM1Mi43LAogICAgICAidGFyZ2V0IjogIm9wdGlvbjpOZXZlciIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAib3B0aW9uOk5ldmVyIiwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiTmV2ZXIiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-9007f885b17fc1a5e182",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null paced sample 10",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2316,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:20:27.038Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJwYWNlZCIsCiAgInJ1biI6IDEwLAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiU3BhY2UiCiAgXSwKICAiZnJvbSI6IG51bGwsCiAgImJlZm9yZSI6ICJudWxsIiwKICAiYWZ0ZXIiOiAibmV2ZXIiLAogICJyZXN1bHQiOiAibmV2ZXIgfCBsaXN0IGNsb3NlZCIsCiAgImxpc3RPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogNDYuMiwKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICIgIiwKICAgICAgInQiOiAzNzUuOCwKICAgICAgInRhcmdldCI6ICJvcHRpb246TmV2ZXIiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogIm9wdGlvbjpOZXZlciIsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIk5ldmVyIgogICAgfQogIF0KfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-92d1cdf1e089762c7afc",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null paced sample 11",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2355,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:20:29.359Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJwYWNlZCIsCiAgInJ1biI6IDExLAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiU3BhY2UiCiAgXSwKICAiZnJvbSI6IG51bGwsCiAgImJlZm9yZSI6ICJudWxsIiwKICAiYWZ0ZXIiOiAibmV2ZXIiLAogICJyZXN1bHQiOiAibmV2ZXIgfCBsaXN0IGNsb3NlZCIsCiAgImxpc3RPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogNDEuOSwKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICIgIiwKICAgICAgInQiOiAzODYuNSwKICAgICAgInRhcmdldCI6ICJvcHRpb246TmV2ZXIiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogIm9wdGlvbjpOZXZlciIsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIk5ldmVyIgogICAgfQogIF0KfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-628e5dba8dccf8da9b72",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null paced sample 12",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2400,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:20:31.721Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJwYWNlZCIsCiAgInJ1biI6IDEyLAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiU3BhY2UiCiAgXSwKICAiZnJvbSI6IG51bGwsCiAgImJlZm9yZSI6ICJudWxsIiwKICAiYWZ0ZXIiOiAibmV2ZXIiLAogICJyZXN1bHQiOiAibmV2ZXIgfCBsaXN0IGNsb3NlZCIsCiAgImxpc3RPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogNDAuNywKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICIgIiwKICAgICAgInQiOiAzOTMsCiAgICAgICJ0YXJnZXQiOiAib3B0aW9uOk5ldmVyIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJvcHRpb246TmV2ZXIiLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJOZXZlciIKICAgIH0KICBdCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-2a34d4c27f9b3c1f9af1",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null paced sample 13",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2285,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:20:34.128Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJwYWNlZCIsCiAgInJ1biI6IDEzLAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiU3BhY2UiCiAgXSwKICAiZnJvbSI6IG51bGwsCiAgImJlZm9yZSI6ICJudWxsIiwKICAiYWZ0ZXIiOiAibmV2ZXIiLAogICJyZXN1bHQiOiAibmV2ZXIgfCBsaXN0IGNsb3NlZCIsCiAgImxpc3RPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogNDAuOSwKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICIgIiwKICAgICAgInQiOiAzNzMuNSwKICAgICAgInRhcmdldCI6ICJvcHRpb246TmV2ZXIiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogIm9wdGlvbjpOZXZlciIsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIk5ldmVyIgogICAgfQogIF0KfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-0d9005db29e0f44ae69f",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null paced sample 14",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2262,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:20:36.417Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJwYWNlZCIsCiAgInJ1biI6IDE0LAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiU3BhY2UiCiAgXSwKICAiZnJvbSI6IG51bGwsCiAgImJlZm9yZSI6ICJudWxsIiwKICAiYWZ0ZXIiOiAibmV2ZXIiLAogICJyZXN1bHQiOiAibmV2ZXIgfCBsaXN0IGNsb3NlZCIsCiAgImxpc3RPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogMzMuOSwKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICIgIiwKICAgICAgInQiOiAzNzAuNSwKICAgICAgInRhcmdldCI6ICJvcHRpb246TmV2ZXIiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogIm9wdGlvbjpOZXZlciIsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIk5ldmVyIgogICAgfQogIF0KfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-442fbf1c52bebc0a1893",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null paced sample 15",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2374,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:20:38.683Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJwYWNlZCIsCiAgInJ1biI6IDE1LAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiU3BhY2UiCiAgXSwKICAiZnJvbSI6IG51bGwsCiAgImJlZm9yZSI6ICJudWxsIiwKICAiYWZ0ZXIiOiAibmV2ZXIiLAogICJyZXN1bHQiOiAibmV2ZXIgfCBsaXN0IGNsb3NlZCIsCiAgImxpc3RPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogMzEsCiAgICAgICJ0YXJnZXQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImZvY3VzZWQiOiAiY29tYm9ib3g6RXhwaXJlcyIsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiICIsCiAgICAgICJ0IjogMzU2LjgsCiAgICAgICJ0YXJnZXQiOiAib3B0aW9uOk5ldmVyIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJvcHRpb246TmV2ZXIiLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJOZXZlciIKICAgIH0KICBdCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-f7eb84d6e4f22d836049",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null paced sample 16",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2123,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:20:41.061Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJwYWNlZCIsCiAgInJ1biI6IDE2LAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiU3BhY2UiCiAgXSwKICAiZnJvbSI6IG51bGwsCiAgImJlZm9yZSI6ICJudWxsIiwKICAiYWZ0ZXIiOiAibmV2ZXIiLAogICJyZXN1bHQiOiAibmV2ZXIgfCBsaXN0IGNsb3NlZCIsCiAgImxpc3RPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogMzEuNiwKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICIgIiwKICAgICAgInQiOiAzNTcuMiwKICAgICAgInRhcmdldCI6ICJvcHRpb246TmV2ZXIiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogIm9wdGlvbjpOZXZlciIsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIk5ldmVyIgogICAgfQogIF0KfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-dc160d387bb28508f3c8",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null paced sample 17",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2279,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:20:43.188Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJwYWNlZCIsCiAgInJ1biI6IDE3LAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiU3BhY2UiCiAgXSwKICAiZnJvbSI6IG51bGwsCiAgImJlZm9yZSI6ICJudWxsIiwKICAiYWZ0ZXIiOiAibmV2ZXIiLAogICJyZXN1bHQiOiAibmV2ZXIgfCBsaXN0IGNsb3NlZCIsCiAgImxpc3RPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogMzEuMiwKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICIgIiwKICAgICAgInQiOiAzNTcuNiwKICAgICAgInRhcmdldCI6ICJvcHRpb246TmV2ZXIiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogIm9wdGlvbjpOZXZlciIsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIk5ldmVyIgogICAgfQogIF0KfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-00aac5ea8dfcd7f9e67f",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null paced sample 18",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2223,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:20:45.471Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJwYWNlZCIsCiAgInJ1biI6IDE4LAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiU3BhY2UiCiAgXSwKICAiZnJvbSI6IG51bGwsCiAgImJlZm9yZSI6ICJudWxsIiwKICAiYWZ0ZXIiOiAibmV2ZXIiLAogICJyZXN1bHQiOiAibmV2ZXIgfCBsaXN0IGNsb3NlZCIsCiAgImxpc3RPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogNDMuMSwKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICIgIiwKICAgICAgInQiOiAzNzMuOSwKICAgICAgInRhcmdldCI6ICJvcHRpb246TmV2ZXIiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogIm9wdGlvbjpOZXZlciIsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIk5ldmVyIgogICAgfQogIF0KfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-78a3de1b6bc9eff27598",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        },
+        {
+          "title": "orbit-field select-down-space-from-null paced sample 19",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2210,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T06:20:47.699Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "keyboard-window",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtZmllbGQiLAogICJzZXF1ZW5jZSI6ICJzZWxlY3QtZG93bi1zcGFjZS1mcm9tLW51bGwiLAogICJjb250cm9sIjogbnVsbCwKICAibW9kZSI6ICJwYWNlZCIsCiAgInJ1biI6IDE5LAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiU3BhY2UiCiAgXSwKICAiZnJvbSI6IG51bGwsCiAgImJlZm9yZSI6ICJudWxsIiwKICAiYWZ0ZXIiOiAibmV2ZXIiLAogICJyZXN1bHQiOiAibmV2ZXIgfCBsaXN0IGNsb3NlZCIsCiAgImxpc3RPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogMzkuNywKICAgICAgInRhcmdldCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAiZm9jdXNlZCI6ICJjb21ib2JveDpFeHBpcmVzIiwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICIgIiwKICAgICAgInQiOiAzNjQuNCwKICAgICAgInRhcmdldCI6ICJvcHRpb246TmV2ZXIiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJmb2N1c2VkIjogIm9wdGlvbjpOZXZlciIsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIk5ldmVyIgogICAgfQogIF0KfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "00492c0a91c87ce5edd1-d26d99e1091cd66ada8e",
+          "file": "keyboard-window.browser.mjs",
+          "line": 101,
+          "column": 3
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-07T06:19:25.008Z",
+    "duration": 85137.68699999999,
+    "expected": 40,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

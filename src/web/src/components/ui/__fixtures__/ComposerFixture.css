@@ -23,6 +23,12 @@
   background: var(--bg-raised);
 }
 
+/* The task panel's comment field rule as index.css had it while the panel used the AntD field; P3.2
+   moved the panel to Orbit and kept only the Orbit half there, so the AntD reference keeps it here. */
+.fixture-task-panel .tdp-compose .ant-input {
+  flex: 1;
+}
+
 .fixture-plain {
   width: var(--fixture-width, 360px);
   margin: 0 auto;

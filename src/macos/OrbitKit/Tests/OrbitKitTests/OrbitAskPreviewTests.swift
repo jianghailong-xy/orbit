@@ -21,9 +21,13 @@ final class OrbitAskPreviewTests: XCTestCase {
         // it a formality. Web refuses all of them too, and the weaker client would otherwise win.
         // A provider write joins them for its own reason: a standing yes would let the next one name
         // any endpoint and key.
+        // A merge check joins them with teeth on both sides: the server writes a session's merge
+        // check only against a card a PERSON answered, so a standing rule here would be a switch
+        // that turns every later proposal into a refusal the agent cannot read — the owner
+        // believing they had allowed it.
         for tool in ["orbit_task_batch", "orbit_dag_change", "orbit_task_create", "orbit_project_create",
                      "orbit_blocker_resolve", "orbit_provider_create", "orbit_provider_update",
-                     "orbit_provider_delete"] {
+                     "orbit_provider_delete", "orbit_project_update_integration"] {
             XCTAssertEqual(Approvals.rememberRules(toolName: tool, input: json("{}")), [],
                            "\(tool) must not offer Allow & remember")
         }

@@ -190,7 +190,13 @@ orbit_pat_<43 字符 base64url>        # randomBytes(32)，256 bit
   `POST plan/redraft`、`POST plan-proposals/:id/decide`）。
 
 第 3 步任务又追加 1 条：`PATCH /projects/:id/integration`。它的每个字段都是下面 5.1 里 `PATCH /projects/:id`
-拒绝 PAT 的 `integration`（对 agent 会话也是 `INTEGRATION_SETTINGS_OWNER_ONLY`），不拒它，字段级规则换个 URL 就绕过去了。
+拒绝 PAT 的 `integration`，不拒它，字段级规则换个 URL 就绕过去了。
+
+※ 2026-10-07 起这条与 `PATCH /projects/:id` 不再逐字段对应：后者对 agent 会话只拒集成对象里的
+**线**字段（`line` / `projectBranchName` / `upstreamRef`，拒 403 `INTEGRATION_SETTINGS_OWNER_ONLY`），
+而 `mergeCheckCommand` / `mergeCheckTimeoutSeconds` 在本会话对本项目的 ALLOWED 确认卡覆盖这次改动时可以写入
+（`projects/project-integration-approval.ts`）。PAT 在该路由仍被整体拒绝 `integration`：PAT 不是会话，
+没有可以绑定卡的东西，若跟会话一样放行，同一个改动就会有两条规则。本路由（owner 通道）的拒绝规则一字未变。
 
 完整清单共 33 条，在 `src/apiserver/src/auth/pat-owner-channel-routes.ts`。普查 spec `auth/pat-route-coverage.spec.ts`
 双向精确核对装饰器与清单；`auth/pat-owner-channel.pg.spec.ts` 对生产 apiserver 逐门各一条：持全部 scope 的 PAT →

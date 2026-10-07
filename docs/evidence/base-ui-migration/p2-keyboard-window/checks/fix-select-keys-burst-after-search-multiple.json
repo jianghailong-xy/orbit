@@ -1,0 +1,13 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-select-keys/select-keys-burst.config.mjs --project chromium-dark-desktop --grep '\"'\"'(orbit-combobox|antd-search|orbit-multiselect|antd-multiple) '\"'\"''",
+ "cwd": "/var/tmp/p2kw-c2604b/after3",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "28405c86d217f03c6ed02783ee38e3e3354ed420",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "startedAt": "2026-10-07T05:43:15.202558+00:00",
+ "endedAt": "2026-10-07T05:46:59.813630+00:00",
+ "exitCode": 0,
+ "outputSha256": "3cd254e739027d74898763803d5312c5498dbc90a8a39b1a573ddc5a93eba51c",
+ "outputBytes": 16710,
+ "archive": "{\"destination\":\"/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6/docs/evidence/base-ui-migration/p2-keyboard-window/fix-select-keys-burst-after-search-multiple\",\"stats\":{\"startTime\":\"2026-10-07T05:43:15.802Z\",\"duration\":223881.762,\"expected\":92,\"skipped\":0,\"unexpected\":0,\"flaky\":0},\"artifacts\":92}"
+}

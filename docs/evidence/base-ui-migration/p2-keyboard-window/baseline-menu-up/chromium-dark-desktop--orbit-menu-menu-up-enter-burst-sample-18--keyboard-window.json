@@ -1,0 +1,37 @@
+{
+  "target": "orbit-menu",
+  "sequence": "menu-up-enter",
+  "control": null,
+  "mode": "burst",
+  "run": 18,
+  "keys": [
+    "ArrowUp",
+    "Enter"
+  ],
+  "from": null,
+  "before": "none",
+  "after": "none",
+  "result": "closed",
+  "listOpen": false,
+  "active": "button:Add attachment",
+  "keyLog": [
+    {
+      "key": "ArrowUp",
+      "t": 38.1,
+      "target": "button:Add attachment",
+      "trusted": true,
+      "focused": "button:Add attachment",
+      "listbox": false,
+      "highlighted": null
+    },
+    {
+      "key": "Enter",
+      "t": 65.6,
+      "target": "button:Add attachment",
+      "trusted": true,
+      "focused": "button:Add attachment",
+      "listbox": true,
+      "highlighted": "/Command"
+    }
+  ]
+}

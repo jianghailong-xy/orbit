@@ -64,7 +64,9 @@ export const decliningPrefix = (toolName: string | null | undefined): string =>
       ? 'Leaving this open: '
       : toolName === 'orbit_integration_skip_merge_check'
         ? 'Checking it after all: '
-        : 'Not creating: ';
+        : toolName === 'orbit_project_update_integration'
+          ? 'Leaving the check as it is: '
+          : 'Not creating: ';
 
 /** What the empty composer asks for while a decline is armed. */
 export const DECLINE_PLACEHOLDER = 'Say what to do instead…';
@@ -212,6 +214,47 @@ function skipMergeCheckInput(a: ApprovalInfo): SkipMergeCheckInput | null {
 }
 
 /**
+ * Orbit's ask before a session changes a project's merge check — the check run on the combined tree
+ * before that project's work lands.
+ *
+ * The one integration setting an agent may propose: where the work LANDS stays the owner's alone
+ * and is refused outright, but what is checked before it lands is a judgement the session holding a
+ * failing check is the one that can make. So the card leads with the two commands — what the check
+ * is now, and what it would become — because that difference is the whole of what is being decided.
+ *
+ * The server writes the change only against an ALLOWED card whose input reproduces the proposal it
+ * is sent (`projects/project-integration-approval.ts`), so a card that misrepresents what would be
+ * written does not merely mislead: the write it is attached to is refused.
+ */
+const isMergeCheckChange = (a: ApprovalInfo): boolean =>
+  a.toolName === 'orbit_project_update_integration';
+
+interface MergeCheckChangeInput {
+  projectTitle: string;
+  /** The check as the project stands, or null when it has none. */
+  current: string | null;
+  /** What it would become; null clears it. */
+  next: string | null;
+  /** The budget for the new check, in seconds, when the proposal named one. */
+  timeout: number | null;
+}
+
+function mergeCheckChangeInput(a: ApprovalInfo): MergeCheckChangeInput | null {
+  if (!isMergeCheckChange(a)) return null;
+  const obj = (a.input ?? {}) as Record<string, unknown>;
+  const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null);
+  const timeout = obj.mergeCheckTimeoutSeconds;
+  return {
+    projectTitle: text(obj.projectTitle) ?? '',
+    current: text(obj.currentMergeCheckCommand),
+    next: text(obj.mergeCheckCommand),
+    // Absent means the budget is left as it is, which is not the same as "no budget" — so a
+    // proposal that named none shows no second line rather than a zero.
+    timeout: typeof timeout === 'number' ? timeout : null,
+  };
+}
+
+/**
  * Orbit's asks before a provider write: one of the owner's own providers created, changed or removed.
  * Drawn as the plain card — its body is the provider as it would be written, the key reduced to the
  * fact that one is being set — but, like every ask Orbit raises for itself, never waived by a rule.
@@ -306,7 +349,14 @@ function rememberRulesFor(a: ApprovalInfo): PermissionRule[] {
   // whatever endpoint and key the next one names.
   // Nor a skip: "always let this conversation land past the check" is every later landing unchecked,
   // which is the project's setting and not a rule this card may leave behind.
-  if (isTaskCreate(a) || isProjectCreate(a) || isBlockerResolve(a) || isProviderWrite(a) || isSkipMergeCheck(a)) {
+  //
+  // Nor a merge check, and this one has teeth on BOTH sides: the server writes a session's merge
+  // check only against a card a PERSON answered (an auto-allowed row does not count), so a standing
+  // rule would be a switch that turns the change into a refusal the agent cannot read — the owner
+  // believing they had allowed it, and every later proposal coming back as a 403 telling the agent
+  // to ask for a card that is already answered.
+  if (isTaskCreate(a) || isProjectCreate(a) || isBlockerResolve(a) || isProviderWrite(a)
+    || isSkipMergeCheck(a) || isMergeCheckChange(a)) {
     return [];
   }
   if (a.toolName === 'Bash') {
@@ -408,6 +458,7 @@ export function ApprovalPanel({
   const create = createInput(approval);
   const blocker = blockerResolveInput(approval);
   const skipCheck = skipMergeCheckInput(approval);
+  const mergeCheck = mergeCheckChangeInput(approval);
   // What the composer's bar would name as the thing not being done: the proposal's own subject, and
   // never the tool's name, which says nothing about what is not being created. Null for everything
   // that is not one of Orbit's own asks — a plan, a tool call — which keeps its one-press Reject.
@@ -421,6 +472,8 @@ export function ApprovalPanel({
           ? (blocker.subjectTitle || blocker.kind || 'this blocker')
           : skipCheck
             ? (skipCheck.taskTitle || 'this landing')
+          : mergeCheck
+            ? `${mergeCheck.projectTitle || 'this project'}'s merge check`
             : null;
   const heading = isPlan(approval)
           ? '📋 Confirm: exit plan mode and proceed with this plan?'
@@ -438,7 +491,9 @@ export function ApprovalPanel({
                   ? `🚧 Confirm: this no longer blocks ${blocker.projectTitle || 'the project'}?`
                   : skipCheck
                     ? `⏭ Confirm: land ${skipCheck.taskTitle || 'this task'} without the merge check?`
-                    : `🔓 Approve tool call: ${approval.toolName}`;
+                    : mergeCheck
+                      ? `🔧 Confirm: change the merge check of ${mergeCheck.projectTitle || 'this project'}?`
+                      : `🔓 Approve tool call: ${approval.toolName}`;
   return (
     <ReviewCard enabled={compact} title={heading}
       summary={markdownToPlainLines(plan || create?.prose || '')}
@@ -449,7 +504,7 @@ export function ApprovalPanel({
         {heading}
       </div>
       {/* A create is read top to bottom like a plan, so it grows instead of scrolling. */}
-      <div className={`approval-body${plan || create || blocker || skipCheck ? ' is-plan' : ''}`}>
+      <div className={`approval-body${plan || create || blocker || skipCheck || mergeCheck ? ' is-plan' : ''}`}>
         {plan ? (
           <Markdown
             remarkPlugins={[remarkGfm]}
@@ -468,6 +523,8 @@ export function ApprovalPanel({
           <BlockerResolveBody input={blocker} />
         ) : skipCheck ? (
           <SkipMergeCheckBody input={skipCheck} />
+        ) : mergeCheck ? (
+          <MergeCheckChangeBody input={mergeCheck} />
         ) : (
           <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
         )}
@@ -493,7 +550,9 @@ export function ApprovalPanel({
                     ? 'Resolve it'
                     : skipCheck
                       ? 'Land it without the check'
-                      : 'Approve'}
+                      : mergeCheck
+                        ? 'Change the check'
+                        : 'Approve'}
           {keys && <span className="approval-kbd">{ENTER_HINT}</span>}
         </CardActionButton>
         {rules.length > 0 && (
@@ -576,6 +635,10 @@ function BlockerResolveBody({ input }: { input: BlockerResolveInput }): JSX.Elem
  * question is whether THAT command should hold up THAT landing — and then the agent's claim that the
  * red is the check's rather than the work's, marked as the agent's for the same reason the blocker
  * card marks its own. The command is shown and not run: nothing here proves it would fail.
+ *
+ * Its neighbour below is the other half of that question — changing the command rather than going
+ * past it — and the two cards are deliberately separate: an owner who lets this landing through has
+ * not agreed to run something else next time.
  */
 function SkipMergeCheckBody({ input }: { input: SkipMergeCheckInput }): JSX.Element {
   return (
@@ -597,6 +660,45 @@ function SkipMergeCheckBody({ input }: { input: SkipMergeCheckInput }): JSX.Elem
         landing and every merge into main are checked as before.
       </p>
     </div>
+  );
+}
+
+/**
+ * What the merge check is now, and what it would become.
+ *
+ * Two commands and nothing else, because their difference IS the decision: everything else about
+ * this project's integration line — which branch the work lands on — is not being asked about and
+ * could not be given away here. The current value comes from the project read rather than from the
+ * agent's recollection of it, which is the thing a person is here to check.
+ *
+ * A check that is being REMOVED says so in words: an empty line on the right reads as a loading
+ * state, not as "no check at all".
+ */
+function MergeCheckChangeBody({ input }: { input: MergeCheckChangeInput }): JSX.Element {
+  const current = input.current ?? 'no check configured';
+  const next = input.next ?? 'no check — nothing runs on the combined tree';
+  return (
+    <div className="dag-approval">
+      <p className="dag-approval-note">
+        Run on the combined tree before this project's work lands. Nothing else about the
+        project's integration line changes.
+      </p>
+      <Command label="now" command={current} />
+      <Command label="after" command={next} />
+      {input.timeout !== null && (
+        <p className="dag-approval-caption">killed after {input.timeout}s</p>
+      )}
+    </div>
+  );
+}
+
+/** One command on the card: the label above it, the command as it would be run below. */
+function Command({ label, command }: { label: string; command: string }): JSX.Element {
+  return (
+    <>
+      <p className="dag-approval-caption">{label}</p>
+      <pre className="approval-input">{command}</pre>
+    </>
   );
 }
 

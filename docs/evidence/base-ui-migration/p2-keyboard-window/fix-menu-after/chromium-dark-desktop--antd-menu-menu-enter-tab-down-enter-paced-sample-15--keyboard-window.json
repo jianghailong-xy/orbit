@@ -1,0 +1,57 @@
+{
+  "target": "antd-menu",
+  "sequence": "menu-enter-tab-down-enter",
+  "control": null,
+  "mode": "paced",
+  "run": 15,
+  "keys": [
+    "Enter",
+    "Tab",
+    "ArrowDown",
+    "Enter"
+  ],
+  "from": null,
+  "before": null,
+  "after": null,
+  "result": "ran Image",
+  "listOpen": false,
+  "active": "body:darkSwitch themeAdd atta",
+  "keyLog": [
+    {
+      "key": "Enter",
+      "t": 29.5,
+      "target": "button:Add attachment",
+      "trusted": true,
+      "focused": "button:Add attachment",
+      "listbox": false,
+      "highlighted": null
+    },
+    {
+      "key": "Tab",
+      "t": 402.8,
+      "target": "button:Add attachment",
+      "trusted": true,
+      "focused": "button:Add attachment",
+      "listbox": true,
+      "highlighted": null
+    },
+    {
+      "key": "ArrowDown",
+      "t": 712.8,
+      "target": "menuitem:File",
+      "trusted": true,
+      "focused": "menuitem:File",
+      "listbox": true,
+      "highlighted": null
+    },
+    {
+      "key": "Enter",
+      "t": 1022.3,
+      "target": "menuitem:Image",
+      "trusted": true,
+      "focused": "menuitem:Image",
+      "listbox": true,
+      "highlighted": null
+    }
+  ]
+}

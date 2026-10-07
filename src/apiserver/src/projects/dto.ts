@@ -186,8 +186,11 @@ const BRANCH_REF = /^refs\/heads\/\S+$/;
 /**
  * `PATCH /projects/:id/integration`, and `integration` on a project update: the account owner's
  * choice of where this project's finished tasks land and what is checked before they do
- * (`docs/project-integration-line-contract.md` L5). Only the owner's — a request carrying an
- * acting session is refused whole — and each field is written only when sent.
+ * (`docs/project-integration-line-contract.md` L5). Each field is written only when sent, and on
+ * the update route they are not all the owner's in the same way: the line is, whole, while the
+ * merge check is a session's to propose and the owner's to allow on a card
+ * (`project-integration-approval.ts`). `PATCH /projects/:id/integration` is the owner's own door
+ * and is unaffected — it carries no acting session, so no card is asked for.
  */
 export class UpdateProjectIntegrationDto implements IntegrationSettings {
   /** `MAIN` lands finished tasks straight on the upstream; `PROJECT_BRANCH` on the project's own
@@ -321,8 +324,10 @@ export class UpdateProjectDto {
    * automatic-only, so a project is settled by whoever writes this column and by nothing else. */
   @IsOptional() @IsIn(PROJECT_STATUSES) status?: ProjectStatus;
 
-  /** This project's integration line and merge check (`UpdateProjectIntegrationDto`). The account
-   *  owner's to set: like `status`, a request carrying an acting session is refused whole. */
+  /** This project's integration line and merge check (`UpdateProjectIntegrationDto`). The line is
+   *  the account owner's alone, refused whole to a request carrying an acting session. The merge
+   *  check may be changed from a session, but only on a confirmation card the owner has answered
+   *  for this project and exactly this change (`project-integration-approval.ts`). */
   @IsOptional() @ValidateNested() @Type(() => UpdateProjectIntegrationDto)
   integration?: UpdateProjectIntegrationDto;
 
