@@ -278,6 +278,7 @@ class PushDeviceTest {
         compose.waitUntil(10_000) { app.push.notice.value?.eventId == message.getValue("eventId") }
         compose.onNodeWithTag("notification-notice").assertIsDisplayed()
         awaitNotifications(0)
+        capture("foreground-notice")
         compose.onNode(hasText("Open") and hasAnyAncestor(hasTestTag("notification-notice"))).performClick()
         awaitCard()
         assertTrue(ObjectId.same(fixture.sessionId, app.realtime.state.value.session?.id))
