@@ -72,7 +72,9 @@ export async function wikiScenario({ page, expect, capture }) {
   await expect(page.getByRole('heading', { name: 'Wiki', exact: true })).toBeVisible();
   await expect(page.getByText('Preserve visible behavior', { exact: true })).toBeVisible();
   const phone = page.viewportSize().width <= 960;
-  await capture('wiki-home', { title: '.wk-title-row', ...(phone ? {} : { directory: '.wk-toc' }), card: '.wk-card' });
+  // main 2f9cc095f (refactor(wiki): list topic articles on the Wiki home, drop status cards) removed the
+  // home's .wk-card; its topic-article rows take their place, drawn once the home's reads are in.
+  await capture('wiki-home', { title: '.wk-title-row', ...(phone ? {} : { directory: '.wk-toc' }), card: '.wk-pl-doc.topic' });
   if (phone) {
     await page.getByRole('button', { name: 'Contents', exact: true }).click();
     const contents = page.getByRole('dialog', { name: 'Contents' });
