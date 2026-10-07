@@ -7348,16 +7348,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     });
     setTimeout(() => taRef.current?.focus(), 0);
   };
-  // The project settlement card's "Ask the coordinator to handle it": the card's own facts — the
-  // blocked criteria, what each is waiting on and what would clear them — go out as one ordinary
-  // turn. Ordinary because nothing is waiting on an answer: the card explains a projection, and the
-  // work that would clear it is this agent's. The facts ARE the message, so unlike the armed
-  // replies above there is nothing to type first; the composer stays free for anything they leave
-  // out. The card stays where it is, with its own Confirm still live.
-  const delegateProjectSettlement = (talk: { facts: string }): void => {
-    if (send.isPending) return;
-    send.mutate({ content: talk.facts, images: [], intent: defaultSendIntent });
-  };
   // A LIVE session's pills show its stored choice (editable any time the runner is
   // online — see configEditable); otherwise they're editable and reflect local state.
   const selectedWorkspace = workspacesForRunner.find((a) => a.id === selected?.workspace?.id);
@@ -9822,14 +9812,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   onViewTasks={(createdTasks.data?.total ?? 0) > 0 ? viewCreatedTasks : undefined}
                 />
               )}
-              {/* The other end of that question: the work filed under this project has met every
-                  criterion it states and no task under it is IN_PROGRESS, so is the project done?
-                  Drawn from the
-                  project page's own `['project', id]` read and pressed straight at the status door
-                  with the browser's credential — the one shape that door accepts from a
-                  conversation. Keyed by the session, because whether it was delivered belongs to
-                  this conversation, and by a key none of its siblings carries, for the reason the
-                  evidence card's note above gives. */}
+              {/* The owner's end of the close-out, and the only card this slot draws since the
+                  owner's ruling of 2026-10-07 04:20Z took "Why is this project not done?" out of
+                  the conversation: "Is this project done?" while the coordinator has asked (or the
+                  row says Record as done…), and the receipt in its place once it is recorded. A
+                  project nobody has asked about draws nothing here — its gaps and the entries that
+                  act on them are the project page's Open items row and the Needs you hint. Keyed
+                  by the session, because whether it was delivered belongs to this conversation,
+                  and by a key none of its siblings carries, for the reason the evidence card's
+                  note above gives. */}
               {selected && selectedId && !selectedTrashed && (
                 <SessionProjectSettlementCard
                   key={`settlement:${selectedId}`}
@@ -9839,7 +9830,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       || selectedSession?.projectMembership?.role === 'COORDINATOR'
                   }
                   waitingKind={selectedSession?.waitingKind ?? null}
-                  onDelegate={delegateProjectSettlement}
                 />
               )}
               {selected &&
