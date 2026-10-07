@@ -642,3 +642,31 @@ revision notices. Every real-cluster item in the verification table above remain
 
 The local evidence lives in `src/apiserver/src/managed-runners/*.spec.ts`, run by the unit suite, and
 in the three `*.pg.spec.ts` files there, each run with `scripts/run-pg-spec.sh <spec>`.
+
+## Implementation record: sign-in provisioning
+
+Recorded 2026-10-07 for the code-track sign-in task. It was verified with the in-memory Kubernetes
+namespace of `test-support/fake-kube-client.ts`, disposable PostgreSQL databases and a test playing
+the runner (heartbeat and claim with the credential the manager put in the bootstrap Secret). No
+cluster, kubeconfig, Ceph or model credential was used, and nothing here is evidence about a real
+cluster, a real runner heartbeat or a real model session.
+
+| Area | As implemented |
+| --- | --- |
+| Hook | `AuthService.completeLogin`, the exit of password login, first-user bootstrap and the Google ticket exchange, calls `ManagedRunnerService.signedIn` after the tokens are issued. It is injected as `MANAGED_RUNNER_SIGN_IN`, the one export of `ManagedRunnerModule`, which is global for it. Nothing else calls it: refresh, logout, a password change, an administrator opening an account and the capability and status reads record nothing. A unit spec holds the call site to that one method. |
+| Off | `signedIn` returns before reading anything. Login and bootstrap make exactly the database calls they made before. |
+| On | An eligible owner without a mapping gets one (mapping, runner row and default workspace in the manager-core transaction), and the reconcile worker is kicked. The sign-in waits for no instance and makes no Kubernetes call. An existing mapping is left as it is in every state: a sign-in does not retry FAILED, recreate a removed workspace or a tombstone, or wake anything. Every failure is logged and swallowed, so the issued session stands; an explicit `ensure`, or the next sign-in, records the intent. |
+| Eligibility | `ManagedRunnerEligibility` (`managed-runner-eligibility.ts`) is the one decision of who is given a managed runner. Sign-in, explicit `ensure` (403 `MANAGED_RUNNER_NOT_ELIGIBLE`) and the status read (`canEnsure` false, with that reason) ask it. With the switch on it answers yes for every account; narrowing it to invited testers changes that implementation and nothing else. No configuration was added. |
+| Default workspace | Created once with the mapping, bound by `runnerId` and `targetRunnerId`, with `position` NULL, so it sorts after every workspace the owner already has. Existing order, the first workspace a client lands on, selections and deep links are unchanged. Nothing is matched by name. An owner who removes it does not get it, or another, back at the next sign-in. |
+| Model supply | READY also needs the fresh heartbeat after STARTING to report a runtime installed and signed in: `auth: yes`, no installation error, and advertised where the claim requires it. Claude Code, Codex, Kimi Code and Antigravity count, preferred in that order, and the first is stored as `initialProvider`. Without one the mapping stays STARTING with reason `MODEL_UNAVAILABLE`; a runtime signed in meanwhile makes the next pass READY. At the startup deadline it turns FAILED with that reason, retryable, and a retry waits on the same Pod. OpenCode and DeepSeek Harness are not counted as supply in this version. |
+| First session | The derived provider seed (`lastProviderByWorkspace`) answers a managed default workspace with no interactive history with its `initialProvider`. Its `lastProvider` in workspace payloads, and a session created there without a provider, start on that runtime; every other workspace keeps the Claude floor. `SessionsService.create` refuses a first session there with 409 `MODEL_UNAVAILABLE`, before anything is created, on a runtime the managed runner did not report installed and signed in, whether the provider was named or derived. A session bringing its own credential needs only the CLI installed. After the first interactive session the workspace's history decides, as for every workspace. The deprecated workspace `provider` alias is neither read nor written. |
+
+Left for the authorized test environment: a real sign-in provisioning a real PVC and Pod; the managed
+image consuming the bootstrap credential and heartbeating with real engine health (its entrypoint
+still stops before registering, as the manager record says); a real first session executed by a real
+runtime with a real model credential; how a real runner's engine probe reports supply (an `unknown`
+answer from a slow probe delays READY); and sign-in under load alongside manager passes. Client
+rendering of these states, capacity admission and wake/sleep belong to the client and wake/sleep work.
+
+The local evidence is `managed-runner-sign-in.spec.ts` and `managed-runner-supply.spec.ts` in the
+unit suite, and `managed-runner-sign-in.pg.spec.ts`, run with `scripts/run-pg-spec.sh <spec>`.
