@@ -11,12 +11,13 @@ that carries it, the tests that exercise it, and what they established. Three ki
   its own PostgreSQL, the repo's Go runner with a stand-in engine), seeded only through the real API, signed in through the
   product's sign-in screen with the stack's test accounts (owner and member). Every write is read back from the API as the
   same account and every list is compared with what the API answers; the reads are kept beside the screenshots
-  (`<journey>-readback.txt`). Not production, not a physical phone. The stack was removed after the runs; its tooling
-  (setup, seeding, verification, the stand-in engine, seed ids with share tokens and test passwords redacted) and its final
-  state are kept with the evidence uploads (`a11-stack-tooling/`).
+  (`<journey>-readback.txt`, also in the evidence uploads under `a11-stack-readbacks/`). Not production, not a physical
+  phone. As the coordinator asked, the stack (its source copy, database container and runner directories) was removed after
+  the runs.
 
-App code is unchanged since 0705c23ad (`git diff 0705c23ad.. -- src/android/app/src/main src/android/core/src/main` is
-empty); later commits change only device tests, scripts and docs.
+App code: the review fixes landed in 0705c23ad; the only later app change is 3c9ff9aa8 (the created-task row of the A08 hook
+drew its fields over each other — found on the light set's screenshot, fixed red→green as RG3). Every other commit after
+0705c23ad changes only device tests, scripts and docs.
 
 ## Runs
 
@@ -32,16 +33,19 @@ empty); later commits change only device tests, scripts and docs.
 | S5 | bgj_993f0d5d3a51 | 089fc1bb1 | stack s01 | PASS |
 | F36 | bgj_5a87dbe3206a | 9ae822323 | fixture suite, API 36 light (20 journeys) | PASS 20/20 |
 | D200 | bgj_5a87dbe3206a | 9ae822323 | screens tour, dark + 200 % font | PASS (Run now ends above the comment box) |
-| F29 | bgj_5a87dbe3206a | 9ae822323 | fixture suite on API 29 (Android 10, emulator-5556 started and stopped by the runner) | RESULT_F29 |
+| F29 | bgj_5a87dbe3206a | 9ae822323 | fixture suite on API 29 (Android 10, emulator-5556 started and stopped by the runner) | PASS 20/20 |
 | TB | bgj_5a87dbe3206a | 9ae822323 | `TalkBackCheckTest`, TalkBack running | PASS: touch exploration on through 6 pages; no press without words; TalkBack's focus landed on Task options, Task actions, Send comment, Project actions; TalkBack's notification prompt dismissed unanswered (its permission unchanged); settings restored |
+| RG3 | bgj_e55ffede1b8c | test APK 3c9ff9aa8 on app 9ae822323, then on 3c9ff9aa8 | created-task row: fields one under another | red on 9ae822323 (the Status label drawn at the Title label's place, top 730) → green |
+| Final | bgj_e55ffede1b8c | 3c9ff9aa8 | fixture suite API 36 light; dark + 200 % tour; fixture suite API 29 | PASS 20/20; PASS; PASS 20/20 |
+| TB2 | bgj_0e190ab9a7f6 | e3d99ec93 (app code = 3c9ff9aa8) | `TalkBackCheckTest`, twice | PASS ×2 (as TB) |
 
 ## UI-F04 · Drawer Tasks / `orbit-task` / created-task row → list and task page
 
 | A01 entry / field group | Android page | Tests | Result |
 | --- | --- | --- | --- |
 | Drawer Tasks | `TaskBrowser` (Tasks branch of `MainActivity`) | Fixture `taskSearchAndLabelsKeepScopeThroughRecreation`, `screensTour`; Stack `s01_theTaskListIsTheServersList` | S5: every row of `GET /tasks/page?projectId=none` is shown |
-| `orbit-task:` from a conversation, back to it with the draft kept | `TaskDetail` over the conversation (A05 stack) | Fixture `sourceConversationTaskAndProjectReturnKeepDraft` | F36, F29 |
-| created-task row → task | A08 created-tasks card row (minimal hook) → `TaskDetail` | Fixture `regressionCreatedTaskRow_opensTheTask` | RG2: red on the reviewed build (no entry), green on the fix |
+| `orbit-task:` from a conversation, back to it with the draft kept | `TaskDetail` over the conversation (A05 stack) | Fixture `sourceConversationTaskAndProjectReturnKeepDraft` | F36, F29, Final |
+| created-task row → task | A08 created-tasks card row (minimal hook) → `TaskDetail` | Fixture `regressionCreatedTaskRow_opensTheTask` | RG2: red on the reviewed build (no entry), green on the fix; RG3: the row's fields one under another |
 | scope All / list; search; filter; sort/order; Tasks/Batches; labels | `TaskBrowser` bar, chips, options menu, label sheet | Unit `TaskApiTest`, `TaskLogicTest`; Fixture `taskSearchAndLabels…`, `regressionP21_…`; Stack `s01_…` | S5: the Failed chip shows the server's failed rows; a search shows the server's matches plus the rows `/tasks/active` pins over them (Happening now, as iOS `TasksView`); the `android` label shows the server's labelled rows. RG2: a write finishing under an earlier filter no longer refills the new one (P2-1) |
 | multi-select bulk run / stop / assign / delete | bulk bar + iOS confirmations | Unit `TaskApiTest`; Stack `s04_bulkDeleteLeavesNothingOnTheServer` | S4: both rows answer `GET /tasks/:id` → 404 after Delete |
 | detail: comments, acceptance, schedule, prerequisites, watch | `TaskDetail` sections and sheets (`TaskEditor.kt`) | Fixture `taskDetailWritesGoThroughTheServersOwnRecord`, `regressionP23_…`; Stack `s02_taskPageWritesAreTheServersRecord` | S2: comment, acceptance criteria, runAt set then cleared, prerequisite, watch — each read back from `GET /tasks/:id` or `GET /watches`. RG1: a refused acceptance edit keeps its sheet and draft (P2-3) |
@@ -91,5 +95,5 @@ empty); later commits change only device tests, scripts and docs.
 
 | Check | Tests | Result |
 | --- | --- | --- |
-| TalkBack running on the main pages | `TalkBackCheckTest` (labels as TalkBack composes them; TalkBack's focus put on the icon-only presses) | TB |
-| 200 % font: Run now scrolls clear of the comment box | `screensTour` asserts Run now's bounds end above the comment box | D200 |
+| TalkBack running on the main pages | `TalkBackCheckTest` (labels as TalkBack composes them; TalkBack's focus put on the icon-only presses) | TB, TB2 |
+| 200 % font: Run now scrolls clear of the comment box | `screensTour` asserts Run now's bounds end above the comment box | D200, Final |
