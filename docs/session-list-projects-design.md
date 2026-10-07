@@ -16,7 +16,7 @@
 | role | 怎么认 |
 |---|---|
 | `COORDINATOR` | `project.coordinator_session_id = s.id` |
-| `LANDING`（平台驱动的落地会话） | `s.kind = 'LANDING'` 且 `project_landing.session_id = s.id`；项目归属由落地主体对应的任务或晋升确定（集成线契约 §2.9） |
+| `LANDING`（平台驱动的落地会话；集成线契约修订 11 §2.9，对实现的要求，落地会话迁移之前没有这种会话） | `s.kind = 'LANDING'` 且 `project_landing.session_id = s.id`；项目取落地主体的 `project_id` |
 | `TASK` | `s.task_id → task.project_id` |
 | `CONTEXT`（@ 任务发起的对话） | `s.context_task_id → task.project_id` |
 | `JUDGMENT`（coordinator 的一次性判断会话） | `project_coordinator_wake.session_id`，`status = 'SESSION_OPENED'` |
@@ -24,33 +24,33 @@
 
 - 一个会话同时命中多条时按表格顺序取第一条（正常不会发生：coordinator 不执行任务，`task_id` 和 `context_task_id` 有 CHECK 互斥）。
 - 被 `/coordinator/replace` 换掉的旧 coordinator 认不回来（项目不再指向它），它留在 Completed 里平铺。本期不处理。
-- `LANDING` 的 `AWAITING_INPUT` 只表示容器未结案，不表示等用户回复；实时状态读 `landing` 视图。项目分组上线前不进任何列表，只能通过链接打开；上线后收进项目条目，项目会话页以 Landings 组列出未结的和有待办的，已结的折叠。
+- `LANDING`（修订 11，对实现的要求）的 `AWAITING_INPUT` 只表示容器未结案，不表示等用户回复；实时状态读 `landing` 视图。它的 `root_session_id` 为 NULL，不会以 `CHILD` 归属任何项目。平铺的列表（§3.2）默认不返回它；`GET /sessions?projectId=` 带 `includeLanding=1` 时才以 `LANDING` 角色返回，项目会话页以 Landings 组列出未结的和有待办的，已结的折叠。项目条目与项目会话页的会话数、running 数、状态点都不计 `LANDING`。
 
 ## 3. 服务端
 
 ### 3.1 `projectMembership`
 
-会话列表（`GET /sessions`）、会话详情（`GET /sessions/:id`）和 `session.updated` 推送的会话摘要（`buildSessionSummary`）都加；落地会话使用 `landing.updated`（§3.4）：
+会话列表（`GET /sessions`）、会话详情（`GET /sessions/:id`）和 `session.updated` 推送的会话摘要（`buildSessionSummary`）都加（落地会话不发 `session.updated`，见 §3.4）：
 
 ```jsonc
 "projectMembership": {              // 不属于任何项目时为 null
   "projectId": "…",
   "projectTitle": "后台作业生命周期",
   "projectStatus": "OPEN",          // OPEN | DONE | CANCELLED
-  "role": "COORDINATOR"             // COORDINATOR | LANDING | TASK | CONTEXT | JUDGMENT | CHILD
+  "role": "COORDINATOR"             // COORDINATOR | TASK | CONTEXT | JUDGMENT | CHILD；修订 11 起加 LANDING（只在 includeLanding=1 的 projectId 读口出现）
 }
 ```
 
 - **不改现有 `projectId` / `projectTitle`。** 它们的含义是“这个会话协调哪个项目”，只给 coordinator；Coordinator 标、会话里的卡片、iOS 的 `coordinatorPulses`、Back to project 都在读。
 - 嵌套的 `projectId` 已在 `PUBLIC_ID_FIELDS` 里（`src/shared/src/codec.ts`），拦截器按字段名改写、不看层级，所以 codec 不用改。
-- 成员关系写成**一段 SQL**，列表、详情、推送共用，免得算出来不一样。列表查询已经 `LEFT JOIN task t`、`LEFT JOIN project cp`（`sessions.service.ts` 的 `listRows`），在此基础上补 `context_task_id` 的任务、判断会话的 wake、根会话及落地主体。
-- **集成线契约修订 9（§2.9、附录 B）取代本条原来的「本期不加列、不做迁移」（修订前第 45 行）。** 落地会话增加 `session.kind` 判别列及落地主体、作业记录的存储；选型和迁移约束以该契约为准。
+- 成员关系写成**一段 SQL**，三处共用，免得列表、详情、推送算出来不一样。列表查询已经 `LEFT JOIN task t`、`LEFT JOIN project cp`（`sessions.service.ts` 的 `listRows`），在此基础上补 `context_task_id` 的任务、判断会话的 wake 和根会话。集成线契约修订 11（对实现的要求）：`sessions/session-project-membership.ts` 的 `directProjectMembershipSql` 与 `projectMembershipCandidatesSql` 两处都加落地主体的分支，否则 `projectId` 读口收不到落地会话。
+- **集成线契约修订 11（§2.9、附录 B）取代本条原来的「本期不加列、不做迁移」（修订前第 45 行）。** 落地会话增加 `session.kind` 判别列（线上字段叫 `sessionKind`，不叫 `kind`：web 的列表条目写 `{ ...session, kind: 'session' }`）及落地主体、作业记录的存储；选型和迁移约束以该契约为准。项目分组本身仍不加列。
 
 ### 3.2 按项目列会话
 
 `GET /sessions?projectId=<id>&view=<open|completed>`：这个项目在**所有 Workspace** 里属于调用者的成员会话（含 coordinator），行的形状和排序与列表相同。别人的项目返回空列表。项目会话页用它。
 
-`GET /sessions` 和 agent 工具 `session_list` 默认排除 `kind=LANDING`。项目分组上线前不开放列表包含落地会话的选项；`includeLanding` 随项目分组一起上线，届时显式请求（HTTP 为 `includeLanding=1`）才把落地会话作为 `LANDING` 成员返回，项目会话页采用该选项。直接链接的 `GET /sessions/:id`、`session_get` 不受列表排除规则影响。
+集成线契约修订 11（§2.9 LS6，对实现的要求）：平铺的 `GET /sessions`（不带 `projectId` 的各 view）、`GET /sessions/compact`、`GET /sessions/search`、`GET /sessions/counts`，以及 agent 工具 `session_list`、`session_search`，默认排除落地会话；`GET /sessions?projectId=` 只在带 `includeLanding=1` 时把该项目的落地会话以 `LANDING` 角色返回，项目会话页带上它。直接链接的 `GET /sessions/:id`、`session_get` 不受列表排除规则影响。
 
 ### 3.3 `/projects/sidebar` 补进度数字
 
@@ -58,9 +58,10 @@
 
 ### 3.4 实时
 
-**集成线契约修订 9 取代本节原来的「不加新事件」。** 落地会话新增 `landing.updated`，与 `includeLanding` 随项目分组一起上线；在那之前按集成线契约 §2.7a 的节奏轮询。旧客户端忽略未知的 `landing.updated`，不会因此收到落地会话行或普通会话失败通知。客户端：
+不加新事件（集成线契约修订 11 确认这一条对落地会话同样成立）。客户端：
 
-- 普通成员会话的 `session.updated` 本来就实时，条目上的状态点、第 2 行的话跟着它变；落地会话的条目状态跟着 `landing.updated` 变。
+- 成员会话的 `session.updated` 本来就实时，条目上的状态点、第 2 行的话跟着它变。
+- 落地会话（修订 11，对实现的要求）不发 `session.created` / `session.updated`，也不新增 `landing.updated`：它不进条目的状态点，项目会话页的 Landings 组随页面轮询刷新，落地会话页按集成线契约 §2.7a 的节奏轮询。旧客户端因此收不到落地会话行，也不会为它弹「Session failed」通知。
 - 进度数字（`taskCounts`、`buckets.running`）和 coordinator 处理中的例外来自 `/projects/sidebar`：照旧 15 秒轮询，另外收到成员会话的 `session.updated` 时去抖（约 2 秒）顺手刷新一次。
 - 把两端都没处理的 `project.changed` 接上：Web 的 `groupsFor` 现在只刷会话，Swift 的 `ControlEventType` 把它解成 `.unknown`；收到时刷新项目摘要。
 
@@ -84,12 +85,14 @@
 1. **coordinator 等你**：它会话行现在的原话（Web `sessionLine` / iOS `SessionLine.make`），如 `Approve merge to main`、`Question from coordinator`、`Escalated to you`、`Paused`、`Ready to start`，琥珀色。
 2. **有执行会话等你**（coordinator 没在等）：`<那个会话行的等待原话> · <会话名>`，如 `Waiting for your confirmation · 额度恢复后自动重试`，琥珀色。几个都在等时取等得最久的那个。会话名在窄栏里会被截断，Web 悬停能看全。
 3. **coordinator 在处理例外**（`/projects/sidebar` 的 `attention.coordinatorItems`）：项目页那个蓝标签的话去掉 `Coordinator ·` 前缀、首字母大写，如 `Resolving a merge conflict · 18m`，蓝字。
-4. **其余**：coordinator 会话行的原话（`Running …` 蓝字、`You: …`、最后一条回复预览）。
-5. **没有 coordinator**（从没开过、在回收站或已清除）：`No coordinator`，灰字。
+4. **coordinator 正在跑一轮**（转圈，runner 在线）：coordinator 会话行的原话（`Running …` 蓝字）。
+5. **平台有在途的落地**（19555f614，本条此前漏写）：项目列表 / 侧栏的 `integration.inFlight` 描述的那个作业，选法同项目页的 landing 行（运行中优先，再按最早领取或入队）：`Merge to main · queued · 13m`、`Landing · checking · 4m · <task>`（几条同时在途时种类后写 `<n> jobs`，不带任务名）。运行中且心跳不超过 10 分钟用 `running` 语气（同 `Running …`），排队或心跳更旧用 `queued` 语气。旧服务端只给 `activeJobCount` 时写 `Landing · <n> job(s)`。web `sessionProjectLandingLine`，OrbitKit 同一文案。
+6. **其余**：coordinator 会话行的其他原话（`You: …`、最后一条回复预览）。
+7. **没有 coordinator**（从没开过、在回收站或已清除）：`No coordinator`，灰字。
 
 ### 4.3 点击
 
-- **点条目**：进第 2 行所说的那个会话。第 1、3、4 种是 coordinator；第 2 种是那个等你的执行会话；第 5 种进项目会话页。
+- **点条目**：进第 2 行所说的那个会话。第 1、3、4、6 种是 coordinator；第 2 种是那个等你的执行会话；第 5 种今天有 coordinator 时进 coordinator、没有时进项目会话页（集成线契约修订 11 对实现的要求：`inFlight` 带 `landingSessionId` 时进那个落地会话）；第 7 种进项目会话页。
 - **点进度小标签**：进项目会话页（§5）。它是单独的点击区：Web 悬停时描边变蓝，提示 `<n> sessions · <m> running`（n 含 coordinator）；iOS 把它的点击区加高到整行。
 - **Web 悬停 ⋯ / 右键 / iOS 长按**：`Open Session`、`Sessions`、`Open Project`，分隔线，`Pin` / `Unpin`、`Move…`（owner 10-04 的决定）。`Open Session` 和点条目一样，打开第 2 行所说的会话；没有可打开的会话时置灰。后两项作用在 coordinator 上，条目跟着走。
   - **不放** `Complete`、`Share`、`Delete`：完成 coordinator 会影响整个项目，要在对话里做。
@@ -116,7 +119,7 @@
 - **进度条**：页头下面一条，迷你进度条 + `<done>/<total> done · <m> running`，不进项目页：Web 用 ↗，iOS 走页头右上角那个按钮（owner 10-06 的决定）。
 - **合入 main**（owner 10-06 的决定，效果图 `docs/mocks/project-merge-sessions-page/`）：进度条下面一张合入卡，只在有话说时出现——检查中（`CHECK_PROMOTION` 在途，它那行合入状态从进度条挪进来，任务落到项目分支的 Landing 行仍在进度条里）、等你确认（可直接按 `Merge to main` / `Not now`，`Details ›` 打开完整的卡）、合入中（推送前可 `Cancel`）、暂时合不了（`Coordinator is resolving it · <age>`，`Open coordinator ›`）。合完卡片收起，这次合入作为一行 `Merged into main`（`<sha> · <n> tasks · by you`）按 `merged.at` 排进下面的时间分组，点开是回执。协调会话里只留一行。契约见 `docs/project-integration-line-contract.md` 修订 10。
 - **搜索**：页头和进度条下面直接是列表，没有搜索框（owner 10-04 的决定）。Web 的 ⌘K 仍能打开全局搜索面板；iOS 项目页不接全局搜索。Workspace 列表和文件夹页的搜索保持原样。
-- **列表**：`Coordinator` 一节放 coordinator（行上照旧带 `Coordinator` 标），下面是成员会话，按时间分组。列出全部 Workspace 的全部成员会话（Open 和 Completed，不含 Trash），每行操作按它自己的状态，行、悬停按钮、左右滑、长按和外面同状态的会话行一样（owner 10-04 的决定）。客户端分别请求 `GET /sessions?projectId=<id>&view=open` 和 `view=completed`，按 id 合并去重；页头会话数和进度条 running 数按合并后的全部会话计算。
+- **列表**：`Coordinator` 一节放 coordinator（行上照旧带 `Coordinator` 标），下面是成员会话，按时间分组。列出全部 Workspace 的全部成员会话（Open 和 Completed，不含 Trash），每行操作按它自己的状态，行、悬停按钮、左右滑、长按和外面同状态的会话行一样（owner 10-04 的决定）。客户端分别请求 `GET /sessions?projectId=<id>&view=open` 和 `view=completed`，按 id 合并去重；页头会话数和进度条 running 数按合并后的全部会话计算（集成线契约修订 11 起，带 `includeLanding=1` 读回的 `LANDING` 成员只进 Landings 组，不计入这两个数）。
 - **打开与轮询**（iOS，2026-10-06）：打开时先用 App 手里已有的会话填上——Open 列表里这个项目的成员、Workspace 列表里的行、这一页上次读到的 Completed 成员（OrbitKit `SessionProjectMembers`，和上面的合并去重同一条规则），不先清成 0，上面两个请求回来后再替换。之后每 4 秒的轮询不再重拉两份完整列表：Open 成员直接取 App 的 Open 列表（它有自己的轮询和实时推送），Completed 列表只在某个 Open 成员离开 Open 列表时、或距上次读满 60 秒（同 Web 的 `PROJECT_SESSION_REFRESH_MS`）时再读。landing 行、合入卡、开工行的读各自并行轮询，不排在成员列表后面。`view=completed` 回来空列表就是答案，不再用旧参数 `archived` 重问。
 
 ## 6. 文案（Web 与 OrbitKit 逐字一致）

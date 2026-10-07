@@ -2,6 +2,8 @@
 
 # 落地会话（契约修订 9 草案）
 
+> 本草案作为集成线契约 **v1 修订 11** 落地（`docs/project-integration-line-contract.md` 附录 B；main 的修订 9、10 已另有所指，见 §0.1 第 1 条）。文中的「修订 9」都指修订 11。
+
 
 ## 0. 红队修正（2026-10-04，优先于下文；下文与本节冲突处以本节为准）
 
@@ -63,6 +65,118 @@
     - lock-order.ts:149-153 的措辞：ensure 在领取语句提交后、在自己的事务里执行；
     - GET /sessions 和 session_list 的返回范围变化；
     - session-list-projects-design §3.4「不加新事件」被改写。
+
+## 0.1 2026-10-07 复核修正（优先于 §0 与正文中被它改写的条目）
+
+2026-10-07 在 main de0838eb7 上逐条复核。de0838eb7 比 5b73f4717 多 632 个提交。本节没提到的条目，仍按 §0 执行。
+
+### 编号与基线
+1. **修订号**：main 附录 B 已有 v1 修订 9（Chat about this，2026-10-03，5a897a5ea）和修订 10（合入卡挪到项目 sessions 页，2026-10-06，6b4bef713）。本草案作为**修订 11** 落地，以合入 main 时附录 B 的下一个空号为准。本文标题和正文里的「修订 9」都指修订 11。
+2. **迁移号**：0377 已是 dsh_runner_gate，main 最新为 0392（2026-10-07）。新迁移一律取实施时 main 最新号之后的空号。
+3. **T0 的 8e69d8013**（orbit/9-a2dcf9）与 main 在附录 B 冲突，要在 origin/main 上重做；10-04 的退回意见仍然成立。
+
+### main 上已经有的
+4. **项目分组已上线**（a19a3d157、9c241dfa2、adb070ff6、383594ee2、609d4f226、ee7de74cc）：web 有 ?project= 页，iOS 有 SessionProjectPage，macOS 没有。§3「项目分组还没在 main 上」和 §0 第 15 条「landing.updated 和 includeLanding 跟项目分组一起上」作废，改为：
+   - 平铺的 GET /sessions、/sessions/compact、/sessions/search、/sessions/counts、session_list、session_search 默认排除 LANDING；
+   - GET /sessions?projectId= 只在 includeLanding=1 时以 LANDING 角色返回；成员关系 SQL 的两处（directProjectMembershipSql、projectMembershipCandidatesSql）都加 LANDING 分支；
+   - 项目条目与项目 sessions 页的会话数、running 数和状态点不计 LANDING；
+   - **不加 landing.updated**：分组上线时没有加实时事件，页面按 4 s 轮询；落地会话页按 §2.7a 的节奏轮询；
+   - 服务端由新任务 t2list 负责，客户端由 web 入口任务和 t4apple 负责。
+5. **修订 10**：合入卡在项目 sessions 页（web ProjectMergeStrip，iOS ProjectMergeCardView），协调会话里每个时刻只留一行。
+   - §3「晋升卡在 CHECKING/CONFIRMED/RECHECKING 时显示 Watch」改为合入卡上的 Watch。
+   - §5「晋升沿用 Cancel（project-promotion.controller.ts:77）」：现在在 :83，并且是 @PatForbidden('OWNER_INTERACTIVE')。
+   - M-T10 改为「取消中」以后，ProjectPromotionView 由服务端给出 cancelRequested 与 pushBoundaryPassed，合入卡据此画「取消中」，不再自己看 execution.phase（ProjectMergeStrip.tsx:173）。
+6. **落地行已经有四处**：项目页 Work overview、项目 sessions 页进度卡（859fc2e0c）、合入卡里的 LandingRow（6b4bef713）、会话列表项目行第二行（19555f614）。四处共用 landingLine。会话列表项目行在心跳超过 10 分钟时变灰，是同一种假停滞。V6 与活性规则覆盖全部四处，新字段一律可选。
+7. **owner 重跑门已上线**（d2904706e，0380）：POST /projects/:id/tasks/:taskId/integration/retry 与 POST /projects/:id/promotions/:promotionId/integration/retry；发起者是会话或 user，二者互斥。§5 表「重跑」一行和 §8 第 4 期「放宽 0344」已经完成。
+8. **LAND_TASK 的 blockingReason 已实现**，含跨账号只给原因。代码在 project-task-integration.ts:108-190 与 :340-375，不在 project-integration-line.ts。第 1 期只需推广到两种晋升作业和本机锁等待。
+9. **晋升待办从来没有 OPEN_TASK_SESSION**：5b73f4717 与 main 都只投影 ASK_COORDINATOR_AGAIN、RETRY、REVIEW（open-item-doors.ts:634-643）。§0 第 9 条和 §3「晋升待办上错误的 Open task session」说的其实是转录卡上的「Open the failed session ↗」（OpenItemDeliveryCard.tsx:177-236；OrbitKit OpenItemDelivery.swift）和行上的 sessionId。暂时保留的是这两样。
+10. **Automatic 合入被抢后已能交回**：今天在第 1 轮重取时经 M-T12（integrate.go:553-556）报 READY，服务端交回 owner（project-promotion.service.ts:1045-1047）。owner 确认过的候选以 ERROR 结束，已走 BLOCKED 加 INTEGRATION_ERROR 待办。§0 第 16 条剩下要做的是：轮次改为 0，加上提交列表。
+11. **其他已上线、要读进时间线与结案规则的事实**：
+    - task_reopen intent（28bd87aa4，0381）；
+    - 修复任务 fixes_open_item_id（c84c6f9a3，0379）：协调会话现在建修复任务，而不是重开原任务；
+    - 协调会话交接 handover_*（0378）；
+    - MOVE_TASK（0386、0389）。
+
+### 机制修正
+12. **推送界线**（改 §0 第 1、2 条）：定义为「服务端在本次领取（claim_generation）下记下过同步 PUSH 回报」。
+    - 第 1 期起就从作业行的一列读出（例如 push_reported_generation，由 PUSH 同步回报在租约围栏内写入），不依赖第 3 期才有的事件表。
+    - 只能看 phase 的地方，PUSH 与 VERIFY 都算已过界。runner 推送成功后报 VERIFY（integrate.go:394、:687），而今天 applyCancel 只排除 PUSH（project-promotion.service.ts:610）：VERIFY 期间取消，会把已推送的合入记成 CANCELLED。这是 §9 第 1 条之外的新缺陷，由 t1srv-a 修。
+13. **legacy 领取**（progress_protocol 不是 v2）：PUSH 回报是尽力而为，应答被丢弃（integrate.go:1034），所以「没记下 PUSH」不能证明没有推送。
+    - 放弃一律写 PUSH_OUTCOME_UNKNOWN，不写 RUNNER_LOST，也不写「nothing was pushed」。
+    - 检查期间不判 LEASE_EXPIRED，或以预算加余量为界；X-E5 用同一条界线。
+14. **锁序**（改 §7 S3 的前提与 §0 第 17 条）：claimOne（integration-job-relay.ts:311-387）JOIN session、workspace 后 FOR UPDATE SKIP LOCKED（:385），没有 OF c，三张表都上行锁，但从不等待。
+    - lock-order.ts 如实写现状。
+    - 「作业门不等待 session 锁」写成对实现的要求。
+    - 是否收窄为 OF c，由 t1srv-a 配竞态 spec 决定。
+15. **J12 不需要迁移**：error_code 没有 CHECK（0281:85），闭集是 INTEGRATION_ERROR_CODES（project-integration-job.ts:71-83）加契约文本。phase 有 CHECK（0281:109），所以本机锁等待与 prepare 用可选的 step 列，不加 phase 值。
+16. **提交列表改名**：upstreamMovedBy 与 project_promotion.upstream_moved_by（Int，0294）、ProjectPromotionView.recheck.upstreamMovedBy（number）重名，建议改为 upstreamMovedCommits。它放在结果的新可选字段里，不进 errorDetail：errorDetail 会被原样抄进待办 payload（relay :978）。
+17. **J-T8 的「重开」** 指 task_reopen 门，与写 task_reopen_intent 在同一事务里。任务被写成 CANCELLED 或 FAILED 同样叫停。普通的 DONE→IN_PROGRESS 编辑是继续工作，不叫停。按现行 J-T3、J-T8、M-T10 就能做的修复拆成 t1srv-a，不等修订 11：QUEUED 直接 CANCELLED、已请求取消可接管、VERIFY 界线、LAND_TASK 的 J-T8、回填。
+18. **删除回滚**（改 §9 第 2 条）：LAND_TASK 的 task_id 置空还违反 project_integration_job_land_task_chk（0281:117-119），所以任何一代 LAND_TASK 都会挡住删任务。project_promotion.task_id、session_id（0286:90-93）同样撞 project_promotion_terminal_guard（:128-143）。只能改为不带外键的历史引用，「让守卫放行」行不通。
+19. **会话行补充**（改 §2「会话行」）：
+    - root_session_id 为 NULL，否则会获得 CHILD 归属；
+    - title_managed_by_project=true；
+    - 显式写 dispatch_origin 与 run_source；
+    - provider='orbit' 且 provider_builtin=true，并把 orbit 加入 providers/provider-slug.ts 的 RESERVED（今天不是保留值）；
+    - PROMOTION 主体的 workspace 取 project.coordinator_workspace_id；
+    - 判别列的线上字段名避开 kind：web 列表条目写 {...session, kind: 'session'}，会覆盖同名字段。
+20. **结案补充**（§2「任务段」）：
+    - MOVE_TASK 移走任务时，它的未结段结案为 CANCELLED；
+    - 待办由修复任务解决时，写明 settled_as 与会话 status；
+    - owner 重跑门的新一代落在同一段。
+21. **runner 新查实的缺陷**（补 §9）：
+    - 检查以 0 退出、但子进程仍占着 stdout 时，返回 exec.ErrWaitDelay，落进 integrate.go:894 的 default，被判 CHECK_FAILED（先例修复 0fa9af167）。
+    - 自更新闸门只数会话轮次（runloop.go:103-116）。Update Runner Now（ef8745d30）与灰度发版会在长检查中途停掉心跳（:2005），runner 一直显示离线，直到作业结束（:2016）。
+    - scratch 挪进 worktreesDir 以后，gcWorktrees 会把非 UUID 目录当作可删（runner-api.controller.ts:6433-6455）。要在 worktree.go:2517 排除它，并按在跑作业另做清扫。
+22. **换掉 CombinedOutput 挪到第 1 期**（改 §8 第 3 期）：不换就量不出 outputIdleMs 与 outputBytes，也就没有活性。第 3 期只留上传 sink、日志表和脱敏。
+23. **推送许可作废**：§2「数据」里的 push_granted_at、§5「推送许可」、§8 第 1 期的「推送许可」都已被 §0 第 1 条取代。
+
+### 新的守护与约束
+24. **main 上新增的普查**，本项目每个任务都要满足：
+    - PAT 路由覆盖（pat-route-coverage.spec.ts）：owner 门用 @PatForbidden('OWNER_INTERACTIVE')，并登记 auth/pat-owner-channel-routes.ts；
+    - 租户隔离名册（auth/tenant-isolation-cases.ts）：每个带 :param 的用户路由一例；runner 门不在名册里，要自己加用例；
+    - 待办门矩阵（open-item-doors.ts 与 spec）：新动作 OPEN_LANDING、ABANDON 和新的待办 kind 都要有门；
+    - requiredAction/primaryAction 逐字节不变（4f7584649）；
+    - 列表与项目页的 inFlight deepEqual（project-integration-inflight.pg.spec.ts）；
+    - public-id 覆盖、迁移台账（task-judgment-data-preserved.spec.ts）、db-write-inventory、lock-order。
+25. **其他约束**：
+    - 别人项目的落地读口回 404（同 da1b9b0b4 之后的 promotions 读口）；
+    - 新的 Go 文件里出现 sourceSessionId 字样，要加进 ALLOWED_READERS；
+    - readOpenListVersion 不能因作业每 30 s 的心跳失效（open-list-version.ts:107）。
+26. **发布**：项目开着 Automatic，项目分支检查一过就会自动合进 main，协调会话拦不住，所以靠拆分来保证安全，不靠「一起合入」。
+    - t2core 建落地主体、landing_id 和会话行的插入逻辑（ensure），但**不启用插入**：生产上不出现任何 LANDING 会话行。它的 pg spec 在测试里直接调用 ensure 验证。
+    - t2guard 装好所有守卫与普查之后，在同一个任务里启用插入。
+    - T0 落到项目分支后，Automatic 会把它合进 main，借此占住修订号。
+
+### 引用漂移（5b73f4717 → de0838eb7）
+| 设计里写的 | 现在 |
+|---|---|
+| project-promotion.service.ts:587-612（applyCancel）、:974 | :599-627（界线在 :610）、:986 |
+| project-promotion.service.ts:842-846（supersede） | :855-858 |
+| project-promotion.service.ts:399-406（中位数） | :417 与 :473-494（量的是整次 CHECK_PROMOTION） |
+| project-promotion.service.ts:135-139 | :136-141；候选写 task_id/session_id 在 :176-178 |
+| project-promotion.controller.ts:77 | :83 |
+| integration-job-relay.ts:317-318、:379-383、:965 | :318、:376-382、:966 |
+| project-integration-line.ts:276-313、:285-288 | inFlight :307-345，计数 :264-268；另有 readProjectIntegrationLines :139-193 |
+| project-progress.ts:323 | OpenItemAction :324-332 |
+| integrate.go:977、:1004-1019、:772/:813、:346/:613、:802-845、:136-149 | :1034、:1062-1076、:829/:870、:377/:670、:859-901、:138-149 |
+| runloop.go:1230-1259 | :1257-1287 |
+| sessions.service.ts:8631、:4815-4825、:3190-3210 | :8859-8873、createTurn :4933、:3340-3356 |
+| tasks.service.ts:11508 | remove :12246，deleteMany :12399 |
+| queue.service.ts:268-273 | :332-337（provider 白名单 :340-360） |
+| schema.prisma:2445-2447 | :2653-2655 |
+| ProjectDetail.swift:676-689 | ProjectTaskIntegration :719 |
+| ProjectPage.swift:111-201、:184 | :120-203、:196 |
+
+### 任务调整（2026-10-07）
+- T0 在 origin/main 上重做，作为修订 11。
+- t1srv 拆成两个任务：
+  - t1srv-a：按现行条文修撤销与接管，可立即开工；
+  - t1srv：v2 协议、续租、「取消中」、release 门。
+- t1run 拆出「结果重发、排空交还、自更新闸门、scratch」，由它服务判据 11。
+- t4web 拆出「web 入口与 Landings 组」。
+- 新增 t2list，以及效果图 03 的刷新。
+- t2core 不启用会话行插入，由 t2guard 装好守卫后启用（见第 26 条）。
+- 不在本项目：契约对 0378–0381、ef527a22e（J-S2/M3）、门矩阵、da1b9b0b4 的补记。建议另开，作为修订 12，排在修订 11 之后。
 
 ## 1. 旧理由为什么站不住
 
