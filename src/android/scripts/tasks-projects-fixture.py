@@ -61,7 +61,7 @@ def reset():
     generation = state.get('generation', 0) + 1
     state.update(case='normal', pending=True, denied=False, mode='', assignment=None, final=None,
                  denyTasks=False, denyProjects=False, readError=False, generation=generation, journal=old_journal,
-                 runTriggers={}, mutations=0, streamDown=False, eventStorm=False, delays={}, dropNext={}, manyJobs=False, createdTasks=False)
+                 runTriggers={}, mutations=0, streamDown=False, eventStorm=False, delays={}, dropNext={}, manyJobs=False, createdTasks=False, pageLimit=None)
     state.update(shares={}, watches=[], attachments={})
     state['tasks'] = {
         OUTSIDE: task(OUTSIDE, 'A11 task checklist', labels=['Mobile', 'Sprint, one']),
@@ -214,6 +214,7 @@ class Handler(cards.Handler):
         if path == '/api/events':
             if state.get('streamDown'): return self.reply(dict(message='Controlled stream outage'), 503)
             return self.control_stream()
+        if state['delays'].get('GET ' + path): time.sleep(state['delays']['GET ' + path] / 1000)
         with LOCK:
             self.journal(path, query)
             if state['readError'] and (path.startswith('/api/tasks') or path.startswith('/api/projects')):
@@ -250,7 +251,7 @@ class Handler(cards.Handler):
             if path == '/api/task-lists/' + LIST: return self.reply(state['lists'][LIST])
             if path == '/api/tasks/page':
                 rows = scoped(query, True)
-                start, limit = int(query.get('cursor', ['0'])[0]), min(int(query.get('limit', ['100'])[0]), 200)
+                start, limit = int(query.get('cursor', ['0'])[0]), min(int(query.get('limit', ['100'])[0]), state.get('pageLimit') or 200)
                 body = dict(items=rows[start:start + limit], nextCursor=str(start + limit) if len(rows) > start + limit else None)
                 mode = query.get('counts', ['full'])[0]
                 if mode != 'none': body['total'] = len(rows)
@@ -338,7 +339,7 @@ class Handler(cards.Handler):
         if path == '/__control':
             with LOCK:
                 if body.get('reset'): reset()
-                for key in ('case', 'mode', 'pending', 'denied', 'denyTasks', 'denyProjects', 'readError', 'assignment', 'streamDown', 'eventStorm', 'delays', 'dropNext', 'manyJobs', 'createdTasks'):
+                for key in ('case', 'mode', 'pending', 'denied', 'denyTasks', 'denyProjects', 'readError', 'assignment', 'streamDown', 'eventStorm', 'delays', 'dropNext', 'manyJobs', 'createdTasks', 'pageLimit'):
                     if key in body: state[key] = body[key]
                 if 'case' in body: state['pending'] = body.get('pending', True)
                 if 'task' in body:

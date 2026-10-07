@@ -483,6 +483,121 @@ class TasksProjectsDeviceTest {
         back(); awaitTag("composer-input")
     }
 
+    // MARK: regressions from the coordinator's review of v2 (decision 1EWmKFuYkFgqyK5hzUzNoA)
+    // As before, only tags and words both the reviewed build (65bb8884f) and its fix carry: red there, green on the fix.
+
+    /** N2: a Delete answered after its page was left does not pop the page shown now. */
+    @Test fun regressionN2_aDeleteAnsweredAfterLeavingPopsNothing() = journey("n2-delete-after-leaving") {
+        login(); http("/__control", """{"delays":{"DELETE /api/tasks/$taskId":4000}}""")
+        drawer("Tasks"); awaitTag("tasks-list"); awaitText("A11 task checklist")
+        tap("task:$taskId", "tasks-list"); awaitIn("task-detail", "A11 task checklist")
+        tap("task-menu"); compose.onNodeWithText(TaskDetailCopy.deleteTask).performClick()
+        awaitTag("task-confirm"); tap("task-confirm")
+        back(); awaitTag("tasks-list")
+        compose.waitUntil(20_000) { journal().any { it.text("method") == "DELETE" && it.text("path") == "/api/tasks/$taskId" && it["status"]?.toString() == "200" } }
+        SystemClock.sleep(1_500)
+        capture("n2-list-after-late-delete")
+        compose.onAllNodesWithTag("tasks-list").assertCountEquals(1)
+    }
+
+    /** N2: while the owner's start is out, View tasks cannot take the sheet away and lose the server's answer. */
+    @Test fun regressionN2_viewTasksWaitsForTheStartThatIsOut() = journey("n2-view-tasks-in-flight") {
+        login(case = "own-start"); http("/__control", """{"delays":{"POST /api/projects/$projectId/start":4000}}""")
+        open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch"); awaitScrollTo("project-detail", hasTestTag("project-start-own"))
+        tap("project-start-own"); awaitTag("project-start-confirm")
+        compose.onNodeWithTag("project-start-confirm").performScrollTo().performClick()
+        compose.onNodeWithTag("project-start-view-tasks").performScrollTo(); capture("n2-view-tasks-while-starting")
+        compose.onNodeWithTag("project-start-view-tasks").assertIsNotEnabled()
+        compose.waitUntil(20_000) { http("/__stats").obj("project")?.text("startedAt") != null }
+    }
+
+    /** P2-5: the project index keeps up through a steady stream of events. */
+    @Test fun regressionP25_theProjectIndexKeepsUpThroughAStreamOfEvents() = journey("p2-5-project-index-storm") {
+        login(); drawer("Projects"); awaitTag("projects-list"); awaitText("A11 Android launch")
+        http("/__control", """{"eventStorm":true}""")
+        http("/__control", """{"project":{"title":"A11 Android launch, renamed elsewhere"}}""")
+        val renamed = hasText("A11 Android launch, renamed elsewhere", substring = true) and hasAnyAncestor(hasTestTag("projects-list"))
+        try { compose.waitUntil(10_000) { compose.onAllNodes(renamed).fetchSemanticsNodes().isNotEmpty() } }
+        finally { capture("p2-5-project-index-during-storm"); http("/__control", """{"eventStorm":false}""") }
+    }
+
+    /** P2-5: a list read slower than the coalescing still lands through a steady stream of events. */
+    @Test fun regressionP25_aSlowListReadStillLandsThroughAStreamOfEvents() = journey("p2-5-slow-read-storm") {
+        login(); drawer("Tasks"); awaitTag("tasks-list"); awaitText("A11 task checklist")
+        http("/__control", """{"delays":{"GET /api/tasks/page":3000},"eventStorm":true}""")
+        http("/__control", """{"task":{"id":"$taskId","title":"A11 task checklist, renamed elsewhere"}}""")
+        try { awaitText("A11 task checklist, renamed elsewhere", 20_000) }
+        finally { capture("p2-5-slow-read-during-storm"); http("/__control", """{"eventStorm":false,"delays":{}}""") }
+    }
+
+    /** N1: Load more ends even when the list is read again while it is out, and what lies past the first page is reachable. */
+    @Test fun regressionN1_loadMoreEndsWhenTheListIsReadAgain() = journey("n1-load-more") {
+        login(); http("/__control", """{"pageLimit":1}""")
+        drawer("Tasks"); awaitTag("tasks-list"); awaitScrollTo("tasks-list", hasTestTag("tasks-load-more"))
+        http("/__control", """{"delays":{"GET /api/tasks/page":3000}}""")
+        tap("tasks-load-more", "tasks-list")
+        tap("tasks-options"); compose.onNodeWithText("Refresh").performClick()
+        val stuck = hasTestTag("tasks-load-more") and hasText(TaskListCopy.loading)
+        try { compose.waitUntil(20_000) { compose.onAllNodes(stuck).fetchSemanticsNodes().isEmpty() } }
+        finally { capture("n1-load-more-after-refresh") }
+        http("/__control", """{"delays":{}}""")
+        if (compose.onAllNodesWithTag("tasks-load-more").fetchSemanticsNodes().isNotEmpty()) tap("tasks-load-more", "tasks-list")
+        awaitScrollTo("tasks-list", hasTestTag("task:$taskId")); awaitScrollTo("tasks-list", hasTestTag("task:$prerequisiteId"))
+    }
+
+    /** N3: a sheet cannot be put away while what it sent is out; the refusal is shown under it, with what was typed. */
+    @Test fun regressionN3_aSheetStaysUntilItsWriteIsAnswered() = journey("n3-sheet-in-flight") {
+        login(); http("/__control", """{"mode":"refuse-acceptance","delays":{"PATCH /api/tasks/$taskId":4000}}""")
+        open("orbit-task:$taskId"); awaitIn("task-detail", "A11 task checklist")
+        tap("task-edit-acceptance", "task-detail"); awaitTag("task-acceptance-sheet")
+        compose.onNodeWithTag("task-acceptance-criteria").performTextReplacement("A criterion the server will refuse")
+        tap("task-save-acceptance"); capture("n3-sheet-while-sending")
+        compose.onNode(hasText(TaskDetailCopy.cancel) and hasAnyAncestor(hasTestTag("task-acceptance-sheet"))).assertIsNotEnabled()
+        compose.waitUntil(20_000) { journal().any { it.text("method") == "PATCH" && it["status"]?.toString() == "400" } }
+        awaitTag("task-sheet-error"); capture("n3-sheet-after-refusal")
+        compose.onNodeWithTag("task-acceptance-criteria").assertTextContains("A criterion the server will refuse")
+    }
+
+    /** N3: Share is not offered while a write is out. */
+    @Test fun regressionN3_shareWaitsForAWriteThatIsOut() = journey("n3-share-while-busy") {
+        login(); http("/__control", """{"delays":{"POST /api/tasks/$taskId/execute":4000}}""")
+        open("orbit-task:$taskId"); awaitIn("task-detail", "A11 task checklist")
+        scrollTo("task-detail", hasTestTag("task-run")); compose.onNodeWithTag("task-run").performClick()
+        scrollTo("task-detail", hasTestTag("task-menu")); tap("task-menu")
+        val share = hasText(SharePanelCopy.share) and hasAnyAncestor(isPopup())
+        compose.waitUntil(10_000) { compose.onAllNodes(share).fetchSemanticsNodes().isNotEmpty() }
+        capture("n3-menu-while-running")
+        compose.onNode(share).assertIsNotEnabled()
+    }
+
+    /** P3: a comment the server took is not offered again when the task is reopened (answered after the page was left). */
+    @Test fun regressionP3_aSentCommentIsNotOfferedAgain() = journey("p3-comment-sent-after-leaving") {
+        login(); http("/__control", """{"delays":{"POST /api/tasks/$taskId/comments":3000}}""")
+        open("orbit-session:$sessionId"); awaitTag("composer-input")
+        open("orbit-task:$taskId"); awaitIn("task-detail", "A11 task checklist")
+        compose.onNodeWithTag("task-comment").performTextInput("Sent once only")
+        tap("task-post-comment"); back(); awaitTag("composer-input")
+        compose.waitUntil(20_000) { journal().any { it.text("path") == "/api/tasks/$taskId/comments" && it["status"]?.toString() == "200" } }
+        SystemClock.sleep(1_000)
+        open("orbit-task:$taskId"); awaitIn("task-detail", "A11 task checklist"); capture("p3-comment-box-after-reopen")
+        compose.onNodeWithTag("task-comment").assert(hasText("Sent once only", substring = true).not())
+    }
+
+    /** P3: a bulk action leaves no selection behind for the page to offer the same action again. */
+    @Test fun regressionP3_aBulkActionLeavesNoSelectionBehind() = journey("p3-bulk-selection") {
+        login(); http("/__control", """{"delays":{"POST /api/tasks/batch-delete":3000}}""")
+        drawer("Tasks"); awaitTag("tasks-list"); awaitText("A11 task checklist")
+        tap("tasks-options"); compose.onNodeWithText(TaskListCopy.selectTasks).performClick()
+        tap("task:$taskId", "tasks-list")
+        compose.onNode(hasText(TaskListCopy.delete) and hasAnyAncestor(hasTestTag("tasks-bulk-bar"))).performClick()
+        awaitTag("tasks-bulk-confirm"); tap("tasks-bulk-confirm")
+        drawer("Projects"); awaitTag("projects-list")
+        compose.waitUntil(20_000) { journal().any { it.text("path") == "/api/tasks/batch-delete" && it["status"]?.toString() == "200" } }
+        SystemClock.sleep(1_000)
+        drawer("Tasks"); awaitTag("tasks-list"); capture("p3-tasks-after-bulk")
+        compose.onAllNodesWithTag("tasks-bulk-bar").assertCountEquals(0)
+    }
+
     // MARK: screens for the owner (run again under dark mode and a large font)
 
     @Test fun screensTour() = journey("screens") {
