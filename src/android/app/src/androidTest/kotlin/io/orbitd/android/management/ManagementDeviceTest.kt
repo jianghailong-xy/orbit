@@ -714,6 +714,8 @@ class ManagementDeviceTest {
                 bearerOnPublicManifest = request.getHeader("Authorization")
                 return MockResponse().setHeader("Content-Type", "application/json").setBody("""{"version":"0.1.200"}""")
             }
+            // The login page asks the typed instance what it offers, signed out; this one predates Google sign-in.
+            if (path == "/api/auth/methods") return MockResponse().setResponseCode(404)
             if (path !in listOf("/api/auth/login", "/api/auth/logout")) assertEquals("Bearer fixture-access", request.getHeader("Authorization"))
             if (path == "/api/users/me" && forbidden) return MockResponse().setResponseCode(403).setBody("{}")
             fun bodyOf() = Json.parseToJsonElement(request.body.readUtf8()).jsonObject
