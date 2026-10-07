@@ -1510,6 +1510,14 @@ export interface SessionDetail {
   provider?: string | null;
   /** The routing decision this task run was planned with; null on any other session. */
   route?: TaskRunRoute | null;
+  // The run's SOURCE, as the session row carries it (project-source-contract §6.1). `REFUSED` is a
+  // baseline the runner would not start from — the run never became one — and `sourceRefusalCode`
+  // with `sourceRefusalDetail` is why (the code, the ref and the machine's own words). UNBOUND on
+  // every Legacy session, and the only state an ordinary session ever has.
+  sourceState?: string | null;
+  sourceRef?: string | null;
+  sourceRefusalCode?: string | null;
+  sourceRefusalDetail?: Record<string, unknown> | null;
   /** On an account pool: the member its last claim dispatched on (null before the first). */
   poolMemberProviderId?: string | null;
   /** On a shared pool: the key its last claim chose (null before the first, or when none could run). */
