@@ -9,7 +9,7 @@ import XCTest
 /// name pages one push away on whichever stack the record rides — and every word and rule taken from
 /// OrbitKit (`Infrastructure`, `RunnerAttention`, `RunnerPageCopy`, `RunnerPageFormat`), where it is
 /// tested. Each check reads the slice of the file it is about, so a match somewhere else can't pass it.
-final class RunnersPageWiringTests: XCTestCase {
+final class InfrastructurePageWiringTests: XCTestCase {
     private struct SourceMissing: Error, CustomStringConvertible {
         let path: String
         var description: String {

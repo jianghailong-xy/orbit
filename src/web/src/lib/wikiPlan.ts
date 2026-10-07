@@ -550,7 +550,7 @@ export interface WikiPlanJobCard {
   look: WikiPlanJobLook;
   title: string;
   text: string;
-  /** run: the session of the run it waits for or runs; settings: the space's Maintenance; runners: the Runners page. */
+  /** run: the session of the run it waits for or runs; settings: the space's Maintenance; runners: Infrastructure. */
   link: { label: string; to: 'run' | 'settings' | 'runners'; sessionId: string | null } | null;
   /** Writing: how far, and the document being written now. */
   progress: { done: number; total: number; now: string | null } | null;

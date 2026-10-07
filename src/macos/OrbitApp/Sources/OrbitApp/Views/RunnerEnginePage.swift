@@ -99,7 +99,7 @@ private struct RunnerEngineContent: View {
 
     /// DeepSeek Harness has no sign-in here: every session runs on the configured API key it was
     /// started with. What this machine decides is whether it can start Harness at all — and the one
-    /// fix that happens here is installing the pinned CLI (web parity: Providers' Harness row).
+    /// fix that happens here is installing the pinned CLI (web parity: the Harness key's machine rows on Infrastructure).
     @ViewBuilder private func dshSection(offline: Bool) -> some View {
         let state = DshRuntime.state(of: runner)
         Section {

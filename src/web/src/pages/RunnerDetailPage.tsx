@@ -261,7 +261,7 @@ export function RunnerDetailPage() {
   // its own for it, and its Model line reads as it always has.
   const smartSelection = useQuery(meQuery()).data?.preferences?.modelRouting === true;
 
-  // Rename / delete the runner — same API the Runners grid uses.
+  // Rename / delete the runner — same API a machine card's ⋯ on Infrastructure uses.
   const [renaming, setRenaming] = useState(false);
   const [renameVal, setRenameVal] = useState('');
   const renameMut = useMutation({

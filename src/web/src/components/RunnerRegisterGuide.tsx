@@ -97,7 +97,7 @@ export function RunnerRegisterGuide() {
         <p className="runner-sub">
           A runner is a machine that runs Claude Code, Codex, or Kimi tasks for you. Run this one command on the
           machine you want to add — it installs the orbit CLI, then opens your browser to confirm
-          the machine belongs to you. It appears in the list on the left once it comes online.
+          the machine belongs to you. It appears under Machines on Infrastructure once it comes online.
         </p>
 
         <Segmented
@@ -115,7 +115,7 @@ export function RunnerRegisterGuide() {
             <div className="runner-status-text">
               <div className="runner-status-title">Runner online — “{connected.name}” is ready</div>
               <div className="runner-status-sub">
-                It's now in the sidebar under Runners. Next, give it a workspace — the repo and
+                It's now on Infrastructure, under Machines. Next, give it a workspace — the repo and
                 working directory it runs tasks in.
               </div>
             </div>

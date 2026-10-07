@@ -996,8 +996,8 @@ button.toast--pill:focus-visible {
     opacity: 1;
   }
 }
-/* A Workspace row while the list is arranged: it opens nothing, and the Runners page's drag handle
-   stands in the folder's column. */
+/* A Workspace row while the list is arranged: it opens nothing, and a drag handle like a machine
+   card's on Infrastructure stands in the folder's column. */
 .tp-item.editing {
   cursor: default;
 }
@@ -1717,48 +1717,12 @@ button.toast--pill:focus-visible {
   background: var(--error-bg);
 }
 
-/* ---- Runners page (the runner list, moved out of the sidebar) ---- */
-.runners-head {
-  max-width: 920px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
+/* ---- Machines: Infrastructure's machine cards, a machine's page, Add a runner, Rotate token ---- */
 .runners-empty {
   max-width: 920px;
   margin: 24px auto 0;
   color: var(--text-3);
   font-size: 14px;
-}
-.runners-list {
-  max-width: 920px;
-  margin: 16px auto 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.runner-card {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  cursor: pointer;
-  background: var(--bg-raised);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-.runner-card:hover {
-  border-color: var(--brand-border);
-  box-shadow: 0 2px 8px rgba(51, 112, 255, 0.08);
-}
-.runner-card.dragging {
-  border-color: var(--brand-border);
-  box-shadow: 0 8px 24px rgba(31, 35, 41, 0.16);
-  opacity: 0.78;
 }
 .runner-drag-handle {
   display: flex;
@@ -1798,47 +1762,10 @@ button.toast--pill:focus-visible {
   align-self: flex-start;
   margin-top: 5px;
 }
-.runner-meta {
-  flex: 1;
-  min-width: 0;
-}
-.runner-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .runner-sub {
   font-size: 12px;
   color: var(--text-3);
   margin-top: 2px;
-}
-.runner-kebab {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
-  color: var(--text-3);
-  font-size: 15px;
-  flex: none;
-  /* Always reserve the slot so revealing the kebab on hover doesn't shift
-     the version number and chevron; only fade visibility. */
-  visibility: hidden;
-  opacity: 0;
-  transition: opacity 0.15s ease, visibility 0.15s ease;
-}
-.runner-kebab:hover {
-  background: var(--bg-hover-strong);
-  color: var(--text-1);
-}
-.runner-card:hover .runner-kebab,
-.runner-card.menu-open .runner-kebab {
-  visibility: visible;
-  opacity: 1;
 }
 /* Slot utilization: a thin track with a fill proportional to live sessions. */
 .runner-util {
@@ -1859,14 +1786,6 @@ button.toast--pill:focus-visible {
 }
 .runner-util.full .runner-util-fill {
   background: var(--warning-solid);
-}
-.runner-tags {
-  font-size: 12px;
-  color: var(--text-4);
-  margin-top: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 /* The third line: what this machine needs a person for. When it wraps on a narrow screen, the
    triangle stays with its first line. */
@@ -1890,17 +1809,6 @@ button.toast--pill:focus-visible {
   margin-top: 2.5px;
   font-size: 11px;
 }
-.runner-version {
-  font-size: 12px;
-  color: var(--text-3);
-  flex: none;
-}
-/* Always-visible navigation affordance; the whole card is clickable. */
-.runner-chevron {
-  color: var(--dot-idle);
-  font-size: 12px;
-  flex: none;
-}
 .runner-token-box {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;
@@ -1913,7 +1821,7 @@ button.toast--pill:focus-visible {
 }
 
 /* ---- Skills page (skills/commands a runner reported, grouped per machine) ---- */
-/* Center the content column to match Runners / session pages (920px). */
+/* Center the content column to match a machine's page / session pages (920px). */
 .skills-page {
   max-width: 920px;
   margin: 0 auto;
@@ -14217,7 +14125,8 @@ button.chat-jump-start:hover {
 }
 
 /* ============================================================================
-   Provider onboarding — logo gallery + guided add flow (ProvidersPage).
+   Infrastructure (InfrastructurePage, InfrastructureOverview) and provider
+   onboarding — logo gallery + guided add flow (ProviderGallery, ProviderConnectPage).
    ========================================================================== */
 .prov-page-head {
   display: flex;
@@ -14598,9 +14507,10 @@ button.chat-jump-start:hover {
 }
 
 /* ============================================================================
-   Providers → "On your runners": the engine CLIs signed in on each machine.
-   A different kind of identity from the API keys below (one machine, one
-   subscription, nothing pasted), hence its own section rather than more rows.
+   Infrastructure → "Machines": the engine CLIs signed in on each machine (the
+   same rows on a machine's own page). A different kind of identity from the API
+   keys below (one machine, one subscription, nothing pasted), hence its own
+   section rather than more rows.
    ========================================================================== */
 .re-sec {
   margin-top: 22px;
@@ -15370,7 +15280,7 @@ button.chat-jump-start:hover {
 }
 
 /* ============================================================================
-   Providers → "Account pools": several Claude subscriptions under one name. The
+   Infrastructure → "Account pools": several Claude subscriptions under one name. The
    runner cards' skeleton (fold, head, three-column rows), with a status column
    wide enough for "Unavailable · usage unreadable" (185px measured — the widest
    a member's tag gets; "Unavailable · key refused" is 151px and "Spent · resets
@@ -16140,7 +16050,7 @@ button.chat-jump-start:hover {
 }
 @media (max-width: 700px) {
   /* The quota is what an account's row is about: a line of its own under the name, bars and resets
-     kept — as a runner's accounts have it on Providers. */
+     kept — as a runner's accounts have it on Infrastructure. */
   .pool-row .re-quota.pool-login-quota {
     display: block;
     grid-column: 1 / -1;

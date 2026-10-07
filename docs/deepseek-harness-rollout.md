@@ -25,7 +25,7 @@
 
 1. 服务端已部署最终候选：`GET /api/health` 返回 ok；`_prisma_migrations` 的最新一条与候选版本一致。
 2. runner 主机为 Linux x64，服务账户 PATH 中的 `node --version` 为 v26.x；`npm ci` 能访问 registry（安装使用内嵌锁文件）。
-3. runner 未开启 AutoInstallEngines（默认就是关闭）。dsh 必须显式安装：在 Web 的 Providers / runner 页点 Install、调用 `POST /api/runners/:id/install {"engine":"dsh"}`，或在 runner 上运行 `orbit doctor`。
+3. runner 未开启 AutoInstallEngines（默认就是关闭）。dsh 必须显式安装：在 Web 的 Infrastructure 页点 Install（API keys 表里 DeepSeek Harness key 的下方按机器列出；机器详情页的 DeepSeek Harness 行只读）、调用 `POST /api/runners/:id/install {"engine":"dsh"}`，或在 runner 上运行 `orbit doctor`。
 4. 获准使用 dsh 的用户已有 DeepSeek API Key。Key 只能经 provider 加密存储和派发进入 runner，不得写入 runner 环境、日志、文档或证据。
 
 ## 3. 分批启用步骤

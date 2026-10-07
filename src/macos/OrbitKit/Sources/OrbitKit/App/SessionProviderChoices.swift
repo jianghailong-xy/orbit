@@ -28,7 +28,7 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
     /// (`ProviderPool.unavailable`) — a reason no machine fixes, which is why `fixEngine` stays nil
     /// for it. Not for one whose accounts are only spent: that one waits for a reset (`note`).
     public let unavailable: String?
-    /// Which engine row on the Providers page fixes `unavailable`. That is the CLI this choice
+    /// Which engine row on Infrastructure fixes `unavailable`. That is the CLI this choice
     /// runs on, which for a BYOK provider is not its own slug — a Moonshot row is fixed on the
     /// Kimi engine row. Set whenever a runner can fix `unavailable`; nil on a pool whose accounts
     /// are what is missing, whose row is greyed out rather than sent anywhere.

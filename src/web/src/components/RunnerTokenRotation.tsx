@@ -9,8 +9,8 @@ import type { Runner } from './TasksSidePanel';
 
 /**
  * Rotating a runner's token: the confirmation that says what it breaks, then the new token, shown
- * exactly once. The Runners list's ⋯ menu and the runner's own Actions menu both offer it, so both
- * mount this rather than each keeping a copy of the words.
+ * exactly once. A machine card's ⋯ menu on Infrastructure and the runner's own Actions menu both
+ * offer it, so both mount this rather than each keeping a copy of the words.
  */
 export function useRunnerTokenRotation() {
   const { modal } = AntdApp.useApp();

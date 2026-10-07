@@ -431,7 +431,7 @@ claim（P1 已落地，`QueueService.resolveSharedPool`）：
 
 以效果图为准：[`docs/mocks/codex-shared-pool/`](./mocks/codex-shared-pool/)。
 
-方案 A（2026-10-02）起，Codex 池的池页、加账号与分享的对话框、Providers 页的池卡以
+方案 A（2026-10-02）起，Codex 池的池页、加账号与分享的对话框、池卡（原在 Providers 页，现在在 Infrastructure 页的 Account pools 区）以
 [`docs/mocks/account-pool-access/`](./mocks/account-pool-access/) 为准（每张图都有 PNG 和 HTML；英文文案逐字照抄，
 web 与原生之间走 parity 测试）。两套图说法不一样的地方，以 account-pool-access 为准。
 
@@ -439,7 +439,7 @@ web 与原生之间走 parity 测试）。两套图说法不一样的地方，�
 |---|---|
 | 01-review-and-accounts | 左半：原池页的 review（头部读数只看 5h、登出图标常红、「Just me」只是一句副标题、只能放一个账号）。右半 A–E：一个池放多个 ChatGPT 账号——右上角常驻 Add account；Accounts 卡头部写 `Next:` 下一个会话落在哪个账号、以及它最紧的窗口；登出图标平时灰色、悬停才变红；「Who can use it」成为一张卡；换号句式 |
 | 02-who-can-use-it | 池主和被加进来的人看同一个池：分享后 API key 标 `Everyone here`（~~ChatGPT 账号标 `Only you`、成员只剩一行锁住的说明~~——已作废，见下）；Who can use it 卡（Just me / Me and people I add、每人能跑什么和 API key 本月用量份额、They can add their own API keys）；池里没有 key 且没有账号登录时的黄色提示。右下的「方案 B」（两种池不合并）未采用。**2026-10-03（D9）起，这张图里成员视角的锁定行与 `Only you` 标注不再代表产品行为**：账号与 key 一样标 `Everyone here`，成员读到和池主相同的账号卡片（邮箱、套餐、`…AB12`、额度、被登出原因），卡脚注如实写明账号共享与条款风险；**（D10）起卡上再添一条规则开关「They can add their own ChatGPT accounts」，成员可以由头部按钮 `Add account` 把自己的账号签进来，账号行第二行以签名者姓名开头（如 `Zhang Min · ChatGPT Plus · …AB12`），Sign out / Sign in again 按行给：Sign in again 只有签名者本人，Sign out 签名者本人与管理员**；图纸与 PNG 未重画 |
-| 03-flows | Add account 先选加什么（Sign in with ChatGPT / Paste an OpenAI API key）；第二个账号的登录说明；完成页与同一账号再登；Share Codex Pool（含池里没有 key 的变体）；Make Codex Pool just yours?；Providers 页的池卡（池主 Just me / 分享后，以及成员看到的同一个池） |
+| 03-flows | Add account 先选加什么（Sign in with ChatGPT / Paste an OpenAI API key）；第二个账号的登录说明；完成页与同一账号再登；Share Codex Pool（含池里没有 key 的变体）；Make Codex Pool just yours?；Providers 页的池卡（池主 Just me / 分享后，以及成员看到的同一个池；这张卡现在在 Infrastructure 页的 Account pools 区） |
 
 - web 已按这三张图实现：`ProviderPoolPage.tsx` 的 `CodexPoolPage` 按池主 / 被加进来的人两种视角画同一个池，0321 建的 key 池也走这个页面，
   只是没有 ChatGPT 账号；成员的会话选择器里没有能跑的 key 时该池置灰，写 `No key you can run on`。

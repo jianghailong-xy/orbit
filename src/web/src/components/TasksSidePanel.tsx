@@ -144,8 +144,10 @@ const TOP: TopNavItem[] = [
   { key: 'wiki', icon: <SidebarNavIcon name="wiki" />, label: 'Wiki' },
   // No Following here: its watches are the waits agents keep for their own sessions, already shown
   // in each session's header and Watching strip, and those are what link to /following.
-  // Infrastructure is where agents run and whose quota they spend: the machines, the API keys and the
-  // account pools, each user's own — what the Runners and Providers rows used to split between them.
+  // Infrastructure is where agents run and whose quota they spend — what the Runners and Providers
+  // rows used to split between them: the user's own machines and API keys, and the account pools
+  // they own or were added to. Shared providers (those with no owner) are not on it, an admin's
+  // included: the UI manages only each user's own (PROVIDERS_BASE).
   { key: 'infrastructure', icon: <SidebarNavIcon name="runners" />, label: 'Infrastructure' },
 ];
 
@@ -211,7 +213,7 @@ export interface Runner {
   displayName?: string | null;
   online?: boolean;
   maxConcurrent?: number;
-  // Persisted order of the Runners page's cards; null until assigned by migration or a reorder.
+  // Persisted order of Infrastructure's machine cards; null until assigned by migration or a reorder.
   position?: number | null;
   // Live sessions currently occupying this runner's slots (of maxConcurrent).
   activeSessions?: number;
@@ -242,7 +244,7 @@ export interface Runner {
   runsAsRoot?: boolean | null;
   // Where this runner's updates of itself stand, as it last reported: why it is or isn't on the
   // latest release, and the last update it installed. undefined/null = a runner too old to report
-  // it, which the Runners page judges by runsAsRoot as it always has.
+  // it, which runnerAttention judges by runsAsRoot as it always has.
   selfUpdate?: RunnerSelfUpdate | null;
   // Free-space floor in MB (PATCH minFreeDiskMb): below it this machine takes no new task runs.
   // null = no floor.
@@ -496,7 +498,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   };
 
   // Runners carry the computed `online` flag and the names the rows show. Poll on the same 15s
-  // cadence as the Runners page so status stays in sync while the sidebar is up.
+  // cadence as a machine's page so status stays in sync while the sidebar is up.
   const runners = useQuery({
     queryKey: ['runners'],
     queryFn: () => api<Runner[]>('/runners'),
@@ -520,7 +522,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // runner is metadata on each row, not a sort key.
   const orderedWorkspaces = useMemo(() => orderWorkspaces(workspaces.data ?? []), [workspaces.data]);
 
-  // Each drop is saved at once, the Runners page's way: the rows (and their ⌘N) move immediately,
+  // Each drop is saved at once, the machine cards' way: the rows (and their ⌘N) move immediately,
   // the server's list settles it, and a refusal puts them back.
   const qc = useQueryClient();
   const message = useToast();
@@ -1280,7 +1282,7 @@ export function WorkspaceRow({
 }
 
 /** A Workspace row while the list is being arranged, dragged by its handle with the pointer or the
- *  keyboard — the Runners page's `SortableRunnerCard` idiom. */
+ *  keyboard — the idiom of Infrastructure's machine cards (`RunnerEngineCard`). */
 function SortableWorkspaceRow({
   workspace,
   disabled,

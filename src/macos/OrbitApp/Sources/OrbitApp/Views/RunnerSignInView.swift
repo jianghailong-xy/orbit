@@ -155,7 +155,7 @@ struct RunnerSignInView: View {
 
     /// Idle, or a failed attempt to try again. Signing in fixes this one machine with the account
     /// the user already pays for; there is no second route out on these clients (an API key is
-    /// configured from the web's Providers page), so this is the whole choice.
+    /// configured from the web's Infrastructure page), so this is the whole choice.
     @ViewBuilder
     private func idle(_ model: RunnerSignInModel) -> some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -254,7 +254,7 @@ private struct PasteBackForm: View {
 ///
 /// The remedy depends on where the credentials live (see `EngineAuth.remedy`): a built-in engine
 /// signs in on the runner itself, OpenCode's provider-specific login can only be run on that
-/// machine, Antigravity connects Gemini in Providers, and any other slug is a configured
+/// machine, Antigravity connects Gemini in Infrastructure, and any other slug is a configured
 /// API key — which these clients can't edit, so the card says where it lives instead of offering a
 /// button that goes nowhere.
 struct AuthErrorCardView: View {
@@ -417,7 +417,7 @@ struct AntigravityRepairCardView: View {
 
 /// A DeepSeek Harness session that could not run, as the remedy rather than the runner's sentence
 /// (web's `DshRepairCard`). Its credential is a configured key, never a sign-in on the runner, so a
-/// key problem is fixed on that key's page in Providers; everything else is about the machine.
+/// key problem is fixed on that key's page, from Infrastructure; everything else is about the machine.
 struct DshRepairCardView: View {
     let console: ConsoleModel
     let repair: DshRuntime.Repair

@@ -16,7 +16,7 @@ public enum DshRuntime {
     /// The heartbeat capability the server requires before it creates, resumes or hands out a dsh
     /// session.
     public static let runnerCapability = "provider:dsh"
-    /// The `fixEngine` of the picker's connect-a-key row: fixed by connecting the key in Providers
+    /// The `fixEngine` of the picker's connect-a-key row: fixed by connecting the key in Infrastructure
     /// (web `/providers/new/deepseek-harness`), not on any runner.
     public static let connectFix = "dsh-connect"
     /// The permission modes Harness enforces (shared `DSH_PERMISSION_MODES`, measured in P4). The
