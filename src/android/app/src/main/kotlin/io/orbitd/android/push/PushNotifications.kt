@@ -25,10 +25,16 @@ class PushNotifications(private val context: Context) {
     private var seen = runCatching { Wire.json.decodeFromString<List<String>>(history.readFully().decodeToString()) }
         .getOrDefault(emptyList()).takeLast(128).toMutableList()
 
+    /** The channel needs-you alerts post to. Android never raises an existing channel's importance,
+     * so 482b132e8's DEFAULT `orbit.needs-you` is replaced by a new HIGH channel (pops up like the iOS
+     * banner) unless its user changed that importance, which then stays theirs. */
+    val needsYou: String = manager.getNotificationChannel(LEGACY_NEEDS_YOU).let { legacy ->
+        if (legacy?.hasUserSetImportance() == true) LEGACY_NEEDS_YOU
+        else { if (legacy != null) manager.deleteNotificationChannel(LEGACY_NEEDS_YOU); NEEDS_YOU }
+    }
+
     init {
-        // Needs-you alerts block an agent, so they pop up like the iOS banner; the user can change
-        // any channel in Android settings, after which Orbit never raises it again.
-        listOf(Triple(NEEDS_YOU, "Needs your reply", NotificationManager.IMPORTANCE_HIGH),
+        listOfNotNull(Triple(NEEDS_YOU, "Needs your reply", NotificationManager.IMPORTANCE_HIGH).takeIf { needsYou == NEEDS_YOU },
             Triple(SESSIONS, "Sessions", NotificationManager.IMPORTANCE_DEFAULT),
             Triple(UPDATES, "Project and account updates", NotificationManager.IMPORTANCE_DEFAULT)).forEach { (id, title, importance) ->
             manager.createNotificationChannel(NotificationChannel(id, title, importance))
@@ -51,7 +57,10 @@ class PushNotifications(private val context: Context) {
         catch (error: Exception) { history.failWrite(stream); throw error }
     }
 
-    fun show(message: PushMessage, data: Map<String, String>): Boolean {
+    /** [silent] keeps the entry in the tray without sound, vibration or heads-up: the platform has no
+     * per-post switch, so (as NotificationCompat.setSilent does) it joins a group without a summary
+     * and lets only the summary alert. */
+    fun show(message: PushMessage, data: Map<String, String>, silent: Boolean = false): Boolean {
         val link = message.link
         val channel = channel(message)
         if (!allowed(channel)) return false
@@ -69,7 +78,9 @@ class PushNotifications(private val context: Context) {
             .setContentIntent(pending).setAutoCancel(true).setOnlyAlertOnce(true)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
             .setCategory(if (message.payload.isReminder) Notification.CATEGORY_REMINDER else Notification.CATEGORY_STATUS)
-            .addExtras(extras).build()
+            .addExtras(extras)
+            .apply { if (silent) setGroup(SILENT_GROUP).setGroupAlertBehavior(Notification.GROUP_ALERT_SUMMARY) }
+            .build()
         return try { manager.notify(tag, 0, notification); true } catch (_: SecurityException) { false }
     }
 
@@ -83,13 +94,15 @@ class PushNotifications(private val context: Context) {
         seen.clear(); history.delete()
     }
     fun channel(message: PushMessage) = when {
-        message.payload.isReminder || message.payload.kind == "confirmation-problems" -> NEEDS_YOU
+        message.payload.isReminder || message.payload.kind == "confirmation-problems" -> needsYou
         message.payload.sessionId != null -> SESSIONS
         else -> UPDATES
     }
     private fun tag(message: PushMessage) = "$PREFIX${message.registrationKey}:${message.notificationKey}"
     companion object {
-        const val NEEDS_YOU = "orbit.needs-you"
+        const val NEEDS_YOU = "orbit.needs-you.alert"
+        const val LEGACY_NEEDS_YOU = "orbit.needs-you"
+        const val SILENT_GROUP = "orbit.silent"
         const val SESSIONS = "orbit.sessions"
         const val UPDATES = "orbit.updates"
         private const val PREFIX = "orbit:"

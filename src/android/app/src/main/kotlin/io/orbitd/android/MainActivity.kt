@@ -39,6 +39,7 @@ import io.orbitd.android.directory.*
 import io.orbitd.android.navigation.*
 import io.orbitd.android.ui.OrbitTheme
 import io.orbitd.android.ui.LocalOrbitColors
+import io.orbitd.android.push.NotificationSettings
 import io.orbitd.android.push.PushNoticeHost
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
@@ -188,6 +189,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open)
                                 Destination.SETTINGS -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     AuthScreen(authState, authMessage, auth::login, auth::logout)
+                                    NotificationSettings(app.push) // A10 entry until A13's settings page replaces this branch.
                                     Button(onClick = { open(OrbitRoute(Destination.BUILD)) }) { Text("Build information") }
                                 }
                                 Destination.BUILD -> BuildInformation { navigation = navigation.back() }

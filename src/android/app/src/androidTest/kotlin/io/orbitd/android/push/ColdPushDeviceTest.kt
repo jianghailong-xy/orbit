@@ -172,6 +172,27 @@ class ColdPushDeviceTest {
         capture("permission-second-sign-in")
     }
 
+    /** Host: pm clear, a regular file where the push directory goes, permission revoked with its flags
+     * cleared. Nothing in push storage can be written; asking must neither crash nor block the app. */
+    @Test fun permissionPromptSurvivesUnwritablePushStorage() {
+        signOutAfter = true
+        assertTrue("Android 13+ only", Build.VERSION.SDK_INT >= 33)
+        assertTrue("Host must block the push directory", File(app.noBackupFilesDir, "push").isFile)
+        launch(Intent(app, MainActivity::class.java))
+        resetAndLogin(binding = false)
+        val deny = awaitPermissionButton()
+        capture("unwritable-storage-permission-request")
+        assertTrue(deny.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        await("dialog dismissed") { resumed is MainActivity }
+        SystemClock.sleep(2_000) // The answer's write fails off the main thread; the process must stay up.
+        assertTrue(resumed is MainActivity)
+        assertFalse("Asked once in this process", app.push.claimPermissionPrompt())
+        assertTrue(File(app.noBackupFilesDir, "push").isFile)
+        File(output, "unwritable-storage-result.txt").writeText("PASS\npid=${Process.myPid()}\n" +
+            "Push storage unwritable: sign-in showed the system request, Don't allow was clicked, the app stayed up.\n")
+        capture("unwritable-storage-app-alive")
+    }
+
     private fun seed(file: String) {
         launch(Intent(app, MainActivity::class.java))
         resetAndLogin()
@@ -194,7 +215,7 @@ class ColdPushDeviceTest {
         // Retain encrypted credentials, binding and event history for the next process.
     }
 
-    private fun resetAndLogin() {
+    private fun resetAndLogin(binding: Boolean = true) {
         compose.waitUntil(10_000) { app.session.state.value !is AuthState.Restoring }
         runBlocking { app.push.beforeSignOut(); app.session.logout() }
         http("/__push_reset", "{}")
@@ -203,7 +224,8 @@ class ColdPushDeviceTest {
         compose.onNodeWithText("Email").performTextReplacement("a10@example.test")
         compose.onNodeWithText("Password").performTextReplacement("controlled-password")
         compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
-        compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedIn && app.push.registration.activeBinding() != null && app.realtime.state.value.directoryFresh }
+        compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh &&
+            (!binding || app.push.registration.activeBinding() != null) }
     }
     private fun approve() {
         compose.onNodeWithTag("approval:a1:ALLOW").performScrollTo().assertIsEnabled().performClick()

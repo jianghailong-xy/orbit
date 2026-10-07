@@ -2,8 +2,10 @@
 # A10 controlled device checks: the real Application/Activity/notification tray/HTTP client. The test
 # APK's PushTestRunner substitutes only token acquisition; messages are injected, never sent by FCM.
 # Every phase records PASS/FAIL in result.txt; the exit code is nonzero if any selected phase failed.
-# Optional: A10_PHASES (default "suite cold tray permission"), A10_TESTS (PushDeviceTest methods,
-# comma separated), A10_NIGHT (yes|no) and A10_FONT_SCALE (e.g. 2.0) for an appearance pass.
+# Optional: A10_PHASES (default "upgrade suite cold tray permission storage"), A10_TESTS (PushDeviceTest
+# methods, comma separated), A10_NIGHT (yes|no) and A10_FONT_SCALE (e.g. 2.0) for an appearance pass.
+# The upgrade phase needs A10_OLD_APK: a debug APK of an earlier release signed with the same key
+# (482b132e8 created the DEFAULT needs-you channel).
 set -euo pipefail
 if (( $# < 3 || $# > 4 )); then
   echo 'Usage: push-device-test.sh APP_APK TEST_APK EVIDENCE_DIR [API29..36|SERIAL]' >&2
@@ -13,7 +15,7 @@ apk="$(realpath "$1")"
 tests="$(realpath "$2")"
 output="$(realpath -m "$3")"
 target="${4:-36}"
-phases=" ${A10_PHASES:-suite cold tray permission} "
+phases=" ${A10_PHASES:-upgrade suite cold tray permission storage} "
 [[ -f "$apk" && -f "$tests" ]] || { echo 'Both APKs are required' >&2; exit 2; }
 mkdir -p "$output"
 [[ -z "$(ls -A "$output")" ]] || { echo 'Use a new evidence directory' >&2; exit 2; }
@@ -104,7 +106,7 @@ export ANDROID_SERIAL="$serial"
 } > "$output/device.txt"
 adbx -s "$serial" reverse --list > "$output/reverse-before.txt"
 if grep -q "tcp:$port" "$output/reverse-before.txt"; then echo "Reverse port $port is owned elsewhere" >&2; exit 75; fi
-sha256sum "$apk" "$tests" "$scripts"/push-device-test.sh "$scripts"/push-cold-fixture.py "$scripts"/push-host-ui.py \
+sha256sum "$apk" "$tests" "$scripts"/push-device-test.sh "$scripts"/push-cold-fixture.py "$scripts"/push-host-ui.py "$scripts"/push-channel-upgrade.py \
   "$scripts"/cards-fixture.py "$scripts"/../../shared/src/interaction-cards.fixture.json > "$output/inputs.sha256"
 cmp "$scripts"/../../shared/src/interaction-cards.fixture.json "$scripts"/../app/src/androidTest/assets/push/interaction-cards.fixture.json
 "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" > "$output/apk-badging.txt"
@@ -165,7 +167,7 @@ tray_tap() { # Host-driven: a production process posts one entry, dies, and Syst
   # --no-restart attaches to that running process and skips the force-stop that would cancel the entry.
   instrument tray-entry io.orbitd.android.push.ColdTrayEntryTest --no-restart
   adbx -s "$serial" shell dumpsys notification --noredact > "$output/tray-notifications-before.txt"
-  if grep -q 'commandError=true' "$output/tray-entry.txt"; then
+  if grep -Eq 'commandError=true|Unknown option' "$output/tray-entry.txt"; then
     echo 'tray_tap=NOT_RUN (this platform cannot attach an instrumentation with --no-restart)' >> "$output/tray.txt"
     return 1
   fi
@@ -205,6 +207,35 @@ assert stats['journal'][-1]['path'].endswith('/approvals/a1/decision'), stats['j
 EOF
 }
 
+# 0. In-place upgrade from an earlier release: Android never raises an existing channel's importance,
+# so the untouched DEFAULT needs-you channel must be replaced by the new HIGH one.
+if [[ "$phases" == *" upgrade "* ]]; then
+  [[ -f "${A10_OLD_APK:-}" ]] || { echo 'A10_OLD_APK is required for the upgrade phase' >&2; exit 2; }
+  sha256sum "$A10_OLD_APK" > "$output/upgrade-old-apk.sha256"
+  set +e
+  (
+    set -e
+    adbx -s "$serial" uninstall "$package" > /dev/null 2>&1 || true
+    adbx -s "$serial" install "$A10_OLD_APK" > "$output/upgrade-install-old.txt"
+    adbx -s "$serial" shell am start -W -n "$package/io.orbitd.android.MainActivity" > "$output/upgrade-launch-old.txt"
+    sleep 3
+    adbx -s "$serial" shell dumpsys notification > "$output/upgrade-channels-old.txt"
+    adbx -s "$serial" shell am force-stop "$package"
+    adbx -s "$serial" install -r "$apk" > "$output/upgrade-install-new.txt"
+    adbx -s "$serial" shell am start -W -n "$package/io.orbitd.android.MainActivity" > "$output/upgrade-launch-new.txt"
+    sleep 3
+    adbx -s "$serial" shell dumpsys notification > "$output/upgrade-channels-new.txt"
+    adbx -s "$serial" shell am force-stop "$package"
+    python3 "$scripts/push-channel-upgrade.py" "$output/upgrade-channels-old.txt" "$output/upgrade-channels-new.txt" "$package" > "$output/upgrade.txt"
+  )
+  upgrade_status=$?
+  set -e
+  if (( upgrade_status == 0 )); then record upgrade PASS; else record upgrade FAIL; fi
+  # The remaining phases start from a fresh installation again.
+  adbx -s "$serial" uninstall "$package" > /dev/null 2>&1 || true
+  adbx -s "$serial" install "$apk" > "$output/install-app-after-upgrade.txt"
+fi
+
 # 1. Warm-process suite with an in-process HTTP fixture (API 33+: permission granted for these journeys).
 if (( api >= 33 )); then adbx -s "$serial" shell pm grant "$package" android.permission.POST_NOTIFICATIONS; fi
 if [[ "$phases" == *" suite "* ]]; then
@@ -216,7 +247,7 @@ if [[ "$phases" == *" suite "* ]]; then
 fi
 
 # 2. Separate processes against a persistent host fixture.
-if [[ "$phases" == *" cold "* || "$phases" == *" tray "* || "$phases" == *" permission "* ]]; then fixture; fi
+if [[ "$phases" == *" cold "* || "$phases" == *" tray "* || "$phases" == *" permission "* || "$phases" == *" storage "* ]]; then fixture; fi
 if [[ "$phases" == *" cold "* ]]; then
   adbx -s "$serial" shell run-as "$package" rm -rf files/a10-push
   instrument prepare "$cold#prepare"
@@ -255,7 +286,20 @@ if [[ "$phases" == *" permission "* ]] && (( api >= 33 )); then
   if passed "$output/permission.txt"; then record permission PASS; else record permission FAIL; fi
 fi
 
-for label in suite prepare restore signed-out tray-login tray-entry permission; do
+# 5. Android 13+ with push storage that cannot be written (a file where its directory goes): the
+# permission request must still work and the app must stay up.
+if [[ "$phases" == *" storage "* ]] && (( api >= 33 )); then
+  adbx -s "$serial" shell pm clear "$package" > "$output/storage-clear.txt"
+  adbx -s "$serial" shell run-as "$package" sh -c 'mkdir -p no_backup && rm -rf no_backup/push && echo blocked > no_backup/push'
+  adbx -s "$serial" shell pm revoke "$package" android.permission.POST_NOTIFICATIONS
+  adbx -s "$serial" shell pm clear-permission-flags "$package" android.permission.POST_NOTIFICATIONS user-set user-fixed
+  instrument storage "$cold#permissionPromptSurvivesUnwritablePushStorage"
+  evidence storage
+  adbx -s "$serial" shell run-as "$package" rm -f no_backup/push || true
+  if passed "$output/storage.txt"; then record storage PASS; else record storage FAIL; fi
+fi
+
+for label in suite prepare restore signed-out tray-login tray-entry permission storage; do
   pid="$(cat "$output/$label.pid" 2>/dev/null || true)"
   if [[ -n "$pid" ]]; then adbx -s "$serial" logcat -d -v threadtime --pid="$pid" -T "$start" > "$output/$label-logcat.txt" 2>&1 || true; fi
 done

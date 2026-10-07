@@ -29,7 +29,8 @@ fun PushNoticeHost(controller: PushController, content: @Composable () -> Unit) 
     val notice by controller.notice.collectAsState()
     val signedIn by controller.signedIn.collectAsState(false)
     val context = LocalContext.current
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { controller.requestReconcile() }
+    // The once-per-installation mark is written only after the system request was shown and answered.
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { controller.permissionPromptFinished() }
     LaunchedEffect(signedIn) {
         if (signedIn && controller.claimPermissionPrompt()) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }

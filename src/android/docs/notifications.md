@@ -122,31 +122,38 @@ Material Snackbar. Open sends the same explicit ACTION_VIEW entry as a system
 notification; Dismiss calls `controller.dismissNotice()`. The host pads above the
 IME and navigation bars and does not change the shell's destinations or back
 stack. The controller owns clearing on reconciliation, focus change, and logout.
-System banners are suppressed in the foreground, keeping the existing card as
-the focused session's only approval prompt. This follows the Swift separation
-between an in-app foreground cue and background system display; the current
-Android foreground cue does not independently play Swift's approval sound.
-iOS also keeps a foreground alert in Notification Center (`.list`); Android
-posts nothing to the tray while an Orbit Activity is started, so an alert that
-arrives in the foreground leaves only the in-app state (the notice, the
-drawer's needs-you counts and the card). "Foreground" means started: an alert
-that lands while the Activity is paused but still visible is treated as
-foreground.
+In the foreground there is no sound or heads-up. Like iOS, which lists every
+foreground alert in Notification Center (`.list`), each alert still goes to the
+tray, silently: the platform builder has no per-post silent switch, so it joins
+the `orbit.silent` group with `GROUP_ALERT_SUMMARY` and no summary (what
+NotificationCompat.setSilent does). The one exception is the focused session's
+own approval, whose card is already on screen. An approval for another session
+also gets the notice. Swift additionally plays the approval sound in the
+foreground; Android stays silent there. "Foreground" means started: an alert that
+lands while the Activity is paused but still visible is treated as foreground.
 
 Android 13+ shows no notification until the app is granted POST_NOTIFICATIONS.
 iOS asks at launch (`NotificationManager.configure`). A configured Android build
 asks once per installation, in context: `PushNoticeHost` launches the system
-request on the first signed-in foreground (`PushController.claimPermissionPrompt`,
-flag kept in the push storage under `noBackupFilesDir`). A refusal is final for
-the automatic path; asking again is the user's choice from `NotificationSettings`
-or Android settings. Builds without Firebase configuration, and API 29–32 where
+request on the first signed-in foreground (`PushController.claimPermissionPrompt`
+only reads state and holds an in-process guard). The mark is written to the push
+storage under `noBackupFilesDir` after the request was answered
+(`permissionPromptFinished`), on an IO thread and isolated like every other push
+storage write; if it cannot be written, the next launch asks again instead of
+crashing. A refusal is final for the automatic path; asking again is the user's
+choice from `NotificationSettings` or Android settings. Builds without Firebase configuration, and API 29–32 where
 the permission is granted at install, never prompt. Token registration does not
 depend on the permission, as on iOS, so silent sync and reconciliation still run.
 
-Channels: `orbit.needs-you` ("Needs your reply", approvals, owner items and
+Channels: `orbit.needs-you.alert` ("Needs your reply", approvals, owner items and
 confirmation problems) is `IMPORTANCE_HIGH`, so it pops up like the iOS banner;
-`orbit.sessions` and `orbit.updates` are `IMPORTANCE_DEFAULT`. Android applies an
-importance only when it creates a channel; afterwards the user's choice wins.
+`orbit.sessions` and `orbit.updates` are `IMPORTANCE_DEFAULT`. Android never
+raises the importance of a channel that already exists, so an installation of
+`482b132e8`, which created `orbit.needs-you` at DEFAULT, would otherwise keep
+DEFAULT forever. On start, an `orbit.needs-you` whose importance the user has not
+set (`hasUserSetImportance()`) is deleted and the new channel is used; one the
+user changed is kept and used as it is. Deleting the old channel also removes a
+reminder that was showing in it at the moment of the upgrade.
 
 ## Route correspondence and cross-module interfaces
 
@@ -174,10 +181,13 @@ A13 owns the Settings page. Apart from the one-time request above, A10 provides
 on an explicit tap, reads current authorization on resume, and opens Android's
 app notification settings. `controller.configured` describes SDK availability;
 `controller.notifications.allowed(channel: String? = null)` checks global or
-individual-channel authorization. Channel IDs are `orbit.needs-you`,
+individual-channel authorization. Channel IDs are `controller.notifications.needsYou`
+(`orbit.needs-you.alert`, or a user-changed legacy `orbit.needs-you`),
 `orbit.sessions`, and `orbit.updates`. The interface was handed to A13 in a task
-comment; A10 does not insert it into MainActivity's Settings branch. Settings
-integration/permission-discovery remains incomplete until A13 wires that entry.
+comment. Until A13's settings page replaces MainActivity's Settings branch, that
+branch shows `NotificationSettings(app.push)` under the account section (a
+one-line entry the coordinator asked for), so a refused request can be repeated
+or Android's notification settings opened.
 A10 owns `OrbitApplication.push` and its notification initialization. Shared-entry
 changes remain minimal and preserve unrelated navigation/auth/attachment cleanup.
 
@@ -266,14 +276,17 @@ phases. The script holds `ui.lock` for the whole run, refuses a serial that is
 not an emulator, reinstalls both APKs, records device/APK/input hashes, and
 restores what it changed (night mode, font scale, reverse mapping, fixture).
 `A10_PHASES`, `A10_TESTS`, `A10_NIGHT` and `A10_FONT_SCALE` select a subset or an
-appearance pass. Every phase records PASS/FAIL/NOT_RUN in `result.txt`.
+appearance pass; `A10_OLD_APK` names the earlier release for the upgrade phase. Every
+phase records PASS/FAIL/NOT_RUN in `result.txt`.
 
 | Phase | Processes | What it exercises |
 | --- | --- | --- |
-| `suite` (`PushDeviceTest`) | one instrumented process | Background alert → real tray entry → real touch → reader card → approval endpoint; duplicate event and same-tag replacement; foreground alert deduplicated, then another end's resolution clears tray and card through sync and, separately, through foreground REST; a PendingIntent captured before sign-out survives login and Activity recreation; 403/404/503/stale authority before display and on tap; channel deleted (plus the app-op on API 29–32) while approval keeps working; account switch rejects the old binding, keeps the installation and unregisters; foreground notice opens an unfocused session; WorkManager retry after 503 and old-binding rejection after an account switch. |
+| `upgrade` | `A10_OLD_APK`, then `adb install -r` | The earlier release creates `orbit.needs-you` at DEFAULT; after the in-place upgrade `push-channel-upgrade.py` reads `dumpsys notification` and requires that channel deleted and `orbit.needs-you.alert` at HIGH. |
+| `suite` (`PushDeviceTest`) | one instrumented process | Background alert → real tray entry → real touch → reader card → approval endpoint; duplicate event and same-tag replacement; foreground alert deduplicated, then another end's resolution clears tray and card through sync and, separately, through foreground REST; a PendingIntent captured before sign-out survives login and Activity recreation; 403/404/503/stale authority before display and on tap; channel deleted (plus the app-op on API 29–32) while approval keeps working; account switch rejects the old binding, keeps the installation and unregisters; foreground notice opens an unfocused session; a foreground agent message and an unfocused approval stay in the tray silently (also after Home) while the focused session's approval is left out; WorkManager retry after 503 and old-binding rejection after an account switch. |
 | `cold` (`ColdPushDeviceTest`) | three processes | Sign in and post in the background; force-stop; a new process whose first Activity is the notification's ACTION_VIEW restores the login, binding and event history, shows the card and approves; then a signed-out new process keeps the route through the login screen and opens it after authentication. |
 | `tray` | launcher start + `--no-restart` attachment + SystemUI start | The production builder posts an entry in a launcher-started process, which is killed; a host tap on the surviving entry starts a new, uninstrumented process that restores the login and opens the session card; the host taps Allow and the fixture records the decision. |
 | `permission` (API 33+) | fresh app data | The first signed-in foreground shows the system request once; "Don't allow" leaves no tray entry; approval still works; a second sign-in does not ask again. |
+| `storage` (API 33+) | fresh app data, push directory replaced by a file | Signing in still shows the request; after "Don't allow" the failed mark write leaves the app running. |
 
 Platform limits seen on the emulator: finishing an instrumentation force-stops
 the target, which cancels its notifications, so the tray phase attaches to a

@@ -15,6 +15,7 @@ import android.os.Bundle
 import android.os.ParcelFileDescriptor
 import android.os.Process
 import android.os.SystemClock
+import android.service.notification.StatusBarNotification
 import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -277,7 +278,8 @@ class PushDeviceTest {
         deliver(message)
         compose.waitUntil(10_000) { app.push.notice.value?.eventId == message.getValue("eventId") }
         compose.onNodeWithTag("notification-notice").assertIsDisplayed()
-        awaitNotifications(0)
+        awaitNotifications(1)
+        assertSilent(orbitEntries().single())
         capture("foreground-notice")
         compose.onNode(hasText("Open") and hasAnyAncestor(hasTestTag("notification-notice"))).performClick()
         awaitCard()
@@ -288,6 +290,39 @@ class PushDeviceTest {
         compose.onNodeWithTag("notification-notice").assertDoesNotExist()
         compose.onNodeWithTag("approval:a1:ALLOW").assertIsEnabled()
         capture("foreground-notice-actionable")
+        pass()
+    }
+
+    /** iOS lists every foreground alert in Notification Center; here it stays in the tray without sound
+     * or heads-up. Only the focused session's own approval stays out, because its card is on screen. */
+    @Test fun foregroundAlertsStayInTheTraySilentlyExceptTheFocusedApproval() {
+        login()
+        assertNull(app.realtime.state.value.session)
+        val agentMessage = UUID.randomUUID().toString()
+        deliver(envelope("alert", buildJsonObject {
+            put("title", "A10 agent message"); put("body", "An agent wrote without naming a session."); put("kind", "agent-message")
+        }, key = agentMessage))
+        awaitNotifications(1)
+        assertSilent(orbitEntries().single())
+        val approval = alert()
+        deliver(approval)
+        compose.waitUntil(10_000) { app.push.notice.value?.eventId == approval.getValue("eventId") }
+        awaitNotifications(2)
+        orbitEntries().forEach(::assertSilent)
+        background() // Leaving the app keeps both reminders in the tray.
+        awaitNotifications(2)
+        foreground()
+        compose.onNode(hasText("Open") and hasAnyAncestor(hasTestTag("notification-notice"))).performClick()
+        awaitCard()
+        instrument.runOnMainSync { manager.cancelAll() }
+        awaitNotifications(0)
+        deliver(alert()) // A new event for the approval whose card is on screen.
+        SystemClock.sleep(1_000)
+        awaitNotifications(0)
+        assertNull(app.push.notice.value)
+        File(evidence, "foreground-tray-result.txt").writeText("agentMessageKey=$agentMessage\n" +
+            "Foreground agent message and unfocused approval stayed in the tray silently (group ${PushNotifications.SILENT_GROUP}, " +
+            "GROUP_ALERT_SUMMARY) and after Home; the focused session's approval was not added.\n")
         pass()
     }
 
@@ -369,11 +404,16 @@ class PushDeviceTest {
         put("threadId", fixture.sessionId)
     })
     private fun sync() = envelope("sync", buildJsonObject { put("badge", 0); put("clearSessions", JsonArray(listOf(JsonPrimitive(fixture.sessionId)))) })
-    private fun envelope(type: String, payload: JsonObject) = mapOf("version" to "1", "type" to type,
+    private fun envelope(type: String, payload: JsonObject, key: String? = null) = mapOf("version" to "1", "type" to type,
         "registrationKey" to app.push.registration.activeBinding()!!.registrationKey, "eventId" to UUID.randomUUID().toString(),
-        "notificationKey" to if (type == "sync") "badge-sync" else "approval-${fixture.sessionId}",
+        "notificationKey" to (key ?: if (type == "sync") "badge-sync" else "approval-${fixture.sessionId}"),
         "sentAt" to "2026-10-05T00:00:00Z", "payload" to payload.toString())
-    private fun awaitNotifications(count: Int) = awaitCondition { manager.activeNotifications.count { it.tag?.startsWith("orbit:") == true } == count }
+    private fun orbitEntries() = manager.activeNotifications.filter { it.tag?.startsWith("orbit:") == true }
+    private fun awaitNotifications(count: Int) = awaitCondition { orbitEntries().size == count }
+    private fun assertSilent(entry: StatusBarNotification) {
+        assertEquals(PushNotifications.SILENT_GROUP, entry.notification.group)
+        assertEquals(Notification.GROUP_ALERT_SUMMARY, entry.notification.groupAlertBehavior)
+    }
     private fun awaitCondition(timeoutMillis: Long = 15_000, check: () -> Boolean) {
         val until = SystemClock.elapsedRealtime() + timeoutMillis
         while (!check()) {
@@ -531,6 +571,7 @@ private class PushHttpFixture(corpus: String) {
                 return json(buildJsonObject { put("id", "a1"); put("status", "ALLOWED") })
             }
             return when {
+                path == "/api/users/me" -> json(buildJsonObject { put("id", account); put("preferences", buildJsonObject {}) })
                 path == "/api/workspaces" -> json(JsonArray(listOf(buildJsonObject { put("id", workspace); put("name", "A10 controlled workspace"); put("enabled", true) })))
                 path == "/api/sessions" -> json(JsonArray(if (request.requestUrl!!.queryParameter("view") == "open") listOf(detail()) else emptyList()))
                 path.matches(Regex("/api/sessions/[^/]+")) -> json(detail())
