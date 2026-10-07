@@ -209,7 +209,11 @@ import {
   postWorkNotOnBranchComment,
   reclaimStalledTask,
 } from '../tasks/reclaim-stalled-task';
-import { readDispatchRefusal, recordDispatchRefusal } from '../tasks/task-dispatch-refusal';
+import {
+  raiseSourceUnresolvedBlocker,
+  readDispatchRefusal,
+  recordDispatchRefusal,
+} from '../tasks/task-dispatch-refusal';
 import { CurrentRunner } from './current-runner.decorator';
 import { reclaimRuntimeIds } from './reclaim-runtime';
 import {
@@ -2629,7 +2633,11 @@ export class RunnerApiController {
    * The refusal is recorded INSIDE this transaction, on the door's own client, for the reason the
    * checkout's refusal is recorded in the finalize's: a refusal committed without its record is the
    * silent state this whole path exists to close, and the compare-and-set cannot be won twice, so
-   * nothing would ever come back to write the missing half.
+   * nothing would ever come back to write the missing half. Three halves, in fact, and all three are
+   * written here: the run itself is closed in the same transaction the refusal is frozen in
+   * (`freezeSessionSourcePin`, so a refused session never stays RUNNING with its claim held), the
+   * task records the refusal (`recordDispatchRefusal`), and the project gets the exception item that
+   * says its code line is unresolved (`raiseSourceUnresolvedBlocker`, SR50).
    */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/source/pin')
@@ -2648,12 +2656,18 @@ export class RunnerApiController {
           dto,
         );
         if (frozen.refused) {
+          const at = new Date();
+          // The project's exception item FIRST, the task's record second, and the order is the lock
+          // order rather than a preference: this one writes a `project_blocker`, whose foreign key
+          // takes the project (rank 40) FOR KEY SHARE, and `recordDispatchRefusal` writes the task
+          // (rank 50). Taking 50 and then 40 is the cycle two transactions can deadlock on.
+          await raiseSourceUnresolvedBlocker(tx, frozen.refused, at);
           await recordDispatchRefusal(
             tx,
             frozen.refused.taskId,
             frozen.refused.run,
             { code: frozen.refused.code, reason: frozen.refused.reason },
-            new Date(),
+            at,
           );
         }
         return frozen;

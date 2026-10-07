@@ -1,3 +1,5 @@
+import { createHash, randomUUID } from 'node:crypto';
+
 import { CreatorType, Prisma } from '@prisma/client';
 import {
   SOURCE_FIX_ACTIONS,
@@ -55,6 +57,14 @@ import { hasResolvedSource } from '../projects/session-source';
  * carries the code), and it is recorded here anyway: the reader who has to see that a task could not
  * start is a reader of the task, and two shapes of the same fact is one shape more than anybody
  * needs.
+ *
+ * THE PROJECT'S OWN ITEM
+ * ======================
+ * A task record and a coordinator message still leave the PROJECT silent about a line that cannot
+ * be resolved — nothing on it says work has stopped until somebody reads a task. So the pin door,
+ * in the transaction that refuses the session, also opens the project's `SOURCE_UNRESOLVED`
+ * exception item (`raiseSourceUnresolvedBlocker`), one row per ref and code: SR50's kind, at the
+ * single landing place migration 0231 declared for it.
  *
  * WHAT THIS DOES NOT DO
  * =====================
@@ -159,6 +169,93 @@ export async function recordDispatchRefusal(
     },
   });
   return refusal;
+}
+
+/**
+ * §10.3 / SR50's one kind: every SOURCE refusal routes a person to one conclusion — the code line
+ * this run was told to start from cannot be resolved, and no retry will change that.
+ *
+ * The precise code and its executable next step live in the row's `detail`, because the kind is
+ * routing vocabulary (which surface, which button) and a kind per code would mean a database CHECK
+ * rewrite per error code (SR50).
+ */
+export const SOURCE_UNRESOLVED_BLOCKER_KIND = 'SOURCE_UNRESOLVED';
+
+/** How long a HUMAN-recovery blocker waits before it reads as overdue (BL5's escalation alarm). */
+const HUMAN_BLOCKER_ALARM_MS = 30 * 60 * 1_000;
+
+/**
+ * The project's exception item for a refusal this module just recorded on the task.
+ *
+ * WHY A PROJECT NEEDS IT, WHEN THE TASK ALREADY SAYS IT
+ * ====================================================
+ * `task.dispatch_refusal` is the task's own record, and the coordinator wake delivers it to the
+ * conversation that exists. Neither puts the project itself on the needs-human surface: a project
+ * whose integration line does not exist has a task that cannot start, and until this write the
+ * project page's blocker count said nothing about it. SR50 named the landing place; this is the
+ * write.
+ *
+ * ONE ROW PER LINE, NOT ONE PER RUN
+ * =================================
+ * The dedupe key is the project's ref and the refusal code — the two facts a person has to change —
+ * under 0125's partial unique index on open rows. Two tasks dispatched from the same missing branch
+ * are one thing to fix and one row; a second refusal finds the row already open and writes nothing,
+ * so a retried request and a repeated attempt both leave exactly one. `taskIds` names the task this
+ * row was opened for: the per-run truth is on each task's own column, which is where a reader of a
+ * run looks for it.
+ *
+ * `subject_type` is PROJECT and not TASK for the same reason: what is unresolved is the project's
+ * code binding or the branch it names, and the tasks are what it stops. The readers that ask for a
+ * task's blockers by `subjectType = 'TASK'` (integration retries, task attribution) are asking about
+ * a task's own problem, which this is not.
+ *
+ * A task that is in no project has no row to hang this on, and gets none: the refusal is still on
+ * the task, which is the only place it can legally be recorded (the column is the same one).
+ */
+export async function raiseSourceUnresolvedBlocker(
+  tx: Prisma.TransactionClient,
+  refusal: { taskId: string; code: SourceRefusalCode; run: { sourceRef: string | null } },
+  at: Date,
+): Promise<string | null> {
+  const task = await tx.task.findUnique({
+    where: { id: refusal.taskId },
+    select: { projectId: true },
+  });
+  if (!task?.projectId) return null;
+  const projectId = task.projectId;
+  const fixAction = SOURCE_FIX_ACTIONS[refusal.code];
+  const ref = refusal.run.sourceRef;
+  const detail = { code: refusal.code, fixAction, ref, taskIds: [refusal.taskId] };
+  // §11.3: one open episode per key. The project is the index's other half, and the key is the two
+  // facts the fix changes — `${kind}:<code>:<ref>`, the spelling `<kind>:<subject>:<id>` variants in
+  // this tree use, with the code in the subject's place because a missing ref and an unreachable
+  // authority are different fixes on the same line.
+  const dedupeKey = `${SOURCE_UNRESOLVED_BLOCKER_KIND}:${refusal.code}:${ref ?? ''}`;
+  const conditionVersion = createHash('sha256').update(JSON.stringify(detail)).digest('hex');
+  const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    INSERT INTO "project_blocker" (
+      "id", "project_id", "kind", "owner", "recovery", "severity", "required_action",
+      "next_check_at", "subject_type", "subject_id", "detail", "dedupe_key",
+      "lifecycle_generation", "condition_version", "first_seen_at", "last_seen_at", "updated_at"
+    )
+    SELECT ${randomUUID()}::uuid, ${projectId}::uuid, ${SOURCE_UNRESOLVED_BLOCKER_KIND},
+           'USER'::"project_blocker_owner", 'HUMAN'::"project_blocker_recovery",
+           'CRITICAL'::"project_blocker_severity",
+           -- The same sentence the task's own comment carries: the blocker, the comment and the
+           -- coordinator's message are read by different people and must not disagree about what
+           -- to do. It is a fixAction's executable step, not a restatement of the error (BL0).
+           ${dispatchRefusalNextStep({ fixAction, ref })},
+           ${new Date(at.getTime() + HUMAN_BLOCKER_ALARM_MS)}, 'PROJECT', ${projectId},
+           ${JSON.stringify(detail)}::jsonb, ${dedupeKey},
+           coalesce(max(blocker."lifecycle_generation"), 0) + 1,
+           ${conditionVersion}, ${at}, ${at}, ${at}
+      FROM "project_blocker" blocker
+     WHERE blocker."project_id" = ${projectId}::uuid
+       AND blocker."dedupe_key" = ${dedupeKey}
+    ON CONFLICT ("project_id", "dedupe_key") WHERE "resolved_at" IS NULL DO NOTHING
+    RETURNING "id"
+  `);
+  return rows[0]?.id ?? null;
 }
 
 /**
