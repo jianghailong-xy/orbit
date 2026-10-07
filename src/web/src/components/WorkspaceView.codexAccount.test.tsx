@@ -399,10 +399,13 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     // The engine on the hero — no accounts there — then the account in the composer.
     await click(mounted().querySelector('.np-card'));
     await render(() => document.querySelector('.np-list'));
+    // OpenCode is listed whether or not the runner has it — this one hasn't — so it is a row here
+    // too, carrying its reason rather than vanishing.
     expect([...document.querySelectorAll('.np-list .np-row-name')].map((row) => row.textContent)).toEqual([
       'Claude',
       'Codex',
       'Kimi',
+      'OpenCode',
       'Connect a provider…',
     ]);
     await click([...document.querySelectorAll('.np-list .np-row')].find((row) => row.textContent?.startsWith('Claude')));

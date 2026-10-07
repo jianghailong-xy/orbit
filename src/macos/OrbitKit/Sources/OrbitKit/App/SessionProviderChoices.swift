@@ -221,6 +221,19 @@ public enum SessionProviderChoices {
         health?.installed == false ? "Not installed" : nil
     }
 
+    /// The arrow that closes a picker row's reason: where tapping the row goes.
+    ///
+    /// A sign-in this client can drive is a promise the row can keep, so those engines get ", sign
+    /// in →". What a runner is missing otherwise takes the bare arrow: an install (`opencode`
+    /// included, now that Orbit installs it), a runner update, a Harness key to paste, Antigravity's
+    /// install-or-key row, and OpenCode's own `auth login` — which asks which underlying provider to
+    /// use, so the relay's DTO can't express it (`EngineAuth.Remedy.runCommand`). Naming a sign-in
+    /// on those points at a button that isn't there, and the row already lands on the one that is.
+    public static func fixSuffix(_ fixEngine: String?) -> String {
+        ["antigravity", "dsh", DshRuntime.connectFix, "opencode"].contains(fixEngine ?? "")
+            ? " →" : ", sign in →"
+    }
+
     /// Why a pool none of whose credentials can run is greyed out, in the pool's own words: what it holds
     /// is what its reader can run on — its ChatGPT accounts first and its keys when none can (2026-10-03),
     /// built for one of the people its owner added the same way it is for its owner (web's
@@ -323,23 +336,30 @@ public enum SessionProviderChoices {
                               brandKey: DshRuntime.presetSlug, modelLabel: "", unavailable: "Add API key",
                               fixEngine: DshRuntime.connectFix, setup: true)]
             : []
-        // OpenCode, once the runner reports it installed — it has no sign-in to offer, so a machine
-        // without it has nothing to fix here either. Its own config first, then every key it may spend
-        // (`OpenCodeKeys`): it speaks each dialect a configured key does, so the same key is listed
-        // under its own engine above and here, as `opencode/<slug>` (web parity).
-        let openCode: [ProviderChoice] = health("opencode")?.installed == true
-            ? [ProviderChoice(slug: "opencode", label: AgentDefaults.providerName("opencode", configured: nil),
-                              kind: .engine, brandKey: nil,
-                              modelLabel: modelLabel(for: "opencode", configured: configured, catalog: catalog))]
-                + configured
-                    .filter { $0.runsOnOpenCode == true && !poolSlugs.contains($0.slug) }
-                    .map { provider in
-                        let choice = OpenCodeKeys.choice(provider.slug)
-                        return ProviderChoice(slug: choice, label: provider.label, kind: .byok,
-                                              brandKey: provider.presetSlug,
-                                              modelLabel: modelLabel(for: choice, configured: configured, catalog: catalog))
-                    }
-            : []
+        // OpenCode, installed or not: Orbit installs it, so a machine without it is a row the picker
+        // can send somewhere rather than an empty space — the same rule DSH and the login engines are
+        // listed under. It has no sign-in to offer (its own login picks an underlying provider
+        // interactively), so the row is never a pick until the CLI is there. Then its keys, which are
+        // only worth listing once it runs (`OpenCodeKeys`): it speaks each dialect a configured key
+        // does, so the same key is listed under its own engine above and here, as `opencode/<slug>`
+        // (web parity).
+        let openCodeInstalled = health("opencode")?.installed == true
+        let openCode: [ProviderChoice] = [
+            ProviderChoice(slug: "opencode", label: AgentDefaults.providerName("opencode", configured: nil),
+                           kind: .engine, brandKey: nil,
+                           modelLabel: modelLabel(for: "opencode", configured: configured, catalog: catalog),
+                           unavailable: openCodeInstalled ? nil : "Not installed",
+                           fixEngine: openCodeInstalled ? nil : "opencode")
+        ] + (openCodeInstalled
+             ? configured
+                 .filter { $0.runsOnOpenCode == true && !poolSlugs.contains($0.slug) }
+                 .map { provider in
+                     let choice = OpenCodeKeys.choice(provider.slug)
+                     return ProviderChoice(slug: choice, label: provider.label, kind: .byok,
+                                           brandKey: provider.presetSlug,
+                                           modelLabel: modelLabel(for: choice, configured: configured, catalog: catalog))
+                 }
+             : [])
         return engineChoices + poolChoices + byok + dshSetup + openCode
     }
 

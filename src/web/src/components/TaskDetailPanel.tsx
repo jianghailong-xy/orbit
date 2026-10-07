@@ -798,7 +798,12 @@ export function TaskDetailPanel({
       : assigneeRunner?.antigravity?.envKeyAvailable === true,
     assigneeRunner,
   );
-  // Task pins already offer OpenCode; preserve it while applying Gemini's admission state.
+  // Task pins already offer OpenCode; preserve it while applying Gemini's admission state. The
+  // picker now lists OpenCode always — with a reason when the runner hasn't got it — but this panel
+  // judges no engine (it has no health to, and passes none), so it drops that entry and keeps the
+  // plain one where the pin menu has always had it: with the engines, and pickable.
+  const listedOpenCode = runProviderChoices.findIndex((choice) => choice.slug === 'opencode');
+  if (listedOpenCode >= 0) runProviderChoices.splice(listedOpenCode, 1);
   runProviderChoices.splice(3, 0, currentProviderChoice('opencode', runProviderChoices, assigneeRunner?.modelCatalog, configuredProviders));
   if (q.data?.provider && !runProviderChoices.some((choice) => choice.slug === q.data.provider)) {
     runProviderChoices.unshift(currentProviderChoice(q.data.provider, runProviderChoices, assigneeRunner?.modelCatalog, configuredProviders, assigneeRunner?.runtimeDefaultModels, assigneeRunner?.antigravity));
