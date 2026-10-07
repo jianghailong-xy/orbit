@@ -13,6 +13,8 @@ mkdir -p "$output"
 [[ -z "$(ls -A "$output")" ]]
 adb=/opt/android-sdk/platform-tools/adb
 serial=${ANDROID_SERIAL:-emulator-5554}
+# Only the shared emulator: a physical phone on the same adb server is never installed to, cleared or reconfigured.
+[[ "$serial" == emulator-* ]] || { echo "Refusing non-emulator device $serial" >&2; exit 2; }
 package=io.orbitd.android.debug
 exec 9>/var/lib/orbit/android/ui.lock
 flock -n 9 || { echo 'Device is in use; no device state changed.' >&2; exit 75; }

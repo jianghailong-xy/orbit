@@ -225,7 +225,7 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.WIKI_ENTRY -> "Wiki"
     Destination.SETTINGS -> if (route.id == "workspace") data.workspaces.firstOrNull { ObjectId.same(it.id, route.workspaceId) }?.name
         ?.let { "$it settings" } ?: settingsTitle(route.id) else settingsTitle(route.id, route.recordId)
-    Destination.RUNNER -> runnerTitle(route.recordId, data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.name)
+    Destination.RUNNER -> runnerTitle(route.recordId, route.id, data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.name)
     else -> route.destination.name.lowercase().replaceFirstChar(Char::uppercase)
 }
 

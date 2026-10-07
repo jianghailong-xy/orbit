@@ -243,6 +243,8 @@ class ManagementDeviceTest {
     }
     private fun capture(label: String) {
         compose.waitForIdle(); instrumentation.waitForIdleSync()
+        // Semantics can be current a frame before the display is: let the frame reach the screen.
+        android.os.SystemClock.sleep(700)
         val dir = File(app.filesDir, "a13-management").apply { mkdirs() }
         instrumentation.uiAutomation.takeScreenshot().let { bitmap ->
             File(dir, "$label.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }; bitmap.recycle()

@@ -74,6 +74,7 @@ internal class RunnersModel(private val api: ManagementApi) {
     suspend fun load() {
         try {
             runners = providerObjects(api.get("runners"))
+            runners.forEach { runnerNames[ObjectId.canonical(it.text("id")) ?: it.text("id")] = RunnerPage.displayName(it) }
             try { workspaces = providerObjects(api.get("workspaces")) } catch (e: CancellationException) { throw e } catch (_: Exception) { }
             loaded = true; failed = false; error = null
         } catch (e: CancellationException) { throw e }
@@ -125,10 +126,13 @@ internal fun rememberNow(every: Long = 15_000): Long {
     return now
 }
 
-fun runnerTitle(record: String?, runnerName: String?): String = when {
+/** The aliases runner pages have read, so the shell's title says what the page head says. */
+private val runnerNames = mutableStateMapOf<String, String>()
+
+fun runnerTitle(record: String?, runnerId: String?, fallback: String?): String = when {
     record == "name" -> RunnerCopy.ABOUT_NAME
     record?.startsWith("engine:") == true -> RunnerPage.engineName(record.removePrefix("engine:"))
-    else -> runnerName ?: "Runner"
+    else -> runnerId?.let { runnerNames[ObjectId.canonical(it) ?: it] } ?: fallback ?: "Runner"
 }
 
 @Composable
