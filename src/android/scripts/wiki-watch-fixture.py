@@ -56,13 +56,11 @@ def make_watch(id_, status='ACTIVE', action='RESUME_SESSION'):
                          'targetStatus': {'status': 'IN_PROGRESS', 'running': True, 'queued': False}}], 'matches': [], 'expiryDeliveries': []}
 
 def reset():
+    # The shared corpus's maintenance run, whole: Recently changed folds it into one row, its page counts it,
+    # and its pending ops (run1-op3, run1-op7) are what Review lists.
     run = remap(copy.deepcopy(REVIEW['runs'][0]['view']))
     run['expiresAt'] = '2026-11-01T00:00:00Z'
     run['revertible'] = True
-    # One explicit review target keeps device navigation deterministic; content remains from corpus.
-    run['ops'] = [op for op in run['ops'] if op['id'] == OP]
-    run['ops'][0]['entryId'] = ENTRY
-    run['ops'][0]['baseRevision'] = 1
     entries = {entry['id']: entry for entry in run['entries']}
     entry = entries[ENTRY]
     entry.update(title='A12 Wiki source entry', summary='**Controlled** Wiki source with an original session record.')
@@ -157,7 +155,18 @@ class Handler(BASE.Handler):
         tail = path.removeprefix(prefix)
         if path == tail: return None
         if tail == '/entries': return list(state['entries'].values())
-        if tail == '/timeline': return {'items': [{'id': OP, 'opId': OP, 'entryId': ENTRY, 'title': state['entries'][ENTRY]['title'], 'op': 'add', 'at': AT, 'origin': 'maintenance', 'changesetId': CHANGESET}]}
+        if tail == '/timeline':
+            # One owner edit (an op row) over the maintenance run's applied ops (one run row).
+            items = [{'opId': uid('a3'), 'op': 'amend', 'decision': 'auto_applied', 'origin': 'owner', 'at': AT, 'entryId': ENTRY,
+                      'title': state['entries'][ENTRY]['title'], 'kind': state['entries'][ENTRY].get('kind'), 'status': 'active',
+                      'trust': state['entries'][ENTRY].get('trust')}]
+            for op in state['run']['ops']:
+                if op['decision'] != 'auto_applied': continue
+                entry = state['entries'].get(op.get('resultEntryId') or op.get('entryId')) or {}
+                items.append({'opId': op['id'], 'op': op['op'], 'decision': 'auto_applied', 'origin': 'maintenance', 'at': state['run']['createdAt'],
+                              'entryId': entry.get('id'), 'title': entry.get('title'), 'kind': entry.get('kind'), 'status': entry.get('status'),
+                              'trust': entry.get('trust'), 'appliedByMode': 'automatic', 'changesetId': CHANGESET, 'changesetAppliedByMode': 'automatic'})
+            return {'items': items}
         if tail == '/health': return {**copy.deepcopy(HEALTH['cases'][0]['health']), 'spaceId': SPACE, 'entries': len(state['entries'])}
         if tail == '/docs':
             directory = remap(copy.deepcopy(DOCS['docs']['directory']['read']))
@@ -216,7 +225,18 @@ class Handler(BASE.Handler):
 
     do_PATCH = do_POST
 
+    def link_previews(self, body):
+        # The cards a page names: the inherited session and task are this account's; anything else is unavailable.
+        out = []
+        for ref in body.get('refs', []):
+            kind, id_ = ref.get('kind'), normalize('/' + ref.get('id', '')).lstrip('/')
+            if kind == 'session' and id_ == BASE.SESSION: out.append({'kind': kind, 'id': ref['id'], 'state': 'ok', 'session': {'title': 'Long conversation'}})
+            elif kind == 'task' and id_ == BASE.TASK: out.append({'kind': kind, 'id': ref['id'], 'state': 'ok', 'task': {'title': 'Related reading task'}})
+            else: out.append({'kind': kind, 'id': ref.get('id'), 'state': 'unavailable'})
+        return {'previews': out}, 200
+
     def mutate(self, path, body):
+        if path == '/api/link-previews': return self.link_previews(body)
         if path.startswith('/api/watches/'):
             id_, action = path.split('/')[-2:]
             watch = state['watches'].get(id_)
