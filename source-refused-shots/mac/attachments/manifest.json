@@ -1,0 +1,35 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "4330bdf21027da36410f851957325cd8f386098c",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "58715A61-BF74-4032-BA7E-DC87ABB2B100.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "RunStartShotTeststestMacShowsWhyTheRunNeverStarted-notes_0_460D2AE9-4E21-4A8B-AC99-2A38C968BCD4.txt",
+        "timestamp" : 1791382387.123
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "4330bdf21027da36410f851957325cd8f386098c",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "1F736CB5-4EAD-4DB8-9BA7-A17AF59CFCD9.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-project-requests_0_9BAC4ADE-169F-4C67-B494-CDD8AA47A117.txt",
+        "timestamp" : 1791382387.091
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "4330bdf21027da36410f851957325cd8f386098c",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "FCF41300-2490-4BC8-98F2-8CFE26616590.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-requests_0_A7B2A8BD-C354-4FB6-A90D-312B3E489031.txt",
+        "timestamp" : 1791382303.844
+      }
+    ],
+    "testIdentifier" : "RunStartShotTests/testMacShowsWhyTheRunNeverStarted()",
+    "testIdentifierURL" : "test://com.apple.xcode/RunStartProbe/RunStartMacProbeUITests/RunStartShotTests/testMacShowsWhyTheRunNeverStarted"
+  }
+]
