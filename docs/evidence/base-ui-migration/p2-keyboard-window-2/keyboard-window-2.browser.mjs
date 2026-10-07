@@ -73,6 +73,8 @@ const SEQUENCES = [
   { name: 'sub-right-end-enter', keys: ['ArrowRight', 'End', 'Enter'], targets: SUBMENUS, control: 'sub-right-enter' },
   { name: 'sub-right-c-enter', keys: ['ArrowRight', 'c', 'Enter'], targets: SUBMENUS, control: 'sub-right-enter' },
   { name: 'sub-right-tab', keys: ['ArrowRight', 'Tab'], targets: SUBMENUS, control: 'sub-right' },
+  // Added after the first baseline: Shift+Tab in the submenu window (its own baseline chunk).
+  { name: 'sub-right-shift-tab', keys: ['ArrowRight', 'Shift+Tab'], targets: SUBMENUS, control: 'sub-right' },
   { name: 'sub-enter', keys: ['Enter'], targets: SUBMENUS },
   { name: 'sub-enter-enter', keys: ['Enter', 'Enter'], targets: SUBMENUS, control: 'sub-enter' },
   { name: 'sub-enter-down-enter', keys: ['Enter', 'ArrowDown', 'Enter'], targets: SUBMENUS, control: 'sub-enter-enter' },

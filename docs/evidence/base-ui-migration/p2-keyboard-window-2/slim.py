@@ -28,7 +28,7 @@ def compact(log):
         name = 'Space' if key['key'] == ' ' else key['key']
         if key.get('shift'):
             name = f'Shift+{name}'
-        parts.append(f"{name}{'' if key['trusted'] else '*'}>{key['target']}[{key.get('popups')}|f={key.get('focused')}|h={key.get('highlighted')}]@{key.get('t')}")
+        parts.append(f"{name}{'' if key['trusted'] else '*'}>{key['target']}[{key.get('popups')}|f={key.get('focused')}|h={key.get('highlighted')}]@{key.get('t', '')}")
     return ' ; '.join(parts)
 
 
@@ -67,6 +67,12 @@ def slim_run(raw, dest):
                         if attachment['name'] in ('keyboard-window-2', 'held-frames-2') and body is not None:
                             record = json.loads(body)
                             log = record.get('keyLog', [])
+                            if attachment['name'] == 'held-frames-2':
+                                # A held-frames case: its name is the sequence, its result the state after the frames ran.
+                                before, after = record['before'], record['after']
+                                changed = ', '.join(f'{k}={v}' for k, v in after['outputs'].items() if before['outputs'].get(k) != v) or 'none'
+                                record = {**record, 'target': '', 'kind': 'held', 'sequence': record['name'], 'mode': 'held', 'run': '',
+                                          'result': f"{changed} | {after['popups']} | @{after['active']}"}
                             samples.append({'test': f"{test['projectName']} › {spec['title']}", 'target': record.get('target'),
                                             'kind': record.get('kind'), 'sequence': record.get('sequence'), 'control': record.get('control') or '',
                                             'mode': record.get('mode'), 'run': record.get('run'), 'keys': ' '.join(record.get('keys', [])),
