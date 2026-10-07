@@ -1,0 +1,1196 @@
+{
+  "stats": {
+    "startTime": "2026-10-07T00:03:19.113Z",
+    "duration": 271685.796,
+    "expected": 96,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "c58b6a7c452751e7c9b22232935f248e759efd29350953e0a04fb2c46574f292"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "6f8b9ab67982f610304fe8aa8e18fbdf9f3665c7080f6ee1903045e596fbe8b4"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "86b46c38f5999c600b8a6d11171acfe2f3594fbd473ce5b3b3092b6b77ffedd5"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "b44273d1c2849d5f7f4ad623089e2a76d53aa19f89977223e4050d7c0fe22102"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "81f1a2627cab1ed7c6e5413ffdd6c412d320e57b9a5f4c52b0422b282ffa503f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "4592f17420a23549560baf7cf4995794ccecc31a0a18e5ce98eb62cfef7ebddb"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "b65cec3010650eec7aef03fba2c3a25c2fa6eb9071310146f65fe7848352da67"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "f6852baea5e72fa23d8feb40c641a596dcb458ec2613b9487bb6e1dadac6f5b7"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "a6e5423371d7a30383bb22e4145fcacaa7b799183b15723692573c98c2ca3ea8"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "6b31e866c3fc95ade51e43500c8ad311aed6bce26aa95685f0c37440027598c4"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "1a86501ced45addee93b5c5e13c658257ff7b03f80427c597bce5bdc0609461c"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "60cb52cc7ba0a79c955f56ca3af3c89b87db52f634786e60797c4f40b23a116a"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "3ebfe8e0e193acf38242b5f054c3c3b4c39324f29550a38af18aa59247635199"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "2015e9cac7a5274f3babad9cef6386ea3ec43d17aff0e5c7ff22ae5f50f95969"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "6765db597a4a2a2447730ac0f2dee92eb27de13316eb6c647ec82e14d1a7725d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "557e39269662ca82195a71a14ebb5d222d8f8e13a6126e1f646e1f2d79cd6554"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "136a68604d4a03d3dd04385415bfb43eec834ccb96d0235fec5486f3fd72d246"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "8b2c58d3202bbed2f63c55a9165e5ca81963f2f55b2d85a62786ec779b03e031"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "eca68a1f70fed70c9ec3de8f95b9eb456103800e5f262fbea362f7a85ca95d23"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "d6e1b55ff55ef48cf553fc4f9e994c466bc0a0a05bf477f98780fbe3c232a6a4"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "d8128ca5da48b667dbf0052667bc2505a6f3ae9ee6df500f4e632f6bb1f577bf"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "ef1f6801fbad5474838f3fa182e933db531a64ea70131b6197b993f00b236ede"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "4e31e2583b8cc2a172da51c7ea2adf86d63e595fa9c09b3a4626089bbef172cd"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "2159256e60a085df5ae7087410dd2b250ab20d308b8e60dcd3af1dfff1f4b712"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "87d7408c62f5d7c29b23b476c11b854981774cdd0fe5feef7c56ac469ba165eb"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "54b3d5ea03c5ea9e85baabbd0d6113a458f59caaa6303ea696cb65ec3c409f6a"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "244c366d0d6d93f6525ab68eab5ea005cad7dce936dd6e861770b7ed196a1326"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "dc2832619162fb8ecd7589d1ed65c90de222482d38e0ea5d9f10d6d4b861cbe2"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "5b7dd4f4df43c98828f074df4410de8bdbd8ad1598e464558859cef33565ee5f"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "8c925e06a8dfdad863a4d854e31b24a1de26dadd327d33f08c8e07b47b9a8111"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "40be513d147e616b565c37cff5c41cef5b1d40f7d7f62d9e8688c0ca9d7eec7b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "1ef48ed31b9a4de9984057b2904584088f44fe63e887ba75a51dcef2061de693"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "aa5023ce6b18a32f4754962f58c7e07fb817c72e81e33b3880fcfca7af213a07"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "c15bc822ad400fddbdf3fc9791901804e43e50d53b8379cfed854d5a5edbd725"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "9985b24f63f246cab9ab069d916aca78236408cfdf2166f0df5ea658ccce0a6d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "09b37343b3e26e5219c4a8edf41d9484a6635f0aa985f665ef72cffc81cc0fc0"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "adb86af514dc569e5ff39a0edb6cc696ae9ce42f5160ef72ee0a26c77d43c462"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "98236f32d62117a12d77d4fb0d58434e0fa6ce1ff1fed009ab419d608ca58ce6"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "02c2befb7ed8df406371e45db7015d73a6a80139f423ddfe66a57cbb9af88971"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "bfc3827f86b486a468bb3153694b70a471ccb0b673abd66d9a646c52e184f54b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "f34957e2714e1a30579a0ebb245fff2c9d4d2d5dcc96fa2ae287a82d1c682c88"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "d5a68680127a74f45ee0cf32b9f2df2644971684ff501f21c53fc6fb022a7331"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "38d467239c6de8a97dc193713ddcb66b70e5cc3d47820da08203aee5c49f23fa"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "66b0a1d4b18912f5d78d03dbdad0635f671ca4f404705ca0b9da7205f20d8344"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "eba093007d44389eb9794bdcbc5db05f7852d5827097aafbb741d0f36095e97a"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--notification-card-stays-fixed-through-Dialog-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "8887636b14f1bb8a65bc39dcc3474cf94071634b81639803d5d068f89fd94d4e"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--notification-card-stays-fixed-through-Drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "862d3d45a4da6a0deec5f414bfe374b20b7232ad8d06b87d36b915152d393915"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--notification-card-stays-fixed-through-Bottom-drawer-entry-nested-layers-and-exit--continuous-card-motion.json",
+          "sha256": "fdec6b691deb479d27c7fddcb5adbcdfd7aa79d9ddcd79e420bdd27809ee4314"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--before-exit.png",
+          "sha256": "0616c1c8eb4480312d8ef05a4cc6e3d90b77b1d8b1e188cae7e62bfaf75aaa9a"
+        },
+        {
+          "file": "chromium-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+          "sha256": "e015167c13df164dfbe31be01a32bccabb7b8a1f284722cb2465c50a6c481917"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--before-exit.png",
+          "sha256": "0616c1c8eb4480312d8ef05a4cc6e3d90b77b1d8b1e188cae7e62bfaf75aaa9a"
+        },
+        {
+          "file": "chromium-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+          "sha256": "8bc4137cb739ac5b157d8fabd5d7c00ac550ccc42f59368a22598ec841b42837"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+          "sha256": "42e1c5bac9aef875283d84c9c0f79899a3c3c1e124af56b7b55b0704136b69bc"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--before-exit.png",
+          "sha256": "0616c1c8eb4480312d8ef05a4cc6e3d90b77b1d8b1e188cae7e62bfaf75aaa9a"
+        },
+        {
+          "file": "chromium-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+          "sha256": "93b66f83ca1f8bd5f8bbdd0e6044e270f50e96bf0dd2c39422acbc7b216a8d97"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--before-exit.png",
+          "sha256": "0616c1c8eb4480312d8ef05a4cc6e3d90b77b1d8b1e188cae7e62bfaf75aaa9a"
+        },
+        {
+          "file": "chromium-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+          "sha256": "1ea324359679648349f52764a4dcdbe4d4f29078b9ecddcdd0f72c7c269d07ad"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+          "sha256": "82ff8ccc51c591871b22b887542f1ea5a0e55e41a99ca7ae735313ce18ba3db3"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--before-exit.png",
+          "sha256": "38605dabf8f07be869ce4b8d63a1f8be8c2d9588c73760e6d9a383faf0e73227"
+        },
+        {
+          "file": "chromium-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+          "sha256": "12b4d4a95ec526c2027a787dde280f1968e78021d59f485c6c4d42a85c528b3c"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--before-exit.png",
+          "sha256": "38605dabf8f07be869ce4b8d63a1f8be8c2d9588c73760e6d9a383faf0e73227"
+        },
+        {
+          "file": "chromium-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+          "sha256": "1c10bad6025f1b46c48ffabd4ae916b9e06e0ed8d396e772425145a912733458"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+          "sha256": "2d3e07c12184b8f259158e2ac10d3233e5fd0748c961829d45759d0fc78fd2f2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--before-exit.png",
+          "sha256": "38605dabf8f07be869ce4b8d63a1f8be8c2d9588c73760e6d9a383faf0e73227"
+        },
+        {
+          "file": "chromium-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+          "sha256": "33ea543b3cec628451749cd2f53f29588f14b9fe05cb6dd283ba26bee417760e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--before-exit.png",
+          "sha256": "38605dabf8f07be869ce4b8d63a1f8be8c2d9588c73760e6d9a383faf0e73227"
+        },
+        {
+          "file": "chromium-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+          "sha256": "d6030082180bd9776e5877489283675d0c5cbe708dc5b8d5977f24d85aa4ef3c"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+          "sha256": "d7d47650a879f573fc06b329ab39e89c582388853677c4d43f4ce6510b20dd47"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--before-exit.png",
+          "sha256": "316e93554ffeeba0731cea39b3f9a0058b5b839d7f9d83eff8de28df000d85f8"
+        },
+        {
+          "file": "chromium-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+          "sha256": "41767b9a97b34e108914cf3cafe08cf85414f09e6b7a8af0dc45551b1e782cc6"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--before-exit.png",
+          "sha256": "316e93554ffeeba0731cea39b3f9a0058b5b839d7f9d83eff8de28df000d85f8"
+        },
+        {
+          "file": "chromium-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+          "sha256": "9afc1822d86809c9e061dc6c760375b51c40f0636c9c8a1eaac0dfa1b3c900ce"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+          "sha256": "7ab273eaaa8056683d9866162b50482931ac6ceb9ce6e3cffb28e6ae65dbcc00"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--before-exit.png",
+          "sha256": "316e93554ffeeba0731cea39b3f9a0058b5b839d7f9d83eff8de28df000d85f8"
+        },
+        {
+          "file": "chromium-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+          "sha256": "0e5ef9658a8ff6ecf979c12e7787e4ce4014465ce71408d5f4d4f4fb80142724"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--before-exit.png",
+          "sha256": "316e93554ffeeba0731cea39b3f9a0058b5b839d7f9d83eff8de28df000d85f8"
+        },
+        {
+          "file": "chromium-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+          "sha256": "bacfdd4a1f3ab5f2f2b94ed80071fd144e9987b8a6dc8f443ec8e86caa776c7b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+          "sha256": "99eea706a1c4347de1d58f17a609a30576cc5e63f7e10ebb07c69e2c012fb1ad"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--before-exit.png",
+          "sha256": "dc8f97128ca6d7ba594b88d0120b61c501da3f03707eef122055f8dcb10e08da"
+        },
+        {
+          "file": "chromium-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+          "sha256": "b37ec2adedd579d0eaf0bf46b322ca151dfc10f438a61e8b2cd5f22618dfedd4"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--before-exit.png",
+          "sha256": "dc8f97128ca6d7ba594b88d0120b61c501da3f03707eef122055f8dcb10e08da"
+        },
+        {
+          "file": "chromium-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+          "sha256": "13547e9c67ce8e745d01aad6bad805651f9b01bfbf830f8149394ea047b5ca4e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+          "sha256": "9ae0ec368887f84881027b86ee8e4c5581a3770b9444f7574c25df672bd6f644"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--before-exit.png",
+          "sha256": "dc8f97128ca6d7ba594b88d0120b61c501da3f03707eef122055f8dcb10e08da"
+        },
+        {
+          "file": "chromium-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+          "sha256": "3955af7a10301f7200bb8545d14b7bf7d23d6621ee02f56cea1ea72c3f22c323"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--before-exit.png",
+          "sha256": "dc8f97128ca6d7ba594b88d0120b61c501da3f03707eef122055f8dcb10e08da"
+        },
+        {
+          "file": "chromium-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+          "sha256": "7ac3765bc34ddd40e30992550e4ae18170fcaedbab6f79c19c019fb547bce2e6"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+          "sha256": "f87b14669046b385b334f201231419da7189498e3a5aa1b48293961d33026e8a"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--before-exit.png",
+          "sha256": "d9a3ac1293b28caed39534c82fb7c0aafc8017f2a125177defb92801f00cfd4a"
+        },
+        {
+          "file": "webkit-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+          "sha256": "a8ded9294844b6d474ae0915a79d2d60ce4dd10634235f04de827058ca060a4c"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--before-exit.png",
+          "sha256": "674c3f1542be07b5563d8730757f291492a7d240c09d56bbd6fe4bbbf3efc396"
+        },
+        {
+          "file": "webkit-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+          "sha256": "76d4de729cdca31f3d5f565092ab804a63d0872f27293f01db02ea89e976edc5"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+          "sha256": "91a571cbc7177faa4525eaa069c08625b65c2fbfd5884e27bfc59e0049495b89"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--before-exit.png",
+          "sha256": "a85c0dbce8670938661135c3ea5ef69323ee3b9a0394067c2fd5b59d200b7935"
+        },
+        {
+          "file": "webkit-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+          "sha256": "92479b412f571a05811ac8ae84c3f37a3e1e78d80a39eb964e8785206184e36f"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--before-exit.png",
+          "sha256": "27110063f367e8762875f540fe98b26ecdf28ab262c96fecdb134c9966905aa9"
+        },
+        {
+          "file": "webkit-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+          "sha256": "66eefe8f8bc057ad14d23e8ef20c2fd6510325261f7a3bc3d59f2cbd3b7f9880"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+          "sha256": "284ec6f78f26f4367548ee20b51953750a889941e52c3e767b062b12f7cff9ae"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--before-exit.png",
+          "sha256": "c2f0200005f5aa22e01a3bb6dbb9542ce307b1991361c40a5df944a880d7e673"
+        },
+        {
+          "file": "webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+          "sha256": "fdb284a1073833848e3d0e15eba3d328511ff91ca6db62c5f2b0bb48b9b8022b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--before-exit.png",
+          "sha256": "c2f0200005f5aa22e01a3bb6dbb9542ce307b1991361c40a5df944a880d7e673"
+        },
+        {
+          "file": "webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+          "sha256": "60df56d2282827be242e8e2e0f4ee1740c03c1413c4a2c01b36ec1094d7f0939"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+          "sha256": "f377537b93539c9f748646fe5f9110f06280ec5813ab4568b837c30323c77b3c"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--before-exit.png",
+          "sha256": "c2f0200005f5aa22e01a3bb6dbb9542ce307b1991361c40a5df944a880d7e673"
+        },
+        {
+          "file": "webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+          "sha256": "c05fb3a4240d702073406517464c461383f4ce869c009a2d8ab8d79edd4035c0"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--before-exit.png",
+          "sha256": "c2f0200005f5aa22e01a3bb6dbb9542ce307b1991361c40a5df944a880d7e673"
+        },
+        {
+          "file": "webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+          "sha256": "515dafa8df3d17d80317a59afa3d99d8850392c00fc5129624ef9d3ccd91710b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+          "sha256": "98d324442ebccf728c823293a856019269e788f06d6c5e8c9397012417159bd8"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--before-exit.png",
+          "sha256": "4701870f80f9ffc4b81cf167231e56302bafdcc50997a5a7284c0afa60614b73"
+        },
+        {
+          "file": "webkit-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+          "sha256": "f508c92dac61282a427d44ec47d1e578ec672a7c929428871e150a0392a3d679"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--before-exit.png",
+          "sha256": "ff0f7d7b2c653031b29d15ad40034fd85168f25f3ab1084cfaa4d33f90795950"
+        },
+        {
+          "file": "webkit-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+          "sha256": "f77c6e4be4e1912f34a0caa81668c1ea94a50416d71eb2c620a5bfdd52a380dc"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+          "sha256": "6a921e10e36c18893e1229fdf8601625a250ffcf5a8472bac2ea4ca6a8cf1658"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--before-exit.png",
+          "sha256": "860e553b9181cc325754cff304509e52ffe54c9d70b35c7cd9244cfcc2877fb7"
+        },
+        {
+          "file": "webkit-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+          "sha256": "0fa4541b16f593518911324c6b755b6f3d1d38e4e72d302c23f0cc87be8c6afd"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--before-exit.png",
+          "sha256": "295b78261f3c43f4438a0dfb7f0cb3752b6128376364306e20a2079deabc0b49"
+        },
+        {
+          "file": "webkit-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+          "sha256": "b5efe6b288ae183e368e41e9e60c0b8ef30ac4680f8a440d6432398699bfc5a9"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+          "sha256": "c3bb91e7a9e1c7e71613f3b48611c61b9624582124357167f62fcdf4f7ef0b09"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--before-exit.png",
+          "sha256": "bee92678fba3f899ff845bd9c357d0f804697c051839715fcc76c342b8aeacff"
+        },
+        {
+          "file": "webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+          "sha256": "a220a2f66ac952d76d1ab656f82235d782511d447e35452d0a2472e2e6ccac27"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--before-exit.png",
+          "sha256": "bee92678fba3f899ff845bd9c357d0f804697c051839715fcc76c342b8aeacff"
+        },
+        {
+          "file": "webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+          "sha256": "fdc13f58009b28bcdf018fdb1a7068615677a4c733b4c4d06588820fac6654b3"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+          "sha256": "c03a84f27ff9fef716cf59cd7e39e03f45d52ab0bccd84e411bd7cfdf7bf42c4"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--before-exit.png",
+          "sha256": "bee92678fba3f899ff845bd9c357d0f804697c051839715fcc76c342b8aeacff"
+        },
+        {
+          "file": "webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+          "sha256": "63d222ba01e52550e1bd9df43c91fadcd1b72c997702d2d7c702402d683fc356"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--before-exit.png",
+          "sha256": "bee92678fba3f899ff845bd9c357d0f804697c051839715fcc76c342b8aeacff"
+        },
+        {
+          "file": "webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+          "sha256": "fec191ec48242045a5ab26921e9db1ef4d8c24604400dd2643b92c0acfbf7c34"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+          "sha256": "ef5c41bce2472875777de4f1fa5e33e9a00298960c97d5fafbbeabbe8f10b44a"
+        }
+      ]
+    }
+  ]
+}

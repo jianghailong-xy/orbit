@@ -1,0 +1,160 @@
+{
+ "ok": true,
+ "layersInValidCase": {
+  "p0-drift": 120,
+  "p0.2": 130,
+  "accepted": 2
+ },
+ "acceptedInValidCase": [
+  {
+   "screenshot": "chromium-light-desktop/project-graph-fullscreen.png",
+   "replaces": "p0-drift"
+  },
+  {
+   "screenshot": "chromium-light-phone/project-graph-fullscreen.png",
+   "replaces": "p0.2"
+  }
+ ],
+ "cases": [
+  {
+   "name": "valid: one entry on a P0.2 original, one stacked on a main drift reference",
+   "expected": "assembled",
+   "outcome": "assembled",
+   "said": [
+    "P0 expected screenshots: 130 P0.2 originals, 120 main drift references, 2 accepted migration differences."
+   ]
+  },
+  {
+   "name": "no decision",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "accepted migration difference chromium-light-phone/project-graph-fullscreen.png: cite the coordinator's CONFIRM decision on the batch's evidence (task id, evidence revision and digest, document)."
+  },
+  {
+   "name": "decision is not CONFIRM",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "accepted migration difference chromium-light-phone/project-graph-fullscreen.png: cite the coordinator's CONFIRM decision on the batch's evidence (task id, evidence revision and digest, document)."
+  },
+  {
+   "name": "no evidence revision",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "accepted migration difference chromium-light-phone/project-graph-fullscreen.png: cite the coordinator's CONFIRM decision on the batch's evidence (task id, evidence revision and digest, document)."
+  },
+  {
+   "name": "evidence revision 0",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "accepted migration difference chromium-light-phone/project-graph-fullscreen.png: cite the coordinator's CONFIRM decision on the batch's evidence (task id, evidence revision and digest, document)."
+  },
+  {
+   "name": "no evidence digest",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "accepted migration difference chromium-light-phone/project-graph-fullscreen.png: cite the coordinator's CONFIRM decision on the batch's evidence (task id, evidence revision and digest, document)."
+  },
+  {
+   "name": "no task id",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "accepted migration difference chromium-light-phone/project-graph-fullscreen.png: cite the coordinator's CONFIRM decision on the batch's evidence (task id, evidence revision and digest, document)."
+  },
+  {
+   "name": "decision document missing",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "accepted migration difference chromium-light-phone/project-graph-fullscreen.png: cite the coordinator's CONFIRM decision on the batch's evidence (task id, evidence revision and digest, document)."
+  },
+  {
+   "name": "no difference description",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "accepted migration difference chromium-light-phone/project-graph-fullscreen.png: describe the accepted difference."
+  },
+  {
+   "name": "replaces the P0.2 original of a main drift screenshot",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "accepted migration difference chromium-light-desktop/project-graph-fullscreen.png: it replaces p0.2 8a403b77fb2a675de59288acf7bf5e8785f2c9c007efe1321eca7c1bd20083a6, but the current expectation is p0-drift 0e129acaf6cb97b227cdd4af76e1a4210cba0824a2a9a404f7bfae091d87fa98; register it again."
+  },
+  {
+   "name": "replaces a stale expectation",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "accepted migration difference chromium-light-phone/project-graph-fullscreen.png: it replaces p0.2 0000000000000000000000000000000000000000000000000000000000000000, but the current expectation is p0.2 5bbdd1f3349bec5251905e2d57de03894d1e270ba0977c708fd63efc0cd7da27; register it again."
+  },
+  {
+   "name": "before commit not a full SHA",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "accepted migration difference chromium-light-phone/project-graph-fullscreen.png: name the before and after commits of its same-commit comparison, run in the P0.2 environment."
+  },
+  {
+   "name": "same-commit run outside the P0.2 environment",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "accepted migration difference chromium-light-phone/project-graph-fullscreen.png: name the before and after commits of its same-commit comparison, run in the P0.2 environment."
+  },
+  {
+   "name": "registered image is not the after original",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "accepted migration difference chromium-light-phone/project-graph-fullscreen.png: register the after original of a comparison whose before original differs."
+  },
+  {
+   "name": "before and after originals identical",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "accepted migration difference chromium-light-phone/project-graph-fullscreen.png: register the after original of a comparison whose before original differs."
+  },
+  {
+   "name": "accepted screenshot changed after registration",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "accepted migration difference chromium-light-phone/project-graph-fullscreen.png: its same-commit originals no longer match their registered SHA-256."
+  },
+  {
+   "name": "before original changed after registration",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "accepted migration difference chromium-light-phone/project-graph-fullscreen.png: its same-commit originals no longer match their registered SHA-256."
+  },
+  {
+   "name": "same screenshot registered twice",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "accepted migration difference chromium-light-phone/project-graph-fullscreen.png: only a P0 screenshot can be registered, once."
+  },
+  {
+   "name": "not a P0 screenshot",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "accepted migration difference chromium-light-phone/not-a-p0-screenshot.png: only a P0 screenshot can be registered, once."
+  },
+  {
+   "name": "unregistered file in accepted/screenshots",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "Unregistered accepted migration difference screenshots: chromium-light-phone/extra.png"
+  },
+  {
+   "name": "unregistered file in accepted/before",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "Unregistered accepted migration difference screenshots: chromium-light-phone/extra.png"
+  },
+  {
+   "name": "main drift reference changed after registration",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "main drift reference chromium-light-desktop/project-graph-fullscreen.png no longer matches its registered SHA-256."
+  },
+  {
+   "name": "unregistered file in the main drift reference",
+   "expected": "refused",
+   "outcome": "refused",
+   "error": "Unregistered main drift reference screenshots: chromium-light-desktop/extra.png"
+  }
+ ]
+}

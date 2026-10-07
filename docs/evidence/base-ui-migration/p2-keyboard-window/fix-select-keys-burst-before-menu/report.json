@@ -1,0 +1,1129 @@
+{
+  "config": {
+    "argv": [
+      "/usr/local/bin/node",
+      "/var/tmp/p2kw-c2604b/before/node_modules/@playwright/test/cli.js",
+      "test",
+      "--config",
+      "docs/evidence/base-ui-migration/p2-select-keys/select-keys-burst.config.mjs",
+      "--project",
+      "chromium-dark-desktop",
+      "--grep",
+      "orbit-menu "
+    ],
+    "configFile": "/var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-select-keys/select-keys-burst.config.mjs",
+    "rootDir": "/var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-select-keys",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": "/var/tmp/p2kw-c2604b/before/src/web/ui-migration/environment.mjs",
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/before/src/web/.choices-results/p2-select-keys-burst",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-light-desktop",
+        "name": "chromium-light-desktop",
+        "testDir": "/var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-select-keys",
+        "testIgnore": [],
+        "testMatch": [
+          "select-keys-burst.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/before/src/web/.choices-results/p2-select-keys-burst",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-light-phone",
+        "name": "chromium-light-phone",
+        "testDir": "/var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-select-keys",
+        "testIgnore": [],
+        "testMatch": [
+          "select-keys-burst.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/before/src/web/.choices-results/p2-select-keys-burst",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-dark-desktop",
+        "name": "chromium-dark-desktop",
+        "testDir": "/var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-select-keys",
+        "testIgnore": [],
+        "testMatch": [
+          "select-keys-burst.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/before/src/web/.choices-results/p2-select-keys-burst",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-dark-phone",
+        "name": "chromium-dark-phone",
+        "testDir": "/var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-select-keys",
+        "testIgnore": [],
+        "testMatch": [
+          "select-keys-burst.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/before/src/web/.choices-results/p2-select-keys-burst",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-light-desktop",
+        "name": "webkit-light-desktop",
+        "testDir": "/var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-select-keys",
+        "testIgnore": [],
+        "testMatch": [
+          "select-keys-burst.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/before/src/web/.choices-results/p2-select-keys-burst",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-light-phone",
+        "name": "webkit-light-phone",
+        "testDir": "/var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-select-keys",
+        "testIgnore": [],
+        "testMatch": [
+          "select-keys-burst.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/before/src/web/.choices-results/p2-select-keys-burst",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-dark-desktop",
+        "name": "webkit-dark-desktop",
+        "testDir": "/var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-select-keys",
+        "testIgnore": [],
+        "testMatch": [
+          "select-keys-burst.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/var/tmp/p2kw-c2604b/before/src/web/.choices-results/p2-select-keys-burst",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-dark-phone",
+        "name": "webkit-dark-phone",
+        "testDir": "/var/tmp/p2kw-c2604b/before/docs/evidence/base-ui-migration/p2-select-keys",
+        "testIgnore": [],
+        "testMatch": [
+          "select-keys-burst.browser.mjs"
+        ],
+        "timeout": 90000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "/var/tmp/p2kw-c2604b/before/src/web/.choices-results/p2-select-keys-burst/report.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "none",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": {
+      "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+      "cwd": "/var/tmp/p2kw-c2604b/before/src/web/",
+      "url": "http://127.0.0.1:4177",
+      "reuseExistingServer": false,
+      "timeout": 30000
+    }
+  },
+  "suites": [
+    {
+      "title": "select-keys-burst.browser.mjs",
+      "file": "select-keys-burst.browser.mjs",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "orbit-menu down-down-enter burst sample 0",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2183,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:46:56.604Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAiYnVyc3QiLAogICJydW4iOiAwLAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiQXJyb3dEb3duIiwKICAgICJFbnRlciIKICBdLAogICJiZWZvcmUiOiAibm9uZSIsCiAgImFmdGVyIjogIm5vbmUiLAogICJleHBlY3RlZCI6IG51bGwsCiAgImxpc3Rib3hPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICJrZXlMb2ciOiBbCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiAzNi44LAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICJBcnJvd0Rvd24iLAogICAgICAidCI6IDcyLjksCiAgICAgICJ0YXJnZXQiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJGaWxlIgogICAgfSwKICAgIHsKICAgICAgImtleSI6ICJFbnRlciIsCiAgICAgICJ0IjogNzMuNCwKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIkZpbGUiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-140267b22fadeeafdab1",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter burst sample 1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1506,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:46:58.873Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAiYnVyc3QiLAogICJydW4iOiAxLAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiQXJyb3dEb3duIiwKICAgICJFbnRlciIKICBdLAogICJiZWZvcmUiOiAibm9uZSIsCiAgImFmdGVyIjogIm5vbmUiLAogICJleHBlY3RlZCI6IG51bGwsCiAgImxpc3Rib3hPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICJrZXlMb2ciOiBbCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiAzMS44LAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICJBcnJvd0Rvd24iLAogICAgICAidCI6IDU3LjksCiAgICAgICJ0YXJnZXQiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJGaWxlIgogICAgfSwKICAgIHsKICAgICAgImtleSI6ICJFbnRlciIsCiAgICAgICJ0IjogNTguMywKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIkZpbGUiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-bb44e7f41b39e95d23f9",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter burst sample 2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1754,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:47:00.390Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAiYnVyc3QiLAogICJydW4iOiAyLAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiQXJyb3dEb3duIiwKICAgICJFbnRlciIKICBdLAogICJiZWZvcmUiOiAibm9uZSIsCiAgImFmdGVyIjogIm5vbmUiLAogICJleHBlY3RlZCI6IG51bGwsCiAgImxpc3Rib3hPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICJrZXlMb2ciOiBbCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiA1MS4zLAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICJBcnJvd0Rvd24iLAogICAgICAidCI6IDgzLjMsCiAgICAgICJ0YXJnZXQiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJGaWxlIgogICAgfSwKICAgIHsKICAgICAgImtleSI6ICJFbnRlciIsCiAgICAgICJ0IjogODMuOSwKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIkZpbGUiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-51f528b1e74ac0128190",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter burst sample 3",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1444,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:47:02.156Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAiYnVyc3QiLAogICJydW4iOiAzLAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiQXJyb3dEb3duIiwKICAgICJFbnRlciIKICBdLAogICJiZWZvcmUiOiAibm9uZSIsCiAgImFmdGVyIjogIm5vbmUiLAogICJleHBlY3RlZCI6IG51bGwsCiAgImxpc3Rib3hPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICJrZXlMb2ciOiBbCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiAzOC43LAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICJBcnJvd0Rvd24iLAogICAgICAidCI6IDY2LjgsCiAgICAgICJ0YXJnZXQiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJGaWxlIgogICAgfSwKICAgIHsKICAgICAgImtleSI6ICJFbnRlciIsCiAgICAgICJ0IjogNjcuMSwKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIkZpbGUiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-b95c2e93d36aed24af62",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter burst sample 4",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1568,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:47:03.606Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAiYnVyc3QiLAogICJydW4iOiA0LAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiQXJyb3dEb3duIiwKICAgICJFbnRlciIKICBdLAogICJiZWZvcmUiOiAibm9uZSIsCiAgImFmdGVyIjogIm5vbmUiLAogICJleHBlY3RlZCI6IG51bGwsCiAgImxpc3Rib3hPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICJrZXlMb2ciOiBbCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiA0NC42LAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICJBcnJvd0Rvd24iLAogICAgICAidCI6IDcxLAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiRmlsZSIKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiRW50ZXIiLAogICAgICAidCI6IDcxLjMsCiAgICAgICJ0YXJnZXQiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJGaWxlIgogICAgfQogIF0KfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-e8a5363bbf4e9caf30e1",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter burst sample 5",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1511,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:47:05.179Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAiYnVyc3QiLAogICJydW4iOiA1LAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiQXJyb3dEb3duIiwKICAgICJFbnRlciIKICBdLAogICJiZWZvcmUiOiAibm9uZSIsCiAgImFmdGVyIjogIm5vbmUiLAogICJleHBlY3RlZCI6IG51bGwsCiAgImxpc3Rib3hPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICJrZXlMb2ciOiBbCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiAyOC41LAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICJBcnJvd0Rvd24iLAogICAgICAidCI6IDYxLjEsCiAgICAgICJ0YXJnZXQiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJGaWxlIgogICAgfSwKICAgIHsKICAgICAgImtleSI6ICJFbnRlciIsCiAgICAgICJ0IjogNjEuNSwKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIkZpbGUiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-22c3b9f44a86bc558959",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter burst sample 6",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1482,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:47:06.695Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAiYnVyc3QiLAogICJydW4iOiA2LAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiQXJyb3dEb3duIiwKICAgICJFbnRlciIKICBdLAogICJiZWZvcmUiOiAibm9uZSIsCiAgImFmdGVyIjogIm5vbmUiLAogICJleHBlY3RlZCI6IG51bGwsCiAgImxpc3Rib3hPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICJrZXlMb2ciOiBbCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiA0Mi43LAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICJBcnJvd0Rvd24iLAogICAgICAidCI6IDk1LjMsCiAgICAgICJ0YXJnZXQiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJGaWxlIgogICAgfSwKICAgIHsKICAgICAgImtleSI6ICJFbnRlciIsCiAgICAgICJ0IjogOTUuNywKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIkZpbGUiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-545789cc948baad2b4e7",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter burst sample 7",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1426,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:47:08.182Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAiYnVyc3QiLAogICJydW4iOiA3LAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiQXJyb3dEb3duIiwKICAgICJFbnRlciIKICBdLAogICJiZWZvcmUiOiAibm9uZSIsCiAgImFmdGVyIjogIm5vbmUiLAogICJleHBlY3RlZCI6IG51bGwsCiAgImxpc3Rib3hPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICJrZXlMb2ciOiBbCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiAzNCwKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiA2NS44LAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiRmlsZSIKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiRW50ZXIiLAogICAgICAidCI6IDY2LjMsCiAgICAgICJ0YXJnZXQiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJGaWxlIgogICAgfQogIF0KfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-35190a02cfec5c0790b4",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter burst sample 8",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1512,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:47:09.613Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAiYnVyc3QiLAogICJydW4iOiA4LAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiQXJyb3dEb3duIiwKICAgICJFbnRlciIKICBdLAogICJiZWZvcmUiOiAibm9uZSIsCiAgImFmdGVyIjogIm5vbmUiLAogICJleHBlY3RlZCI6IG51bGwsCiAgImxpc3Rib3hPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICJrZXlMb2ciOiBbCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiA0My4yLAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICJBcnJvd0Rvd24iLAogICAgICAidCI6IDcwLjYsCiAgICAgICJ0YXJnZXQiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJGaWxlIgogICAgfSwKICAgIHsKICAgICAgImtleSI6ICJFbnRlciIsCiAgICAgICJ0IjogNzAuOSwKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIkZpbGUiCiAgICB9CiAgXQp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-435607508b9d78c15d09",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter burst sample 9",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1527,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:47:11.130Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAiYnVyc3QiLAogICJydW4iOiA5LAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiQXJyb3dEb3duIiwKICAgICJFbnRlciIKICBdLAogICJiZWZvcmUiOiAibm9uZSIsCiAgImFmdGVyIjogIm5vbmUiLAogICJleHBlY3RlZCI6IG51bGwsCiAgImxpc3Rib3hPcGVuIjogZmFsc2UsCiAgImFjdGl2ZSI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICJrZXlMb2ciOiBbCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiA0MS45LAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiBmYWxzZSwKICAgICAgImhpZ2hsaWdodGVkIjogbnVsbAogICAgfSwKICAgIHsKICAgICAgImtleSI6ICJBcnJvd0Rvd24iLAogICAgICAidCI6IDY3LAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiRmlsZSIKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiRW50ZXIiLAogICAgICAidCI6IDY3LjMsCiAgICAgICJ0YXJnZXQiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJGaWxlIgogICAgfQogIF0KfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-bc30bade5d31b6e797ef",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter burst sample 10",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1478,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:47:12.662Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAiYnVyc3QiLAogICJydW4iOiAxMCwKICAia2V5cyI6IFsKICAgICJBcnJvd0Rvd24iLAogICAgIkFycm93RG93biIsCiAgICAiRW50ZXIiCiAgXSwKICAiYmVmb3JlIjogIm5vbmUiLAogICJhZnRlciI6ICJub25lIiwKICAiZXhwZWN0ZWQiOiBudWxsLAogICJsaXN0Ym94T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogMzAuMiwKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiA1NC44LAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiRmlsZSIKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiRW50ZXIiLAogICAgICAidCI6IDU1LjEsCiAgICAgICJ0YXJnZXQiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJGaWxlIgogICAgfQogIF0KfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-e9d77f76aeb5746a8f7c",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter burst sample 11",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1503,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:47:14.145Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAiYnVyc3QiLAogICJydW4iOiAxMSwKICAia2V5cyI6IFsKICAgICJBcnJvd0Rvd24iLAogICAgIkFycm93RG93biIsCiAgICAiRW50ZXIiCiAgXSwKICAiYmVmb3JlIjogIm5vbmUiLAogICJhZnRlciI6ICJub25lIiwKICAiZXhwZWN0ZWQiOiBudWxsLAogICJsaXN0Ym94T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogMzIuMiwKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiA2MSwKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIkZpbGUiCiAgICB9LAogICAgewogICAgICAia2V5IjogIkVudGVyIiwKICAgICAgInQiOiA2MS41LAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiRmlsZSIKICAgIH0KICBdCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-84d7e50e3739cd4ea26d",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter burst sample 12",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1423,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:47:15.652Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAiYnVyc3QiLAogICJydW4iOiAxMiwKICAia2V5cyI6IFsKICAgICJBcnJvd0Rvd24iLAogICAgIkFycm93RG93biIsCiAgICAiRW50ZXIiCiAgXSwKICAiYmVmb3JlIjogIm5vbmUiLAogICJhZnRlciI6ICJub25lIiwKICAiZXhwZWN0ZWQiOiBudWxsLAogICJsaXN0Ym94T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogMzcsCiAgICAgICJ0YXJnZXQiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IGZhbHNlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiBudWxsCiAgICB9LAogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogNjIuNywKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIkZpbGUiCiAgICB9LAogICAgewogICAgICAia2V5IjogIkVudGVyIiwKICAgICAgInQiOiA2My4xLAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiRmlsZSIKICAgIH0KICBdCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-d38eda055f4ce78d5d92",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter burst sample 13",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1566,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:47:17.079Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAiYnVyc3QiLAogICJydW4iOiAxMywKICAia2V5cyI6IFsKICAgICJBcnJvd0Rvd24iLAogICAgIkFycm93RG93biIsCiAgICAiRW50ZXIiCiAgXSwKICAiYmVmb3JlIjogIm5vbmUiLAogICJhZnRlciI6ICJub25lIiwKICAiZXhwZWN0ZWQiOiBudWxsLAogICJsaXN0Ym94T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogMzYuNCwKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiA2NC4yLAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiRmlsZSIKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiRW50ZXIiLAogICAgICAidCI6IDY0LjUsCiAgICAgICJ0YXJnZXQiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJGaWxlIgogICAgfQogIF0KfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-b3af24a0445b1e511a2d",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter burst sample 14",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1475,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:47:18.648Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAiYnVyc3QiLAogICJydW4iOiAxNCwKICAia2V5cyI6IFsKICAgICJBcnJvd0Rvd24iLAogICAgIkFycm93RG93biIsCiAgICAiRW50ZXIiCiAgXSwKICAiYmVmb3JlIjogIm5vbmUiLAogICJhZnRlciI6ICJub25lIiwKICAiZXhwZWN0ZWQiOiBudWxsLAogICJsaXN0Ym94T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogMzMuNSwKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiA1OC44LAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiRmlsZSIKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiRW50ZXIiLAogICAgICAidCI6IDU5LjEsCiAgICAgICJ0YXJnZXQiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJGaWxlIgogICAgfQogIF0KfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-0de2abfe1e2d6ccc6587",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter burst sample 15",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1418,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:47:20.127Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAiYnVyc3QiLAogICJydW4iOiAxNSwKICAia2V5cyI6IFsKICAgICJBcnJvd0Rvd24iLAogICAgIkFycm93RG93biIsCiAgICAiRW50ZXIiCiAgXSwKICAiYmVmb3JlIjogIm5vbmUiLAogICJhZnRlciI6ICJub25lIiwKICAiZXhwZWN0ZWQiOiBudWxsLAogICJsaXN0Ym94T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogMzUuOCwKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiA2My45LAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiRmlsZSIKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiRW50ZXIiLAogICAgICAidCI6IDY0LjMsCiAgICAgICJ0YXJnZXQiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJGaWxlIgogICAgfQogIF0KfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-28791dd34699b3561a20",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter burst sample 16",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1473,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:47:21.549Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAiYnVyc3QiLAogICJydW4iOiAxNiwKICAia2V5cyI6IFsKICAgICJBcnJvd0Rvd24iLAogICAgIkFycm93RG93biIsCiAgICAiRW50ZXIiCiAgXSwKICAiYmVmb3JlIjogIm5vbmUiLAogICJhZnRlciI6ICJub25lIiwKICAiZXhwZWN0ZWQiOiBudWxsLAogICJsaXN0Ym94T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogMjcsCiAgICAgICJ0YXJnZXQiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IGZhbHNlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiBudWxsCiAgICB9LAogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogNTEuNSwKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIkZpbGUiCiAgICB9LAogICAgewogICAgICAia2V5IjogIkVudGVyIiwKICAgICAgInQiOiA1MS44LAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiRmlsZSIKICAgIH0KICBdCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-adbdf7f25aa2b2c73594",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter burst sample 17",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1503,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:47:23.026Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAiYnVyc3QiLAogICJydW4iOiAxNywKICAia2V5cyI6IFsKICAgICJBcnJvd0Rvd24iLAogICAgIkFycm93RG93biIsCiAgICAiRW50ZXIiCiAgXSwKICAiYmVmb3JlIjogIm5vbmUiLAogICJhZnRlciI6ICJub25lIiwKICAiZXhwZWN0ZWQiOiBudWxsLAogICJsaXN0Ym94T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogNDEuNywKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiA2Ny44LAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiRmlsZSIKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiRW50ZXIiLAogICAgICAidCI6IDY4LjIsCiAgICAgICJ0YXJnZXQiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJGaWxlIgogICAgfQogIF0KfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-050970b197ef1e6c7ea0",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter burst sample 18",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1483,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:47:24.532Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAiYnVyc3QiLAogICJydW4iOiAxOCwKICAia2V5cyI6IFsKICAgICJBcnJvd0Rvd24iLAogICAgIkFycm93RG93biIsCiAgICAiRW50ZXIiCiAgXSwKICAiYmVmb3JlIjogIm5vbmUiLAogICJhZnRlciI6ICJub25lIiwKICAiZXhwZWN0ZWQiOiBudWxsLAogICJsaXN0Ym94T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogMzIsCiAgICAgICJ0YXJnZXQiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IGZhbHNlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiBudWxsCiAgICB9LAogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogNjIuMywKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIkZpbGUiCiAgICB9LAogICAgewogICAgICAia2V5IjogIkVudGVyIiwKICAgICAgInQiOiA2Mi43LAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiRmlsZSIKICAgIH0KICBdCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-be34166b148c9a4373ce",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter burst sample 19",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1497,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:47:26.018Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAiYnVyc3QiLAogICJydW4iOiAxOSwKICAia2V5cyI6IFsKICAgICJBcnJvd0Rvd24iLAogICAgIkFycm93RG93biIsCiAgICAiRW50ZXIiCiAgXSwKICAiYmVmb3JlIjogIm5vbmUiLAogICJhZnRlciI6ICJub25lIiwKICAiZXhwZWN0ZWQiOiBudWxsLAogICJsaXN0Ym94T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogMjYsCiAgICAgICJ0YXJnZXQiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IGZhbHNlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiBudWxsCiAgICB9LAogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogNTQuOSwKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIkZpbGUiCiAgICB9LAogICAgewogICAgICAia2V5IjogIkVudGVyIiwKICAgICAgInQiOiA1NS40LAogICAgICAidGFyZ2V0IjogImJ1dHRvbjpBZGQgYXR0YWNobWVudCIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiRmlsZSIKICAgIH0KICBdCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-916ee2a7a745d946e9bd",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter paced sample 0",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2395,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:47:27.519Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAicGFjZWQiLAogICJydW4iOiAwLAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiQXJyb3dEb3duIiwKICAgICJFbnRlciIKICBdLAogICJiZWZvcmUiOiAibm9uZSIsCiAgImFmdGVyIjogImltYWdlIiwKICAiZXhwZWN0ZWQiOiBudWxsLAogICJsaXN0Ym94T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogMzQuMiwKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiAzNzEuOCwKICAgICAgInRhcmdldCI6ICJtZW51aXRlbTpGaWxlIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJGaWxlIgogICAgfSwKICAgIHsKICAgICAgImtleSI6ICJFbnRlciIsCiAgICAgICJ0IjogNjg1LjUsCiAgICAgICJ0YXJnZXQiOiAibWVudWl0ZW06SW1hZ2UiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIkltYWdlIgogICAgfQogIF0KfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-713a12dc3398aea62639",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter paced sample 1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2444,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:47:29.919Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAicGFjZWQiLAogICJydW4iOiAxLAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiQXJyb3dEb3duIiwKICAgICJFbnRlciIKICBdLAogICJiZWZvcmUiOiAibm9uZSIsCiAgImFmdGVyIjogImltYWdlIiwKICAiZXhwZWN0ZWQiOiBudWxsLAogICJsaXN0Ym94T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogMzguNSwKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiAzNzgsCiAgICAgICJ0YXJnZXQiOiAibWVudWl0ZW06RmlsZSIsCiAgICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICAgImxpc3Rib3giOiB0cnVlLAogICAgICAiaGlnaGxpZ2h0ZWQiOiAiRmlsZSIKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiRW50ZXIiLAogICAgICAidCI6IDY4Ni44LAogICAgICAidGFyZ2V0IjogIm1lbnVpdGVtOkltYWdlIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJJbWFnZSIKICAgIH0KICBdCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-41c546262224cc59f17d",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        },
+        {
+          "title": "orbit-menu down-down-enter paced sample 2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2465,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-07T05:47:32.367Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "select-keys",
+                      "contentType": "application/json",
+                      "body": "ewogICJ0YXJnZXQiOiAib3JiaXQtbWVudSIsCiAgInNlcXVlbmNlIjogImRvd24tZG93bi1lbnRlciIsCiAgIm1vZGUiOiAicGFjZWQiLAogICJydW4iOiAyLAogICJrZXlzIjogWwogICAgIkFycm93RG93biIsCiAgICAiQXJyb3dEb3duIiwKICAgICJFbnRlciIKICBdLAogICJiZWZvcmUiOiAibm9uZSIsCiAgImFmdGVyIjogImltYWdlIiwKICAiZXhwZWN0ZWQiOiBudWxsLAogICJsaXN0Ym94T3BlbiI6IGZhbHNlLAogICJhY3RpdmUiOiAiYnV0dG9uOkFkZCBhdHRhY2htZW50IiwKICAia2V5TG9nIjogWwogICAgewogICAgICAia2V5IjogIkFycm93RG93biIsCiAgICAgICJ0IjogMzYuOSwKICAgICAgInRhcmdldCI6ICJidXR0b246QWRkIGF0dGFjaG1lbnQiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogZmFsc2UsCiAgICAgICJoaWdobGlnaHRlZCI6IG51bGwKICAgIH0sCiAgICB7CiAgICAgICJrZXkiOiAiQXJyb3dEb3duIiwKICAgICAgInQiOiAzNzguMSwKICAgICAgInRhcmdldCI6ICJtZW51aXRlbTpGaWxlIiwKICAgICAgInRydXN0ZWQiOiB0cnVlLAogICAgICAibGlzdGJveCI6IHRydWUsCiAgICAgICJoaWdobGlnaHRlZCI6ICJGaWxlIgogICAgfSwKICAgIHsKICAgICAgImtleSI6ICJFbnRlciIsCiAgICAgICJ0IjogNjk2LjUsCiAgICAgICJ0YXJnZXQiOiAibWVudWl0ZW06SW1hZ2UiLAogICAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAgICJsaXN0Ym94IjogdHJ1ZSwKICAgICAgImhpZ2hsaWdodGVkIjogIkltYWdlIgogICAgfQogIF0KfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c40270df147273c26564-9a105a091e77af3ac251",
+          "file": "select-keys-burst.browser.mjs",
+          "line": 60,
+          "column": 3
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-07T05:46:55.174Z",
+    "duration": 39883.310000000005,
+    "expected": 23,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

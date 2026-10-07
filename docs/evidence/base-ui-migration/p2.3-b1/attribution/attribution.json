@@ -1,0 +1,1107 @@
+{
+ "breakpoints": [
+  {
+   "commit": "383594ee2fe398e18a4b94bcd2f4eff64af926a6",
+   "subject": "perf(apiserver): join a project's tasks to its sessions instead of expanding their ids",
+   "outcomes": {
+    "chromium-light-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "chromium-dark-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-light-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-dark-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    }
+   },
+   "screenshots": {
+    "chromium-dark-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 11,
+      "maxChannelDelta": 1
+     }
+    },
+    "chromium-light-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    },
+    "webkit-dark-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    },
+    "webkit-light-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    }
+   }
+  },
+  {
+   "commit": "4920dab40a38c7df700a0bd50f93531bd768b844",
+   "subject": "Merge origin/main into orbit/apiserver-get-sessions-projectid-15-6dec8c",
+   "outcomes": {
+    "chromium-light-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "chromium-dark-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-light-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-dark-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    }
+   },
+   "screenshots": {
+    "chromium-dark-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     },
+     "vsPreviousRun": {
+      "differentPixels": 11,
+      "maxChannelDelta": 1
+     }
+    },
+    "chromium-light-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 44,
+      "maxChannelDelta": 2
+     },
+     "vsPreviousRun": {
+      "differentPixels": 44,
+      "maxChannelDelta": 2
+     }
+    },
+    "webkit-dark-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     },
+     "vsPreviousRun": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    },
+    "webkit-light-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     },
+     "vsPreviousRun": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    }
+   }
+  },
+  {
+   "commit": "0982d8ed842bb2fc8efa649a054a401fcda0e2ec",
+   "subject": "Merge refs/heads/project/34ajNeEYWbtCQL3gazPPj into refs/heads/main",
+   "outcomes": {
+    "chromium-light-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "chromium-dark-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-light-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-dark-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    }
+   },
+   "screenshots": {
+    "chromium-dark-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     },
+     "vsPreviousRun": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    },
+    "chromium-light-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 97,
+      "maxChannelDelta": 2
+     },
+     "vsPreviousRun": {
+      "differentPixels": 113,
+      "maxChannelDelta": 2
+     }
+    },
+    "webkit-dark-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     },
+     "vsPreviousRun": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    },
+    "webkit-light-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     },
+     "vsPreviousRun": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    }
+   }
+  },
+  {
+   "commit": "dcfb5adf622147edb5f25126cb735ad12e43e1cf",
+   "subject": "Merge refs/heads/project/34b6G5PenLgreIF9F7qQZ into refs/heads/main",
+   "outcomes": {
+    "chromium-light-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "chromium-dark-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-light-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-dark-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    }
+   },
+   "screenshots": {
+    "chromium-dark-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "305 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 6255,
+      "maxChannelDelta": 178
+     },
+     "vsPreviousRun": {
+      "differentPixels": 6255,
+      "maxChannelDelta": 178
+     }
+    },
+    "chromium-light-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "313 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 2273,
+      "maxChannelDelta": 224
+     },
+     "vsPreviousRun": {
+      "differentPixels": 2321,
+      "maxChannelDelta": 224
+     }
+    },
+    "webkit-dark-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "305 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 6265,
+      "maxChannelDelta": 178
+     },
+     "vsPreviousRun": {
+      "differentPixels": 6265,
+      "maxChannelDelta": 178
+     }
+    },
+    "webkit-light-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "314 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 2274,
+      "maxChannelDelta": 224
+     },
+     "vsPreviousRun": {
+      "differentPixels": 2274,
+      "maxChannelDelta": 224
+     }
+    }
+   }
+  },
+  {
+   "commit": "51f0cdfeeb9e91573fe3f85c5e6473195ea9498f",
+   "subject": "Merge refs/heads/project/34b8pthjtmO06pvd8i3FW into refs/heads/main",
+   "outcomes": {
+    "chromium-light-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "chromium-dark-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-light-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-dark-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    }
+   },
+   "screenshots": {
+    "chromium-dark-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "305 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 6243,
+      "maxChannelDelta": 178
+     },
+     "vsPreviousRun": {
+      "differentPixels": 29,
+      "maxChannelDelta": 1
+     }
+    },
+    "chromium-light-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "313 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 2259,
+      "maxChannelDelta": 224
+     },
+     "vsPreviousRun": {
+      "differentPixels": 35,
+      "maxChannelDelta": 2
+     }
+    },
+    "webkit-dark-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "305 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 6265,
+      "maxChannelDelta": 178
+     },
+     "vsPreviousRun": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    },
+    "webkit-light-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "314 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 2274,
+      "maxChannelDelta": 224
+     },
+     "vsPreviousRun": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    }
+   }
+  },
+  {
+   "commit": "be0f8c22a5891c98806eee135c132dbea138c698",
+   "subject": "Merge refs/heads/project/34b6G5PenLgreIF9F7qQZ into refs/heads/main",
+   "outcomes": {
+    "chromium-light-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "chromium-dark-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-light-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-dark-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    }
+   },
+   "screenshots": {
+    "chromium-dark-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "8787 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 202131,
+      "maxChannelDelta": 220
+     },
+     "vsPreviousRun": {
+      "differentPixels": 195905,
+      "maxChannelDelta": 220
+     }
+    },
+    "chromium-light-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "8872 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 74725,
+      "maxChannelDelta": 224
+     },
+     "vsPreviousRun": {
+      "differentPixels": 72487,
+      "maxChannelDelta": 224
+     }
+    },
+    "webkit-dark-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "8840 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 202230,
+      "maxChannelDelta": 220
+     },
+     "vsPreviousRun": {
+      "differentPixels": 195965,
+      "maxChannelDelta": 220
+     }
+    },
+    "webkit-light-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "9047 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 75191,
+      "maxChannelDelta": 225
+     },
+     "vsPreviousRun": {
+      "differentPixels": 72917,
+      "maxChannelDelta": 225
+     }
+    }
+   }
+  },
+  {
+   "commit": "b2e05492f6addfedcdbe575207df9922cb7c6415",
+   "subject": "Merge refs/heads/project/34b8pthjtmO06pvd8i3FW into refs/heads/main",
+   "outcomes": {
+    "chromium-light-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "chromium-dark-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-light-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-dark-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    }
+   },
+   "screenshots": {
+    "chromium-dark-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "8787 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 202131,
+      "maxChannelDelta": 220
+     },
+     "vsPreviousRun": {
+      "differentPixels": 12,
+      "maxChannelDelta": 2
+     }
+    },
+    "chromium-light-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "8872 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 74726,
+      "maxChannelDelta": 224
+     },
+     "vsPreviousRun": {
+      "differentPixels": 22,
+      "maxChannelDelta": 2
+     }
+    },
+    "webkit-dark-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "8840 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 202230,
+      "maxChannelDelta": 220
+     },
+     "vsPreviousRun": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    },
+    "webkit-light-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "9047 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 75191,
+      "maxChannelDelta": 225
+     },
+     "vsPreviousRun": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    }
+   }
+  },
+  {
+   "commit": "30cf8978649e37f6f59979975a52a3a12b3cea05",
+   "subject": "Merge refs/heads/project/34b6G5PenLgreIF9F7qQZ into refs/heads/main",
+   "outcomes": {
+    "chromium-light-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "chromium-dark-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-light-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-dark-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    }
+   },
+   "screenshots": {
+    "chromium-dark-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "8787 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 202131,
+      "maxChannelDelta": 220
+     },
+     "vsPreviousRun": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    },
+    "chromium-light-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "8872 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 74725,
+      "maxChannelDelta": 224
+     },
+     "vsPreviousRun": {
+      "differentPixels": 22,
+      "maxChannelDelta": 2
+     }
+    },
+    "webkit-dark-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "8840 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 202230,
+      "maxChannelDelta": 220
+     },
+     "vsPreviousRun": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    },
+    "webkit-light-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "9047 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 75191,
+      "maxChannelDelta": 225
+     },
+     "vsPreviousRun": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    }
+   }
+  },
+  {
+   "commit": "f86211ec364d3d41e2035a91295e4ab11d9a03d8",
+   "subject": "Merge refs/heads/project/34b9KDmnRzopeuF1enIN6 into refs/heads/main",
+   "outcomes": {
+    "chromium-light-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "chromium-dark-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-light-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-dark-desktop | both sides of existing 600, 640 and 960px rules": {
+     "status": "expected",
+     "error": null
+    }
+   },
+   "screenshots": {
+    "chromium-dark-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "8787 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 202131,
+      "maxChannelDelta": 220
+     },
+     "vsPreviousRun": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    },
+    "chromium-light-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "8872 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 74725,
+      "maxChannelDelta": 224
+     },
+     "vsPreviousRun": {
+      "differentPixels": 14,
+      "maxChannelDelta": 2
+     }
+    },
+    "webkit-dark-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "8840 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 202230,
+      "maxChannelDelta": 220
+     },
+     "vsPreviousRun": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    },
+    "webkit-light-desktop/breakpoint-959-wiki.png": {
+     "vsP0Expectation": "9047 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 75191,
+      "maxChannelDelta": 225
+     },
+     "vsPreviousRun": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    }
+   }
+  }
+ ],
+ "profile": [
+  {
+   "commit": "85b18b6460c23b680787f7a1df340b3943e62256",
+   "subject": "docs: add Antigravity multi-account design mocks",
+   "outcomes": {
+    "chromium-light-desktop | profile": {
+     "status": "expected",
+     "error": null
+    },
+    "chromium-light-phone | profile": {
+     "status": "expected",
+     "error": null
+    },
+    "chromium-dark-desktop | profile": {
+     "status": "expected",
+     "error": null
+    },
+    "chromium-dark-phone | profile": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-light-desktop | profile": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-light-phone | profile": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-dark-desktop | profile": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-dark-phone | profile": {
+     "status": "expected",
+     "error": null
+    }
+   },
+   "screenshots": {
+    "chromium-dark-desktop/profile-validation.png": {
+     "vsP0Expectation": "18 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 496,
+      "maxChannelDelta": 88
+     }
+    },
+    "chromium-dark-desktop/profile.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    },
+    "chromium-dark-phone/profile-validation.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 389,
+      "maxChannelDelta": 48
+     }
+    },
+    "chromium-dark-phone/profile.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    },
+    "chromium-light-desktop/profile-validation.png": {
+     "vsP0Expectation": "83 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 584,
+      "maxChannelDelta": 113
+     }
+    },
+    "chromium-light-desktop/profile.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    },
+    "chromium-light-phone/profile-validation.png": {
+     "vsP0Expectation": "22 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 318,
+      "maxChannelDelta": 60
+     }
+    },
+    "chromium-light-phone/profile.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    },
+    "webkit-dark-desktop/profile-validation.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    },
+    "webkit-dark-desktop/profile.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    },
+    "webkit-dark-phone/profile-validation.png": {
+     "vsP0Expectation": "339 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 3994,
+      "maxChannelDelta": 167
+     }
+    },
+    "webkit-dark-phone/profile.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    },
+    "webkit-light-desktop/profile-validation.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    },
+    "webkit-light-desktop/profile.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    },
+    "webkit-light-phone/profile-validation.png": {
+     "vsP0Expectation": "376 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 4863,
+      "maxChannelDelta": 224
+     }
+    },
+    "webkit-light-phone/profile.png": {
+     "vsP0Expectation": "match",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 0,
+      "maxChannelDelta": 0
+     }
+    }
+   }
+  },
+  {
+   "commit": "86c6d2d4df03f541a9ef6b5c57bf2ee0e365c181",
+   "subject": "Merge refs/heads/project/34ajNeEYWbtCQL3gazPPj into refs/heads/main",
+   "outcomes": {
+    "chromium-light-desktop | profile": {
+     "status": "expected",
+     "error": null
+    },
+    "chromium-light-phone | profile": {
+     "status": "expected",
+     "error": null
+    },
+    "chromium-dark-desktop | profile": {
+     "status": "expected",
+     "error": null
+    },
+    "chromium-dark-phone | profile": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-light-desktop | profile": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-light-phone | profile": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-dark-desktop | profile": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-dark-phone | profile": {
+     "status": "expected",
+     "error": null
+    }
+   },
+   "screenshots": {
+    "chromium-dark-desktop/profile-validation.png": {
+     "vsP0Expectation": "9358 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 64705,
+      "maxChannelDelta": 223
+     },
+     "vsPreviousRun": {
+      "differentPixels": 64221,
+      "maxChannelDelta": 223
+     }
+    },
+    "chromium-dark-desktop/profile.png": {
+     "vsP0Expectation": "9400 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 64203,
+      "maxChannelDelta": 223
+     },
+     "vsPreviousRun": {
+      "differentPixels": 64203,
+      "maxChannelDelta": 223
+     }
+    },
+    "chromium-dark-phone/profile-validation.png": {
+     "vsP0Expectation": "21662 pixels (ratio 0.07 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 72340,
+      "maxChannelDelta": 223
+     },
+     "vsPreviousRun": {
+      "differentPixels": 72037,
+      "maxChannelDelta": 223
+     }
+    },
+    "chromium-dark-phone/profile.png": {
+     "vsP0Expectation": "4795 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 8192,
+      "maxChannelDelta": 212
+     },
+     "vsPreviousRun": {
+      "differentPixels": 8192,
+      "maxChannelDelta": 212
+     }
+    },
+    "chromium-light-desktop/profile-validation.png": {
+     "vsP0Expectation": "9159 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 14437,
+      "maxChannelDelta": 224
+     },
+     "vsPreviousRun": {
+      "differentPixels": 13862,
+      "maxChannelDelta": 224
+     }
+    },
+    "chromium-light-desktop/profile.png": {
+     "vsP0Expectation": "9144 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 13862,
+      "maxChannelDelta": 224
+     },
+     "vsPreviousRun": {
+      "differentPixels": 13862,
+      "maxChannelDelta": 224
+     }
+    },
+    "chromium-light-phone/profile-validation.png": {
+     "vsP0Expectation": "22063 pixels (ratio 0.07 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 47588,
+      "maxChannelDelta": 224
+     },
+     "vsPreviousRun": {
+      "differentPixels": 47282,
+      "maxChannelDelta": 224
+     }
+    },
+    "chromium-light-phone/profile.png": {
+     "vsP0Expectation": "4721 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 7133,
+      "maxChannelDelta": 224
+     },
+     "vsPreviousRun": {
+      "differentPixels": 7133,
+      "maxChannelDelta": 224
+     }
+    },
+    "webkit-dark-desktop/profile-validation.png": {
+     "vsP0Expectation": "15248 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 96402,
+      "maxChannelDelta": 223
+     },
+     "vsPreviousRun": {
+      "differentPixels": 96402,
+      "maxChannelDelta": 223
+     }
+    },
+    "webkit-dark-desktop/profile.png": {
+     "vsP0Expectation": "13762 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 92330,
+      "maxChannelDelta": 223
+     },
+     "vsPreviousRun": {
+      "differentPixels": 92330,
+      "maxChannelDelta": 223
+     }
+    },
+    "webkit-dark-phone/profile-validation.png": {
+     "vsP0Expectation": "21671 pixels (ratio 0.07 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 73654,
+      "maxChannelDelta": 223
+     },
+     "vsPreviousRun": {
+      "differentPixels": 71518,
+      "maxChannelDelta": 223
+     }
+    },
+    "webkit-dark-phone/profile.png": {
+     "vsP0Expectation": "4702 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 8595,
+      "maxChannelDelta": 212
+     },
+     "vsPreviousRun": {
+      "differentPixels": 8595,
+      "maxChannelDelta": 212
+     }
+    },
+    "webkit-light-desktop/profile-validation.png": {
+     "vsP0Expectation": "15649 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 41905,
+      "maxChannelDelta": 224
+     },
+     "vsPreviousRun": {
+      "differentPixels": 41905,
+      "maxChannelDelta": 224
+     }
+    },
+    "webkit-light-desktop/profile.png": {
+     "vsP0Expectation": "13970 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 37825,
+      "maxChannelDelta": 224
+     },
+     "vsPreviousRun": {
+      "differentPixels": 37825,
+      "maxChannelDelta": 224
+     }
+    },
+    "webkit-light-phone/profile-validation.png": {
+     "vsP0Expectation": "22235 pixels (ratio 0.07 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 52038,
+      "maxChannelDelta": 224
+     },
+     "vsPreviousRun": {
+      "differentPixels": 47412,
+      "maxChannelDelta": 224
+     }
+    },
+    "webkit-light-phone/profile.png": {
+     "vsP0Expectation": "4626 pixels (ratio 0.02 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 7562,
+      "maxChannelDelta": 224
+     },
+     "vsPreviousRun": {
+      "differentPixels": 7562,
+      "maxChannelDelta": 224
+     }
+    }
+   }
+  }
+ ],
+ "wiki": [
+  {
+   "commit": "51f0cdfeeb9e91573fe3f85c5e6473195ea9498f",
+   "subject": "Merge refs/heads/project/34b8pthjtmO06pvd8i3FW into refs/heads/main",
+   "outcomes": {
+    "chromium-light-desktop | wiki": {
+     "status": "expected",
+     "error": null
+    },
+    "chromium-light-phone | wiki": {
+     "status": "expected",
+     "error": null
+    },
+    "chromium-dark-desktop | wiki": {
+     "status": "expected",
+     "error": null
+    },
+    "chromium-dark-phone | wiki": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-light-desktop | wiki": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-light-phone | wiki": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-dark-desktop | wiki": {
+     "status": "expected",
+     "error": null
+    },
+    "webkit-dark-phone | wiki": {
+     "status": "expected",
+     "error": null
+    }
+   },
+   "screenshots": {
+    "chromium-dark-desktop/wiki-home.png": {
+     "vsP0Expectation": "224 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 5008,
+      "maxChannelDelta": 178
+     }
+    },
+    "chromium-dark-phone/wiki-home.png": {
+     "vsP0Expectation": "205 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 4599,
+      "maxChannelDelta": 178
+     }
+    },
+    "chromium-light-desktop/wiki-home.png": {
+     "vsP0Expectation": "233 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 1896,
+      "maxChannelDelta": 224
+     }
+    },
+    "chromium-light-phone/wiki-home.png": {
+     "vsP0Expectation": "207 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 1890,
+      "maxChannelDelta": 224
+     }
+    },
+    "webkit-dark-desktop/wiki-home.png": {
+     "vsP0Expectation": "204 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 5012,
+      "maxChannelDelta": 178
+     }
+    },
+    "webkit-dark-phone/wiki-home.png": {
+     "vsP0Expectation": "207 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 4593,
+      "maxChannelDelta": 178
+     }
+    },
+    "webkit-light-desktop/wiki-home.png": {
+     "vsP0Expectation": "221 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 1910,
+      "maxChannelDelta": 224
+     }
+    },
+    "webkit-light-phone/wiki-home.png": {
+     "vsP0Expectation": "209 pixels (ratio 0.01 of all image pixels) are different.",
+     "vsP0ExpectationPixels": {
+      "differentPixels": 1904,
+      "maxChannelDelta": 224
+     }
+    }
+   }
+  },
+  {
+   "commit": "be0f8c22a5891c98806eee135c132dbea138c698",
+   "subject": "Merge refs/heads/project/34b6G5PenLgreIF9F7qQZ into refs/heads/main",
+   "outcomes": {
+    "chromium-light-desktop | wiki": {
+     "status": "unexpected",
+     "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+    },
+    "chromium-light-phone | wiki": {
+     "status": "unexpected",
+     "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+    },
+    "chromium-dark-desktop | wiki": {
+     "status": "unexpected",
+     "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+    },
+    "chromium-dark-phone | wiki": {
+     "status": "unexpected",
+     "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+    },
+    "webkit-light-desktop | wiki": {
+     "status": "unexpected",
+     "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+    },
+    "webkit-light-phone | wiki": {
+     "status": "unexpected",
+     "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+    },
+    "webkit-dark-desktop | wiki": {
+     "status": "unexpected",
+     "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+    },
+    "webkit-dark-phone | wiki": {
+     "status": "unexpected",
+     "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+    }
+   },
+   "screenshots": {}
+  }
+ ]
+}

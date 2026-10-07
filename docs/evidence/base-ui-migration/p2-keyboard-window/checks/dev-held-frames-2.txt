@@ -1,0 +1,25 @@
+
+Running 20 tests using 1 worker
+
+  ✓   1 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image (2.3s)
+  ✓   2 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file (907ms)
+  ✓   3 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowUp Enter with frames held runs command (957ms)
+  ✓   4 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image (879ms)
+  ✓   5 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowUp Enter with frames held runs command (917ms)
+  ✓   6 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file (844ms)
+  ✓   7 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command (931ms)
+  ✓   8 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell (850ms)
+  ✓   9 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowDown Enter with frames held runs file (1.1s)
+  ✓  10 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row (1.0s)
+  ✓  11 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowDown Enter with frames held runs image (1.4s)
+  ✓  12 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown Enter with frames held runs file (945ms)
+  ✓  13 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowDown ArrowUp Enter with frames held runs command (976ms)
+  ✓  14 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowDown Enter with frames held runs image (1.4s)
+  ✓  15 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter ArrowUp Enter with frames held runs command (967ms)
+  ✓  16 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu Enter Enter with frames held runs file (937ms)
+  ✓  17 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp Enter with frames held runs command (927ms)
+  ✓  18 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowUp Enter with frames held runs shell (760ms)
+  ✓  19 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:67:3 › attachment menu ArrowUp ArrowDown Enter with frames held runs file (973ms)
+  ✓  20 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.browser.mjs:77:1 › row actions menu ArrowDown Enter with frames held runs its action and not the row (1.1s)
+
+  20 passed (23.1s)

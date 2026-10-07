@@ -1,0 +1,19 @@
+{
+ "app": "/var/tmp/p0d2/trees/xfix-e6786d077",
+ "commit": "16e0188ae2a6d912f6915b719c9c77ab04346f19",
+ "runner": "/var/tmp/p0d2/runners/diag",
+ "runnerCommit": "d2479173b7d11748278ca75f84e7ae20f5c75201",
+ "args": "b1-state.diag.mjs -g profile$",
+ "started": "2026-10-07T05:28:16Z",
+ "finished": "2026-10-07T05:28:52Z",
+ "exit": 0,
+ "environment": "p0.2",
+ "stats": {
+  "expected": 8,
+  "unexpected": 0,
+  "flaky": 0,
+  "skipped": 0
+ },
+ "screenshots": 16,
+ "environmentSha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+}

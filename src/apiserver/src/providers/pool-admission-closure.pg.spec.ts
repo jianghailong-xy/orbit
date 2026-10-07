@@ -764,6 +764,47 @@ suite("an account pool's admission, closed at every door, on real PostgreSQL", {
     assert.deepEqual(await noticesOf(onSpent.id), []);
   });
 
+  await t.test("(3) …and so do the other doors that build its engine: a restarted runner's reclaim, and the reload a switch onto the pool queued", async () => {
+    const holds = await account(db, alice, 'Holds');
+    usageAnswers.set(holds.key, fiveHour(10));
+    await usage.refresh(holds.row);
+    const shrinking = await providers.createPool(alice, { label: 'Shrinking', providerIds: [holds.row.id] });
+    await track();
+    // An engine up on the pool, and one switched onto it while it could run — its reload still queued —
+    // when the pool loses its last account.
+    const reclaimAt = await machine(db, alice, 'alice-reclaims-emptied');
+    const running = await live(db, alice, reclaimAt, shrinking.slug);
+    const switchAt = await machine(db, alice, 'alice-switches-emptied');
+    const switched = await live(db, alice, switchAt, 'claude');
+    await sessions.updateConfig(alice, switched, { provider: shrinking.slug });
+    await providers.removePoolMember(alice, shrinking.id, holds.row.id);
+
+    // The reclaim rebuilds the engine on the Claude default — not left out as a provider nothing holds.
+    const rebuilt = (await runnerApi.reclaim({ id: reclaimAt.runnerId, ownerId: alice })).sessions
+      .find((s) => s.sessionId === running);
+    assert.ok(rebuilt, 'the reclaim left the session on the emptied pool out');
+    assert.equal(rebuilt.provider, 'claude');
+    assert.deepEqual(rebuilt.agent.env, configuredEnv.get(reclaimAt.workspaceId), "the reclaim handed out more than the agent's env");
+
+    // The reload is handed out, re-spawning on the Claude default — not refused at every poll of the inbox.
+    const dequeue = (runnerApi as unknown as {
+      dequeueTurn(sessionId: string, runnerId: string, leaseGeneration: string | null): Promise<
+        { kind: string; env?: Record<string, string> } | null
+      >;
+    }).dequeueTurn.bind(runnerApi);
+    const reload = await dequeue(switched, switchAt.runnerId, null);
+    assert.equal(reload?.kind, 'reload');
+    assert.deepEqual(reload?.env, configuredEnv.get(switchAt.workspaceId), "the reload handed out more than the agent's env");
+
+    // Each records no member, and owes the transcript the line that says where the run went.
+    for (const sessionId of [running, switched]) {
+      const row = await recorded(sessionId);
+      assert.equal(row.poolMemberProviderId, null, 'the run is recorded on a member it is not on');
+      assert.match(String(row.poolSwitchNotice), /"Shrinking"/, 'the line does not name the pool');
+      assert.match(String(row.poolSwitchNotice), /Claude default \(this runner's own login\)/, 'the line does not say where the run went');
+    }
+  });
+
   await t.test("(4) no session payload that carries a pool's member holds a credential or an endpoint — the lists, the detail, the transcript, the turns, the search", async () => {
     await track();
     const workspaces = await db.session.findMany({

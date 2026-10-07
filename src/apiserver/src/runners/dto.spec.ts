@@ -11,6 +11,25 @@ test('Antigravity can be installed and signed into', async () => {
   assert.equal((await validate(login)).length, 0);
 });
 
+test('StartInstallDto accepts OpenCode and every other installable engine', async () => {
+  // OpenCode is never signed in through Orbit (StartLoginDto refuses it below), so this relay is
+  // the only way its CLI gets onto a machine — a wrong list here refuses the install outright.
+  const openCode = new StartInstallDto();
+  openCode.engine = 'opencode';
+  assert.equal((await validate(openCode)).length, 0);
+  for (const engine of ['claude', 'codex', 'kimi', 'antigravity', 'dsh'] as const) {
+    const dto = new StartInstallDto();
+    dto.engine = engine;
+    assert.equal((await validate(dto)).length, 0, engine);
+  }
+});
+
+test('StartInstallDto rejects an engine slug it does not know', async () => {
+  const dto = new StartInstallDto();
+  dto.engine = 'aider' as never;
+  assert.notEqual((await validate(dto)).length, 0);
+});
+
 test('StartLoginDto accepts every built-in login engine, including Kimi and Antigravity', async () => {
   for (const engine of ['claude', 'codex', 'kimi', 'antigravity'] as const) {
     const dto = new StartLoginDto();
@@ -22,6 +41,12 @@ test('StartLoginDto accepts every built-in login engine, including Kimi and Anti
 test('StartLoginDto rejects a configured-provider slug as a login engine', async () => {
   const dto = new StartLoginDto();
   dto.engine = 'moonshot' as never;
+  assert.notEqual((await validate(dto)).length, 0);
+});
+
+test('StartLoginDto still rejects OpenCode, which is installed and never signed in', async () => {
+  const dto = new StartLoginDto();
+  dto.engine = 'opencode' as never;
   assert.notEqual((await validate(dto)).length, 0);
 });
 

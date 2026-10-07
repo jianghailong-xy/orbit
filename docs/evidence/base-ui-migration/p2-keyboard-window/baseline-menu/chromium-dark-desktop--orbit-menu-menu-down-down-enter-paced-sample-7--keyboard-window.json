@@ -1,0 +1,47 @@
+{
+  "target": "orbit-menu",
+  "sequence": "menu-down-down-enter",
+  "control": null,
+  "mode": "paced",
+  "run": 7,
+  "keys": [
+    "ArrowDown",
+    "ArrowDown",
+    "Enter"
+  ],
+  "from": null,
+  "before": "none",
+  "after": "image",
+  "result": "ran Image",
+  "listOpen": false,
+  "active": "button:Add attachment",
+  "keyLog": [
+    {
+      "key": "ArrowDown",
+      "t": 34.4,
+      "target": "button:Add attachment",
+      "trusted": true,
+      "focused": "button:Add attachment",
+      "listbox": false,
+      "highlighted": null
+    },
+    {
+      "key": "ArrowDown",
+      "t": 380.9,
+      "target": "menuitem:File",
+      "trusted": true,
+      "focused": "menuitem:File",
+      "listbox": true,
+      "highlighted": "File"
+    },
+    {
+      "key": "Enter",
+      "t": 699.2,
+      "target": "menuitem:Image",
+      "trusted": true,
+      "focused": "menuitem:Image",
+      "listbox": true,
+      "highlighted": "Image"
+    }
+  ]
+}

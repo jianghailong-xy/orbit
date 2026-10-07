@@ -285,7 +285,14 @@ import {
   withSessionReplies,
   withTaskStart,
 } from './control-plane-note';
-import { accountPoolRuntime, isBuiltinProvider, openCodeKeyRows, resolveProviderExec } from '../providers/custom-provider';
+import {
+  accountPoolRuntime,
+  adminOnlyProviderRefusal,
+  isBuiltinProvider,
+  openCodeKeyRows,
+  resolveProviderExec,
+  usableProviderScope,
+} from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
 import { bgLaunchConfirmed, bgLaunchKind } from './bg-launch-receipt';
 import { enginePhaseAfter, enginePhaseSinceAfter, engineTurnActiveAfter } from './engine-turn';
@@ -332,6 +339,7 @@ import {
   retireSessionInboxGeneration,
 } from '../common/session-inbox-fence';
 import {
+  ADMIN_ONLY_PROVIDER_ERROR,
   ADVERTISED_RUNTIMES,
   DSH_RUNNER_UPGRADE_ERROR,
   PROVIDER_UNAVAILABLE_ERROR,
@@ -1457,13 +1465,13 @@ export class RunnerApiController {
   @Post('integration-jobs/:jobId/result')
   @HttpCode(200)
   async integrationJobResult(
-    @CurrentRunner() runner: { id: string },
+    @CurrentRunner() runner: { id: string; ownerId?: string },
     @Param('jobId', PublicIdPipe) jobId: string,
     @Body() body: IntegrationJobResultRequest,
   ): Promise<IntegrationJobResultResponse> {
     let applied: Awaited<ReturnType<IntegrationJobRelay['applyResult']>>;
     try {
-      applied = await this.integrationQueue().applyResult(jobId, runner.id, body);
+      applied = await this.integrationQueue().applyResult(jobId, runner.id, body, runner.ownerId);
     } catch (error) {
       throw integrationJobHttpError(error);
     }
@@ -2421,8 +2429,9 @@ export class RunnerApiController {
       const declared = s.provider ?? null;
       // Custom provider borrows a built-in runtime — resolve the runner-facing provider, model,
       // and injected env so a resumed session keeps talking to the configured endpoint. Owner
-      // scope mirrors the claim path: a personal provider resolves only for its owner's sessions,
-      // and an account pool is rebuilt on the member the claim would choose, not the runner's login — a
+      // scope mirrors the claim path: a personal provider resolves only for its owner's sessions, a
+      // shared one only for an admin's (usableProviderScope), and an account pool is rebuilt on the
+      // member the claim would choose, not the runner's login — a
       // shared pool, or a Codex pool of the owner's own login, on the gateway with a token of its own, as
       // the claim builds it. A maintenance run, as on the claim, never through a pool.
       const declaredIsBuiltin = isBuiltinProvider(declared, s.providerBuiltin);
@@ -2431,7 +2440,7 @@ export class RunnerApiController {
         : ((await this.prisma.modelProvider.findFirst({
             where: {
               slug: declared!,
-              OR: [{ ownerId: null }, { ownerId: s.ownerId }],
+              ...(await usableProviderScope(this.prisma, s.ownerId)),
             },
           })) ??
           (maintenance
@@ -2439,17 +2448,26 @@ export class RunnerApiController {
             : ((await this.queue.resolveLoginPool(this.prisma, s, declared!)) ??
               (await this.queue.resolvePoolMember(this.prisma, s, declared!)) ??
               (await this.queue.resolveSharedPool(this.prisma, s, declared!)))));
-      if (!declaredIsBuiltin && (!customRow?.enabled
+      // As on the claim: a Claude pool of the owner's own that none of its members can run is rebuilt on
+      // the Claude default, as the line resolvePoolMember owed says; any other slug no enabled row holds
+      // is left out, unavailable.
+      const poolFallback = !declaredIsBuiltin && !customRow && !maintenance
+        && (await accountPoolRuntime(this.prisma, s.ownerId, declared!)) === AgentProvider.CLAUDE;
+      if (!declaredIsBuiltin && !poolFallback && (!customRow?.enabled
         || !['claude', 'codex', 'kimi', 'antigravity', 'dsh'].includes(customRow.runtime))) {
-        await this.markProviderUpgradeRequired(runner.id, { id: s.id }, PROVIDER_UNAVAILABLE_ERROR,
+        // The same sentence the queue holds it with (QueueService.pausedPendingSessions), or the two would
+        // take turns rewriting it.
+        const adminOnly = !customRow && await adminOnlyProviderRefusal(this.prisma, s.ownerId, declared!);
+        await this.markProviderUpgradeRequired(runner.id, { id: s.id },
+          adminOnly ? ADMIN_ONLY_PROVIDER_ERROR : PROVIDER_UNAVAILABLE_ERROR,
           s.status === RunStatus.PENDING ? [{ id: s.id, error: s.error }] : []);
         continue;
       }
       const openCodeKeys = declared === AgentProvider.OPENCODE ? await openCodeKeyRows(this.prisma, s.ownerId) : undefined;
       const resolveExec = (sessionModel: string | null) =>
         resolveProviderExec({
-          declaredProvider: declared,
-          declaredProviderBuiltin: s.providerBuiltin,
+          declaredProvider: poolFallback ? AgentProvider.CLAUDE : declared,
+          declaredProviderBuiltin: poolFallback || s.providerBuiltin,
           customRow,
           openCodeKeys,
           sessionModel,
@@ -2835,9 +2853,10 @@ export class RunnerApiController {
     // FOR UPDATE lock. A reclaim storm may call takeover-leases on the same session
     // hundreds of times per minute; each call would otherwise acquire a row lock that
     // starves the claim queue's FOR UPDATE SKIP LOCKED, preventing new PENDING
-    // sessions from ever being claimed.
-    const preflight = await this.prisma.session.findUnique({
-      where: { id: sessionId },
+    // sessions from ever being claimed. Read on this runner's sessions only, as the lock
+    // below is: a session of another runner is one this one has never heard of.
+    const preflight = await this.prisma.session.findFirst({
+      where: { id: sessionId, assignedRunnerId: runner.id },
       select: { inboxLeaseOwner: true, inboxLeaseGeneration: true, status: true, provider: true, providerBuiltin: true, ownerId: true },
     });
     const preflightRuntime = preflight ? await sessionExecRuntime(this.prisma, preflight) : undefined;
@@ -3814,15 +3833,19 @@ export class RunnerApiController {
       : ((await tx.modelProvider.findFirst({
           where: {
             slug: session.provider!,
-            OR: [{ ownerId: null }, { ownerId: session.ownerId }],
+            ...(await usableProviderScope(tx, session.ownerId)),
           },
         })) ??
         (await this.queue.resolveLoginPool(tx, session, session.provider!)) ??
         (await this.queue.resolvePoolMember(tx, session, session.provider!)) ??
         (await this.queue.resolveSharedPool(tx, session, session.provider!)));
+    // As on the claim: a Claude pool of the owner's own that none of its members can run re-spawns on
+    // the Claude default, as the line resolvePoolMember owed says; any other slug nothing holds is refused.
+    const poolFallback = !customRow && !isBuiltinProvider(session.provider, session.providerBuiltin)
+      && (await accountPoolRuntime(tx, session.ownerId, session.provider!)) === AgentProvider.CLAUDE;
     const exec = resolveProviderExec({
-      declaredProvider: session.provider,
-      declaredProviderBuiltin: session.providerBuiltin,
+      declaredProvider: poolFallback ? AgentProvider.CLAUDE : session.provider,
+      declaredProviderBuiltin: poolFallback || session.providerBuiltin,
       customRow,
       openCodeKeys:
         session.provider === AgentProvider.OPENCODE && openCodeKeyOf(session.model)
@@ -4002,7 +4025,7 @@ export class RunnerApiController {
     let runtime = normalizeRuntimeProvider(session.provider, session.providerBuiltin);
     if (!isBuiltinProvider(session.provider, session.providerBuiltin)) {
       const customRow = await this.prisma.modelProvider.findFirst({
-        where: { slug: session.provider!, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
+        where: { slug: session.provider!, ...(await usableProviderScope(this.prisma, session.ownerId)) },
         select: { runtime: true },
       });
       // A pool has no row of its own: a shared pool runs Codex.
@@ -6432,7 +6455,7 @@ export class RunnerApiController {
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/worktrees-removable')
   async worktreesRemovable(
-    @CurrentRunner() runner: { id: string },
+    @CurrentRunner() runner: { id: string; ownerId?: string },
     @Body() dto: WorktreesRemovableRequest,
   ): Promise<WorktreesRemovableResponse> {
     const ids = (dto.ids ?? []).slice(0, 1000);
@@ -6442,6 +6465,10 @@ export class RunnerApiController {
       ? await this.prisma.session.findMany({
           where: {
             id: { in: valid },
+            // Only the runner's own account's sessions are kept: a checkout no session of that
+            // account names is leftover, whatever another account's session of that id is doing —
+            // and what another account's session is doing is not this runner's to learn.
+            ...(runner.ownerId !== undefined ? { ownerId: runner.ownerId } : {}),
             completedAt: null,
             archivedAt: null,
             deletedAt: null,

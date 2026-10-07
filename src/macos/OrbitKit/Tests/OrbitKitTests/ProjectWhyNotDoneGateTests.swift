@@ -2,17 +2,24 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// "Why is this project not done?" is asked only of a project that LOOKS finished — OPEN and
-/// started, every stated criterion met by its work, no task IN_PROGRESS — and that the projection
-/// does not call done (the owner's ruling of 2026-10-06 09:29Z, which put back the condition the
-/// browser had before 0f47238c1). A project with work still to do is not asked: "the work is not
-/// done yet" is not news. The three other drawings stay as they were — the owner's card while a
-/// DONE_REQUEST or a press here stands, Orbit's DONE as the card's terminal state, the owner's DONE
-/// as its receipt.
+/// The conversation draws the owner's card and nothing else.
 ///
-/// And the card's tally adds up: each met criterion is counted where its work is, each unmet one as
-/// "not met" and never by its landing lane. The browser holds the same rule and words in
-/// `ProjectWhyNotDoneGate.test.tsx`; `ProjectDoneCopyParityTests` reads its source.
+/// "Why is this project not done?" used to be asked here of a project that LOOKS finished — OPEN
+/// and started, every stated criterion met by its work, no task IN_PROGRESS — and the owner's
+/// ruling of 2026-10-07 04:20Z took that question out of the conversation altogether: closing a
+/// project is driven by the coordinator's request, and the gaps with the entries that act on them
+/// are the project page's Open items row and the Needs you hint. NOTHING is drawn for an OPEN
+/// project nobody has asked about — however finished it looks, however unmet its criteria are, and
+/// whether or not anything is running — which is what this file pins, state by state.
+///
+/// The three other drawings stay as they were: the owner's card while a DONE_REQUEST or a press
+/// here stands, the owner's DONE as its receipt, and — the one survivor of the old card — Orbit's
+/// own DONE as its TERMINAL state, "This project is done · recorded by Orbit".
+///
+/// And the card's tally still adds up: each met criterion is counted where its work is, each unmet
+/// one as "not met" and never by its landing lane. The browser holds the same rule and words in
+/// `ProjectWhyNotDoneGate.test.tsx`, `ProjectDoneConversation.test.tsx` and
+/// `ProjectDoneConversationTests.swift`; `ProjectDoneCopyParityTests` reads its source.
 final class ProjectWhyNotDoneGateTests: XCTestCase {
 
     private let request = DoneRequest(criteriaDigest: String(repeating: "a", count: 64),
@@ -23,11 +30,10 @@ final class ProjectWhyNotDoneGateTests: XCTestCase {
                            doneRequest: request)
     }
 
-    /// A started OPEN project whose every criterion is met and none of whose tasks is running, with
-    /// one merge Orbit never saw — the project the card is for. Each case below changes one fact.
+    /// A started OPEN project whose every criterion is met — the project the old card was for. Each
+    /// case below changes one fact of it.
     private func project(status: String = "OPEN", done: Bool = false,
                          criteria: [ProjectDoneCriterion]? = nil,
-                         tasksByStatus: [String: Int]? = ["DONE": 4],
                          doneBy: ProjectDoneBy? = nil) -> ProjectDoneSubject {
         let answers = criteria ?? [
             ProjectDoneCriterion(definitionId: "c1", satisfied: true),
@@ -43,54 +49,36 @@ final class ProjectWhyNotDoneGateTests: XCTestCase {
                 withheld: done ? [] : ["CRITERION_UNLANDED"], criteria: answers,
                 counts: ProjectDoneCounts(criteria: answers.count, met: answers.filter(\.satisfied).count,
                                           landed: 0, onMain: 0)),
-            doneBy: doneBy, tasksByStatus: tasksByStatus)
+            doneBy: doneBy)
     }
 
     /// The antd migration the owner reported on 2026-10-06: started, OPEN, six criteria and every
-    /// one of them Not met yet — whose coordinator conversation carried the card all the same.
-    private func antdMigration(tasksByStatus: [String: Int]? = ["DONE": 2, "OPEN": 5]) -> ProjectDoneSubject {
+    /// one of them Not met yet — which the conversation carried the card under until the ruling.
+    private func antdMigration() -> ProjectDoneSubject {
         let reasons: [CriterionLandingReason?] = [.noReceipt, .noReceipt, .codeless, .codeless, .onProjectBranch, nil]
         return project(criteria: reasons.enumerated().map {
             ProjectDoneCriterion(definitionId: "a\($0.offset + 1)", satisfied: false, landing: "UNKNOWN",
                                  landingReason: $0.element)
-        }, tasksByStatus: tasksByStatus)
+        })
     }
 
     private func slot(_ subject: ProjectDoneSubject?, request: ProjectOpenItemRow? = nil,
-                      waitingKind: SessionWaitingKind? = nil, record: ProjectDoneRecord? = nil,
-                      started: Bool? = true) -> ProjectDone.Slot {
-        ProjectDone.slot(subject: subject, request: request, waitingKind: waitingKind, record: record,
-                         started: started)
+                      waitingKind: SessionWaitingKind? = nil, record: ProjectDoneRecord? = nil) -> ProjectDone.Slot {
+        ProjectDone.slot(subject: subject, request: request, waitingKind: waitingKind, record: record)
     }
 
-    // MARK: whether the conversation asks
+    // MARK: nothing is drawn for an OPEN project nobody asked about
 
-    func testAProjectWithACriterionStillUnmetIsNotAsked() {
-        XCTAssertEqual(slot(antdMigration()), .none, "six criteria Not met yet is not a finished-looking project")
+    func testAClosingCardIsDrawnForNoStateOfAnOpenUnaskedProject() {
+        XCTAssertEqual(slot(project()), .none,
+                       "every criterion met and nothing running: the old card's whole reason to exist")
+        XCTAssertEqual(slot(antdMigration()), .none,
+                       "six criteria Not met yet — the state the owner reported on 2026-10-06")
         let oneUnmet = project(criteria: [
             ProjectDoneCriterion(definitionId: "c1", satisfied: true),
             ProjectDoneCriterion(definitionId: "c2", satisfied: false, landing: "UNKNOWN", landingReason: .codeless),
         ])
-        XCTAssertEqual(slot(oneUnmet), .none, "one unmet criterion is enough to leave the card down")
-    }
-
-    func testAllMetWithATaskStillInProgressIsNotAsked() {
-        XCTAssertEqual(slot(project(tasksByStatus: ["DONE": 4, "IN_PROGRESS": 1])), .none,
-                       "a task still running: the project has not stopped")
-    }
-
-    func testAllMetNothingRunningAndTheProjectionWithholdingIsAsked() {
-        XCTAssertEqual(slot(project()), .notDone)
-        // Only IN_PROGRESS holds it back — work that is not running is the projection's to explain.
-        XCTAssertEqual(slot(project(tasksByStatus: ["DONE": 4, "OPEN": 1, "FAILED": 1])), .notDone)
-        XCTAssertEqual(slot(project(tasksByStatus: [:])), .notDone, "no tasks at all is nothing running")
-        XCTAssertEqual(slot(project(tasksByStatus: nil)), .notDone,
-                       "a read without the tally is nothing it can say is running — the browser's `?? 0`")
-    }
-
-    func testEveryOtherHalfOfTheConditionHoldsTheCardBack() {
-        XCTAssertEqual(slot(project(), started: false), .none, "not started: the start card asks")
-        XCTAssertEqual(slot(project(), started: nil), .none, "a read that does not say it started")
+        XCTAssertEqual(slot(oneUnmet), .none, "one unmet criterion is as good a reason as six")
         XCTAssertEqual(slot(project(status: "CANCELLED")), .none, "not OPEN")
         XCTAssertEqual(slot(project(criteria: [])), .none, "no criteria: nothing to explain")
         XCTAssertEqual(slot(project(done: true)), .none, "the projection already calls it done")
@@ -103,7 +91,7 @@ final class ProjectWhyNotDoneGateTests: XCTestCase {
     // MARK: the three drawings that do not change
 
     func testARequestOrAPressHereDrawsTheOwnersCardWhateverTheProjectLooksLike() {
-        let running = antdMigration(tasksByStatus: ["IN_PROGRESS": 2])
+        let running = project(criteria: antdMigration().derivedDone?.criteria)
         XCTAssertEqual(slot(running, request: row(), waitingKind: .doneRequest), .done(requestID: "req1"),
                        "a DONE_REQUEST is answered on the owner's card, unmet criteria or not")
         XCTAssertEqual(slot(running, waitingKind: .recordAsDone), .done(requestID: nil))
@@ -115,7 +103,7 @@ final class ProjectWhyNotDoneGateTests: XCTestCase {
                        "You recorded this project done · Oct 6, 09:40")
     }
 
-    func testOrbitsDoneIsTheCardsTerminalStateAndTheOwnersDoneIsTheReceipt() {
+    func testOrbitsDoneIsTheOldCardsTerminalStateAndTheOwnersDoneIsTheReceipt() {
         for doneBy in [ProjectDoneBy.derived, nil] {
             let orbitDone = project(status: "DONE", done: true, doneBy: doneBy)
             XCTAssertEqual(slot(orbitDone), .notDone, "Orbit's DONE: This project is done · recorded by Orbit")
@@ -124,11 +112,12 @@ final class ProjectWhyNotDoneGateTests: XCTestCase {
             XCTAssertEqual(ProjectDone.settledBadge(orbitDone.doneBy), ProjectDone.recordedByOrbit)
             XCTAssertEqual(ProjectDone.receiptLine(orbitDone, record: nil), "This project is done · recorded by Orbit")
         }
-        let ownerDone = project(status: "DONE", criteria: antdMigration().derivedDone?.criteria,
-                                tasksByStatus: ["IN_PROGRESS": 1], doneBy: .owner)
+        let ownerDone = project(status: "DONE", criteria: antdMigration().derivedDone?.criteria, doneBy: .owner)
         XCTAssertEqual(slot(ownerDone), .done(requestID: nil), "the owner's DONE keeps its receipt")
         XCTAssertTrue(ProjectDone.recorded(ownerDone, record: nil))
         XCTAssertTrue(ProjectDone.ownerRecorded(ownerDone, record: nil))
+        XCTAssertFalse(ProjectDone.recorded(project(), record: nil),
+                       "an unasked OPEN project is not recorded done by anybody")
     }
 
     // MARK: the tally
@@ -170,7 +159,7 @@ final class ProjectWhyNotDoneGateTests: XCTestCase {
                        "7 criteria · 1 on main · 1 in flight · 1 on the project branch · 1 merged outside Orbit"
                            + " · 1 nothing to land · 1 no code to land · 1 not met")
 
-        // The card this gate draws: every criterion met, so nothing reads "not met".
+        // The terminal state the old card is drawn in: every criterion met, so nothing reads "not met".
         XCTAssertEqual(ProjectDone.whyNotDoneTally(project().derivedDone), "2 criteria · 1 on main · 1 merged outside Orbit")
         XCTAssertEqual(ProjectDone.whyNotDoneTally(antdMigration().derivedDone), "6 criteria · 0 on main · 6 not met")
         XCTAssertEqual(ProjectDone.whyNotDoneTally(nil), "")
@@ -186,38 +175,31 @@ final class ProjectWhyNotDoneGateTests: XCTestCase {
         XCTAssertEqual(ProjectDone.notMet, "not met")
     }
 
-    // MARK: the conversation's read carries what the gate reads
+    // MARK: the conversation's read carries what the slot reads
 
-    /// `GET /projects/:id` as the conversation reads it: `tasksByStatus` rides on the subject the
-    /// slot is asked about, the same as the project page's read of the same document.
-    func testTheConversationsReadCarriesTheRunningTally() throws {
-        func document(_ tasksByStatus: String) -> Data {
-            Data(#"""
-            {"id":"p1","title":"Closeout","status":"OPEN","startedAt":"2026-10-01T00:00:00.000Z",
-             "_count":{"tasks":5},\#(tasksByStatus)
-             "acceptanceCriteriaItems":[{"id":"c1","ordinal":1,"text":"It ships"}],
-             "derivedDone":{"status":"OPEN","done":false,"withheld":["CRITERION_UNLANDED"],"confirmation":"CONFIRMED",
-                            "criteria":[{"definitionId":"c1","satisfied":true,"landing":"UNKNOWN","landingReason":"NO_RECEIPT",
-                                         "withheld":["CRITERION_UNLANDED"]}],
-                            "counts":{"criteria":1,"met":1,"landed":0,"onMain":0,
-                                      "byReason":{"IN_FLIGHT":0,"ON_PROJECT_BRANCH":0,"NOTHING_TO_LAND":0,"NO_RECEIPT":1,"CODELESS":0}}}}
-            """#.utf8)
-        }
-        let running = try JSONDecoder().decode(ProjectCriteriaDocument.self,
-                                               from: document(#""tasksByStatus":{"IN_PROGRESS":1,"DONE":4},"#))
-        XCTAssertEqual(running.doneSubject.tasksByStatus, ["IN_PROGRESS": 1, "DONE": 4])
-        XCTAssertEqual(ProjectDone.slot(subject: running.doneSubject, request: nil, waitingKind: nil, record: nil,
-                                        started: running.started), .none)
-        let page = try JSONDecoder().decode(ProjectDocument.self,
-                                            from: document(#""tasksByStatus":{"IN_PROGRESS":1,"DONE":4},"#))
-        XCTAssertEqual(page.doneSubject, running.doneSubject,
+    /// `GET /projects/:id` as the conversation reads it: the projection, the status and the record
+    /// ride on the subject the slot is asked about, the same as the project page's read of the same
+    /// document — and neither carries the task tally any more, which nothing reads.
+    func testTheConversationsReadAndThePagesAgreeOnTheSubject() throws {
+        let data = Data(#"""
+        {"id":"p1","title":"Closeout","status":"DONE","startedAt":"2026-10-01T00:00:00.000Z",
+         "_count":{"tasks":5},"tasksByStatus":{"IN_PROGRESS":1,"DONE":4},
+         "acceptanceCriteriaItems":[{"id":"c1","ordinal":1,"text":"It ships"}],
+         "derivedDone":{"status":"DONE","done":true,"withheld":[],"confirmation":"CONFIRMED",
+                        "criteria":[{"definitionId":"c1","satisfied":true,"landing":"UNKNOWN","landingReason":"NO_RECEIPT",
+                                     "withheld":[]}],
+                        "counts":{"criteria":1,"met":1,"landed":0,"onMain":0,
+                                  "byReason":{"IN_FLIGHT":0,"ON_PROJECT_BRANCH":0,"NOTHING_TO_LAND":0,"NO_RECEIPT":1,"CODELESS":0}}},
+         "doneBy":"DERIVED","doneAt":"2026-10-06T09:00:00.000Z"}
+        """#.utf8)
+        let conversation = try JSONDecoder().decode(ProjectCriteriaDocument.self, from: data)
+        XCTAssertEqual(ProjectDone.slot(subject: conversation.doneSubject, request: nil, waitingKind: nil,
+                                        record: nil), .notDone,
+                       "Orbit's DONE, read off the conversation's own document")
+        let page = try JSONDecoder().decode(ProjectDocument.self, from: data)
+        XCTAssertEqual(page.doneSubject, conversation.doneSubject,
                        "the page and the conversation read the same facts off the same document")
-
-        let stopped = try JSONDecoder().decode(ProjectCriteriaDocument.self,
-                                               from: document(#""tasksByStatus":{"DONE":5},"#))
-        XCTAssertEqual(ProjectDone.slot(subject: stopped.doneSubject, request: nil, waitingKind: nil, record: nil,
-                                        started: stopped.started), .notDone)
-        let again = try JSONDecoder().decode(ProjectCriteriaDocument.self, from: JSONEncoder().encode(running))
-        XCTAssertEqual(again.tasksByStatus, running.tasksByStatus, "the tally survives the cache round trip")
+        XCTAssertEqual(page.tasksByStatus, ["IN_PROGRESS": 1, "DONE": 4],
+                       "the page still reads the tally its Dispatch line counts from")
     }
 }

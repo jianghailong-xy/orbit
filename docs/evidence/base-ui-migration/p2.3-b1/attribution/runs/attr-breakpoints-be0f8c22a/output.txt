@@ -1,0 +1,70 @@
+{"app": "/var/tmp/p23b1/trees/m-be0f8c22a", "commit": "be0f8c22a5891c98806eee135c132dbea138c698", "dirty": "", "runner": "77233e226b4e8a96d38517a4a68329052d5f04d6", "started": "2026-10-07T00:39:03Z", "args": "--project=chromium-light-desktop --project=chromium-dark-desktop --project=webkit-light-desktop --project=webkit-dark-desktop"}
+[WebServer] (node:2811495) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 131 P0.2 originals, 121 main drift references, 0 accepted migration differences.
+
+Running 4 tests using 1 worker
+
+(node:2811641) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-light-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-light-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-light-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-light-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-light-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-light-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-light-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-light-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-light-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-light-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-light-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-light-desktop/breakpoint-961-session.png, writing actual.
+  ✓  1 [chromium-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (12.0s)
+(node:2813501) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-dark-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-dark-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-dark-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-dark-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-dark-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-dark-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-dark-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-dark-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-dark-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-dark-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-dark-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/chromium-dark-desktop/breakpoint-961-session.png, writing actual.
+  ✓  2 [chromium-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (13.7s)
+(node:2816801) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-light-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-light-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-light-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-light-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-light-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-light-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-light-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-light-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-light-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-light-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-light-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-light-desktop/breakpoint-961-session.png, writing actual.
+  ✓  3 [webkit-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (15.6s)
+(node:2819569) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-dark-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-dark-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-dark-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-dark-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-dark-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-dark-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-dark-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-dark-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-dark-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-dark-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-dark-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/attr-breakpoints-be0f8c22a/snapshots/webkit-dark-desktop/breakpoint-961-session.png, writing actual.
+  ✓  4 [webkit-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (15.5s)
+
+  4 passed (1.0m)
+# exit 0

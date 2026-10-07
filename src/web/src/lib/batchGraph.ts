@@ -123,6 +123,11 @@ export function describeShape(g: BatchGraph): string {
     return g.nodes.length === 1 ? 'a single task' : `${g.nodes.length} independent tasks`;
   }
   if (g.width === 1) return `a chain of ${g.nodes.length}`;
-  if (g.depth === 2) return `${g.width} in parallel after 1`;
+  // "after 1" is a claim about the first layer: one task releasing the rest. Said of three tasks
+  // that release a fourth it reads backwards, so that shape falls through to the general sentence.
+  // The native card reads the same rule (`Approvals.describeBatchShape`).
+  if (g.depth === 2 && g.nodes.filter((n) => n.layer === 0).length === 1) {
+    return `${g.width} in parallel after 1`;
+  }
   return `${g.depth} levels, up to ${g.width} in parallel`;
 }

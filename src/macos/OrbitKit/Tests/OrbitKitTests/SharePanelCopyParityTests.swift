@@ -136,7 +136,7 @@ final class SharePanelCopyParityTests: XCTestCase {
         let web = try source(Self.modal)
         assertSays(web, "const TURN_OFF_TITLE = '\(SharePanelCopy.turnOffTitle)';", in: Self.modal)
         assertSays(web, "const TURN_OFF_DETAIL = '\(SharePanelCopy.turnOffDetail)';", in: Self.modal)
-        assertSays(web, "okText=\"\(SharePanelCopy.turnOff)\"", in: Self.modal)
+        assertSays(web, "confirmText=\"\(SharePanelCopy.turnOff)\"", in: Self.modal)
         assertSays(web, "cancelText=\"\(SharePanelCopy.cancel)\"", in: Self.modal)
         let contract = try source(Self.contract)
         assertSays(contract, "`\(SharePanelCopy.turnOffTitle)` / `\(SharePanelCopy.turnOffDetail)`", in: Self.contract)
@@ -145,7 +145,7 @@ final class SharePanelCopyParityTests: XCTestCase {
     func testTheLinksPressesAreTheContractsAndCopiedIsTheDialogs() throws {
         let web = try source(Self.modal)
         assertSays(web, "{copied ? '\(SharePanelCopy.copied)' : 'Copy'}", in: Self.modal)
-        let done = try slice(web, from: "<Button type=\"primary\" onClick={onClose}>", to: "</Button>")
+        let done = try slice(web, from: "<Button variant=\"primary\" onClick={onClose}>", to: "</Button>")
         XCTAssertEqual(lastWords(done), SharePanelCopy.done, "\(Self.modal) no longer closes with \(SharePanelCopy.done)")
         // The apps' panel, as the contract draws it: Access Picker → the link, Copy Link, Share Link….
         let contract = try source(Self.contract)
