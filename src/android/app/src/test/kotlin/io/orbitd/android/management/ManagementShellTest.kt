@@ -97,6 +97,21 @@ class ManagementShellTest {
         compose.waitUntil(10_000) { fixture.runnerCapacity == 5 }
     }
 
+    @Test fun updateRunnerNowIsOfferedOnlyWhereTheRunnersUpdaterCanActAndAsksItToCheck() {
+        fixture.selfUpdate = "disabledByEnv"
+        signIn()
+        runnerPage()
+        compose.onAllNodes(hasText(RunnerCopy.UPDATE_RUNNER_NOW)).assertCountEquals(0)
+        back()
+        fixture.selfUpdate = "enabled"
+        compose.waitUntil(10_000) { compose.onAllNodes(hasText("Old alias") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText("Old alias") and hasClickAction()).performClick()
+        compose.waitUntil(10_000) { compose.onAllNodes(hasText(RunnerCopy.UPDATE_RUNNER_NOW) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText(RunnerCopy.UPDATE_RUNNER_NOW) and hasClickAction()).performScrollTo().performClick()
+        compose.waitUntil(10_000) { fixture.calls.contains("POST runners/${fixture.RUNNER}/self-update") }
+        await(RunnerCopy.UPDATE_RUNNER_REQUESTED)
+    }
+
     @Test fun theSharePanelStopsWritingWhenTheDirectoryIsNoLongerCurrent() {
         signIn()
         compose.onNodeWithTag("workspace:${fixture.WORKSPACE}").performClick()
@@ -131,13 +146,16 @@ class ManagementShellTest {
         compose.waitUntil(10_000) { app().session.state.value is AuthState.SignedIn && app().realtime.state.value.directoryFresh }
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("workspace:${fixture.WORKSPACE}").fetchSemanticsNodes().isNotEmpty() }
     }
-    private fun runnerNamePage() {
+    private fun runnerPage() {
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
         compose.onNode(hasText("Settings") and hasClickAction()).performScrollTo().performClick()
         compose.onNode(hasText("Runners") and hasClickAction()).performScrollTo().performClick()
         compose.waitUntil(10_000) { compose.onAllNodes(hasText("Old alias") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("Old alias") and hasClickAction()).performClick()
         await("About")
+    }
+    private fun runnerNamePage() {
+        runnerPage()
         compose.onNode(hasText(RunnerCopy.ABOUT_NAME) and hasClickAction()).performScrollTo().performClick()
     }
     private fun name() = compose.onNode(hasSetTextAction() and hasText("Name"))

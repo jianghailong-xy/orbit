@@ -372,6 +372,8 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
         scope.launch { show(model.press { api.patch("runners/$id", buildJsonObject { put("minFreeDiskMb", mb?.let(::JsonPrimitive) ?: JsonNull) }) }) }
     }
     fun updateEngines() = scope.launch { show(model.press { api.post("runners/$id/engine-update") }) }
+    // Checks for its own release now rather than at its next 10-minute check, by the same rules: a turn in flight still holds it.
+    fun updateRunner() = scope.launch { notice.show(model.press { api.post("runners/$id/self-update") } ?: RunnerCopy.UPDATE_RUNNER_REQUESTED) }
     fun copy(text: String) { copyText(context, "Orbit", text); notice.show("Copied") }
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -388,6 +390,7 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                             "setReserve" -> AttentionButton(RunnerCopy.SET_A_RESERVE) { choosingReserve = true }
                             "copyCommand" -> AttentionButton(RunnerCopy.COPY_COMMAND) { copy(action.command.orEmpty()) }
                             "updateEngines" -> AttentionButton(RunnerCopy.UPDATE_ENGINES_NOW, enabled = !RunnerPage.engineUpdateInFlight(runner.obj("install"))) { updateEngines() }
+                            "updateRunner" -> AttentionButton(RunnerCopy.UPDATE_RUNNER_NOW) { updateRunner() }
                         }
                     }
                 }
@@ -421,13 +424,11 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                     verticalAlignment = Alignment.CenterVertically) {
                     Text(RunnerCopy.ABOUT_NAME, Modifier.weight(1f)); Text(RunnerPage.displayName(runner), color = Ink.muted, maxLines = 1); Spacer(Modifier.width(8.dp)); Chevron()
                 }
-                listOf(RunnerCopy.ABOUT_HOSTNAME to runner.str("hostname"), RunnerCopy.ABOUT_VERSION to RunnerPage.versionValue(runner, model.latestVersion),
-                    RunnerCopy.ABOUT_RUNS_AS to RunnerPage.runsAsValue(runner), RunnerCopy.ABOUT_REPOS_FOLDER to runner.str("reposRoot"),
-                    RunnerCopy.ABOUT_LAST_CHECK_IN to RunnerPage.lastCheckIn(runner, now), RunnerCopy.ABOUT_REGISTERED to RunnerPage.registered(runner, now)
-                ).filter { !it.second.isNullOrEmpty() }.forEach { (label, value) ->
-                    HorizontalDivider()
-                    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) { Text(label, Modifier.weight(1f)); SelectionContainer { Text(value!!, color = Ink.muted) } }
-                }
+                AboutRows(RunnerCopy.ABOUT_HOSTNAME to runner.str("hostname"), RunnerCopy.ABOUT_VERSION to RunnerPage.versionValue(runner, model.latestVersion),
+                    RunnerCopy.ABOUT_LAST_UPDATE to RunnerPage.lastUpdate(runner))
+                if (RunnerPage.canUpdateNow(runner, now)) { HorizontalDivider(); TextButton(onClick = { updateRunner() }) { Text(RunnerCopy.UPDATE_RUNNER_NOW) } }
+                AboutRows(RunnerCopy.ABOUT_RUNS_AS to RunnerPage.runsAsValue(runner), RunnerCopy.ABOUT_REPOS_FOLDER to runner.str("reposRoot"),
+                    RunnerCopy.ABOUT_LAST_CHECK_IN to RunnerPage.lastCheckIn(runner, now), RunnerCopy.ABOUT_REGISTERED to RunnerPage.registered(runner, now))
             }
             FormSection(footer = RunnerCopy.ROTATE_TOKEN_FOOTER) {
                 TextButton(onClick = { confirmingRotate = true }) { Text(RunnerCopy.ROTATE_TOKEN) }
@@ -498,6 +499,13 @@ private fun AttentionRow(item: AttentionItem, now: Long, action: @Composable () 
             action()
         }
     }
+}
+
+/** About's label/value rows; a value the runner doesn't report has no row. */
+@Composable
+private fun AboutRows(vararg rows: Pair<String, String?>) = rows.filter { !it.second.isNullOrEmpty() }.forEach { (label, value) ->
+    HorizontalDivider()
+    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) { Text(label, Modifier.weight(1f)); SelectionContainer { Text(value!!, color = Ink.muted) } }
 }
 
 @Composable

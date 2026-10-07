@@ -60,6 +60,9 @@ internal object RunnerCopy {
     const val ABOUT_REPOS_FOLDER = "Repos Folder"
     const val ABOUT_LAST_CHECK_IN = "Last Check-in"
     const val ABOUT_REGISTERED = "Registered"
+    const val ABOUT_LAST_UPDATE = "Last Update"
+    const val UPDATE_RUNNER_NOW = "Update Runner Now"
+    const val UPDATE_RUNNER_REQUESTED = "Checking for a runner release now — a new one installs once no turn is running."
     const val ROOT_NO_BYPASS = "Runs as root, so sessions here can’t use Bypass permissions."
     const val ROTATE_TOKEN = "Rotate Token…"
     const val ROTATE_TOKEN_FOOTER = "Replaces this runner’s credential. It stays offline until the new token is in its " +
@@ -82,6 +85,8 @@ internal object RunnerCopy {
     const val SET_A_RESERVE = "Set a Reserve…"
     const val COPY_COMMAND = "Copy Command"
     const val UPGRADE_COMMAND = "sudo orbit upgrade"
+    const val UPDATES_TURN_ON = "To turn them back on, remove ORBIT_NO_SELFUPDATE from the runner’s environment and restart it — " +
+        "on a Mac, opening the latest Orbit app does this."
 }
 
 internal data class AttentionAction(val kind: String, val engine: String? = null, val workspaceId: String? = null, val command: String? = null)
@@ -349,15 +354,53 @@ internal object RunnerPage {
             AttentionAction("setReserve"))
     }
 
-    /** A regular-user runner behind the latest release stays there until someone runs sudo orbit upgrade. */
-    private fun cannotSelfUpdateItem(runner: JsonObject, latest: String?): AttentionItem? {
-        if (runner.bool("runsAsRoot") != false) return null
+    /** The runner's own words as the start of a sentence: capitalized, with no closing full stop. */
+    private fun runnerSaid(words: String?, otherwise: String): String {
+        val said = words?.trim()?.trimEnd('.').orEmpty()
+        return if (said.isEmpty()) otherwise else said.replaceFirstChar { it.uppercase() }
+    }
+
+    /**
+     * Behind the latest release, and not catching up by itself. A runner that reports where its updates stand
+     * (`selfUpdate`) is taken at its word: `dirNotWritable` points to sudo orbit upgrade, once; `disabledByEnv` says why,
+     * with how to turn it back only for ORBIT_NO_SELFUPDATE; `failed` offers Update Runner Now, so only while online.
+     * `enabled`, `waitingForIdle`, `heldByRollout` and a state this client doesn't know raise nothing. One too old to
+     * report it is judged by runsAsRoot, as before: a regular user stays on its version until someone runs the command.
+     */
+    private fun cannotSelfUpdateItem(runner: JsonObject, latest: String?, offline: Boolean): AttentionItem? {
         val version = runner.str("version")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         if (latest.isNullOrEmpty() || compareRunnerVersions(version, latest) >= 0) return null
         val command = RunnerCopy.UPGRADE_COMMAND
-        return AttentionItem("cannotSelfUpdate", "warn", "Can’t update itself", "Can’t update itself",
-            "It runs as a regular user, so it can’t replace its own binary — still on $version, latest is $latest. On that machine, run $command.",
-            AttentionAction("copyCommand", command = command))
+        val report = runner.obj("selfUpdate")
+        if (report == null) {
+            if (runner.bool("runsAsRoot") != false) return null
+            return AttentionItem("cannotSelfUpdate", "warn", "Can’t update itself", "Can’t update itself",
+                "It runs as a regular user, so it can’t replace its own binary — still on $version, latest is $latest. On that machine, run $command.",
+                AttentionAction("copyCommand", command = command))
+        }
+        return when (report.str("state")) {
+            "dirNotWritable" -> AttentionItem("cannotSelfUpdate", "warn", "Install folder isn’t writable", "Install folder isn’t writable",
+                "It can’t write to ${report.str("installDir") ?: "its install folder"}, so it can’t replace its own binary — still on $version, " +
+                    "latest is $latest. On that machine, run $command once; after that it updates itself.",
+                AttentionAction("copyCommand", command = command))
+            "disabledByEnv" -> {
+                val detail = "${runnerSaid(report.str("reason"), "Its updater is switched off")}, so it doesn’t update itself — still on $version, latest is $latest."
+                AttentionItem("cannotSelfUpdate", "warn", "Updates are turned off", "Updates are turned off",
+                    if (report.str("reason")?.contains("ORBIT_NO_SELFUPDATE") == true) "$detail ${RunnerCopy.UPDATES_TURN_ON}" else detail)
+            }
+            "failed" -> if (offline) null else AttentionItem("cannotSelfUpdate", "warn", "Runner update failed", "Runner update failed",
+                "${runnerSaid(report.str("reason"), "Its last update didn’t go through")}. Still on $version, latest is $latest. " +
+                    "It retries every 10 min — Update Runner Now tries again right away.",
+                AttentionAction("updateRunner"))
+            else -> null
+        }
+    }
+
+    /** Whether Update Runner Now can do anything here: only a runner that reports its updates takes it (the server refuses
+     * an older one), only online, and not one whose updater is off or can't write its install folder. */
+    fun canUpdateNow(runner: JsonObject, nowMs: Long): Boolean {
+        val state = runner.obj("selfUpdate")?.str("state")?.takeIf { it.isNotEmpty() } ?: return false
+        return state != "disabledByEnv" && state != "dirNotWritable" && !isOffline(runner, nowMs)
     }
 
     private fun engineUpdateItems(runner: JsonObject, nowMs: Long) = engineOrder.mapNotNull { engine ->
@@ -380,7 +423,7 @@ internal object RunnerPage {
             items += quotaItems(runner, workspaces, nowMs)
             diskItem(runner, workspaces)?.let { items += it }
         }
-        cannotSelfUpdateItem(runner, latestVersion)?.let { items += it }
+        cannotSelfUpdateItem(runner, latestVersion, offline)?.let { items += it }
         if (!offline) items += engineUpdateItems(runner, nowMs)
         return items
     }
@@ -570,13 +613,28 @@ internal object RunnerPage {
         counts.firstOrNull { ObjectId.same(it.text("workspaceId"), workspace.text("id")) }?.int("running") ?: 0
 
     // about
-    /** `0.1.197 · Latest`; a root runner behind installs the release when no turn is running. */
+    /** `0.1.197 · Latest`; a runner behind that installs the release itself says so, and so does one a staged rollout holds
+     * back. One that reports where its updates stand says which it is; an older one is judged by runsAsRoot, as before. */
     fun versionValue(runner: JsonObject, latest: String?): String? {
         val version = runner.str("version")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val newest = latest?.trim()?.takeIf { it.isNotEmpty() } ?: return version
         if (compareRunnerVersions(version, newest) >= 0) return version + RunnerCopy.SEP + "Latest"
-        if (runner.bool("runsAsRoot") != true) return version
-        return "$version${RunnerCopy.SEP}$newest installs when no turn is running"
+        val note = when (runner.obj("selfUpdate")?.str("state")) {
+            null -> if (runner.bool("runsAsRoot") == true) "installs when no turn is running" else null
+            "enabled", "waitingForIdle" -> "installs when no turn is running"
+            "heldByRollout" -> "not rolled out to it yet"
+            else -> null
+        } ?: return version
+        return "$version${RunnerCopy.SEP}$newest $note"
+    }
+
+    /** `Sep 20, 4:00 PM · 0.1.189 → 0.1.190`: when the runner last updated itself, in the reader's time zone, and between
+     * which versions; none from a runner that doesn't report its updates, or hasn't updated itself yet. */
+    fun lastUpdate(runner: JsonObject, zone: ZoneId = ZoneId.systemDefault()): String? {
+        val report = runner.obj("selfUpdate") ?: return null
+        val from = report.str("lastUpdatedFrom"); val to = report.str("lastUpdatedTo")
+        val versions = if (from != null && to != null) "$from → $to" else to
+        return listOfNotNull(report.str("lastUpdatedAt")?.let { lastSeen(it, zone) }, versions).takeIf { it.isNotEmpty() }?.joinToString(RunnerCopy.SEP)
     }
 
     fun runsAsValue(runner: JsonObject) = when (runner.bool("runsAsRoot")) { true -> "root"; false -> "regular user"; null -> null }

@@ -39,6 +39,8 @@ object ManagementFixture {
     @Volatile var secondRunner = false
     @Volatile var runnerOrder = listOf(RUNNER, RUNNER_TWO)
     @Volatile var removedRunners = emptySet<String>()
+    /** The runner's selfUpdate report's state; null is a runner too old to report one. */
+    @Volatile var selfUpdate: String? = null
     /** Completing it drops the control stream; a reconnect then never opens. */
     @Volatile var drop = CompletableDeferred<Unit>()
     @Volatile private var opened = 0
@@ -46,7 +48,7 @@ object ManagementFixture {
     fun reset() {
         calls.clear(); workspaceName = "Alpha"; runnerAlias = "Old alias"; runnerCapacity = 2; poolLabel = "Team Codex"; theme = "system"; shareFails = false; accessFails = false
         viewerRole = "ADMIN"; viewerCreates = true; membersCanAdd = false; membersCanAddAccounts = false; loginState = "ACTIVE"
-        secondRunner = false; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet()
+        secondRunner = false; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet(); selfUpdate = null
         drop = CompletableDeferred(); opened = 0
     }
 
@@ -78,7 +80,7 @@ object ManagementFixture {
         "status":"ONLINE","lastHeartbeatAt":"$now","maxConcurrent":1,"activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,"engines":[],"enrolledAt":"2026-09-02T00:00:00Z"}"""
     private fun runner() = """{"id":"$RUNNER","name":"box","displayName":"$runnerAlias","hostname":"box-01","version":"0.1.200","online":true,
         "status":"ONLINE","lastHeartbeatAt":"$now","maxConcurrent":$runnerCapacity,"activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,
-        "engines":[],"enrolledAt":"2026-09-01T00:00:00Z"}"""
+        "selfUpdate":${selfUpdate?.let { """{"state":"$it"}""" } ?: "null"},"engines":[],"enrolledAt":"2026-09-01T00:00:00Z"}"""
     private fun sessionRow() = """{"id":"$SESSION","title":"Fixture session","status":"SUCCEEDED","lifecycleState":"OPEN","workspaceId":"$WORKSPACE",
         "agentId":"$WORKSPACE","createdAt":"${now.minusSeconds(600)}","lastTurnAt":"${now.minusSeconds(300)}","pendingApprovals":0}"""
     private fun link() = """{"id":"L1","token":"fixture-token","kind":"SESSION","state":"ACTIVE","root":{"id":"$SESSION","title":"Fixture session"},
@@ -120,6 +122,7 @@ object ManagementFixture {
                 ok(runner())
             }
             "runners/$RUNNER/login" -> ok("""{"status":null}""")
+            "runners/$RUNNER/self-update" -> ok("""{"requestedAt":"$now"}""")
             "sessions" -> ok(if (api.query.contains("view" to "open")) "[${sessionRow()}]" else "[]")
             "sessions/$SESSION/share" -> when {
                 shareFails -> fail(503, "share read failed")
