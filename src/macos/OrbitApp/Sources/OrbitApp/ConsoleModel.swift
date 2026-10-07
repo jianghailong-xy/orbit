@@ -3859,18 +3859,19 @@ final class ConsoleModel {
     /// Which closing card this conversation draws (`ProjectDone.slot`), adopted from the reads — one
     /// at a time, the way the browser's `SessionProjectSettlementCard` switches between them: "Is
     /// this project done?" while the coordinator's request stands (or the row says Record as done…),
-    /// its receipt once the project is recorded done, and otherwise "Why is this project not done?".
+    /// its receipt once the project is recorded done, and otherwise nothing. Nothing asks "Why is
+    /// this project not done?" in a conversation any more (the owner's ruling of 2026-10-07
+    /// 04:20Z); Orbit's own DONE is the terminal state of that old card, drawn as it always was.
     ///
     /// Each card is re-derived from the reads on every render, so a request the coordinator filed
     /// again is the same card with the new request in it. A read that has not answered changes
     /// nothing on screen; one that answered and asks nothing takes the closing card down, as the
-    /// browser draws none — "Why is this project not done?" is up only while the project looks
-    /// finished, and the owner's card only while it is asked or recorded.
+    /// browser draws none — the owner's card is up only while it is asked or recorded.
     private func adoptDoneSlot() {
         let live = ProjectDone.live(openItems: openItems, status: projectDone?.status)
         doneRequestRow = live
         switch ProjectDone.slot(subject: projectDone, request: live, waitingKind: sessionWaitingKind,
-                                record: doneRecord, started: projectStarted) {
+                                record: doneRecord) {
         case .none:
             if projectDone != nil {
                 decisionCards.removeAll { $0.kind == .projectDone || $0.kind == .projectNotDone }
