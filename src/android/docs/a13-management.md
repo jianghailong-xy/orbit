@@ -108,7 +108,13 @@ Each defect below has a test that failed on the code before its fix and passes a
 | P2-6 the status bar's icons ignored the account's appearance | `ManagementShellTest` `theStatusBarFollowsTheAccountsAppearanceNotTheSystems` | `bgj_8d29d54232da` | `bgj_4eb164793b2d` |
 | Found on the real stack: an alias typed just before leaving the Name page was not saved | `ManagementShellTest` `aNameTypedOnTheRunnerNamePageIsSavedWhenThePageGoes` | `bgj_6740c558594a` | `bgj_455fa79ab5f7` (`a39266cec`, whole unit suite) |
 | Found by the emulator's 200% tour: Turn off and Share Link… broken mid-word, the SHARED chip upright (a long pool name does the same at any size) | `ManagementPanelTest` `atTwiceTheFontSizeNoButtonOrChipBreaksItsWords` (native graphics, real text measurement) | `bgj_553d9de0eb12` | `bgj_b522a9ea10fd` (whole unit suite, 159 tests) |
+| Review 2 (P0): a runner removed in Edit mode left its drag handle under the row that moved into its place; a drag there started on the removed id and crashed (`removeAt(-1)`) | `ManagementPanelTest` `aRemovedRowLeavesNoHandleBehindForTheNextRowsDrag` (both row orders: which of two overlapping handles is found first follows hash order); `RunnerPageTest` `aDragOnARowNotInTheOrderMovesNothing` | `bgj_5d6e194abbe6` (`IndexOutOfBoundsException: Index -1 out of bounds for length 1`) | `bgj_60e7ff7c32d2` (`938f82e7f`, whole unit suite, 162) |
+| Review 2 (P3): a very long photo at full zoom asked layout for a size it cannot hold and crashed the crop dialog | `ManagementPanelTest` `aVeryLongPhotoZoomedInAllTheWayStillDraws` (30000×100) | `bgj_5d6e194abbe6` (`Can't represent a width of 265503 … in Constraints`) | `bgj_60e7ff7c32d2` |
 | A Max Concurrent press followed by leaving within the 0.9 s settle was lost | `ManagementShellTest` `maxConcurrentIsSavedOnceThePressesSettle` | `bgj_14f522007f0b` (this test with the runner page of `39a838ffb`: two presses give one write, then the press followed by leaving times out) | `bgj_5820b4219a30` (`4a32b7c2a`) |
+
+Also from review 2: a drag cut short by Edit turning off (the gesture is cancelled) no longer leaves the order it had
+reached on screen (the drag is cleared in a `finally`); no test reproduced the stale order, so this rests on the
+code. Rows now drop their handle and height when they leave, and a drag starts only on a row shown now.
 
 The project gate on the final commit: run on the final commit; its job is cited in the evidence.
 
@@ -138,6 +144,10 @@ Run 10 on `7d141f47b` (API 36 `sdk_gphone64_x86_64`, 1080×2400; APK sha256 app 
 the 200% tour) and the TalkBack check `OK (1 test)` in 204.6 s. Runs 5–9 (`4a32b7c2a` … `3baa9f4a2`) found the
 harness problems and the defects fixed above. Run directories under `src/android/build/device/` are not committed;
 captures and reports go with the evidence.
+
+Runners list Edit on two API levels (`6e271c28b`: API 36 `emulator-5554` `OK (1 test)` in 9.9 s, API 29 `orbit-ui-api29` (Android 10, booted for the run and shut down after) `OK (1 test)` in 6.5 s; job `bgj_e3d658273b69`): `ManagementDeviceTest.runnersListRemovesARowThenReordersTheNextByDragging`
+serves three runners, removes the first row with Edit left on, drags the row that moved into its place below the last,
+and expects one reorder with that order and the rows standing in it.
 
 ### TalkBack, dark appearance, 200% font
 
