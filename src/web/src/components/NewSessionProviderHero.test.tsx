@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
+import { encodeId } from '../lib/idCodec';
 import { NewSessionProviderHero } from './NewSessionProviderHero';
 import { currentProviderChoice, engineChoiceFor, engineChoices, providerChoices } from '../lib/sessionProviderChoices';
 import type { ConfiguredProvider } from '../lib/workspaceDefaults';
@@ -26,6 +27,8 @@ const configured: ConfiguredProvider[] = [
 ];
 const catalog = { claude: [{ value: 'claude-opus-5', label: 'Claude Opus 5' }] } as never;
 
+const RUNNER_ID = '019fc086-c7c7-7c92-8215-778ad8a6280a';
+
 function markup(
   provider: string,
   opts: {
@@ -50,7 +53,7 @@ function markup(
         }
         engines={engines}
         onPick={() => {}}
-        runnerId="019fc086-c7c7-7c92-8215-778ad8a6280a"
+        runnerId={RUNNER_ID}
         disabled={opts.disabled}
         note={opts.note}
         currentModelLabel={opts.currentModelLabel}
@@ -99,6 +102,8 @@ describe('NewSessionProviderHero', () => {
     );
     expect(html).not.toContain('Start a new session');
     expect(html).not.toContain('Orbit remembers who runs it.');
+    // Where what it runs on is managed: Infrastructure.
+    expect(html).toMatch(/<a href="\/infrastructure"[^>]*>Manage<\/a>/);
   });
 
   it('shows the current provider as the collapsed identity, name under the mark', () => {
@@ -136,11 +141,14 @@ describe('NewSessionProviderHero', () => {
     expect(html).toContain('Not installed on this runner');
     expect(html).toContain('engine=kimi');
     expect(html).not.toContain('runner login');
+    // Its fix is that engine's row on this machine's card in Infrastructure.
+    expect(html).toContain(`<a href="/infrastructure?runner=${encodeId(RUNNER_ID)}&amp;engine=kimi"`);
+    expect(html).toMatch(/<a href="\/infrastructure\?runner=[^"]*"[^>]*>Fix it<\/a>/);
   });
 
   it('sends a configured provider’s fix to the engine it borrows, not to its own slug', () => {
-    // Kimi (Moonshot) runs on the Kimi CLI, and `moonshot` has no row on the Providers page to
-    // land on — the install that fixes it is the kimi engine's.
+    // Kimi (Moonshot) runs on the Kimi CLI, and `moonshot` has no row on Infrastructure to land
+    // on — the install that fixes it is the kimi engine's.
     const html = markup('moonshot', {
       engines: [{ engine: 'kimi', installed: false, auth: 'unknown' }],
     });

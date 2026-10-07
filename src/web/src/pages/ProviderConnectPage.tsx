@@ -56,13 +56,13 @@ export function ProviderPickPage() {
  * key, optionally probe it, and save.
  *
  * Editing needs the row, and the management API only lists — so the page reads the same cached
- * list the providers page fills and picks its id out of it.
+ * list Infrastructure fills and picks its id out of it.
  */
 export function ProviderConnectPage() {
   const { slug, id } = useParams();
 
   // Read on both paths: editing needs the row itself, and connecting needs to know which vendors
-  // are already set up — the form seeds its name from that. Same cached list the providers page
+  // are already set up — the form seeds its name from that. Same cached list Infrastructure
   // fills, so arriving from there costs nothing.
   const providers = useQuery({
     queryKey: PROVIDERS_LIST_KEY,

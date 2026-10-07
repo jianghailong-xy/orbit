@@ -1537,7 +1537,7 @@ export function TaskDetailPanel({
                 onChange={(val) => {
                   const choice = runProviderChoices.find((row) => row.slug === val);
                   if (choice?.unavailable) {
-                    navigate(choice.fixHref ?? `/providers?runner=${encodeId(assigneeRunner?.id ?? '')}&engine=${choice.fixEngine ?? choice.slug}`);
+                    navigate(choice.fixHref ?? `/infrastructure?runner=${encodeId(assigneeRunner?.id ?? '')}&engine=${choice.fixEngine ?? choice.slug}`);
                     return;
                   }
                   updateRunTarget.mutate({ provider: val ?? null, model: null });

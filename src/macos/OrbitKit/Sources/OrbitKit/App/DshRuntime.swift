@@ -46,9 +46,9 @@ public enum DshRuntime {
                 return "This runner predates DeepSeek Harness. It updates itself when no session is running on it."
             case .unsupportedPlatform:
                 return "DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only."
-            case .notInstalled: return "Install DeepSeek Harness on this runner from Providers."
+            case .notInstalled: return "Install DeepSeek Harness on this runner from Infrastructure."
             case .unsupportedVersion:
-                return "This runner has a DeepSeek Harness version Orbit does not support. Reinstall it from Providers."
+                return "This runner has a DeepSeek Harness version Orbit does not support. Reinstall it from Infrastructure."
             }
         }
 
@@ -92,18 +92,18 @@ public enum DshRuntime {
         public var detail: String {
             switch self {
             case .needsKey:
-                return "This session has no DeepSeek Harness key to run on. Add or re-enable the key in Providers, then send your message again."
+                return "This session has no DeepSeek Harness key to run on. Add or re-enable the key in Infrastructure, then send your message again."
             case .invalidKey:
-                return "Update the key in Providers, then send your message again. Connecting a key does not check it — the first request does."
+                return "Update the key in Infrastructure, then send your message again. Connecting a key does not check it — the first request does."
             case .updateRunner:
                 return "This runner predates DeepSeek Harness. It updates itself when no session is running on it."
-            case .notInstalled: return "Install it from Providers, then send your message again."
+            case .notInstalled: return "Install it from Infrastructure, then send your message again."
             case .unsupportedPlatform:
                 return "DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only. Move this work to a runner that can."
             }
         }
 
-        /// Fixed on the session's own key, in Providers.
+        /// Fixed on the session's own key, in Infrastructure.
         public var isKeyProblem: Bool { self == .needsKey || self == .invalidKey }
     }
 

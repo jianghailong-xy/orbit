@@ -650,11 +650,11 @@ function PoolCard({
 }
 
 /**
- * The Providers page's middle section: the user's account pools — several Claude subscriptions
+ * Infrastructure's last section: the user's account pools — several Claude subscriptions
  * under one name, each session starting on the one whose quota resets soonest, or a Codex pool of their own
  * that runs on their ChatGPT account — and the shared pools they are in, several people's OpenAI keys
- * under one name (sharedPoolAsProviderPool). Between the engines above (one machine's login) and the
- * keys below (what an account pool is made of), whose verdicts say which accounts a pool would no
+ * under one name (sharedPoolAsProviderPool). Below the machines' engines (one machine's login) and the
+ * API keys (what an account pool is made of), whose verdicts say which accounts a pool would no
  * longer admit (`refusals`, poolRefusals). Its head makes another pool of any kind (NewPoolModal); a key
  * OpenAI refused is replaced from its card, and an account OpenAI signed out is signed in again from
  * it — each taken out on the pool's own page.
@@ -997,7 +997,7 @@ export function NewPoolModal({ rows, onClose }: { rows: ProviderRow[]; onClose: 
                 aria-label="People to add"
               />
               <div className="np-field-h">
-                They see it on their Providers page and in the session picker, and can start sessions on it.
+                They see it on their Infrastructure page and in the session picker, and can start sessions on it.
               </div>
               <Checkbox checked={canAdd} onChange={(e) => setCanAdd(e.target.checked)} className="np-can-add">
                 They can add their own keys

@@ -24,7 +24,7 @@ import {
   WarningOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { RunnerRepoHealth } from '@orbit/shared';
+import type { LoginEngine, RunnerRepoHealth } from '@orbit/shared';
 import {
   App as AntdApp,
   Button,
@@ -64,11 +64,7 @@ import {
 import { CLAUDE_SESSION_ID_RE, importClaudeSessionAndWait } from '../lib/sessionImport';
 import { ClaudeHistoryOffer, type ImportMode } from '../components/ClaudeHistoryOffer';
 import { AccountSelect, offersAccount } from '../components/AccountSelect';
-import {
-  RunnerEnginesSection,
-  engineSignInHref,
-  useEngineUpdate,
-} from '../components/RunnerEnginesSection';
+import { MachineEngines, ownSignInPanel } from '../components/RunnerEngines';
 import { useRunnerTokenRotation } from '../components/RunnerTokenRotation';
 import type { Runner } from '../components/TasksSidePanel';
 import { copyText } from '../lib/clipboard';
@@ -99,6 +95,9 @@ import {
   RUNNER_CAPACITY_FOOTER,
   RUNNER_COPY_COMMAND,
   RUNNER_DISK,
+  RUNNER_ENGINES,
+  RUNNER_ENGINES_FOOTER,
+  RUNNER_ENGINES_OFFLINE_FOOTER,
   RUNNER_KEEP_FREE,
   RUNNER_LINE_SEPARATOR,
   RUNNER_MAX_CONCURRENT,
@@ -309,7 +308,33 @@ export function RunnerDetailPage() {
   // Where the disk card's "Set a Reserve…" lands.
   const capacityRef = useRef<HTMLElement>(null);
   const keepFreeRef = useRef<RefSelectProps>(null);
-  const engineUpdate = useEngineUpdate(runnerId ?? '');
+  // The sign-in panel open in Engines — a row's own, or the one a Needs Attention card's Sign In
+  // opens on that engine's row — and the row that card brought into view.
+  const [signIn, setSignIn] = useState<string | null>(null);
+  const [signInEngine, setSignInEngine] = useState<LoginEngine | null>(null);
+  // Update Engines: POST /runners/:id/engine-update takes no engine — it updates every CLI on the
+  // machine, so it is the machine's to offer: from Engines' head, and from a Needs Attention card.
+  const engineUpdate = useMutation({
+    mutationFn: () => api(`/runners/${runnerId}/engine-update`, { method: 'POST' }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['runners'] }),
+    onError: (e: Error) => message.error("Couldn't start the engine update", e.message),
+  });
+  const dismissEngineUpdate = useMutation({
+    mutationFn: () => api(`/runners/${runnerId}/install`, { method: 'DELETE' }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['runners'] }),
+  });
+  // The model picker lists what these CLIs report, re-read hourly by the runner — and on the spot
+  // after it installs a newer engine. This asks for a pass now, for a model a CLI learned about
+  // some other way. There is no relay to watch: the refreshed catalog simply arrives
+  // on a heartbeat, which is why the toast promises a minute rather than showing progress.
+  const refreshModels = useMutation({
+    mutationFn: () => api(`/runners/${runnerId}/refresh-models`, { method: 'POST' }),
+    onSuccess: () => {
+      message.success('Re-reading this machine’s model lists — the picker updates within a minute.');
+      void qc.invalidateQueries({ queryKey: ['runners'] });
+    },
+    onError: (e: Error) => message.error("Couldn't refresh the model lists", e.message),
+  });
   // Update Runner Now: the runner checks for its release at once rather than at its next 10-minute
   // check, by the same rules — a turn in flight still holds the install. Nothing answers but the
   // update state its next heartbeats report, which the list's refetch brings to this page.
@@ -1176,6 +1201,11 @@ export function RunnerDetailPage() {
     return parts.filter(Boolean).join(RUNNER_LINE_SEPARATOR) || '—';
   })();
   const canUpdateNow = runnerCanUpdateNow(runner, nowMs);
+  // An engine update shares the runner's one relay slot with an engine's install. Only a run in
+  // `update` mode is Engines' news; an install's belongs to the row that started it.
+  const relay = runner.install;
+  const updating = relay?.mode === 'update';
+  const relayInFlight = relay?.status === 'pending' || relay?.status === 'installing';
 
   const openRename = () => {
     setRenameVal(shownName);
@@ -1195,9 +1225,17 @@ export function RunnerDetailPage() {
     const action = item.action;
     switch (action?.kind) {
       case 'signIn': {
+        // Signed in where the engine is listed, below: its row's sign-in opens, and the row comes
+        // into view.
         const engine = action.engine;
-        return engine ? (
-          <Button size="small" onClick={() => navigate(engineSignInHref(runner.id, engine))}>
+        return engine && engine !== 'opencode' && engine !== 'dsh' ? (
+          <Button
+            size="small"
+            onClick={() => {
+              setSignIn(ownSignInPanel(runner, engine));
+              setSignInEngine(engine);
+            }}
+          >
             {RUNNER_SIGN_IN}
           </Button>
         ) : null;
@@ -1364,10 +1402,73 @@ export function RunnerDetailPage() {
           which index.css sets with `order`, so the columns themselves never move. */}
       <div className="rd-cols">
         <div className="rd-col rd-col-main">
-          {/* What software this machine runs, whether it's signed in and current — the same class
-              of fact as the runner version, which is why updating them lives here and not on the
-              Providers page. */}
-          <RunnerEnginesSection runner={runner} />
+          {/* What software this machine runs, and each engine's sign-in: the rows of its card in
+              Infrastructure, where an engine is signed in, installed and its accounts managed. Which
+              version is installed is the same class of fact as the runner version, so updating them
+              lives in this section's head and nowhere else. */}
+          <section className="rd-section rd-engines">
+            <div className="rd-section-head">
+              <div className="rd-section-title">{RUNNER_ENGINES}</div>
+              {/* Understated on purpose: Orbit updates these every 30 min, so this is the escape
+                  hatch for when that isn't soon enough — not the way the CLIs are meant to stay
+                  current. The models button sits here for the same reason it exists: what a CLI
+                  offers is a fact about this machine's engines, and updating one is exactly when
+                  the other goes stale. */}
+              {runner.online && (
+                <div className="rd-section-actions">
+                  <Button size="small" disabled={refreshModels.isPending} onClick={() => refreshModels.mutate()}>
+                    Refresh models
+                  </Button>
+                  <Button
+                    size="small"
+                    disabled={relayInFlight || engineUpdate.isPending}
+                    onClick={() => engineUpdate.mutate()}
+                  >
+                    {relayInFlight && updating ? 'Updating…' : 'Update engines'}
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* The run's report. Unlike an install it is not retired by the next probe: the summary —
+                what moved, what was skipped and why — exists nowhere else once it's gone. */}
+            {updating && relay?.status && (
+              <div className={`rd-engine-relay${relay.status === 'failed' ? ' bad' : ''}`}>
+                <div className="rd-engine-relay-row">
+                  {relay.status === 'pending'
+                    ? 'Queued — the runner picks this up on its next check-in.'
+                    : relay.status === 'installing'
+                      ? 'Updating this machine’s engine CLIs…'
+                      : relay.message || 'Nothing to update.'}
+                </div>
+                {relay.status !== 'pending' && relay.command && (
+                  <div className="rd-engine-relay-hint">
+                    Orbit ran <code className="re-cmd">{relay.command}</code>
+                  </div>
+                )}
+                {(relay.status === 'done' || relay.status === 'failed') && (
+                  <div className="rd-engine-relay-hint">
+                    <button className="re-link" type="button" onClick={() => dismissEngineUpdate.mutate()}>
+                      Dismiss
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className={`re-card re-runner-card${runner.online ? '' : ' offline'}`}>
+              <MachineEngines
+                runner={runner}
+                signIn={signIn}
+                onSignIn={setSignIn}
+                focusEngine={signInEngine}
+                machinePage
+              />
+            </div>
+            {runner.engines && (
+              <div className="rd-hint">{runner.online ? RUNNER_ENGINES_FOOTER : RUNNER_ENGINES_OFFLINE_FOOTER}</div>
+            )}
+          </section>
 
           <section className="rd-section rd-workspaces">
             <div className="rd-section-head">

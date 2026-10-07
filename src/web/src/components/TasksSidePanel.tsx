@@ -406,8 +406,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
 
   // Workspace/session routes have no proxy parent in TOP: a resolved Workspace highlights its own
   // row, while an unresolved deep link briefly leaves the fixed nav unselected. A machine's page, a
-  // key's and a pool's are Infrastructure's, under the addresses the Runners and Providers pages gave
-  // them.
+  // key's and a pool's are Infrastructure's, under the addresses Runners and Providers gave them.
   const routeKey = projectPageKey
     ? projectPageKey
     : activeWorkspaceId

@@ -64,10 +64,10 @@ export interface ProviderChoice {
    *  human label — so "switching provider changes your model" is visible before the click. */
   modelLabel: string;
   /** Why this row can't be picked, or absent when it can. Set for an engine whose CLI the runner
-   *  doesn't have, or has but says it isn't signed into: the row stays listed, and links to the
-   *  Providers page instead of picking, because that is where the install and the sign-in are. */
+   *  doesn't have, or has but says it isn't signed into: the row stays listed, and links to
+   *  Infrastructure instead of picking, because that is where the install and the sign-in are. */
   unavailable?: string;
-  /** Which engine row on the Providers page answers `unavailable`. That is the CLI this choice
+  /** Which engine row in Infrastructure answers `unavailable`. That is the CLI this choice
    *  runs on, which for a BYOK provider is not its own slug — a Moonshot row is fixed on the Kimi
    *  engine row. Set whenever `unavailable` is about this runner. */
   fixEngine?: string;
@@ -246,7 +246,7 @@ function antigravityBlocker(state?: RunnerAntigravityState, health?: RunnerEngin
  *
  * Engines carry the health the runner last reported, because an engine choice is a claim about
  * someone else's machine. Not installed there, or installed but signed out → listed with the
- * reason, pointing at the Providers page where that machine gets its install or its sign-in (see
+ * reason, pointing at Infrastructure, where that machine gets its install or its sign-in (see
  * `unavailable`). Hiding the row instead would leave a user who pays for Kimi with no way to find
  * out why it isn't offered. A runner that has reported nothing claims nothing, so every engine
  * stays pickable — as does any engine missing from a partial report.

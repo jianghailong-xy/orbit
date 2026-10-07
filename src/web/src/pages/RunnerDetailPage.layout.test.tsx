@@ -171,7 +171,7 @@ async function mount(m: Machine, counts: Array<{ workspaceId: string; running: n
           <MemoryRouter initialEntries={[`/runners/${RUNNER_ID}`]}>
             <Routes>
               <Route path="/runners/:id" element={<RunnerDetailPage />} />
-              <Route path="/providers" element={<Arrived />} />
+              <Route path="*" element={<Arrived />} />
             </Routes>
             <ToastViewport />
           </MemoryRouter>
@@ -355,9 +355,14 @@ describe('a runner’s page, laid out as web.png', () => {
     await click(button('Save and clean up', confirm));
     expect(sent.at(-1)).toEqual({ method: 'POST', path: '/workspaces/ws-app/repo-cleanup' });
 
-    // Sign In: that engine's card on Providers, opened.
+    // Sign In: on that engine's own row in Engines, without leaving the page — the row comes into
+    // view with its sign-in open.
     await click(button('Sign In'));
-    expect(text($('[data-testid="arrived"]'))).toBe(`/providers?runner=${RUNNER_ID}&engine=claude`);
+    expect(document.querySelector('[data-testid="arrived"]')).toBeNull();
+    const claude = $('.rd-engines [data-engine="claude"]');
+    expect(claude.className).toContain('focused');
+    expect(scrolledTo.at(-1)).toBe(claude);
+    expect(text($('.re-panel .rsi-btn', claude))).toBe('Sign in to Claude Code');
   });
 
   it('saves Max Concurrent as it is typed — on blur, and on Enter — and Keep Free as it is picked', async () => {
@@ -464,8 +469,9 @@ describe('a runner’s page, laid out as web.png', () => {
       ['warn', 'Can’t update itself', 'Copy Command'],
     ]);
     expect(cards()[0].detail).toBe('Start the runner on that machine — it reconnects within 30 seconds.');
-    // Nothing on it can be updated or re-read from here while it is away, and the page says why.
-    expect($$('.rd-engines button').map(text)).toEqual([]);
+    // Nothing on it can be updated, re-read or signed in from here while it is away, and the page
+    // says why.
+    expect($$('.rd-engines button').filter((b) => !(b as HTMLButtonElement).disabled).map(text)).toEqual([]);
     expect(text($('.rd-engines .rd-hint'))).toBe('Signing in and updating need the runner online.');
     expect(about()[2]).toEqual(['Version', '0.1.155', 'Can’t update itself']);
   });
