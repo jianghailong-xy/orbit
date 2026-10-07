@@ -1,3 +1,5 @@
+import { toUuid } from '@orbit/shared';
+
 import type { PrismaService } from '../prisma/prisma.service';
 import { canonicalJson } from './canonical-json';
 
@@ -35,7 +37,10 @@ import { canonicalJson } from './canonical-json';
  *
  * The values are compared canonically ({@link canonicalJson}), so key order and a client that spells
  * the object differently are not a mismatch — but absent and null are, because "leave the timeout
- * alone" and "put the timeout back to its default" are two different writes.
+ * alone" and "put the timeout back to its default" are two different writes. The id of the project
+ * is resolved to its uuid before it is compared, for the reason {@link projectIdAsUuid} gives: the
+ * two ends are handed it in different spellings, and which project a card is about is the question
+ * rather than how the caller wrote it down.
  */
 
 /** The tool name the runner files this card under; the server matches on it, so the two ends agree. */
@@ -76,8 +81,35 @@ export function mergeCheckProposal(settings: Record<string, unknown>): Record<st
 }
 
 /**
+ * The project a card names — resolved to the uuid that names it — however the caller spelled it.
+ *
+ * WHICH SPELLING AN ID ARRIVES IN IS NOT PART OF WHAT A CARD AUTHORISED, and the two ends of this
+ * comparison receive it in different ones. The CARD carries the id the CALLER wrote: the runner
+ * files it with the string the agent passed to `project_update`, and the tool's own description
+ * tells the agent that is "the project to update, as shown in its web UI URL (/projects/<id>)" —
+ * the base62 public id (`34bZ3i4AvgJaaoaw5E9tH`). The REQUEST carries the uuid that route resolved
+ * that id to, because `PublicIdPipe` decodes every id a caller supplies before the service sees it.
+ * Comparing the two literally made a card the runner files match nothing at all: the owner answered
+ * the question, and the write it was raised for was still refused. Both spellings name the same
+ * project, so both resolve here and the comparison lands on WHICH project, not on how it is written.
+ *
+ * An id that resolves to neither spelling is kept as written. That is fail-closed rather than
+ * lenient: the request side of the comparison is always a resolved uuid by the time it is compared,
+ * so a card naming something undecodable covers nothing.
+ */
+function projectIdAsUuid(value: unknown): unknown {
+  if (typeof value !== 'string') return value ?? null;
+  try {
+    return toUuid(value);
+  } catch {
+    return value;
+  }
+}
+
+/**
  * What a card authorises, as one comparable string: the project named BESIDE the change, and
- * exactly that change. Canonically serialized, so the comparison cannot turn on key order.
+ * exactly that change. Canonically serialized, so the comparison cannot turn on key order — and
+ * with the project resolved to its uuid, so it cannot turn on the spelling of the id either.
  *
  * The project is read out of the same object as the values, rather than passed in from the caller's
  * side of the comparison, and that is deliberate: a version that took the project as an argument
@@ -86,7 +118,7 @@ export function mergeCheckProposal(settings: Record<string, unknown>): Record<st
  */
 export function mergeCheckProposalKey(settings: unknown): string {
   const named = (settings ?? {}) as Record<string, unknown>;
-  return canonicalJson({ projectId: named.projectId ?? null, ...mergeCheckProposal(named) });
+  return canonicalJson({ projectId: projectIdAsUuid(named.projectId), ...mergeCheckProposal(named) });
 }
 
 /** The same key for a request, whose project id is in the URL rather than in the object. */
