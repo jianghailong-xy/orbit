@@ -438,8 +438,15 @@ private fun ConfirmDialog(title: String, message: String, confirm: String, dismi
         dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } })
 }
 
+/** A row's second line; “Everyone here” is green and wraps with the rest as one line of text. */
 @Composable
-private fun EveryoneHere() = Text("Everyone here", color = Ink.green, style = MaterialTheme.typography.labelMedium)
+private fun SharedLine(line: String, tagged: Boolean) {
+    val green = Ink.green
+    Text(buildAnnotatedString {
+        append(line)
+        if (tagged) { append(" · "); withStyle(SpanStyle(color = green)) { append("Everyone here") } }
+    }, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+}
 
 @Composable
 private fun CodexAccountRow(member: PoolMember, login: JsonObject, next: Boolean, tagged: Boolean, canSignInAgain: Boolean, canSignOut: Boolean,
@@ -452,10 +459,7 @@ private fun CodexAccountRow(member: PoolMember, login: JsonObject, next: Boolean
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(member.label, style = MaterialTheme.typography.titleMedium, maxLines = 1); if (next) Chip("NEXT")
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(CodexLogins.line(login, contributor) + if (tagged) " ·" else "", style = MaterialTheme.typography.labelMedium, color = Ink.muted)
-                    if (tagged) EveryoneHere()
-                }
+                SharedLine(CodexLogins.line(login, contributor), tagged)
                 Text(if (RunnerPage.isPaused(member.pausedUntil, now) && CodexLogins.active(login)) "Signed in" else status.label,
                     style = MaterialTheme.typography.bodySmall, color = poolTone(status.tone))
                 if (member.state == "SIGNED_OUT") {
@@ -484,10 +488,7 @@ private fun PoolKeyRow(key: JsonObject, pool: JsonObject, next: Boolean, tagged:
                 if (contributor.bool("you") == true) Text("you", style = MaterialTheme.typography.labelMedium, color = Ink.muted)
                 if (next) Chip("NEXT")
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(PoolPage.keyLine(key) + if (tagged) " ·" else "", style = MaterialTheme.typography.labelMedium, color = Ink.muted)
-                if (tagged) EveryoneHere()
-            }
+            SharedLine(PoolPage.keyLine(key), tagged)
             Text(status.label, style = MaterialTheme.typography.bodySmall, color = poolTone(status.tone))
             PoolPage.invalidReason(key, pool)?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.red) }
             if (key.str("state") == "INVALID" && PoolPage.canReplace(key, pool)) Button(onClick = replace) { Text("Replace key") }

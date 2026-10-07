@@ -1,9 +1,11 @@
 package io.orbitd.android.management
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -12,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -23,6 +26,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.orbitd.android.BuildConfig
+import io.orbitd.android.R
 import io.orbitd.android.navigation.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -121,7 +125,14 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
         Column(Modifier.fillMaxWidth().clickable(enabled = user != null, role = Role.Button) { page("profile") }
             .semantics(mergeDescendants = true) { contentDescription = "Edit profile"; stateDescription = name }
             .padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            AccountAvatar(name, photo, 72.dp)
+            Box {
+                AccountAvatar(name, photo, 72.dp)
+                // EditBadge: a grey disc rimmed in the page's colour, set into the avatar's corner.
+                Surface(Modifier.align(Alignment.BottomEnd).offset(x = 4.dp, y = 2.dp).size(30.dp), shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceVariant, border = BorderStroke(2.dp, MaterialTheme.colorScheme.background)) {
+                    Icon(painterResource(R.drawable.ic_edit), null, Modifier.padding(7.dp))
+                }
+            }
             Text(name, style = MaterialTheme.typography.titleMedium, maxLines = 1)
         }
         if (record.busy || record.stale || record.error != null) PersonalRecordStatus(record)
@@ -136,26 +147,26 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             }
         }
         SettingsGroup("Sessions") {
-            SettingsPicker("Default permission", preferences.text("defaultPermissionMode").ifBlank { "auto" }, personalPermissions,
+            SettingsPicker("Default permission", R.drawable.ic_permission, preferences.text("defaultPermissionMode").ifBlank { "auto" }, personalPermissions,
                 record.ready) { preference("defaultPermissionMode", JsonPrimitive(it)) }
-            SettingsSwitch("Session orchestration", (preferences["enableOrchestration"] as? JsonPrimitive)?.booleanOrNull != false,
+            SettingsSwitch("Session orchestration", R.drawable.ic_orchestration, (preferences["enableOrchestration"] as? JsonPrimitive)?.booleanOrNull != false,
                 record.ready) { preference("enableOrchestration", JsonPrimitive(it)) }
         }
         SettingsGroup("Machines & models") {
-            SettingsLink("Runners", runners) { page("runners") }
-            SettingsLink("Providers") { page("providers") }
+            SettingsLink("Runners", R.drawable.ic_runner, runners) { page("runners") }
+            SettingsLink("Providers", R.drawable.ic_provider) { page("providers") }
         }
         SettingsGroup("Preferences") {
-            SettingsLink("Notifications", when (alerts) { true -> "On"; false -> "Off"; null -> "Unavailable" }) { page("notifications") }
-            SettingsPicker("Appearance", preferences.text("theme").ifBlank { "system" },
+            SettingsLink("Notifications", R.drawable.ic_bell, when (alerts) { true -> "On"; false -> "Off"; null -> "Unavailable" }) { page("notifications") }
+            SettingsPicker("Appearance", R.drawable.ic_appearance, preferences.text("theme").ifBlank { "system" },
                 listOf("system" to "System", "light" to "Light", "dark" to "Dark"), record.ready) { preference("theme", JsonPrimitive(it)) }
         }
         SettingsGroup("Account") {
-            SettingsValue("Email", user?.text("email").orEmpty())
-            SettingsValue("Instance", instance.orEmpty())
-            SettingsLink("Shared links", sharedLinks) { page("sharing") }
-            SettingsLink("Change password") { page("password") }
-            if (user?.text("role") == "ADMIN") SettingsLink("Admin") { page("admin") }
+            SettingsValue("Email", R.drawable.ic_mail, user?.text("email").orEmpty())
+            SettingsValue("Instance", R.drawable.ic_globe, instance.orEmpty())
+            SettingsLink("Shared links", R.drawable.ic_link, sharedLinks) { page("sharing") }
+            SettingsLink("Change password", R.drawable.ic_password) { page("password") }
+            if (user?.text("role") == "ADMIN") SettingsLink("Admin", R.drawable.ic_admin) { page("admin") }
         }
         Spacer(Modifier.height(20.dp))
         Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
@@ -171,6 +182,10 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
         dismissButton = { TextButton(onClick = { signingOut = false }) { Text("Cancel") } })
 }
 
+/** A row's glyph, in the label colour as iOS draws it. */
+@Composable
+private fun SettingsIcon(icon: Int) = Icon(painterResource(icon), null, tint = MaterialTheme.colorScheme.onSurface)
+
 @Composable
 private fun settingsRowColors() = ListItemDefaults.colors(containerColor = Color.Transparent)
 
@@ -184,24 +199,24 @@ private fun SettingsGroup(title: String, rows: @Composable ColumnScope.() -> Uni
 }
 
 @Composable
-private fun SettingsLink(title: String, value: String? = null, open: () -> Unit) {
-    ListItem(headlineContent = { Text(title) }, colors = settingsRowColors(),
+private fun SettingsLink(title: String, icon: Int, value: String? = null, open: () -> Unit) {
+    ListItem(headlineContent = { Text(title) }, colors = settingsRowColors(), leadingContent = { SettingsIcon(icon) },
         trailingContent = value?.let { { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) } },
         modifier = Modifier.clickable(role = Role.Button, onClick = open))
 }
 
 @Composable
-private fun SettingsValue(title: String, value: String) {
-    ListItem(headlineContent = { Text(title) }, colors = settingsRowColors(),
+private fun SettingsValue(title: String, icon: Int, value: String) {
+    ListItem(headlineContent = { Text(title) }, colors = settingsRowColors(), leadingContent = { SettingsIcon(icon) },
         trailingContent = { SelectionContainer { Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant) } })
 }
 
 /** A menu on the row itself, as iOS's pickers are; a write goes out only for a different value. */
 @Composable
-private fun SettingsPicker(title: String, current: String, options: List<Pair<String, String>>, enabled: Boolean, select: (String) -> Unit) {
+private fun SettingsPicker(title: String, icon: Int, current: String, options: List<Pair<String, String>>, enabled: Boolean, select: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        ListItem(headlineContent = { Text(title) }, colors = settingsRowColors(),
+        ListItem(headlineContent = { Text(title) }, colors = settingsRowColors(), leadingContent = { SettingsIcon(icon) },
             trailingContent = { Text(options.firstOrNull { it.first == current }?.second ?: current, color = MaterialTheme.colorScheme.onSurfaceVariant) },
             modifier = Modifier.clickable(enabled = enabled, role = Role.DropdownList) { expanded = true })
         DropdownMenu(expanded, { expanded = false }) {
@@ -214,8 +229,8 @@ private fun SettingsPicker(title: String, current: String, options: List<Pair<St
 }
 
 @Composable
-private fun SettingsSwitch(title: String, checked: Boolean, enabled: Boolean, change: (Boolean) -> Unit) {
-    ListItem(headlineContent = { Text(title) }, colors = settingsRowColors(),
+private fun SettingsSwitch(title: String, icon: Int, checked: Boolean, enabled: Boolean, change: (Boolean) -> Unit) {
+    ListItem(headlineContent = { Text(title) }, colors = settingsRowColors(), leadingContent = { SettingsIcon(icon) },
         trailingContent = { Switch(checked = checked, onCheckedChange = null, enabled = enabled) },
         modifier = Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = change))
 }

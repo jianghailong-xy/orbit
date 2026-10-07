@@ -118,12 +118,12 @@ internal fun rememberResumed(): Boolean {
     return state.isAtLeast(Lifecycle.State.RESUMED)
 }
 
-/** The clock the pages read their heartbeats against, moved on while they are up. */
+/** The clock as of this composition (iOS reads `Date()` in the view body), moved on while the page is up. */
 @Composable
 internal fun rememberNow(every: Long = 15_000): Long {
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(every) { while (true) { delay(every); now = System.currentTimeMillis() } }
-    return now
+    var tick by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(every) { while (true) { delay(every); tick = System.currentTimeMillis() } }
+    return maxOf(tick, System.currentTimeMillis())
 }
 
 /** The aliases runner pages have read, so the shell's title says what the page head says. */

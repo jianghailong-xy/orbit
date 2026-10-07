@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -37,6 +38,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import io.orbitd.android.R
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.HttpMethod
@@ -124,7 +126,7 @@ internal fun PersonalRecordStatus(record: PersonalRecord) {
     if (record.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
     if (record.stale && !record.busy) Text("Refresh required before making changes.")
     record.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    TextButton(onClick = { scope.launch { record.load() } }, enabled = !record.busy) { Text("Refresh") }
+    if (!record.busy) TextButton(onClick = { scope.launch { record.load() } }) { Text("Refresh") }
 }
 
 @Composable
@@ -277,11 +279,15 @@ fun EditProfile(api: ManagementApi, revision: Long, done: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (user == null) { PersonalRecordStatus(record); return@Column }
         Box {
-            Box(Modifier.clip(CircleShape).clickable(enabled = !saving, role = Role.Button) { menu = true }
+            Box(Modifier.clickable(null, ripple(bounded = false, radius = 48.dp), enabled = !saving, role = Role.Button) { menu = true }
                 .semantics { contentDescription = "Choose photo" }) {
                 AccountAvatar(name, when (val chosen = photo) {
                     is ProfilePhoto.Replaced -> chosen.preview; ProfilePhoto.Removed -> null; ProfilePhoto.Unchanged -> saved
                 }, 96.dp)
+                // CameraBadge: a white disc with a light shadow at the avatar's corner.
+                Surface(Modifier.align(Alignment.BottomEnd).size(32.dp), shape = CircleShape, color = MaterialTheme.colorScheme.surface, shadowElevation = 3.dp) {
+                    Icon(painterResource(R.drawable.ic_camera), null, Modifier.padding(7.dp))
+                }
             }
             DropdownMenu(menu, { menu = false }) {
                 DropdownMenuItem(text = { Text("Photo library") }, onClick = {
