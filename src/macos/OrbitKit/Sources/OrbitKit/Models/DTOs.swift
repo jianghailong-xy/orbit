@@ -791,9 +791,15 @@ public struct RetryMessage: Codable, Sendable {
     /// apiserver session-message.ts): the Retry then asks the server to re-send them
     /// (`APIClient.resendRetryMessage`, `RetryRoute`). Nil for the owner's own words.
     public let sessionMessage: SessionMessage?
-    public init(text: String, sessionMessage: SessionMessage? = nil) {
+    /// Nothing of anybody's waits to go out — not the owner's words, and not a reply or
+    /// confirmation turn the sweep re-sends on its own (`AutoRetryService.retryMessage`). The card
+    /// swaps its verb for the platform's continue (`AutoRetryLogic.continueMessage`): sent by hand
+    /// now, or by the server at the reset through the switch, which is the arm that owns it.
+    public let nothingToResend: Bool?
+    public init(text: String, sessionMessage: SessionMessage? = nil, nothingToResend: Bool? = nil) {
         self.text = text
         self.sessionMessage = sessionMessage
+        self.nothingToResend = nothingToResend
     }
 }
 
@@ -1194,6 +1200,11 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     public let lifecycleState: SessionLifecycleState?
     /// Authoritative action availability from newer servers. nil retains legacy local inference.
     public let capabilities: SessionCapabilities?
+    /// The engine this session runs on. What the auto-retry card names as the provider whose quota
+    /// ran out — deliberately NOT the composer's pending pick, which a person sets to the *next*
+    /// turn's provider (exactly what one does when a quota is spent) and which renamed an outage
+    /// that had already happened. Web parity: `outageProvider` in WorkspaceView.tsx.
+    public let provider: String?
     /// Project membership and its integration line drive the existing worktree bar labels.
     public let projectId: String?
     public let projectTitle: String?
@@ -1269,6 +1280,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         lifecycleState = try values.decodeIfPresent(SessionLifecycleState.self, forKey: .lifecycleState)
             ?? legacy.decodeIfPresent(SessionLifecycleState.self, forKey: .filingState)
         capabilities = try values.decodeIfPresent(SessionCapabilities.self, forKey: .capabilities)
+        provider = try values.decodeIfPresent(String.self, forKey: .provider)
         projectId = try values.decodeIfPresent(String.self, forKey: .projectId)
         projectTitle = try values.decodeIfPresent(String.self, forKey: .projectTitle)
         projectMembership = try values.decodeIfPresent(SessionProjectMembership.self, forKey: .projectMembership)
@@ -1301,6 +1313,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
                 sessionState: SessionState? = nil,
                 runState: SessionRunState? = nil, lifecycleState: SessionLifecycleState? = nil,
                 capabilities: SessionCapabilities? = nil,
+                provider: String? = nil,
                 projectId: String? = nil, projectTitle: String? = nil,
                 projectMembership: SessionProjectMembership? = nil,
                 projectIntegrationRef: String? = nil,
@@ -1322,6 +1335,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.runState = runState
         self.lifecycleState = lifecycleState
         self.capabilities = capabilities
+        self.provider = provider
         self.projectId = projectId
         self.projectTitle = projectTitle
         self.projectMembership = projectMembership

@@ -63,11 +63,14 @@ struct ApprovalReviewLayout<Content: View, Actions: View>: View {
     let summary: String
     let dimmed: Bool
     let badge: String?
+    /// The review drawn as a grouped page: cards on the grouped backdrop. The batch card's review
+    /// draws its content as cards, and the other reviews keep the plain sheet they were built on.
+    let grouped: Bool
     private let content: Content
     private let actions: Actions
 
     init(title: String, symbol: String, tone: Color, summary: String, dimmed: Bool = false,
-         badge: String? = nil,
+         badge: String? = nil, grouped: Bool = false,
          @ViewBuilder content: () -> Content, @ViewBuilder actions: () -> Actions) {
         self.title = title
         self.symbol = symbol
@@ -75,6 +78,7 @@ struct ApprovalReviewLayout<Content: View, Actions: View>: View {
         self.summary = summary
         self.dimmed = dimmed
         self.badge = badge
+        self.grouped = grouped
         self.content = content()
         self.actions = actions()
     }
@@ -91,6 +95,9 @@ struct ApprovalReviewLayout<Content: View, Actions: View>: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
+            }
+            .background {
+                if grouped { Color.reviewBackdrop.ignoresSafeArea() }
             }
             .scrollDismissesKeyboard(.interactively)
             .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -186,6 +193,28 @@ private struct ReviewReceipt: View {
     }
 }
 
+/// The review's ✕, on its first page and on every page pushed onto it. On iOS it sits where the
+/// share sheet's Done does (`.topBarTrailing`): iOS 26 draws `.confirmationAction` as the prominent
+/// filled button, which made a second blue yes beside the card's own. The Mac draws that placement
+/// plainly, so it keeps it.
+struct ApprovalReviewCloseButton: ToolbarContent {
+    let close: () -> Void
+
+    var body: some ToolbarContent {
+        #if os(iOS)
+        ToolbarItem(placement: .topBarTrailing) {
+            Button("Close", systemImage: "xmark", action: close)
+                .labelStyle(.iconOnly)
+        }
+        #else
+        ToolbarItem(placement: .confirmationAction) {
+            Button("Close", systemImage: "xmark", action: close)
+                .labelStyle(.iconOnly)
+        }
+        #endif
+    }
+}
+
 /// Presented by ConsoleView, outside the transcript's recyclable rows.
 struct ApprovalReviewSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -245,12 +274,7 @@ struct ApprovalReviewSheet: View {
             .onChange(of: console.statusMessageRevision) { _, _ in
                 reviewStatusMessage = console.statusMessage
             }
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Close", systemImage: "xmark") { dismiss() }
-                        .labelStyle(.iconOnly)
-                }
-            }
+            .toolbar { ApprovalReviewCloseButton { dismiss() } }
         }
         .task {
             await console.refreshRulerQuestions(force: true)

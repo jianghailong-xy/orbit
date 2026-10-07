@@ -128,10 +128,74 @@ final class TailPinningWiringTests: XCTestCase {
                         + "and the gap in between must not flash the button on each streamed update")
     }
 
+    /// The tail can also leave the READER: the keyboard takes the viewport (or the composer grows a
+    /// line) and a pinned transcript keeps its content offset, so the last line sits below the fold
+    /// until something re-pins it — which, in a session that isn't publishing, is nothing at all.
+    /// The owner's report: focus the composer and the conversation is no longer at the bottom.
+    ///
+    /// The reading has to be the List's own height, and off a layout observation: measured on an
+    /// iPhone, the composer growing a line reported nothing to `onScrollGeometryChange` at all —
+    /// that one reports scrolling, not a frame that changed for another reason.
+    func testTheTranscriptAsksWhetherAPinnedViewportResizeShouldFollowTheTail() throws {
+        let source = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift")
+        let resize = try section(source, from: "private struct ViewportResize",
+                                 to: "/// The single scroll observer")
+
+        XCTAssertTrue(resize.contains("onGeometryChange"),
+                      "the List's own frame is the one reading that hears every resize it has")
+        XCTAssertTrue(resize.contains("$0.size.height"),
+                      "and the height is the fact the rule reads — the width churns on nothing here")
+        XCTAssertTrue(resize.contains("TailPinning.followsResize("),
+                      "the view must hand the decision to the tested rule")
+        XCTAssertTrue(resize.contains("wasPinned: atBottom"),
+                      "and tell it whether the reader was still at the tail, or a resize would yank "
+                        + "a reader who had scrolled up to read")
+        XCTAssertTrue(resize.contains("onResize()"),
+                      "and the answer has to reach the transcript, which owns the scroll")
+    }
+
+    /// …and it has to land as a scroll the way every other out-of-update scroll does (`heldScroll`):
+    /// this one arrives off a layout report, where naming a row's index path is how the transcript
+    /// was handed an index past the end (the 0.1.2 crash in `heldScroll`'s note).
+    func testTheResizeFollowReachesTheTailAsAHeldScroll() throws {
+        let source = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift")
+        let repin = try section(source, from: "private func repinAfterResize",
+                                to: "private var strandKey")
+
+        XCTAssertTrue(repin.contains("holdScroll(to: bottomID, anchor: .bottom"),
+                      "the resize's re-pin is the tail, asked for the way a tap on the jump-to-latest "
+                        + "disc asks for it")
+        XCTAssertTrue(repin.contains("animated: false"),
+                      "and landing on it at once: an animated scroll is aimed at the layout of the "
+                        + "frame it starts in, and a viewport still moving under it leaves the tail "
+                        + "short of the bottom")
+        XCTAssertTrue(repin.contains("layoutIfNeeded"),
+                      "with the layout settled first — a lazy List's contentSize is an estimate until "
+                        + "it lays out again, and the scroll is clamped to it (measured: one line "
+                        + "short of the tail, every time)")
+        XCTAssertTrue(repin.contains("console.detached"),
+                      "a window opened at a record ends at a gap and does not follow the tail; "
+                        + "neither does it follow a resize to one")
+        XCTAssertTrue(repin.contains("reviewingCard"),
+                      "and neither does a preview holding its place behind its sheet")
+    }
+
     /// Web decides the same question in `tailPinning.ts`, and the two got here by drifting apart:
     /// both carried the gap-plus-direction rule, so both stopped following a reply when a reasoning
     /// row folded. Asserted piece by piece rather than as one expression, so reflowing that line
     /// isn't what turns this red — and if the file is gone, `source` throws instead of skipping.
+    /// Web follows a resize the same way, off the same pin — `followsResize` is that rule for a
+    /// client whose platform reports the viewport in its scroll geometry, so the two answer "the
+    /// container changed size" alike: only while the reader is still at the bottom.
+    func testWebRepinsOnAResizeWhileTheReaderIsAtTheBottom() throws {
+        let web = try source("src/web/src/components/WorkspaceView.tsx")
+        let observer = try section(web, from: "const ro = new ResizeObserver", to: "ro.observe(el)")
+
+        XCTAssertTrue(observer.contains("atBottomRef.current"),
+                      "the resize re-pin is gated on the same pin as the follow")
+        XCTAssertTrue(observer.contains("scrollTo"), "and it re-pins to the tail")
+    }
+
     func testWebDecidesItWithTheSameRule() throws {
         let web = try source("src/web/src/lib/tailPinning.ts")
         let rule = try section(web, from: "export function pinnedToTail(", to: "\n}")

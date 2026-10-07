@@ -100,6 +100,18 @@ describe('describeShape', () => {
     expect(describeShape(g)).toBe('3 levels, up to 2 in parallel');
   });
 
+  it('says "after 1" only when one task releases the rest', () => {
+    // Three tasks that release a fourth: "3 in parallel after 1" would read backwards.
+    const g = buildBatchGraph([
+      { title: 'a', ref: 'a' },
+      { title: 'b', ref: 'b' },
+      { title: 'c', ref: 'c' },
+      { title: 'd', ref: 'd', dependsOnRefs: ['a', 'b'] },
+    ]);
+
+    expect(describeShape(g)).toBe('2 levels, up to 3 in parallel');
+  });
+
   it('says nothing about an empty batch', () => {
     expect(describeShape(buildBatchGraph([]))).toBe('');
   });

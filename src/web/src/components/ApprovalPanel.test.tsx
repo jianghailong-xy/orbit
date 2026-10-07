@@ -364,7 +364,8 @@ describe('batch create approval', () => {
     const html = render(batchApproval({ taskCount: 2, startingNow: 2 }));
 
     expect(html).not.toContain('Always allow');
-    expect(html).toContain('Create them');
+    // The count it is agreeing to, the way the native card says it.
+    expect(html).toContain('Create 2 tasks');
     // Not creating them is not a verdict typed into the void: it is the question card's own
     // control, and the reason rides back with it (`decliningPrefix`).
     expect(html).toContain('Chat about this');
