@@ -47,7 +47,7 @@ trap cleanup EXIT
 printf 'scope=A12 Wiki/Watch controlled HTTP; emulator only; no real deployment or cross-platform result\nstarted_utc=%s\n' "$(date -u +%FT%TZ)" > "$output/result.txt"
 git -C "$scripts" rev-parse HEAD > "$output/source-sha.txt"
 git -C "$scripts" status --porcelain > "$output/source-status.txt"
-timeout 30 "$adb" -s "$serial" wait-for-device
+timeout 30 "$adb_bin" -s "$serial" wait-for-device 9>&-
 {
   printf 'serial=%s\n' "$serial"
   for prop in ro.product.model ro.build.version.release ro.build.version.sdk ro.build.fingerprint ro.kernel.qemu; do
@@ -83,6 +83,6 @@ done
 "$adb" -s "$serial" exec-out run-as "$package" cat files/a12-captures.tar > "$output/captures.tar"
 tar --no-same-owner -xf "$output/captures.tar" -C "$output"
 chmod -R a+rX "$output/a12-wiki-watch"
-rg 'OK \([0-9]+ tests?\)' "$output/instrumentation.txt" >/dev/null
-if rg 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed|INSTRUMENTATION_STATUS_CODE: -[234]' "$output/instrumentation.txt"; then exit 1; fi
-if rg 'a06-fixture-(access|refresh)|a12-fixture-password' "$output"/logcat-*.txt; then exit 1; fi
+command grep -aE 'OK \([0-9]+ tests?\)' "$output/instrumentation.txt" >/dev/null
+if command grep -aE 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed|INSTRUMENTATION_STATUS_CODE: -[234]' "$output/instrumentation.txt"; then exit 1; fi
+if command grep -aE 'a06-fixture-(access|refresh)|a12-fixture-password' "$output"/logcat-*.txt; then exit 1; fi

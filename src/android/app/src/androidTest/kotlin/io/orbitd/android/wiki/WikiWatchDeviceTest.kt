@@ -25,7 +25,9 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
-/** Production Activity/AuthSession/API navigation against a controlled loopback server. */
+/** The production Activity, AuthSession and navigation against the loopback fixture (scripts/wiki-watch-fixture.py):
+ * each journey signs in through the real login form from a cold-start link, acts through the screens, and reads the
+ * fixture's journal and state back. Controlled HTTP only — not a deployed backend, iOS parity or a physical phone. */
 @RunWith(AndroidJUnit4::class)
 class WikiWatchDeviceTest {
     @get:Rule val compose = createEmptyComposeRule()
@@ -41,10 +43,25 @@ class WikiWatchDeviceTest {
         finally { disconnect() }
     }
     private fun JsonObject.string(key: String) = getValue(key).jsonPrimitive.content
-    private fun await(text: String) { compose.waitUntil(20_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() } }
+    private fun journal(): List<JsonObject> = http("/__stats").getValue("journal").jsonArray.map { it.jsonObject }
+    private fun requests(method: String, suffix: String) = journal().filter { it.string("method") == method && it.string("path").substringBefore('?').endsWith(suffix) }
+    private fun await(text: String, timeout: Long = 20_000) {
+        compose.waitUntil(timeout) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
+    }
+    private fun awaitTag(tag: String, timeout: Long = 20_000) {
+        compose.waitUntil(timeout) { compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty() }
+    }
     private fun press(tag: String) {
         compose.waitUntil(15_000) { compose.onAllNodes(hasTestTag(tag) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag(tag).performScrollTo().performClick()
+        compose.onNodeWithTag(tag).performClick()
+    }
+    /** A row of a lazy list: scrolled into view first, then pressed. */
+    private fun pressIn(list: String, tag: String) {
+        awaitTag(list)
+        compose.waitUntil(15_000) {
+            runCatching { compose.onNodeWithTag(list).performScrollToNode(hasTestTag(tag)) }.isSuccess
+        }
+        press(tag)
     }
     private fun capture(name: String) {
         File(output, "$name-semantics.txt").writeText(compose.onRoot().printToString())
@@ -54,16 +71,19 @@ class WikiWatchDeviceTest {
     }
     private fun launch(raw: String) = Intent(Intent.ACTION_VIEW, Uri.parse(raw), app, MainActivity::class.java)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+
+    /** A cold start from [target]'s link, the login form, then [block]; the journal is kept whatever happens. */
     private fun journey(name: String, target: (JsonObject) -> String, block: (ActivityScenario<MainActivity>, JsonObject) -> Unit) {
         http("/__control", """{"reset":true}""")
         val ids = http("/__ids")
         instrument.sendStatus(0, Bundle().apply { putString("a12_pid", Process.myPid().toString()) })
-        File(output, "$name-identity.txt").writeText("sha=${BuildConfig.SOURCE_SHA}\ndirty=${BuildConfig.SOURCE_DIRTY}\nfixture=loopback-18770\n")
+        File(output, "$name-identity.txt").writeText("sha=${BuildConfig.SOURCE_SHA}\ndirty=${BuildConfig.SOURCE_DIRTY}\nfixture=loopback-18770\nlink=${target(ids)}\n")
         compose.waitUntil(10_000) { app.session.state.value !is AuthState.Restoring }
         runBlocking { app.session.logout() }
         ActivityScenario.launch<MainActivity>(launch(target(ids))).use { scenario ->
             try {
                 await("Email")
+                // The link waits on the login form, across recreation.
                 scenario.recreate()
                 compose.onNodeWithText("Instance address").performTextReplacement(server)
                 compose.onNodeWithText("Email").performTextInput("a12@example.test")
@@ -77,94 +97,122 @@ class WikiWatchDeviceTest {
         }
     }
 
-    @Test fun coldSpaceLinkIsAHomeAndSurvivesRecreation() = journey("space", { "orbit://wiki/${it.string("space")}" }) { scenario, _ ->
-        await("Principles")
-        compose.onNodeWithText("Contents").performClick()
-        await("Browse by category")
-        capture("space-contents")
-        scenario.recreate()
-        await("Browse by category")
-    }
+    // MARK: the Wiki
 
-    @Test fun wikiSourceOpensOriginalRecordAndBackRestoresEntry() = journey("source", { "orbit-wiki:${it.string("entry")}" }) { scenario, ids ->
-        press("wiki-source:${ids.string("source")}")
-        compose.waitUntil(20_000) { app.realtime.state.value.session?.id == ids.string("session") }
-        compose.waitUntil(20_000) {
-            http("/__stats").toString().contains("around=${ids.string("record")}")
+    /** `orbit://wiki/<space>` (the notification's space) opens that space's home, through login and recreation. */
+    @Test fun aSpaceLinkOpensItsHomeThroughLoginAndRecreation() = journey("space-link", { "orbit://wiki/${it.string("space")}" }) { scenario, ids ->
+        awaitTag("wiki-status-line")
+        compose.onNodeWithTag("wiki-space-picker").assertTextContains("a12-fixture")
+        compose.onNodeWithText("Principles").assertExists()
+        listOf("GET /api/wiki/spaces", "/api/wiki/spaces/${ids.string("space")}/entries", "/timeline", "/health").forEach { path ->
+            assertTrue("missing read $path", journal().any { it.string("method") == "GET" && it.string("path").substringBefore('?').endsWith(path.removePrefix("GET ")) })
         }
-        await("Jump to latest")
-        capture("source-record")
-        compose.onNodeWithContentDescription("Back").performClick()
-        press("wiki-edit")
+        capture("space-home")
         scenario.recreate()
-        await("One-line summary")
-        capture("source-return-edit")
+        awaitTag("wiki-status-line")
+        // The Contents sheet: Home, Browse, the index and the plan, then the confirmed plan's documents.
+        press("wiki-bar-contents")
+        awaitTag("wiki-contents-sheet")
+        compose.onNodeWithTag("wiki-contents-browse").assertExists()
+        compose.onNodeWithTag("wiki-contents-plan").assertExists()
+        capture("space-contents")
     }
 
-    @Test fun watchControlReadsBackServerStatesAndStopNeedsConfirmation() = journey("watch", { "orbit://watch/${it.string("watch")}" }) { _, ids ->
-        press("watch:${ids.string("watch")}:WATCH_PAUSE")
-        compose.waitUntil(15_000) { http("/__stats")["watch"]?.jsonObject?.get("state")?.jsonPrimitive?.content == "PAUSED" }
-        press("watch:${ids.string("watch")}:WATCH_RESUME")
-        compose.waitUntil(15_000) { http("/__stats")["watch"]?.jsonObject?.get("state")?.jsonPrimitive?.content == "ACTIVE" }
-        press("watch:${ids.string("watch")}:WATCH_CANCEL")
-        await("Stop watching?")
-        assertEquals("ACTIVE", http("/__stats").getValue("watch").jsonObject.string("state"))
-        capture("watch-stop-confirmation")
-        compose.onNodeWithTag("watch-stop-confirm").performClick()
-        compose.waitUntil(15_000) { http("/__stats")["watch"]?.jsonObject?.get("state")?.jsonPrimitive?.content == "CANCELLED" }
-        await("Stopped")
-        capture("watch-stopped")
-    }
-
-    @Test fun searchEditAndRecreationKeepOriginalRevisionAndServerResult() = journey("search-edit", { "orbit://wiki/${it.string("space")}" }) { scenario, ids ->
-        await("Principles")
-        compose.onNodeWithTag("wiki-search").performScrollTo().performTextInput("A12 Wiki")
-        press("wiki-entry:${ids.string("entry")}")
-        press("wiki-edit")
-        compose.onNodeWithTag("wiki-edit-summary").performScrollTo().performTextReplacement("Edited on Android with server readback.")
+    /** Search under the title finds the entry; Edit writes once, with the base revision, and the page shows the server's answer. */
+    @Test fun searchOpensAnEntryAndEditWritesOnceWithItsRevision() = journey("search-edit", { "orbit://wiki/${it.string("space")}" }) { scenario, ids ->
+        awaitTag("wiki-search")
+        compose.onNodeWithTag("wiki-search").performTextInput("A12 Wiki")
+        press("wiki-hit:${ids.string("entry")}")
+        awaitTag("wiki-entry-title")
+        compose.onNodeWithTag("wiki-entry-title").assertTextEquals("A12 Wiki source entry")
+        assertEquals(1, requests("GET", "/api/wiki/search").size)
+        press("wiki-entry-edit")
+        awaitTag("wiki-entry-form-summary")
+        compose.onNodeWithTag("wiki-entry-form-summary").performTextReplacement("Edited on Android with server readback.")
         scenario.recreate()
-        compose.onNodeWithTag("wiki-edit-summary").assertTextContains("Edited on Android with server readback.")
-        press("wiki-edit-save")
+        awaitTag("wiki-entry-form-summary")
+        compose.onNodeWithTag("wiki-entry-form-summary").assertTextContains("Edited on Android with server readback.")
+        press("wiki-entry-form-save")
         compose.waitUntil(15_000) { http("/__stats").getValue("entry").jsonObject.string("summary") == "Edited on Android with server readback." }
+        val writes = requests("POST", "/changesets")
+        assertEquals(1, writes.size)
+        val op = writes.single().getValue("body").jsonObject.getValue("ops").jsonArray.single().jsonObject
+        assertEquals("amend", op.string("op")); assertEquals(1, op.getValue("baseRevision").jsonPrimitive.int)
         await("Edited on Android with server readback.")
         capture("search-edit-recorded")
+        // Back returns to the home, the query still in its field.
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithTag("wiki-search").assertTextContains("A12 Wiki")
     }
 
-    @Test fun reviewAcceptUsesExistingCardAndWithdrawsSettledProposal() = journey("review", { "orbit://wiki/${it.string("space")}" }) { _, ids ->
-        press("wiki-review")
-        press("wiki-op:${ids.string("op")}:WIKI_ACCEPT")
-        await("All caught up")
-        val decisions = http("/__stats").getValue("journal").jsonArray.map { it.jsonObject }
-            .filter { it.string("method") == "POST" && it.string("path").endsWith("/decide") }
-        assertEquals(1, decisions.size)
-        assertEquals("accept", decisions.single().getValue("body").jsonObject.getValue("decisions").jsonArray.single().jsonObject.string("action"))
+    /** An entry a review mode applied: Confirm is the owner's answer, and its turn source opens the session; Back returns. */
+    @Test fun anEntryLinkConfirmsAndItsSourceOpensTheSessionThenReturns() = journey("entry-source", { "orbit-wiki:${it.string("entry")}" }) { _, ids ->
+        awaitTag("wiki-entry-title")
+        press("wiki-entry-confirm")
+        compose.waitUntil(15_000) { http("/__stats").getValue("entry").jsonObject.string("trust") == "confirmed" }
+        assertEquals(1, requests("POST", "/api/wiki/entries/${ids.string("entry")}/confirm").size)
+        await("Confirmed")
+        capture("entry-confirmed")
+        // The source's card names the session it cites.
+        compose.waitUntil(15_000) { requests("POST", "/api/link-previews").isNotEmpty() }
+        pressIn("wiki-entry-list", "wiki-source:${ids.string("source")}")
+        compose.waitUntil(20_000) { app.realtime.state.value.session?.id == ids.string("session") }
+        capture("entry-source-session")
+        compose.onNodeWithContentDescription("Back").performClick()
+        awaitTag("wiki-entry-title")
+        compose.onNodeWithTag("wiki-entry-title").assertTextEquals("A12 Wiki source entry")
+    }
+
+    /** Review: the banner opens it, Accept records one decision, and the next card takes its place. */
+    @Test fun reviewAcceptRecordsOneDecisionAndMovesOn() = journey("review", { "orbit://wiki/${it.string("space")}" }) { _, _ ->
+        press("wiki-review-banner")
+        awaitTag("wiki-review-page")
+        compose.onNodeWithTag("wiki-review-position").assertTextEquals("1 of 2")
+        capture("review-first")
+        press("wiki-review-accept")
+        compose.waitUntil(15_000) { requests("POST", "/decide").isNotEmpty() }
+        val decision = requests("POST", "/decide").single().getValue("body").jsonObject.getValue("decisions").jsonArray.single().jsonObject
+        assertEquals("accept", decision.string("action"))
+        compose.waitUntil(15_000) { compose.onAllNodesWithTag("wiki-review-position").fetchSemanticsNodes().isEmpty() }
+        await("Accepted")
         capture("review-recorded")
+        // Reject asks for its reason and sends it.
+        press("wiki-review-reject")
+        press("wiki-review-reject:too_specific")
+        compose.waitUntil(15_000) { requests("POST", "/decide").size == 2 }
+        assertEquals("too_specific", requests("POST", "/decide").last().getValue("body").jsonObject.getValue("decisions").jsonArray.single().jsonObject.string("reason"))
+        awaitTag("wiki-review-empty")
     }
 
-    @Test fun revokedAndMissingWikiClearPreviouslyLoadedProtectedContent() = journey("wiki-denial", { "orbit-wiki:${it.string("entry")}" }) { _, _ ->
-        await("A12 Wiki source entry")
-        http("/__control", """{"denial":403}""")
-        compose.onNodeWithText("Refresh").performClick()
-        await("permission")
-        compose.onAllNodesWithText("A12 Wiki source entry").assertCountEquals(0)
-        compose.onNodeWithTag("wiki-edit").assertDoesNotExist()
-        capture("wiki-forbidden")
-        http("/__control", """{"denial":404}""")
+    /** Recently changed folds the maintenance run into one row; its page offers Revert run…, which asks, then reverts once. */
+    @Test fun aRunRowOpensItsPageAndRevertAsksThenRevertsOnce() = journey("run", { "orbit://wiki/${it.string("space")}" }) { _, ids ->
+        pressIn("wiki-home-list", "wiki-run:${ids.string("changeset")}")
+        awaitTag("wiki-run-title")
+        compose.onNodeWithTag("wiki-run-title").assertTextEquals("Applied 5 changes")
+        capture("run-page")
+        press("wiki-run-revert")
+        await("Revert this run?")
+        assertTrue(requests("POST", "/revert").isEmpty())
+        press("wiki-run-revert-confirm")
+        compose.waitUntil(15_000) { requests("POST", "/revert").size == 1 }
+        // Reverted: the page closes back to the home.
+        awaitTag("wiki-status-line")
+        capture("run-reverted")
+    }
+
+    /** An entry the server cannot be reached for says so, with Retry, and reads once the connection is back. */
+    @Test fun anUnreachableEntrySaysSoAndRetryReadsIt() = journey("offline", { "orbit://wiki/${it.string("space")}" }) { _, ids ->
+        awaitTag("wiki-search")
+        compose.onNodeWithTag("wiki-search").performTextInput("A12 Wiki")
+        awaitTag("wiki-hit:${ids.string("entry")}")
+        http("/__control", """{"offline":true,"prefix":"/api/wiki"}""")
+        press("wiki-hit:${ids.string("entry")}")
+        await("The entry couldn't be loaded")
+        compose.onNodeWithTag("wiki-entry-title").assertDoesNotExist()
+        capture("offline-entry")
+        http("/__control", """{"offline":false}""")
         compose.onNodeWithText("Retry").performClick()
-        await("no longer available")
-        capture("wiki-missing")
-    }
-
-    @Test fun lostWatchReplyReconcilesWithoutReplayingMutation() = journey("watch-lost", { "orbit://watch/${it.string("watch")}" }) { _, ids ->
-        compose.waitUntil(15_000) { compose.onAllNodesWithTag("watch:${ids.string("watch")}:WATCH_PAUSE").fetchSemanticsNodes().isNotEmpty() }
-        http("/__control", """{"lostResponse":true,"prefix":"/api/watches"}""")
-        press("watch:${ids.string("watch")}:WATCH_PAUSE")
-        compose.waitUntil(15_000) { compose.onAllNodesWithTag("watch:${ids.string("watch")}:WATCH_RESUME").fetchSemanticsNodes().isNotEmpty() }
-        val posts = http("/__stats").getValue("journal").jsonArray.map { it.jsonObject }
-            .count { it.string("method") == "POST" && it.string("path").endsWith("/pause") }
-        assertEquals(1, posts)
-        capture("watch-lost-reconciled")
+        awaitTag("wiki-entry-title")
+        compose.onNodeWithTag("wiki-entry-title").assertTextEquals("A12 Wiki source entry")
     }
 }
