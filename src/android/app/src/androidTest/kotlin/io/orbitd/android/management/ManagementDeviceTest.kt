@@ -132,6 +132,9 @@ class ManagementDeviceTest {
                 shell("settings put system font_scale 2.0")
                 compose.activityRule.scenario.recreate()
                 await("Updated fixture")
+                // The page reads the account again after the recreate; capture it settled, from the top.
+                compose.waitUntil(15_000) { compose.onAllNodes(hasText("Session orchestration") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+                compose.onNodeWithContentDescription("Edit profile").performScrollTo()
                 capture("settings-home-font200")
                 assertEquals(1, calls.count { it == "PATCH /api/users/me" })
                 assertTrue(calls.contains("PATCH /api/admin/users/u2/role"))
