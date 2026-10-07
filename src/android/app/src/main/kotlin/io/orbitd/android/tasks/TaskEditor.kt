@@ -36,7 +36,7 @@ import java.util.UUID
 
 /** `Start at`: the one time the task starts by itself, saved explicitly, never in the past. */
 @Composable
-internal fun ScheduleSheet(task: JsonObject, enabled: Boolean, close: () -> Unit, save: (String?) -> Unit) {
+internal fun ScheduleSheet(task: JsonObject, enabled: Boolean, error: String?, close: () -> Unit, save: (String?) -> Unit) {
     val context = LocalContext.current
     val zone = ZoneId.systemDefault()
     var picked by rememberSaveable(task.text("id")) { mutableStateOf(TaskTime.parse(task.text("runAt"))?.toEpochMilli()
@@ -59,6 +59,7 @@ internal fun ScheduleSheet(task: JsonObject, enabled: Boolean, close: () -> Unit
                 }) { Text("Time") }
             }
             Text(TaskDetailLogic.scheduleHint(task.text("runAt")), style = MaterialTheme.typography.bodySmall)
+            error?.let { Text(it, Modifier.testTag("task-sheet-error"), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             if (task.text("runAt") != null) TextButton(onClick = { save(null) }, enabled = enabled, modifier = Modifier.testTag("task-cancel-schedule")) {
                 Text(TaskDetailCopy.cancelSchedule, color = MaterialTheme.colorScheme.error) }
         } },
@@ -69,7 +70,7 @@ internal fun ScheduleSheet(task: JsonObject, enabled: Boolean, close: () -> Unit
 
 /** The acceptance editor: criteria, and the command with the exit code that counts as done — together or not at all. */
 @Composable
-internal fun AcceptanceSheet(current: AcceptanceDraft, enabled: Boolean, close: () -> Unit, save: (JsonObject) -> Unit) {
+internal fun AcceptanceSheet(current: AcceptanceDraft, enabled: Boolean, error: String?, close: () -> Unit, save: (JsonObject) -> Unit) {
     var criteria by rememberSaveable { mutableStateOf(current.criteria) }
     var command by rememberSaveable { mutableStateOf(current.command) }
     var exitCode by rememberSaveable { mutableStateOf(current.exitCode) }
@@ -86,6 +87,7 @@ internal fun AcceptanceSheet(current: AcceptanceDraft, enabled: Boolean, close: 
                 placeholder = { Text("0") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
             Text(TaskDetailCopy.acceptanceAutomaticHint, style = MaterialTheme.typography.bodySmall)
             draft.problem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            error?.let { Text(it, Modifier.testTag("task-sheet-error"), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         } },
         confirmButton = { TextButton(onClick = { save(draft.patch(current)) }, enabled = enabled && draft.canSave(current),
             modifier = Modifier.testTag("task-save-acceptance")) { Text(TaskDetailCopy.saveAcceptance) } },
@@ -122,7 +124,7 @@ object TaskFollow {
 
 /** Follow task: wait for a condition on this task, then notify you — until a deadline. One key per sheet. */
 @Composable
-internal fun FollowSheet(task: JsonObject, enabled: Boolean, close: () -> Unit, follow: (JsonObject, Int, String) -> Unit) {
+internal fun FollowSheet(task: JsonObject, enabled: Boolean, error: String?, close: () -> Unit, follow: (JsonObject, Int, String) -> Unit) {
     var condition by rememberSaveable { mutableIntStateOf(0) }
     var ttl by rememberSaveable { mutableIntStateOf(TaskFollow.defaultDeadline) }
     val key = rememberSaveable { UUID.randomUUID().toString().lowercase() }
@@ -146,6 +148,7 @@ internal fun FollowSheet(task: JsonObject, enabled: Boolean, close: () -> Unit, 
                 TaskFollow.deadlines.drop(3).forEach { seconds -> FilterChip(ttl == seconds, { ttl = seconds }, label = { Text(TaskFollow.deadlineTitle(seconds)) }) }
             }
             Text(TaskDetailCopy.followDeadlineHint, style = MaterialTheme.typography.bodySmall)
+            error?.let { Text(it, Modifier.testTag("task-sheet-error"), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         } },
         confirmButton = { TextButton(onClick = { follow(TaskFollow.conditions[condition], ttl, key) }, enabled = enabled, modifier = Modifier.testTag("task-follow-confirm")) {
             Text(TaskDetailCopy.follow) } },
@@ -154,7 +157,7 @@ internal fun FollowSheet(task: JsonObject, enabled: Boolean, close: () -> Unit, 
 
 /** The bounded, server-searched prerequisite picker (`TaskDependencyPicker`). */
 @Composable
-internal fun DependencyPicker(api: TaskApi, taskId: String, existing: List<String>, enabled: Boolean, close: () -> Unit, pick: (String) -> Unit) {
+internal fun DependencyPicker(api: TaskApi, taskId: String, existing: List<String>, enabled: Boolean, refused: String?, close: () -> Unit, pick: (String) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     var candidates by remember { mutableStateOf<List<JsonObject>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -178,6 +181,7 @@ internal fun DependencyPicker(api: TaskApi, taskId: String, existing: List<Strin
             item { OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().testTag("task-dependency-search"), label = { Text(TaskListCopy.searchTasks) }, singleLine = true) }
             if (loading && shown.isEmpty()) item { LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp)) }
             error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
+            refused?.let { item { Text(it, Modifier.testTag("task-sheet-error"), color = MaterialTheme.colorScheme.error) } }
             if (!loading && shown.isEmpty()) item { Text("No matching tasks", Modifier.padding(vertical = 12.dp)) }
             items(shown, key = { it.text("id").orEmpty() }) { candidate ->
                 Row(Modifier.fillMaxWidth().clickable(enabled = enabled, role = Role.Button) { candidate.text("id")?.let(pick) }.padding(vertical = 10.dp)

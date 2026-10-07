@@ -323,7 +323,7 @@ class TasksProjectsDeviceTest {
         http("/__control", """{"task":{"id":"$prerequisiteId","status":"FAILED","runnable":false},"delays":{"POST /api/tasks/$taskId/execute":3000}}""")
         drawer("Tasks"); awaitTag("tasks-list"); awaitText("A11 task checklist"); awaitTag("task-filter:FAILED")
         compose.onNodeWithTag("task:$taskId").performTouchInput { longClick() }
-        compose.onNodeWithText("Run now").performClick()
+        compose.onAllNodesWithText("Run").filterToOne(hasClickAction()).performClick()
         compose.onNodeWithTag("task-filter:FAILED").performScrollTo().performClick()
         awaitTag("task:$prerequisiteId")
         compose.waitUntil(20_000) { journal().any { it.text("path") == "/api/tasks/$taskId/execute" && it["status"]?.toString() == "200" } }
@@ -375,11 +375,12 @@ class TasksProjectsDeviceTest {
     /** P2-4: a Run pressed just before leaving still reaches the server under its one name. */
     @Test fun regressionP24_aRunPressedJustBeforeLeavingStillStarts() = journey("p2-4-run-leave") {
         login(); http("/__control", """{"dropNext":{"POST /api/tasks/$taskId/execute":2}}""")
+        val mark = journal().size
         open("orbit-task:$taskId"); awaitTag("task-detail"); awaitText("A11 task checklist")
         scrollTo("task-detail", hasTestTag("task-run")); compose.onNodeWithTag("task-run").performClick()
         back()
         compose.waitUntil(15_000) { http("/__stats").obj("tasks")?.obj(taskId)?.flag("running") == true }
-        val presses = journal().filter { it.text("path") == "/api/tasks/$taskId/execute" }.mapNotNull { it.obj("body")?.text("triggerId") }.distinct()
+        val presses = journal().drop(mark).filter { it.text("path") == "/api/tasks/$taskId/execute" }.mapNotNull { it.obj("body")?.text("triggerId") }.distinct()
         assertEquals("every delivery carries the press's one name", 1, presses.size)
     }
 
@@ -406,7 +407,8 @@ class TasksProjectsDeviceTest {
 
     /** P2-6: Record as done is the owner's done door, bound to the seal the owner read. */
     @Test fun regressionP26_recordAsDoneIsTheOwnersDoneDoor() = journey("p2-6-record-done") {
-        login(); open("orbit-project:$projectId"); awaitTag("project-detail"); awaitText("A11 Android launch")
+        login(); val mark = journal().size
+        open("orbit-project:$projectId"); awaitTag("project-detail"); awaitText("A11 Android launch")
         tap("project-menu"); compose.onNodeWithText("Record as done").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("project-done-record").fetchSemanticsNodes().isNotEmpty() ||
             compose.onAllNodesWithTag("project-status-confirm").fetchSemanticsNodes().isNotEmpty() }
@@ -414,9 +416,9 @@ class TasksProjectsDeviceTest {
         if (compose.onAllNodesWithTag("project-done-record").fetchSemanticsNodes().isNotEmpty())
             compose.onNodeWithTag("project-done-record").performScrollTo().performClick()
         else compose.onNodeWithTag("project-status-confirm").performClick()
-        compose.waitUntil(10_000) { journal().any { it.text("method") != "GET" && it.text("path")?.startsWith("/api/projects/$projectId") == true } }
+        compose.waitUntil(10_000) { journal().drop(mark).any { it.text("method") != "GET" && it.text("path")?.startsWith("/api/projects/$projectId") == true } }
         SystemClock.sleep(1_000)
-        val writes = journal().filter { it.text("method") != "GET" && it.text("path")?.startsWith("/api/projects/$projectId") == true }
+        val writes = journal().drop(mark).filter { it.text("method") != "GET" && it.text("path")?.startsWith("/api/projects/$projectId") == true }
         assertTrue("no status PATCH stands in for the done door: $writes", writes.none { it.text("method") == "PATCH" && it.obj("body")?.text("status") == "DONE" })
         val done = writes.single { it.text("path") == "/api/projects/$projectId/done" }.obj("body")!!
         assertEquals("seal1", done.text("criteriaDigest")); assertEquals(JsonNull, done["requestId"])

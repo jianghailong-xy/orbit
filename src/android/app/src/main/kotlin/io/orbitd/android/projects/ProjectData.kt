@@ -6,7 +6,6 @@ import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.taskprojects.FeatureWriteRefused
-import io.orbitd.android.taskprojects.FeatureWriteUncertain
 import io.orbitd.android.taskprojects.FeatureWrites
 import kotlinx.serialization.json.*
 
@@ -45,9 +44,14 @@ class ProjectApi(private val auth: AuthSession, private val handle: SessionHandl
         return items to cursor
     }
 
-    private suspend fun send(key: String, path: List<String>, method: HttpMethod = HttpMethod.POST, body: JsonObject? = null, resends: Int = 0): JsonElement? =
-        writes.execute("project:$key:$method:${path.joinToString("/")}:$body", ApiRequest(path, method, body = body?.toString()?.encodeToByteArray()), resends)
+    private suspend fun send(key: String, path: List<String>, method: HttpMethod = HttpMethod.POST, body: JsonObject? = null, resends: Int = 0): JsonElement? {
+        // A new trigger must not turn an uncertain Run press into a second request on the same row (as `TaskApi.write`).
+        val identity = body?.let { JsonObject(it.filterKeys { field -> field != "triggerId" }) }
+        return writes.execute("project:$key:$method:${path.joinToString("/")}:$identity", ApiRequest(path, method, body = body?.toString()?.encodeToByteArray()), resends)
+    }
 
+    /** The owner's done door: the seal read, the gaps accepted, the DONE_REQUEST answered or null. */
+    suspend fun done(id: String, body: JsonObject) = send("done:${body.text("criteriaDigest")}:${body.text("requestId")}", listOf("projects", id, "done"), body = body)
     suspend fun setStatus(id: String, status: String, revision: String) = send(revision, listOf("projects", id), HttpMethod.PATCH, buildJsonObject { put("status", status) })
     suspend fun authorize(id: String, body: JsonObject) = send(body.text("expectedConfigRevision").orEmpty(), listOf("projects", id), HttpMethod.PATCH, body)
     suspend fun updateIntegration(id: String, body: JsonObject, revision: String) = send(revision, listOf("projects", id, "integration"), HttpMethod.PATCH, body)
@@ -77,7 +81,7 @@ fun failureReason(error: Throwable): String = when (error) {
         error.messages.isNotEmpty() -> error.messages.joinToString("\n")
         else -> (error.body as? JsonObject)?.text("error")?.takeIf { it.isNotEmpty() } ?: "the server returned ${error.status}"
     }
-    // Android's own fences (FeatureWrites): a write held or refused locally says so in its own words.
-    is FeatureWriteUncertain, is FeatureWriteRefused -> error.message.orEmpty().trimEnd('.')
+    // Android's own fences (FeatureWrites) and other refusals made on this device say so in their own words.
+    is IllegalStateException -> error.message?.takeIf { it.isNotBlank() }?.trimEnd('.') ?: "the connection dropped"
     else -> "the connection dropped"
 }

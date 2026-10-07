@@ -36,6 +36,7 @@ import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.navigation.*
+import io.orbitd.android.cards.CardFocus
 import io.orbitd.android.taskprojects.*
 import io.orbitd.android.tasks.OfflineNote
 import io.orbitd.android.text.*
@@ -226,6 +227,8 @@ internal class ProjectPageState {
     var notice by mutableStateOf<String?>(null)
     var copied by mutableStateOf<String?>(null)
     var refreshing = false
+    /** Whether the page is still shown: a write that outlives it finishes, but reads and opens nothing. */
+    var attached = true
 }
 
 private sealed interface ProjectDialog {
@@ -237,12 +240,14 @@ private sealed interface ProjectDialog {
     data object Start : ProjectDialog
     data object MergeCheck : ProjectDialog
     data object Share : ProjectDialog
+    data object Done : ProjectDialog
 }
 
 @Composable
 private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: String, revision: Long, open: (OrbitRoute) -> Unit, back: () -> Unit) {
     val api = remember(handle) { ProjectApi(app.session, handle) { app.canWrite(handle) } }
     val state = remember(handle, id) { ProjectPageState() }
+    DisposableEffect(state) { state.attached = true; onDispose { state.attached = false } }
     val scope = rememberCoroutineScope()
     val live by app.realtime.state.collectAsState()
     val auth by app.session.state.collectAsState()
@@ -289,28 +294,39 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
         } finally { state.refreshing = false }
     }
     LaunchedEffect(handle, id) { load() }
-    LaunchedEffect(handle, id, revision) { if (revision > 0 && state.document != null) { delay(400); load() } }
+    // Live events are coalesced: one read two seconds after the first of a burst, never cancelled by the next.
+    val nudge = remember(handle, id) { RefreshNudge(scope) { if (state.document != null) load() } }
+    LaunchedEffect(handle, id, revision) { if (revision > 0) nudge.nudge() }
     // The visible page follows the work it shows, as the iOS page does, without its graph.
     LaunchedEffect(handle, id) { while (true) { delay(15_000); if (state.document != null) load(refreshGraph = false) } }
     LaunchedEffect(Unit) { while (true) { delay(1_000); now = Instant.now() } }
     LaunchedEffect(state.copied) { if (state.copied != null) { delay(2500); state.copied = null } }
 
-    /** One write: busy while it is out, then the page read again; a refusal comes back as the sentence to show (`write`/`runWrite`). */
+    /** One write: busy while it is out, then the page read again; a refusal comes back as the sentence to show
+     * (`write`/`runWrite`). The write belongs to the app, not to the page (iOS's model-owned Task): whoever
+     * waits on it may go away — the page, a sheet — and it still finishes. */
     suspend fun attempt(refusal: String, body: suspend () -> Unit): String? {
         if (state.busy) return null
         state.busy = true
-        try { body(); return null }
-        catch (cancel: CancellationException) { throw cancel }
-        catch (failure: Exception) { return "$refusal${failureReason(failure)}." }
-        finally { state.busy = false; load(settled = true); app.realtime.refreshDirectory() }
+        return app.processScope.async {
+            try { body(); null }
+            catch (cancel: CancellationException) { throw cancel }
+            catch (failure: Exception) { "$refusal${failureReason(failure)}." }
+            finally {
+                state.busy = false
+                app.realtime.refreshDirectory()
+                if (state.attached) load(settled = true)
+            }
+        }.await()
     }
-    fun write(refusal: String, body: suspend () -> Unit) { scope.launch { attempt(refusal, body)?.let { state.notice = it } } }
+    fun write(refusal: String, body: suspend () -> Unit) { app.processScope.launch { attempt(refusal, body)?.let { state.notice = it } } }
     var concurrencyWrite by remember { mutableStateOf<Job?>(null) }
-    /** One press of At most: the number moves now, and one write goes once the presses stop (`stepConcurrency`). */
+    /** One press of At most: the number moves now, and one write goes once the presses stop (`stepConcurrency`),
+     * even if the page is left before they have. */
     fun stepConcurrency(count: Int) {
         state.pendingConcurrency = count
         concurrencyWrite?.cancel()
-        concurrencyWrite = scope.launch {
+        concurrencyWrite = app.processScope.launch {
             delay(700)
             val doc = state.document
             if (doc != null && count != doc.number("maxConcurrentTasks")) {
@@ -322,16 +338,24 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
         }
     }
     fun revision(doc: JsonObject) = "${doc.text("configRevision")}:${doc.text("updatedAt")}"
-    fun openCoordinator() {
+    /** Open (or find) the coordinator conversation — onto the card of the owner's item when there is one
+     * (iOS `openCoordinator(focus:)`), by the address that card is drawn under. */
+    fun openCoordinator(focus: String? = null) {
         if (state.busy) return
         scope.launch {
-            try { api.openCoordinator(id).text("sessionId")?.let { open(OrbitRoute(Destination.SESSION, it)) } }
+            try {
+                api.openCoordinator(id).text("sessionId")?.let { session ->
+                    focus?.let { CardFocus.request(session, it) }
+                    open(OrbitRoute(Destination.SESSION, session))
+                }
+            }
             catch (cancel: CancellationException) { throw cancel }
             catch (failure: Exception) { state.notice = "Couldn't open the coordinator: ${failureReason(failure)}." }
         }
     }
     fun replaceCoordinator() = write("Couldn't start a new coordinator: ") {
-        api.replaceCoordinator(id, "replace:${state.coordinator?.obj("coordination")?.text("sessionId")}")?.text("sessionId")?.let { open(OrbitRoute(Destination.SESSION, it)) }
+        api.replaceCoordinator(id, "replace:${state.coordinator?.obj("coordination")?.text("sessionId")}")?.text("sessionId")
+            ?.let { if (state.attached) open(OrbitRoute(Destination.SESSION, it)) }
     }
 
     val doc = state.document
@@ -363,7 +387,9 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
                     Text("⋯", style = MaterialTheme.typography.titleLarge) }
                 DropdownMenu(menu, { menu = false }) {
                     if (status == "OPEN") {
-                        DropdownMenuItem(text = { Text("Record as done") }, enabled = enabled, onClick = { menu = false; dialog = ProjectDialog.Status("DONE") })
+                        DropdownMenuItem(text = { Text("Record as done") }, enabled = enabled, onClick = {
+                            menu = false; dialog = if (ProjectDone.hasDoneDoor(doc)) ProjectDialog.Done else ProjectDialog.Status("DONE")
+                        })
                         DropdownMenuItem(text = { Text("Record as cancelled") }, enabled = enabled, onClick = { menu = false; dialog = ProjectDialog.Status("CANCELLED") })
                     } else DropdownMenuItem(text = { Text("Reopen project") }, enabled = enabled, onClick = { menu = false; dialog = ProjectDialog.Status("OPEN") })
                     HorizontalDivider()
@@ -380,12 +406,21 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
                 }
             }
         }) }
-        openItemsSection(state, doc, now, enabled, startOwn = { dialog = ProjectDialog.Start }, review = { openCoordinator() }, perform = { action, row ->
+        openItemsSection(state, doc, now, enabled, startOwn = { dialog = ProjectDialog.Start }, recordDone = { dialog = ProjectDialog.Done },
+            review = { row -> openCoordinator(row?.text("itemId")?.let { "start:$it" }) }, perform = { action, row ->
+            val owners = row.text("assignee") != "COORDINATOR"
+            val card = when {
+                !owners -> null
+                row.text("kind") == "PROMOTION_APPROVAL" -> "promotion:${row.text("promotionId").orEmpty()}"
+                else -> row.text("itemId")?.let { "item:$it" }
+            }
             when (action) {
                 "RESUME" -> row.text("fuseEpisodeId")?.let { episode -> write("Couldn't resume the coordinator: ") { api.resumeFuse(id, episode) } }
                 "OPEN_TASK_SESSION" -> row.text("sessionId")?.let { open(OrbitRoute(Destination.SESSION, it)) } ?: row.text("taskId")?.let(openTask)
-                "OPEN_COORDINATOR" -> row.obj("delivery")?.text("sessionId")?.let { open(OrbitRoute(Destination.SESSION, it)) } ?: openCoordinator()
-                else -> openCoordinator()
+                "OPEN_COORDINATOR" -> row.obj("delivery")?.text("sessionId")?.let { session ->
+                    card?.let { CardFocus.request(session, it) }; open(OrbitRoute(Destination.SESSION, session))
+                } ?: openCoordinator(card)
+                else -> openCoordinator(card)
             }
         })
         overviewSection(state, doc, now, openTask)
@@ -456,7 +491,7 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
                 Text(ProjectPage.replaceCoordinatorConfirm, color = MaterialTheme.colorScheme.error) } },
             dismissButton = { TextButton(onClick = { dialog = null }) { Text(ProjectPage.replaceCoordinatorKeep) } })
         is ProjectDialog.Resolve -> {
-            var reason by rememberSaveable(current.blocker.text("id")) { mutableStateOf("") }
+            var reason by remember(current.blocker.text("id")) { mutableStateOf("") }
             AlertDialog(onDismissRequest = { dialog = null }, title = { Text(ProjectPage.resolveBlockerTitle(current.blocker)) },
                 text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(ProjectPage.resolveBlockerMessage(current.blocker), style = MaterialTheme.typography.bodySmall)
@@ -488,6 +523,9 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             }
         } ?: run { dialog = null }
         ProjectDialog.Share -> ShareSheet(app, handle, ShareRootKind.PROJECT, id, close = { dialog = null }) { state.share = it }
+        ProjectDialog.Done -> ProjectDoneSheet(api, id, state, now, enabled, close = { dialog = null }) { body ->
+            attempt("${ProjectDone.notRecorded} — ") { api.done(id, body) }
+        }
     }
 }
 
@@ -501,9 +539,12 @@ private fun Header(state: ProjectPageState, doc: JsonObject, now: Instant, conne
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val running = ProjectDoc.status(doc) == "OPEN" && ProjectDoc.started(doc) != false
             Chip(ProjectDoc.statusLabel(doc), if (running) TagTone.BRAND else TagTone.NEUTRAL, Modifier.testTag("project-status"))
+            if (ProjectDone.readyToClose(ProjectDoc.status(doc), state.openItems)) Chip(ProjectDone.readyToClose, TagTone.WARNING, Modifier.testTag("project-ready-to-close"))
             val count = ProjectDoc.taskCount(doc)
             Text("$count task${if (count == 1) "" else "s"}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        if (ProjectDoc.status(doc) == "DONE") Text(ProjectDone.provenance(doc.text("doneBy"), doc.objects("acceptedGaps").size), Modifier.testTag("project-done-by"),
+            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val view = state.integration
         val facts = view?.let { ProjectPage.integrationFacts(it, now) }
         when {
@@ -518,20 +559,24 @@ private fun Header(state: ProjectPageState, doc: JsonObject, now: Instant, conne
     }
 }
 
-private fun LazyListScope.openItemsSection(state: ProjectPageState, doc: JsonObject, now: Instant, enabled: Boolean, startOwn: () -> Unit, review: () -> Unit,
-    perform: (String, JsonObject) -> Unit) {
+private fun LazyListScope.openItemsSection(state: ProjectPageState, doc: JsonObject, now: Instant, enabled: Boolean, startOwn: () -> Unit, recordDone: () -> Unit,
+    review: (JsonObject?) -> Unit, perform: (String, JsonObject) -> Unit) {
     val items = state.openItems ?: return
     val start = if (ProjectDoc.status(doc) == "OPEN" && ProjectDoc.started(doc) == false) (items.obj("startRequest") ?: JsonObject(emptyMap())) else null
     val asked = start?.takeIf { it.isNotEmpty() }
     val needsYou = items.objects("needsYou")
     val withCoordinator = items.objects("withCoordinator")
-    if (needsYou.isEmpty() && withCoordinator.isEmpty() && start == null) return
-    item(key = "open-items-head") { SectionHead(ProjectPage.openItemsHeading, ProjectPage.openItemsHint(needsYou.size + if (asked != null) 1 else 0, withCoordinator.size)) }
-    if (needsYou.isNotEmpty() || start != null) {
+    // The closing row (iOS main `ProjectDone.pageRow`): the coordinator's request to record it done, or the owner's own.
+    val done = ProjectDone.pageRow(doc, items)
+    if (needsYou.isEmpty() && withCoordinator.isEmpty() && start == null && done == null) return
+    val asking = (if (asked != null) 1 else 0) + if (done is ProjectDone.PageRow.Asked) 1 else 0
+    item(key = "open-items-head") { SectionHead(ProjectPage.openItemsHeading, ProjectPage.openItemsHint(needsYou.size + asking, withCoordinator.size)) }
+    if (needsYou.isNotEmpty() || start != null || done != null) {
         item(key = "needs-you") { GroupLabel(ProjectPage.needsYouGroup) }
         if (start != null) item(key = "start-row") {
             if (asked != null) ItemRow(StartProjectCopy.title, asked.obj("startRequest")?.obj("settings")?.let(StartProjectCopy::requestSummary) ?: asked.text("detailLine").orEmpty(),
-                "${ProjectPage.who(asked)} · ${ProjectPage.waitingLabel(asked, now)}", true, ProjectPage.actionLabel("REVIEW"), enabled, tag = "start-request", press = review, tap = review)
+                "${ProjectPage.who(asked)} · ${ProjectPage.waitingLabel(asked, now)}", true, ProjectPage.actionLabel("REVIEW"), enabled, tag = "start-request",
+                press = { review(asked) }, tap = { review(asked) })
             else Row(Modifier.fillMaxWidth().clickable(enabled = enabled, role = Role.Button, onClick = startOwn).padding(vertical = 8.dp).testTag("project-start-own"),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.outline, CircleShape))
@@ -541,6 +586,24 @@ private fun LazyListScope.openItemsSection(state: ProjectPageState, doc: JsonObj
                 }
                 Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+        }
+        when (done) {
+            is ProjectDone.PageRow.Asked -> item(key = "done-request") {
+                ItemRow(ProjectDone.heading, ProjectDone.requestRowDetail(done.row), "${ProjectPage.who(done.row)} · ${ProjectPage.waitingLabel(done.row, now)}", true,
+                    ProjectPage.actionLabel("REVIEW"), enabled, tag = "project-done-request", press = recordDone, tap = recordDone)
+            }
+            ProjectDone.PageRow.Own -> item(key = "done-own") {
+                Row(Modifier.fillMaxWidth().clickable(enabled = enabled, role = Role.Button, onClick = recordDone).padding(vertical = 8.dp).testTag("project-done-own"),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.outline, CircleShape))
+                    Column(Modifier.weight(1f)) {
+                        Text(ProjectDone.recordAsDoneRow, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                        Text(ProjectDone.notAskedYet, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            null -> Unit
         }
         items(needsYou, key = { "item:${it.text("itemId")}" }) { row ->
             val action = ProjectPage.primaryAction(row)

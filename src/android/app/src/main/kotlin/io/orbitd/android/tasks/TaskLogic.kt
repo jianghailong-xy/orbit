@@ -869,6 +869,8 @@ fun taskError(error: Throwable): String = when {
     error is ApiError && error.status == 404 -> "This task is no longer available."
     error is io.orbitd.android.taskprojects.FeatureWriteUncertain -> error.message.orEmpty()
     error is io.orbitd.android.taskprojects.FeatureWriteRefused -> error.message.orEmpty()
+    // A refusal made on this device names itself; it is not a dropped connection.
+    error is IllegalStateException && !error.message.isNullOrBlank() -> error.message.orEmpty()
     else -> "Request failed — check your connection."
 }
 

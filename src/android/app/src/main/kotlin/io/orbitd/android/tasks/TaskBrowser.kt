@@ -31,6 +31,7 @@ import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.navigation.*
+import io.orbitd.android.taskprojects.RefreshNudge
 import io.orbitd.android.taskprojects.canWrite
 import io.orbitd.android.taskprojects.writable
 import kotlinx.coroutines.CancellationException
@@ -61,7 +62,13 @@ private class TaskListData {
     var error by mutableStateOf<String?>(null)
     var conflict by mutableStateOf<TaskRunHandoff.Conflict?>(null)
     var busy by mutableStateOf<Set<String>>(emptySet())
+    /** The query the screen shows now. Every read compares itself to it after each wait, as iOS
+     * compares `queryKey`: a read made for an earlier filter never lands under a newer one. */
+    var query = TaskQuery()
+    /** Every read is a new generation; only the newest may write what it read. */
     var generation = 0
+    /** Whether the screen is still shown: a write that outlives it finishes, but reads nothing back. */
+    var attached = true
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -92,6 +99,8 @@ internal fun TaskBrowser(app: OrbitApplication, handle: SessionHandle, route: Or
     var labelsOpen by rememberSaveable { mutableStateOf(false) }
     val data = remember(handle) { TaskListData() }
     val query = TaskQuery(listId, filter, search, labels)
+    data.query = query
+    DisposableEffect(data) { data.attached = true; onDispose { data.attached = false } }
 
     suspend fun navigation() {
         coroutineScope {
@@ -104,36 +113,41 @@ internal fun TaskBrowser(app: OrbitApplication, handle: SessionHandle, route: Or
     /** One scope's page and the bounded reads beside it. The page decides the error; the strip,
      * the counts and the label table are optional — a failed one keeps what it last showed. */
     suspend fun load(reset: Boolean) {
-        val generation = if (reset) ++data.generation else data.generation
+        // The query this read is for is the one shown when it starts — never one a closure kept.
+        val key = data.query
+        val generation = ++data.generation
+        fun current() = generation == data.generation && key == data.query
         if (reset) { data.rows = emptyList(); data.cursor = null; data.overview = null; data.pinned = emptyList(); data.pinnedTotal = 0; data.labels = null; data.loaded = false }
         data.loading = true
         try {
             coroutineScope {
-                val counts = async { runCatching { api.counts(query) }.getOrNull() }
-                val pinned = async { if (TaskListLogic.pinsHappeningNow(filter, null, labels)) runCatching { api.active(query) }.getOrNull() else null }
-                val labelTable = async { runCatching { api.labels(query) }.getOrNull() }
-                val header = async { listId?.takeIf { it != "none" && data.lists.none { list -> ObjectId.same(list.text("id"), it) } }
+                val counts = async { runCatching { api.counts(key) }.getOrNull() }
+                val pinned = async { if (TaskListLogic.pinsHappeningNow(key.filter, null, key.labels)) runCatching { api.active(key) }.getOrNull() else null }
+                val labelTable = async { runCatching { api.labels(key) }.getOrNull() }
+                val header = async { key.listId?.takeIf { it != "none" && data.lists.none { list -> ObjectId.same(list.text("id"), it) } }
                     ?.let { runCatching { api.listHeader(it) }.getOrNull() } }
-                val page = api.page(query)
-                if (generation != data.generation) return@coroutineScope
+                val page = api.page(key)
+                if (!current()) return@coroutineScope
                 // The first page is read again in place; rows a reader paged in beyond it are kept.
                 val first = page.objects("items")
                 val firstIds = first.mapNotNull { it.text("id") }.toSet()
                 data.rows = if (reset || data.cursor == null) first else first + data.rows.drop(200).filter { it.text("id") !in firstIds }
                 if (reset || data.rows.size <= 200) data.cursor = page.text("nextCursor")
                 data.error = null; data.loaded = true
-                counts.await()?.let { if (generation == data.generation) data.overview = TaskOverview.of(it) }
-                pinned.await().let { if (generation == data.generation) { data.pinned = it?.objects("items").orEmpty(); data.pinnedTotal = it?.number("total") ?: 0 } }
-                labelTable.await()?.let { if (generation == data.generation) data.labels = it }
-                header.await()?.let { if (generation == data.generation) data.header = it }
+                counts.await()?.let { if (current()) data.overview = TaskOverview.of(it) }
+                pinned.await().let { if (current()) { data.pinned = it?.objects("items").orEmpty(); data.pinnedTotal = it?.number("total") ?: 0 } }
+                labelTable.await()?.let { if (current()) data.labels = it }
+                header.await()?.let { if (current()) data.header = it }
             }
         } catch (cancel: CancellationException) { throw cancel }
-        catch (failure: Exception) { if (generation == data.generation) data.error = taskError(failure) }
+        catch (failure: Exception) { if (current()) data.error = taskError(failure) }
         finally { if (generation == data.generation) data.loading = false }
     }
     // A new query starts empty after the browser's 250 ms debounce; the same query re-reads in place.
     LaunchedEffect(handle, query) { delay(250); load(reset = true) }
-    LaunchedEffect(handle, revision) { if (revision > 0) { delay(400); navigation(); if (data.loaded) load(reset = false) } }
+    // Live events are coalesced: one read two seconds after the first of a burst, never cancelled by the next.
+    val nudge = remember(handle) { RefreshNudge(scope) { navigation(); if (data.loaded) load(reset = false) } }
+    LaunchedEffect(handle, revision) { if (revision > 0) nudge.nudge() }
     LaunchedEffect(handle) { navigation() }
     LaunchedEffect(data.rows, data.pinned) {
         // A selection keeps only rows still listed; a task deleted elsewhere is not acted on blind.
@@ -141,11 +155,13 @@ internal fun TaskBrowser(app: OrbitApplication, handle: SessionHandle, route: Or
         if (selected.any { it !in listed }) selected = selected.filter { it in listed }
     }
 
+    /** A write belongs to the app, not to this screen: leaving does not cancel it (iOS's model-owned
+     * Task). What it reads back afterwards is the screen's current query, and only while it is shown. */
     fun mutate(id: String?, operation: suspend () -> Unit) {
         if (id != null && id in data.busy) return
         data.error = null; data.conflict = null
         id?.let { data.busy = data.busy + it }
-        scope.launch {
+        app.processScope.launch {
             try { operation() }
             catch (cancel: CancellationException) { throw cancel }
             catch (failure: Exception) {
@@ -153,7 +169,8 @@ internal fun TaskBrowser(app: OrbitApplication, handle: SessionHandle, route: Or
                 if (conflict != null) data.conflict = conflict else data.error = taskError(failure)
             } finally {
                 id?.let { data.busy = data.busy - it }
-                load(reset = false); navigation()
+                app.realtime.refreshDirectory()
+                if (data.attached) { load(reset = false); navigation() }
             }
         }
     }
@@ -255,11 +272,12 @@ internal fun TaskBrowser(app: OrbitApplication, handle: SessionHandle, route: Or
                         TextButton(onClick = {
                             val cursor = data.cursor ?: return@TextButton
                             val generation = data.generation
+                            val key = data.query
                             data.loadingMore = true
                             scope.launch {
                                 try {
-                                    val page = api.page(query, cursor)
-                                    if (generation == data.generation) {
+                                    val page = api.page(key, cursor)
+                                    if (generation == data.generation && key == data.query) {
                                         val known = data.rows.mapNotNull { it.text("id") }.toSet()
                                         data.rows = data.rows + page.objects("items").filter { it.text("id") !in known }
                                         data.cursor = page.text("nextCursor")

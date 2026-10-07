@@ -1,11 +1,16 @@
 package io.orbitd.android.cards
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.AuthState
@@ -18,6 +23,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.*
 
 /** A04 is the only live-state owner. Reconnection/foreground/REST invalidations all feed this rail. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SessionCards(open: (String) -> Unit, discuss: ((String) -> Unit)? = null) {
     val resources = LocalReaderResources.current ?: return
@@ -71,10 +77,18 @@ fun SessionCards(open: (String) -> Unit, discuss: ((String) -> Unit)? = null) {
             TextButton(onClick = { app.realtime.refreshSession() }) { Text("Check status") }
             if (!session.fresh) Text("Reconnecting · actions are unavailable until the server is checked.", style = MaterialTheme.typography.bodySmall)
         }
+        val focus = CardFocus.pending(session.id)
         shown.distinctBy { it.key }.forEach { original -> key(resources.handle, original.key, original.binding) {
             val card = if (original.family == CardFamily.START && graph != null) original.copy(context = JsonObject(original.context + ("plan" to graph!!))) else original
-            BusinessCard(card, session.fresh && actions.valid(resources.handle, session.id) && (card.family != CardFamily.START || graph != null), results[card.key]?.takeIf { it.binding == card.binding } ?: CardActionState(), open, discuss) { verb, input ->
-                actions.submit(resources.handle, card, verb, input)
+            // A11 hook: the card a project page opened this conversation onto is brought into view once drawn.
+            val requester = remember { BringIntoViewRequester() }
+            if (focus != null && CardFocus.matches(focus, card.key)) LaunchedEffect(focus, card.key) {
+                requester.bringIntoView(); CardFocus.spend(session.id)
+            }
+            Box(Modifier.bringIntoViewRequester(requester)) {
+                BusinessCard(card, session.fresh && actions.valid(resources.handle, session.id) && (card.family != CardFamily.START || graph != null), results[card.key]?.takeIf { it.binding == card.binding } ?: CardActionState(), open, discuss) { verb, input ->
+                    actions.submit(resources.handle, card, verb, input)
+                }
             }
         } }
         merged.filter { it.text("state") == "MERGED" }.forEach { receipt ->
@@ -89,10 +103,14 @@ fun SessionCards(open: (String) -> Unit, discuss: ((String) -> Unit)? = null) {
             Text("Tasks created here", style = MaterialTheme.typography.titleSmall)
             if (tasks.number("total") == 1) Text(tasks.objects("items").firstOrNull()?.text("title") ?: createdTasksCountLine(tasks))
             else Text(createdTasksCountLine(tasks))
+            // A11 hook: a created task's row opens its task page (iOS `CreatedTasksCard` row → task detail).
             DetailFold("tasks") { tasks.objects("items").forEach { task ->
-                CardFields(task, listOf("title", "status", "running", "replaces"), open)
+                val taskId = task.text("id")
+                Box(Modifier.fillMaxWidth().then(if (taskId == null) Modifier
+                    else Modifier.clickable(role = Role.Button) { open("orbit-task:$taskId") }.testTag("created-task:$taskId"))) {
+                    CardFields(task, listOf("title", "status", "running", "replaces"), open)
+                }
             } }
-            Text("Task details are not connected yet.", style = MaterialTheme.typography.bodySmall)
         }
         session.snapshot?.background?.forEach { job ->
             DetailFold("Background work · ${job.text("description") ?: job.text("taskId") ?: job.text("id") ?: ""}") {

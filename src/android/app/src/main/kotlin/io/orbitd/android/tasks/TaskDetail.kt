@@ -64,6 +64,10 @@ private class TaskDetailData {
     var runner by mutableStateOf<JsonObject?>(null)
     var providers by mutableStateOf<List<JsonObject>>(emptyList())
     var busy by mutableStateOf(false)
+    /** A refusal of what an open sheet sent, said on the sheet: the page's banner is behind it. */
+    var sheetError by mutableStateOf<String?>(null)
+    /** Whether the page is still shown: a write that outlives it finishes, but reads nothing back. */
+    var attached = true
 }
 
 private sealed interface DetailConfirm {
@@ -83,6 +87,7 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
     val connected = writable(live, handle, (auth as? AuthState.SignedIn)?.handle)
     val workspaces = live.directory?.workspaces.orEmpty()
     val data = remember(handle, id) { TaskDetailData() }
+    DisposableEffect(data) { data.attached = true; onDispose { data.attached = false } }
     var sheet by rememberSaveable(id) { mutableStateOf<String?>(null) }
     var confirm by remember { mutableStateOf<DetailConfirm?>(null) }
     var comment by rememberSaveable(id) { mutableStateOf("") }
@@ -127,27 +132,40 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
         }
     }
     LaunchedEffect(handle, id) { load() }
-    LaunchedEffect(handle, id, revision) { if (revision > 0 && data.task != null) { delay(400); load() } }
+    // Live events are coalesced: one read two seconds after the first of a burst, never cancelled by the next.
+    val nudge = remember(handle, id) { RefreshNudge(scope) { if (data.task != null) load() } }
+    LaunchedEffect(handle, id, revision) { if (revision > 0) nudge.nudge() }
     val busyRun = data.task?.let(TaskListLogic::isBusy) == true
     // While a run of it is going, the page follows it: that is when its owner may be asked something.
     LaunchedEffect(handle, id, busyRun) { while (busyRun) { delay(4000); load() } }
     LaunchedEffect(data.notice) { if (data.notice != null) { delay(3000); data.notice = null } }
 
-    fun mutate(operation: suspend () -> Unit) {
+    /** A write belongs to the app, not to this page (iOS's model-owned Task): leaving does not cancel it,
+     * so a Run's resends and a comment still go out. A sheet that sent it closes only once it is taken. */
+    fun mutate(fromSheet: Boolean = false, done: () -> Unit = {}, operation: suspend () -> Unit) {
         if (data.busy) return
-        data.busy = true; data.error = null; data.conflict = null
-        scope.launch {
-            try { operation() }
+        data.busy = true; data.error = null; data.conflict = null; data.sheetError = null
+        app.processScope.launch {
+            try { operation(); done() }
             catch (cancel: CancellationException) { throw cancel }
             catch (failure: Exception) {
                 val conflict = TaskRunHandoff.readConflict(failure)
-                if (conflict != null) data.conflict = conflict else data.error = taskError(failure)
-            } finally { data.busy = false; load(); app.realtime.refreshDirectory() }
+                when {
+                    conflict != null -> data.conflict = conflict
+                    fromSheet -> data.sheetError = taskError(failure)
+                    else -> data.error = taskError(failure)
+                }
+            } finally {
+                data.busy = false
+                app.realtime.refreshDirectory()
+                if (data.attached) load()
+            }
         }
     }
     fun revisionOf(task: JsonObject) = "${task.text("id")}:${task.text("updatedAt")}"
-    fun patch(fields: JsonObject, saved: String? = null) { val task = data.task ?: return
-        mutate { api.update(id, fields, revisionOf(task) + ":" + fields); saved?.let { data.notice = it } } }
+    fun patch(fields: JsonObject, saved: String? = null, fromSheet: Boolean = false, done: () -> Unit = {}) { val task = data.task ?: return
+        mutate(fromSheet, done) { api.update(id, fields, revisionOf(task) + ":" + fields); saved?.let { data.notice = it } } }
+    fun closeSheet() { sheet = null; data.sheetError = null }
 
     val task = data.task
     if (task == null) {
@@ -350,7 +368,8 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
         }
         // The comment box stays on screen: asking an agent about this task is one tap away.
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
-            OutlinedTextField(comment, { comment = it }, Modifier.weight(1f).testTag("task-comment"), placeholder = { Text(TaskDetailCopy.commentPlaceholder) },
+            OutlinedTextField(comment, { comment = it }, Modifier.weight(1f).testTag("task-comment"),
+                placeholder = { Text(TaskDetailCopy.commentPlaceholder, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 maxLines = 4, shape = RoundedCornerShape(22.dp))
             TextButton(onClick = {
                 val body = comment.trim()
@@ -389,20 +408,25 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
     when (val current = sheet) {
         null -> Unit
         "share" -> ShareSheet(app, handle, ShareRootKind.TASK, id, close = { sheet = null }) { data.share = it }
-        "schedule" -> ScheduleSheet(task, enabled, close = { sheet = null }) { runAt ->
-            sheet = null
+        // Each sheet stays up until the server takes what it sent (iOS `TaskDetailParts`), so a refusal
+        // — an override reason the server asks for, the account going offline, an unknown answer —
+        // leaves what was typed where it was, with the server's words under it.
+        "schedule" -> ScheduleSheet(task, enabled, data.sheetError, close = ::closeSheet) { runAt ->
             patch(buildJsonObject { put("runAt", runAt?.let(::JsonPrimitive) ?: JsonNull) },
-                if (runAt == null) TaskDetailCopy.scheduleCancelled else TaskDetailCopy.scheduleSaved)
+                if (runAt == null) TaskDetailCopy.scheduleCancelled else TaskDetailCopy.scheduleSaved, fromSheet = true) { closeSheet() }
         }
-        "acceptance" -> AcceptanceSheet(AcceptanceDraft(task), enabled, close = { sheet = null }) { fields ->
-            sheet = null; patch(fields, TaskDetailCopy.acceptanceSaved)
+        "acceptance" -> AcceptanceSheet(AcceptanceDraft(task), enabled, data.sheetError, close = ::closeSheet) { fields ->
+            patch(fields, TaskDetailCopy.acceptanceSaved, fromSheet = true) { closeSheet() }
         }
-        "follow" -> FollowSheet(task, enabled, close = { sheet = null }) { predicate, ttl, key ->
-            sheet = null
-            mutate { val watch = api.follow(id, predicate, ttl, key); data.notice = if (watch?.text("state") == "MATCHED") TaskDetailCopy.followMatchedAtOnce else TaskDetailCopy.following }
+        "follow" -> FollowSheet(task, enabled, data.sheetError, close = ::closeSheet) { predicate, ttl, key ->
+            mutate(fromSheet = true, done = { closeSheet() }) {
+                val watch = api.follow(id, predicate, ttl, key)
+                data.notice = if (watch?.text("state") == "MATCHED") TaskDetailCopy.followMatchedAtOnce else TaskDetailCopy.following
+            }
         }
-        "dependency" -> DependencyPicker(api, id, task.objects("dependsOn").mapNotNull { it.obj("dependsOnTask")?.text("id") }, enabled, close = { sheet = null }) { prerequisite ->
-            sheet = null; mutate { api.addDependency(id, prerequisite, revisionOf(task)) }
+        "dependency" -> DependencyPicker(api, id, task.objects("dependsOn").mapNotNull { it.obj("dependsOnTask")?.text("id") }, enabled, data.sheetError,
+            close = ::closeSheet) { prerequisite ->
+            mutate(fromSheet = true, done = { closeSheet() }) { api.addDependency(id, prerequisite, revisionOf(task)) }
         }
         else -> if (current.startsWith("why:")) task.objects("sessions").firstOrNull { it.text("id") == current.removePrefix("why:") }?.let { run ->
             TaskDetailLogic.runRoute(run)?.let { route -> RouteWhySheet(route, { modelName(it, task, data) }) { sheet = null } }
