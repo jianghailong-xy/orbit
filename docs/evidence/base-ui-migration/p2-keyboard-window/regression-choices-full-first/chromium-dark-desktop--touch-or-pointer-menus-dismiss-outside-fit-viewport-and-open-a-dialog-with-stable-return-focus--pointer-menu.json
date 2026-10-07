@@ -1,0 +1,17 @@
+{
+  "input": "mouse",
+  "outside": true,
+  "menuBounds": {
+    "x": 378,
+    "y": 160,
+    "width": 130.0625,
+    "height": 177
+  },
+  "submenuBounds": {
+    "x": 383,
+    "y": 260,
+    "width": 139,
+    "height": 72
+  },
+  "dialogReturn": true
+}

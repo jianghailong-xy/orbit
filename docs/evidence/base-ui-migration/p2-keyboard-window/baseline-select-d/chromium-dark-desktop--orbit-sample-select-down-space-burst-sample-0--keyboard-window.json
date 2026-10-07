@@ -1,0 +1,37 @@
+{
+  "target": "orbit-sample",
+  "sequence": "select-down-space",
+  "control": "select-down",
+  "mode": "burst",
+  "run": 0,
+  "keys": [
+    "ArrowDown",
+    "Space"
+  ],
+  "from": "Never",
+  "before": "Never",
+  "after": "Never",
+  "result": "Never | list closed",
+  "listOpen": false,
+  "active": "combobox:Sample choice",
+  "keyLog": [
+    {
+      "key": "ArrowDown",
+      "t": 445.6,
+      "target": "combobox:Sample choice",
+      "trusted": true,
+      "focused": "combobox:Sample choice",
+      "listbox": false,
+      "highlighted": null
+    },
+    {
+      "key": " ",
+      "t": 652.2,
+      "target": "combobox:Sample choice",
+      "trusted": true,
+      "focused": "combobox:Sample choice",
+      "listbox": true,
+      "highlighted": "Never"
+    }
+  ]
+}

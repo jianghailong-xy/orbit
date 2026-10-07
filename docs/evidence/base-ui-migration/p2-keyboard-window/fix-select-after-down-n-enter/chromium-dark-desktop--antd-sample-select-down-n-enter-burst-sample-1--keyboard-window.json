@@ -1,0 +1,47 @@
+{
+  "target": "antd-sample",
+  "sequence": "select-down-n-enter",
+  "control": "select-down-enter-from-7",
+  "mode": "burst",
+  "run": 1,
+  "keys": [
+    "ArrowDown",
+    "n",
+    "Enter"
+  ],
+  "from": "7 days",
+  "before": "7 days",
+  "after": "7 days",
+  "result": "7 days | list closed",
+  "listOpen": false,
+  "active": "combobox:Sample choice",
+  "keyLog": [
+    {
+      "key": "ArrowDown",
+      "t": 16.5,
+      "target": "combobox:Sample choice",
+      "trusted": true,
+      "focused": "combobox:Sample choice",
+      "listbox": false,
+      "highlighted": null
+    },
+    {
+      "key": "n",
+      "t": 28.4,
+      "target": "combobox:Sample choice",
+      "trusted": true,
+      "focused": "combobox:Sample choice",
+      "listbox": true,
+      "highlighted": "7 days"
+    },
+    {
+      "key": "Enter",
+      "t": 29,
+      "target": "combobox:Sample choice",
+      "trusted": true,
+      "focused": "combobox:Sample choice",
+      "listbox": true,
+      "highlighted": "7 days"
+    }
+  ]
+}
