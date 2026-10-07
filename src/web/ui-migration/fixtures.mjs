@@ -142,6 +142,10 @@ export async function installFixtures(page, { theme = 'light', scenario = 'defau
     }
     if (method === 'POST' && path === '/api/auth/change-password') return json({ ok: true });
     if (method === 'GET' && path === '/api/auth/setup-status') return json({ needsSetup: false });
+    // main 558a8ba1f (feat(auth): link and unlink Google from the profile page, ... (S4)) made the profile
+    // page read GET /auth/methods. The server's default answer: Google sign-in is off until an
+    // administrator turns it on, so the password alone (SignInProvidersService.methods()).
+    if (method === 'GET' && path === '/api/auth/methods') return json({ password: true, google: false, googleSignup: false });
     if (method === 'GET' && path === '/api/runners') return json([RUNNER]);
     if (method === 'GET' && path === '/api/workspaces') return json([WORKSPACE]);
     if (method === 'GET' && path === '/api/providers') return json([]);

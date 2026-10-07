@@ -1,0 +1,57 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2-keyboard-window/regression-repeat-motion-top-search/<name>",
+ "files": [
+  {
+   "name": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--motion.json",
+   "bytes": 23708,
+   "sha256": "d35830738288c45a1ab4fcb4a93c7d6b7defea1b61b8aeae3c874592e960b6d1"
+  },
+  {
+   "name": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-1--motion.json",
+   "bytes": 23744,
+   "sha256": "9c09db5fac576679c4272c81ef9e2e88750e7c20f04ff64bbd2eea0442d6eaec"
+  },
+  {
+   "name": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-2--motion.json",
+   "bytes": 23074,
+   "sha256": "542e1eacc596241d228301790d627a55840c8be2d3d5b5410f5b31e479e46a88"
+  },
+  {
+   "name": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-3--motion.json",
+   "bytes": 23367,
+   "sha256": "1e565ca7d78836344069253690e5e5db58a44b8b0f5c0e16ff5945e485419fbf"
+  },
+  {
+   "name": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-4--motion.json",
+   "bytes": 21655,
+   "sha256": "61dd314ea24d5bd61467e9b8d39d97f4a4a64d18ada56db00f6643f4bca4bb74"
+  },
+  {
+   "name": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-5--motion.json",
+   "bytes": 24401,
+   "sha256": "3f8e5ec4cb7223f6975189d70067e95959cc3caeee651e4a845182015729f93d"
+  },
+  {
+   "name": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-6--motion.json",
+   "bytes": 23712,
+   "sha256": "11828d6f4090f5f0c923be62dc8a14155bebe39a3b7ab20439b6e084f99462ce"
+  },
+  {
+   "name": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-7--motion.json",
+   "bytes": 23375,
+   "sha256": "da782e4b0c06aac0ac94e5f58e3c64ea3932c9a5cb52f31e49208c3466541f36"
+  },
+  {
+   "name": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-8--motion.json",
+   "bytes": 24366,
+   "sha256": "e1f1e1d820af96d7c305d7177af2e0ac25b2606f40bf831a9aae493b3f36ba70"
+  },
+  {
+   "name": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--repeat-9--motion.json",
+   "bytes": 23113,
+   "sha256": "c64e04fad147e4c0f5302deda7b40ed370397f21e4313f528d4cbb16e5ecbd9a"
+  }
+ ]
+}

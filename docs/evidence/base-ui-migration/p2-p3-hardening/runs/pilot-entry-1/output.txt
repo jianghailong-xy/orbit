@@ -1,0 +1,369 @@
+[WebServer] (node:2624814) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 88 P0.2 originals, 152 main drift references, 12 accepted migration differences.
+
+Running 88 tests using 1 worker
+
+(node:2624889) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › ui-migration/pilot-performance.browser.mjs:28:1 › record pilot performance (9.6s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-delete-confirm.png, writing actual.
+  ✓   2 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:71:3 › task detail pilot › fields, pickers and the panel header (5.7s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-comment-mention.png, writing actual.
+  ✓   3 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:152:3 › task detail pilot › dependencies, inputs and comments (4.1s)
+  ✓   4 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:232:3 › task detail pilot › a failed upload says so and leaves the list as it was (785ms)
+  ✓   5 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:256:3 › task detail pilot › files dropped on Add file are each uploaded (1.2s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-reopen-refused.png, writing actual.
+  ✓   6 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:294:3 › task detail pilot › reopening a stopped task, refused and then backed out of (1.1s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-share-turn-off.png, writing actual.
+  ✓   7 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:319:3 › share dialog pilot › from Only you to a public link and back (3.6s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-share-error.png, writing actual.
+  ✓   8 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:381:3 › share dialog pilot › loading and a read that failed (2.7s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-p0-share-focused.png, writing actual.
+  ✓   9 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:413:3 › P0 share dialog, focused alike › same element focused before the shot (937ms)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-account-open.png, writing actual.
+  ✓  10 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:428:3 › workspace account pilot › the Claude account picker of a new workspace (1.2s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-antigravity-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-desktop/pilot-antigravity-account-open.png, writing actual.
+  ✓  11 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:454:3 › workspace account pilot › the Antigravity account picker: Default on the Gemini key, a Google account with what is left (1.4s)
+(node:2627882) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  12 [chromium-light-phone] › ui-migration/pilot-performance.browser.mjs:28:1 › record pilot performance
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-delete-confirm.png, writing actual.
+  ✓  13 [chromium-light-phone] › ui-migration/pilot.browser.mjs:71:3 › task detail pilot › fields, pickers and the panel header (5.4s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-comment-mention.png, writing actual.
+  ✓  14 [chromium-light-phone] › ui-migration/pilot.browser.mjs:152:3 › task detail pilot › dependencies, inputs and comments (3.9s)
+  ✓  15 [chromium-light-phone] › ui-migration/pilot.browser.mjs:232:3 › task detail pilot › a failed upload says so and leaves the list as it was (812ms)
+  ✓  16 [chromium-light-phone] › ui-migration/pilot.browser.mjs:256:3 › task detail pilot › files dropped on Add file are each uploaded (1.1s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-reopen-refused.png, writing actual.
+  ✓  17 [chromium-light-phone] › ui-migration/pilot.browser.mjs:294:3 › task detail pilot › reopening a stopped task, refused and then backed out of (1.3s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-share-turn-off.png, writing actual.
+  ✓  18 [chromium-light-phone] › ui-migration/pilot.browser.mjs:319:3 › share dialog pilot › from Only you to a public link and back (3.1s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-share-error.png, writing actual.
+  ✓  19 [chromium-light-phone] › ui-migration/pilot.browser.mjs:381:3 › share dialog pilot › loading and a read that failed (2.5s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-p0-share-focused.png, writing actual.
+  ✓  20 [chromium-light-phone] › ui-migration/pilot.browser.mjs:413:3 › P0 share dialog, focused alike › same element focused before the shot (993ms)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-account-open.png, writing actual.
+  ✓  21 [chromium-light-phone] › ui-migration/pilot.browser.mjs:428:3 › workspace account pilot › the Claude account picker of a new workspace (1.1s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-antigravity-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-light-phone/pilot-antigravity-account-open.png, writing actual.
+  ✓  22 [chromium-light-phone] › ui-migration/pilot.browser.mjs:454:3 › workspace account pilot › the Antigravity account picker: Default on the Gemini key, a Google account with what is left (1.2s)
+(node:2629642) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  23 [chromium-dark-desktop] › ui-migration/pilot-performance.browser.mjs:28:1 › record pilot performance
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-delete-confirm.png, writing actual.
+  ✓  24 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:71:3 › task detail pilot › fields, pickers and the panel header (6.1s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-comment-mention.png, writing actual.
+  ✓  25 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:152:3 › task detail pilot › dependencies, inputs and comments (4.3s)
+  ✓  26 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:232:3 › task detail pilot › a failed upload says so and leaves the list as it was (885ms)
+  ✓  27 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:256:3 › task detail pilot › files dropped on Add file are each uploaded (1.2s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-reopen-refused.png, writing actual.
+  ✓  28 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:294:3 › task detail pilot › reopening a stopped task, refused and then backed out of (1.4s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-share-turn-off.png, writing actual.
+  ✓  29 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:319:3 › share dialog pilot › from Only you to a public link and back (3.4s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-share-error.png, writing actual.
+  ✓  30 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:381:3 › share dialog pilot › loading and a read that failed (2.7s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-p0-share-focused.png, writing actual.
+  ✓  31 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:413:3 › P0 share dialog, focused alike › same element focused before the shot (880ms)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-account-open.png, writing actual.
+  ✓  32 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:428:3 › workspace account pilot › the Claude account picker of a new workspace (1.2s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-antigravity-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-desktop/pilot-antigravity-account-open.png, writing actual.
+  ✓  33 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:454:3 › workspace account pilot › the Antigravity account picker: Default on the Gemini key, a Google account with what is left (1.3s)
+(node:2631595) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  34 [chromium-dark-phone] › ui-migration/pilot-performance.browser.mjs:28:1 › record pilot performance
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-delete-confirm.png, writing actual.
+  ✓  35 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:71:3 › task detail pilot › fields, pickers and the panel header (5.2s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-comment-mention.png, writing actual.
+  ✓  36 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:152:3 › task detail pilot › dependencies, inputs and comments (3.9s)
+  ✓  37 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:232:3 › task detail pilot › a failed upload says so and leaves the list as it was (895ms)
+  ✓  38 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:256:3 › task detail pilot › files dropped on Add file are each uploaded (1.2s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-reopen-refused.png, writing actual.
+  ✓  39 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:294:3 › task detail pilot › reopening a stopped task, refused and then backed out of (1.3s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-share-turn-off.png, writing actual.
+  ✓  40 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:319:3 › share dialog pilot › from Only you to a public link and back (3.3s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-share-error.png, writing actual.
+  ✓  41 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:381:3 › share dialog pilot › loading and a read that failed (2.6s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-p0-share-focused.png, writing actual.
+  ✓  42 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:413:3 › P0 share dialog, focused alike › same element focused before the shot (1.0s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-account-open.png, writing actual.
+  ✓  43 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:428:3 › workspace account pilot › the Claude account picker of a new workspace (1.1s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-antigravity-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/chromium-dark-phone/pilot-antigravity-account-open.png, writing actual.
+  ✓  44 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:454:3 › workspace account pilot › the Antigravity account picker: Default on the Gemini key, a Google account with what is left (1.2s)
+(node:2634278) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  45 [webkit-light-desktop] › ui-migration/pilot-performance.browser.mjs:28:1 › record pilot performance
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-delete-confirm.png, writing actual.
+  ✓  46 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:71:3 › task detail pilot › fields, pickers and the panel header (6.6s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-comment-mention.png, writing actual.
+  ✓  47 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:152:3 › task detail pilot › dependencies, inputs and comments (5.3s)
+  ✓  48 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:232:3 › task detail pilot › a failed upload says so and leaves the list as it was (1.2s)
+  ✓  49 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:256:3 › task detail pilot › files dropped on Add file are each uploaded (1.4s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-reopen-refused.png, writing actual.
+  ✓  50 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:294:3 › task detail pilot › reopening a stopped task, refused and then backed out of (2.3s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-share-turn-off.png, writing actual.
+  ✓  51 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:319:3 › share dialog pilot › from Only you to a public link and back (4.2s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-share-error.png, writing actual.
+  ✓  52 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:381:3 › share dialog pilot › loading and a read that failed (3.3s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-p0-share-focused.png, writing actual.
+  ✓  53 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:413:3 › P0 share dialog, focused alike › same element focused before the shot (1.4s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-account-open.png, writing actual.
+  ✓  54 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:428:3 › workspace account pilot › the Claude account picker of a new workspace (1.5s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-antigravity-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-desktop/pilot-antigravity-account-open.png, writing actual.
+  ✓  55 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:454:3 › workspace account pilot › the Antigravity account picker: Default on the Gemini key, a Google account with what is left (2.0s)
+(node:2636996) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  56 [webkit-light-phone] › ui-migration/pilot-performance.browser.mjs:28:1 › record pilot performance
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-delete-confirm.png, writing actual.
+  ✓  57 [webkit-light-phone] › ui-migration/pilot.browser.mjs:71:3 › task detail pilot › fields, pickers and the panel header (6.0s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-comment-mention.png, writing actual.
+  ✓  58 [webkit-light-phone] › ui-migration/pilot.browser.mjs:152:3 › task detail pilot › dependencies, inputs and comments (4.6s)
+  ✓  59 [webkit-light-phone] › ui-migration/pilot.browser.mjs:232:3 › task detail pilot › a failed upload says so and leaves the list as it was (1.2s)
+  ✓  60 [webkit-light-phone] › ui-migration/pilot.browser.mjs:256:3 › task detail pilot › files dropped on Add file are each uploaded (1.5s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-reopen-refused.png, writing actual.
+  ✓  61 [webkit-light-phone] › ui-migration/pilot.browser.mjs:294:3 › task detail pilot › reopening a stopped task, refused and then backed out of (1.6s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-share-turn-off.png, writing actual.
+  ✓  62 [webkit-light-phone] › ui-migration/pilot.browser.mjs:319:3 › share dialog pilot › from Only you to a public link and back (4.2s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-share-error.png, writing actual.
+  ✓  63 [webkit-light-phone] › ui-migration/pilot.browser.mjs:381:3 › share dialog pilot › loading and a read that failed (3.4s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-p0-share-focused.png, writing actual.
+  ✓  64 [webkit-light-phone] › ui-migration/pilot.browser.mjs:413:3 › P0 share dialog, focused alike › same element focused before the shot (1.3s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-account-open.png, writing actual.
+  ✓  65 [webkit-light-phone] › ui-migration/pilot.browser.mjs:428:3 › workspace account pilot › the Claude account picker of a new workspace (1.5s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-antigravity-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-light-phone/pilot-antigravity-account-open.png, writing actual.
+  ✓  66 [webkit-light-phone] › ui-migration/pilot.browser.mjs:454:3 › workspace account pilot › the Antigravity account picker: Default on the Gemini key, a Google account with what is left (1.5s)
+(node:2639894) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  67 [webkit-dark-desktop] › ui-migration/pilot-performance.browser.mjs:28:1 › record pilot performance
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-delete-confirm.png, writing actual.
+  ✓  68 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:71:3 › task detail pilot › fields, pickers and the panel header (7.5s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-comment-mention.png, writing actual.
+  ✓  69 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:152:3 › task detail pilot › dependencies, inputs and comments (5.9s)
+  ✓  70 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:232:3 › task detail pilot › a failed upload says so and leaves the list as it was (1.2s)
+  ✓  71 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:256:3 › task detail pilot › files dropped on Add file are each uploaded (1.5s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-reopen-refused.png, writing actual.
+  ✓  72 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:294:3 › task detail pilot › reopening a stopped task, refused and then backed out of (2.0s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-share-turn-off.png, writing actual.
+  ✓  73 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:319:3 › share dialog pilot › from Only you to a public link and back (4.7s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-share-error.png, writing actual.
+  ✓  74 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:381:3 › share dialog pilot › loading and a read that failed (3.5s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-p0-share-focused.png, writing actual.
+  ✓  75 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:413:3 › P0 share dialog, focused alike › same element focused before the shot (1.4s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-account-open.png, writing actual.
+  ✓  76 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:428:3 › workspace account pilot › the Claude account picker of a new workspace (1.5s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-antigravity-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-desktop/pilot-antigravity-account-open.png, writing actual.
+  ✓  77 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:454:3 › workspace account pilot › the Antigravity account picker: Default on the Gemini key, a Google account with what is left (1.6s)
+(node:2642965) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  78 [webkit-dark-phone] › ui-migration/pilot-performance.browser.mjs:28:1 › record pilot performance
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-delete-confirm.png, writing actual.
+  ✓  79 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:71:3 › task detail pilot › fields, pickers and the panel header (6.0s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-comment-mention.png, writing actual.
+  ✓  80 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:152:3 › task detail pilot › dependencies, inputs and comments (4.8s)
+  ✓  81 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:232:3 › task detail pilot › a failed upload says so and leaves the list as it was (1.2s)
+  ✓  82 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:256:3 › task detail pilot › files dropped on Add file are each uploaded (1.3s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-reopen-refused.png, writing actual.
+  ✓  83 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:294:3 › task detail pilot › reopening a stopped task, refused and then backed out of (1.7s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-share-turn-off.png, writing actual.
+  ✓  84 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:319:3 › share dialog pilot › from Only you to a public link and back (4.0s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-share-error.png, writing actual.
+  ✓  85 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:381:3 › share dialog pilot › loading and a read that failed (3.2s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-p0-share-focused.png, writing actual.
+  ✓  86 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:413:3 › P0 share dialog, focused alike › same element focused before the shot (1.4s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-account-open.png, writing actual.
+  ✓  87 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:428:3 › workspace account pilot › the Claude account picker of a new workspace (1.4s)
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-antigravity-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p2p3-hardening/pilot-entry-1/shots/webkit-dark-phone/pilot-antigravity-account-open.png, writing actual.
+  ✓  88 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:454:3 › workspace account pilot › the Antigravity account picker: Default on the Gemini key, a Google account with what is left (1.6s)
+
+  7 skipped
+  81 passed (3.6m)

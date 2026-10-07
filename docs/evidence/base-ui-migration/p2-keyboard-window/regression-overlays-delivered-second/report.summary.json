@@ -1,0 +1,4589 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/overlays.config.mjs"
+  ],
+  "configFile": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration/overlays.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/.overlays-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4176 --strictPort",
+   "cwd": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec/src/web/",
+   "url": "http://127.0.0.1:4176",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "overlays.browser.mjs",
+   "file": "overlays.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "dialog and drawers match current surfaces, geometry, typography and actions",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 8221,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:52:19.669Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "AntD-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer-input-hover",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer-input-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer-input-hover",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer-input-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-e8c0a547f9905469be9c",
+     "file": "overlays.browser.mjs",
+     "line": 57,
+     "column": 1
+    },
+    {
+     "title": "dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2806,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:52:28.035Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "dismissal",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-d70e9280e60632665987",
+     "file": "overlays.browser.mjs",
+     "line": 143,
+     "column": 1
+    },
+    {
+     "title": "nested dialog and imperative confirmation close only the top layer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3420,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:52:30.846Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "drawer-with-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "nested-focus-and-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-fd89602ad60847650fcb",
+     "file": "overlays.browser.mjs",
+     "line": 175,
+     "column": 1
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3981,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:52:34.276Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-children",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-9ff68921b966815c68e8",
+     "file": "overlays.browser.mjs",
+     "line": 214,
+     "column": 42
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3596,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:52:38.265Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-children",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-e2420467cce10a69f76c",
+     "file": "overlays.browser.mjs",
+     "line": 214,
+     "column": 42
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy modal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4531,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:52:41.873Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-5941111e52460f098ef4",
+     "file": "overlays.browser.mjs",
+     "line": 256,
+     "column": 42
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 6252,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:52:46.412Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-6bcd845dd07b7f778b36",
+     "file": "overlays.browser.mjs",
+     "line": 256,
+     "column": 42
+    },
+    {
+     "title": "async confirmation prevents duplicate submits, retains failures and permits retry or cancellation",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3028,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:52:52.679Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirm-pending",
+           "contentType": "image/png"
+          },
+          {
+           "name": "confirm-error",
+           "contentType": "image/png"
+          },
+          {
+           "name": "async-confirm",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-ebb78927932006923cfa",
+     "file": "overlays.browser.mjs",
+     "line": 292,
+     "column": 1
+    },
+    {
+     "title": "dismissal controls, retained form values, long content and bottom sheet remain usable",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3937,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:52:55.733Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "bottom-sheet",
+           "contentType": "image/png"
+          },
+          {
+           "name": "sizing-and-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-be5f405022d9d0a882e8",
+     "file": "overlays.browser.mjs",
+     "line": 337,
+     "column": 1
+    },
+    {
+     "title": "open portals inherit live theme changes and composing Escape preserves the dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2728,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:52:59.679Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "theme-and-composition",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-a89fea026269fe91d3d3",
+     "file": "overlays.browser.mjs",
+     "line": 375,
+     "column": 1
+    },
+    {
+     "title": "confirmation owner unmount and immediate sequential prompts do not reuse stale state",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1920,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:53:02.429Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirmation-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-49af2a80d5d03f0f13e6",
+     "file": "overlays.browser.mjs",
+     "line": 404,
+     "column": 1
+    },
+    {
+     "title": "explicit focus, native form validation, motion and document scroll restore correctly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1944,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:53:04.355Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "focus-form-motion-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-ee6208c0472f88e3f2ad",
+     "file": "overlays.browser.mjs",
+     "line": 437,
+     "column": 1
+    },
+    {
+     "title": "dialog and drawers match current surfaces, geometry, typography and actions",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7268,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:53:06.656Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "AntD-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer-input-hover",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer-input-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer-input-hover",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer-input-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-c836c67119ff96f83cdd",
+     "file": "overlays.browser.mjs",
+     "line": 57,
+     "column": 1
+    },
+    {
+     "title": "dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1868,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:53:13.997Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "dismissal",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-fd355a3b52163ab70a83",
+     "file": "overlays.browser.mjs",
+     "line": 143,
+     "column": 1
+    },
+    {
+     "title": "nested dialog and imperative confirmation close only the top layer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1807,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:53:15.871Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "drawer-with-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "nested-focus-and-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-3c9b90ba6e9f4a5ed202",
+     "file": "overlays.browser.mjs",
+     "line": 175,
+     "column": 1
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3488,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:53:17.682Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-children",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-8a2ab33bb7cac862db70",
+     "file": "overlays.browser.mjs",
+     "line": 214,
+     "column": 42
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3556,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:53:21.175Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-children",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-a95f046095e2e2ac02c6",
+     "file": "overlays.browser.mjs",
+     "line": 214,
+     "column": 42
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy modal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2692,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:53:24.735Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-fe962f7ec30159ad357f",
+     "file": "overlays.browser.mjs",
+     "line": 256,
+     "column": 42
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3031,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:53:27.432Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-4b6893bd0ede5e01da6b",
+     "file": "overlays.browser.mjs",
+     "line": 256,
+     "column": 42
+    },
+    {
+     "title": "async confirmation prevents duplicate submits, retains failures and permits retry or cancellation",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1268,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:53:30.468Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirm-pending",
+           "contentType": "image/png"
+          },
+          {
+           "name": "confirm-error",
+           "contentType": "image/png"
+          },
+          {
+           "name": "async-confirm",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-90a076e9f17ea83af5a1",
+     "file": "overlays.browser.mjs",
+     "line": 292,
+     "column": 1
+    },
+    {
+     "title": "dismissal controls, retained form values, long content and bottom sheet remain usable",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2568,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:53:31.741Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "bottom-sheet",
+           "contentType": "image/png"
+          },
+          {
+           "name": "sizing-and-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-dd12fd4e624e7fc5154c",
+     "file": "overlays.browser.mjs",
+     "line": 337,
+     "column": 1
+    },
+    {
+     "title": "open portals inherit live theme changes and composing Escape preserves the dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1340,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:53:34.314Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "theme-and-composition",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-775c84f69a1cdb1ac65c",
+     "file": "overlays.browser.mjs",
+     "line": 375,
+     "column": 1
+    },
+    {
+     "title": "confirmation owner unmount and immediate sequential prompts do not reuse stale state",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1530,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:53:35.660Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirmation-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-15ecbeb4f31cf213a273",
+     "file": "overlays.browser.mjs",
+     "line": 404,
+     "column": 1
+    },
+    {
+     "title": "explicit focus, native form validation, motion and document scroll restore correctly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1926,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:53:37.195Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "focus-form-motion-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-5f2d38c293bd2f9d6668",
+     "file": "overlays.browser.mjs",
+     "line": 437,
+     "column": 1
+    },
+    {
+     "title": "dialog and drawers match current surfaces, geometry, typography and actions",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7120,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:53:39.430Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "AntD-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer-input-hover",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer-input-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer-input-hover",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer-input-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-a92a1c03e6bdc46b062d",
+     "file": "overlays.browser.mjs",
+     "line": 57,
+     "column": 1
+    },
+    {
+     "title": "dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1819,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:53:46.604Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "dismissal",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-494bc4832b30f14dbab4",
+     "file": "overlays.browser.mjs",
+     "line": 143,
+     "column": 1
+    },
+    {
+     "title": "nested dialog and imperative confirmation close only the top layer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1667,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:53:48.430Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "drawer-with-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "nested-focus-and-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-556ae24c79e3dec18f4d",
+     "file": "overlays.browser.mjs",
+     "line": 175,
+     "column": 1
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2840,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:53:50.101Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-children",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-a807d76254d6c6006135",
+     "file": "overlays.browser.mjs",
+     "line": 214,
+     "column": 42
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3879,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:53:52.946Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-children",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-068ebef3137682c5a7cd",
+     "file": "overlays.browser.mjs",
+     "line": 214,
+     "column": 42
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy modal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2341,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:53:56.832Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-9461bcadfd993f84f226",
+     "file": "overlays.browser.mjs",
+     "line": 256,
+     "column": 42
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3590,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:53:59.177Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-cfa3789689c210667828",
+     "file": "overlays.browser.mjs",
+     "line": 256,
+     "column": 42
+    },
+    {
+     "title": "async confirmation prevents duplicate submits, retains failures and permits retry or cancellation",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1549,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:54:02.773Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirm-pending",
+           "contentType": "image/png"
+          },
+          {
+           "name": "confirm-error",
+           "contentType": "image/png"
+          },
+          {
+           "name": "async-confirm",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-8781b864c21405858a85",
+     "file": "overlays.browser.mjs",
+     "line": 292,
+     "column": 1
+    },
+    {
+     "title": "dismissal controls, retained form values, long content and bottom sheet remain usable",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2140,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:54:04.327Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "bottom-sheet",
+           "contentType": "image/png"
+          },
+          {
+           "name": "sizing-and-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-cf6ba7b4536fe46eb572",
+     "file": "overlays.browser.mjs",
+     "line": 337,
+     "column": 1
+    },
+    {
+     "title": "open portals inherit live theme changes and composing Escape preserves the dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1373,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:54:06.472Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "theme-and-composition",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-498b9ddacfaac5b215d3",
+     "file": "overlays.browser.mjs",
+     "line": 375,
+     "column": 1
+    },
+    {
+     "title": "confirmation owner unmount and immediate sequential prompts do not reuse stale state",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1471,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:54:07.851Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirmation-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-58f5aab20156b1a90194",
+     "file": "overlays.browser.mjs",
+     "line": 404,
+     "column": 1
+    },
+    {
+     "title": "explicit focus, native form validation, motion and document scroll restore correctly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2311,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:54:09.327Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "focus-form-motion-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-3f9bbdb7ea9aa24fa761",
+     "file": "overlays.browser.mjs",
+     "line": 437,
+     "column": 1
+    },
+    {
+     "title": "dialog and drawers match current surfaces, geometry, typography and actions",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7701,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:54:12.007Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "AntD-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer-input-hover",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer-input-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer-input-hover",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer-input-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-847b918e59f029382057",
+     "file": "overlays.browser.mjs",
+     "line": 57,
+     "column": 1
+    },
+    {
+     "title": "dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1956,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:54:19.791Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "dismissal",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-c2b29f645e1e81aa4895",
+     "file": "overlays.browser.mjs",
+     "line": 143,
+     "column": 1
+    },
+    {
+     "title": "nested dialog and imperative confirmation close only the top layer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3563,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:54:21.752Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "drawer-with-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "nested-focus-and-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-b99d3165310636b1a47f",
+     "file": "overlays.browser.mjs",
+     "line": 175,
+     "column": 1
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 6293,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:54:25.329Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-children",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-326e65dcefc0afc91078",
+     "file": "overlays.browser.mjs",
+     "line": 214,
+     "column": 42
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5752,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:54:31.631Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-children",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-a95f7b05fad66f98ebcd",
+     "file": "overlays.browser.mjs",
+     "line": 214,
+     "column": 42
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy modal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4405,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:54:37.397Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-6e63a1644d1d403f863a",
+     "file": "overlays.browser.mjs",
+     "line": 256,
+     "column": 42
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3283,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:54:41.820Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-f7d962653b0bc6ae4715",
+     "file": "overlays.browser.mjs",
+     "line": 256,
+     "column": 42
+    },
+    {
+     "title": "async confirmation prevents duplicate submits, retains failures and permits retry or cancellation",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1317,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:54:45.108Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirm-pending",
+           "contentType": "image/png"
+          },
+          {
+           "name": "confirm-error",
+           "contentType": "image/png"
+          },
+          {
+           "name": "async-confirm",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-609b4a741c6a85495553",
+     "file": "overlays.browser.mjs",
+     "line": 292,
+     "column": 1
+    },
+    {
+     "title": "dismissal controls, retained form values, long content and bottom sheet remain usable",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1891,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:54:46.432Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "bottom-sheet",
+           "contentType": "image/png"
+          },
+          {
+           "name": "sizing-and-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-cf3691677bdbd2babc22",
+     "file": "overlays.browser.mjs",
+     "line": 337,
+     "column": 1
+    },
+    {
+     "title": "open portals inherit live theme changes and composing Escape preserves the dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1492,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:54:48.328Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "theme-and-composition",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-e6700ba08248105b29bc",
+     "file": "overlays.browser.mjs",
+     "line": 375,
+     "column": 1
+    },
+    {
+     "title": "confirmation owner unmount and immediate sequential prompts do not reuse stale state",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1433,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:54:49.825Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirmation-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-9ca75a6f7ed49b6d8008",
+     "file": "overlays.browser.mjs",
+     "line": 404,
+     "column": 1
+    },
+    {
+     "title": "explicit focus, native form validation, motion and document scroll restore correctly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2260,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:54:51.263Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "focus-form-motion-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-0e7b7630c270e803e3cb",
+     "file": "overlays.browser.mjs",
+     "line": 437,
+     "column": 1
+    },
+    {
+     "title": "dialog and drawers match current surfaces, geometry, typography and actions",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7444,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:54:54.091Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "AntD-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer-input-hover",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer-input-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer-input-hover",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer-input-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-9c17be3fed54907bfce6",
+     "file": "overlays.browser.mjs",
+     "line": 57,
+     "column": 1
+    },
+    {
+     "title": "dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1766,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:01.747Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "dismissal",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-6778252fccdc3dac940a",
+     "file": "overlays.browser.mjs",
+     "line": 143,
+     "column": 1
+    },
+    {
+     "title": "nested dialog and imperative confirmation close only the top layer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1828,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:03.518Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "drawer-with-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "nested-focus-and-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-6a090828aca42c25c0d8",
+     "file": "overlays.browser.mjs",
+     "line": 175,
+     "column": 1
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3075,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:05.350Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-children",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-bce262941ebdd4c8e16d",
+     "file": "overlays.browser.mjs",
+     "line": 214,
+     "column": 42
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2899,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:08.429Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-children",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-42bfed08563ee9dfb54b",
+     "file": "overlays.browser.mjs",
+     "line": 214,
+     "column": 42
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy modal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2383,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:11.333Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-a2133afc03b353696898",
+     "file": "overlays.browser.mjs",
+     "line": 256,
+     "column": 42
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3298,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:13.720Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-3e47a54d494d8ebfce61",
+     "file": "overlays.browser.mjs",
+     "line": 256,
+     "column": 42
+    },
+    {
+     "title": "async confirmation prevents duplicate submits, retains failures and permits retry or cancellation",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1167,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:17.022Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirm-pending",
+           "contentType": "image/png"
+          },
+          {
+           "name": "confirm-error",
+           "contentType": "image/png"
+          },
+          {
+           "name": "async-confirm",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-ac1757b852b1b7baccb2",
+     "file": "overlays.browser.mjs",
+     "line": 292,
+     "column": 1
+    },
+    {
+     "title": "dismissal controls, retained form values, long content and bottom sheet remain usable",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1472,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:18.193Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "bottom-sheet",
+           "contentType": "image/png"
+          },
+          {
+           "name": "sizing-and-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-5507b323b27d263f948f",
+     "file": "overlays.browser.mjs",
+     "line": 337,
+     "column": 1
+    },
+    {
+     "title": "open portals inherit live theme changes and composing Escape preserves the dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1111,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:19.670Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "theme-and-composition",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-bcb655ba68bce411266f",
+     "file": "overlays.browser.mjs",
+     "line": 375,
+     "column": 1
+    },
+    {
+     "title": "confirmation owner unmount and immediate sequential prompts do not reuse stale state",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1213,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:20.787Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirmation-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-9a27b1085cd21279180e",
+     "file": "overlays.browser.mjs",
+     "line": 404,
+     "column": 1
+    },
+    {
+     "title": "explicit focus, native form validation, motion and document scroll restore correctly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1698,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:22.004Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "focus-form-motion-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-da319229241f6450d3eb",
+     "file": "overlays.browser.mjs",
+     "line": 437,
+     "column": 1
+    },
+    {
+     "title": "dialog and drawers match current surfaces, geometry, typography and actions",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 6914,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:24.008Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "AntD-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer-input-hover",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer-input-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer-input-hover",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer-input-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-dfdf5ce5c97d0d23697b",
+     "file": "overlays.browser.mjs",
+     "line": 57,
+     "column": 1
+    },
+    {
+     "title": "dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1472,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:30.994Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "dismissal",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-120e28567fe8c907524f",
+     "file": "overlays.browser.mjs",
+     "line": 143,
+     "column": 1
+    },
+    {
+     "title": "nested dialog and imperative confirmation close only the top layer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1720,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:32.472Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "drawer-with-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "nested-focus-and-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-a585d3719ec676170772",
+     "file": "overlays.browser.mjs",
+     "line": 175,
+     "column": 1
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3411,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:34.196Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-children",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-bdb7eaa651ca3ee47a53",
+     "file": "overlays.browser.mjs",
+     "line": 214,
+     "column": 42
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3415,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:37.611Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-children",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-a2aa04ae26db8f12005c",
+     "file": "overlays.browser.mjs",
+     "line": 214,
+     "column": 42
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy modal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2426,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:41.031Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-630ee090693d939e9cff",
+     "file": "overlays.browser.mjs",
+     "line": 256,
+     "column": 42
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3001,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:43.461Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-7a46a9e59ca3df09855a",
+     "file": "overlays.browser.mjs",
+     "line": 256,
+     "column": 42
+    },
+    {
+     "title": "async confirmation prevents duplicate submits, retains failures and permits retry or cancellation",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1259,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:46.468Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirm-pending",
+           "contentType": "image/png"
+          },
+          {
+           "name": "confirm-error",
+           "contentType": "image/png"
+          },
+          {
+           "name": "async-confirm",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-d96c0f7390ed631c0b9b",
+     "file": "overlays.browser.mjs",
+     "line": 292,
+     "column": 1
+    },
+    {
+     "title": "dismissal controls, retained form values, long content and bottom sheet remain usable",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1653,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:47.733Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "bottom-sheet",
+           "contentType": "image/png"
+          },
+          {
+           "name": "sizing-and-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-1134d1aa8225e3856045",
+     "file": "overlays.browser.mjs",
+     "line": 337,
+     "column": 1
+    },
+    {
+     "title": "open portals inherit live theme changes and composing Escape preserves the dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1187,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:49.391Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "theme-and-composition",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-0b1f62dc4d134c8ebbb3",
+     "file": "overlays.browser.mjs",
+     "line": 375,
+     "column": 1
+    },
+    {
+     "title": "confirmation owner unmount and immediate sequential prompts do not reuse stale state",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1426,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:50.584Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirmation-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-59bfc058fa2ee80363f1",
+     "file": "overlays.browser.mjs",
+     "line": 404,
+     "column": 1
+    },
+    {
+     "title": "explicit focus, native form validation, motion and document scroll restore correctly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1812,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:52.016Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "focus-form-motion-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-9eb7dc1757c2bca05c96",
+     "file": "overlays.browser.mjs",
+     "line": 437,
+     "column": 1
+    },
+    {
+     "title": "dialog and drawers match current surfaces, geometry, typography and actions",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 9579,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:55:54.224Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "AntD-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer-input-hover",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer-input-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer-input-hover",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer-input-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-9a8ec550fa9aeb122623",
+     "file": "overlays.browser.mjs",
+     "line": 57,
+     "column": 1
+    },
+    {
+     "title": "dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 6264,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:56:03.892Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "dismissal",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-3b55f8a96fb5434ccca9",
+     "file": "overlays.browser.mjs",
+     "line": 143,
+     "column": 1
+    },
+    {
+     "title": "nested dialog and imperative confirmation close only the top layer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4982,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:56:10.174Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "drawer-with-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "nested-focus-and-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-79620d10e4197614b974",
+     "file": "overlays.browser.mjs",
+     "line": 175,
+     "column": 1
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7852,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:56:15.175Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-children",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-a02cd98211060cc277b8",
+     "file": "overlays.browser.mjs",
+     "line": 214,
+     "column": 42
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4417,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:56:23.037Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-children",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-da4aba780444b6f59549",
+     "file": "overlays.browser.mjs",
+     "line": 214,
+     "column": 42
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy modal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7376,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:56:27.461Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-70edf7fd7f0dbe7972fd",
+     "file": "overlays.browser.mjs",
+     "line": 256,
+     "column": 42
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3122,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:56:34.842Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-87635203617355589915",
+     "file": "overlays.browser.mjs",
+     "line": 256,
+     "column": 42
+    },
+    {
+     "title": "async confirmation prevents duplicate submits, retains failures and permits retry or cancellation",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1210,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:56:37.968Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirm-pending",
+           "contentType": "image/png"
+          },
+          {
+           "name": "confirm-error",
+           "contentType": "image/png"
+          },
+          {
+           "name": "async-confirm",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-baa0ea0a53fbbc899409",
+     "file": "overlays.browser.mjs",
+     "line": 292,
+     "column": 1
+    },
+    {
+     "title": "dismissal controls, retained form values, long content and bottom sheet remain usable",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1627,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:56:39.183Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "bottom-sheet",
+           "contentType": "image/png"
+          },
+          {
+           "name": "sizing-and-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-9dfd241e393eae7bae39",
+     "file": "overlays.browser.mjs",
+     "line": 337,
+     "column": 1
+    },
+    {
+     "title": "open portals inherit live theme changes and composing Escape preserves the dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1078,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:56:40.816Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "theme-and-composition",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-7b69f2d9157d06400a2a",
+     "file": "overlays.browser.mjs",
+     "line": 375,
+     "column": 1
+    },
+    {
+     "title": "confirmation owner unmount and immediate sequential prompts do not reuse stale state",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1450,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:56:41.899Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirmation-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-ce0d38c2a7830649b34f",
+     "file": "overlays.browser.mjs",
+     "line": 404,
+     "column": 1
+    },
+    {
+     "title": "explicit focus, native form validation, motion and document scroll restore correctly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2476,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:56:43.354Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "focus-form-motion-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-d6f18a49229928ae26f6",
+     "file": "overlays.browser.mjs",
+     "line": 437,
+     "column": 1
+    },
+    {
+     "title": "dialog and drawers match current surfaces, geometry, typography and actions",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 8805,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:56:47.202Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "AntD-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-right drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer-input-hover",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-bottom drawer-input-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer-input-hover",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-bottom drawer-input-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "AntD-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "Orbit-confirm",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-8c2bf664166c7d794881",
+     "file": "overlays.browser.mjs",
+     "line": 57,
+     "column": 1
+    },
+    {
+     "title": "dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2213,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:56:57.289Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "dismissal",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-a5ab7b67d0b90a4008e2",
+     "file": "overlays.browser.mjs",
+     "line": 143,
+     "column": 1
+    },
+    {
+     "title": "nested dialog and imperative confirmation close only the top layer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2361,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:56:59.508Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "drawer-with-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "nested-focus-and-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-6f488523bde02cfeaaed",
+     "file": "overlays.browser.mjs",
+     "line": 175,
+     "column": 1
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4571,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:57:01.874Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-children",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-28b18bf65fc62cea6821",
+     "file": "overlays.browser.mjs",
+     "line": 214,
+     "column": 42
+    },
+    {
+     "title": "actual legacy modal, Popconfirm and Select work inside Orbit drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3827,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:57:06.453Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-inside-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-children",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-66873c51db4ed30f3be2",
+     "file": "overlays.browser.mjs",
+     "line": 214,
+     "column": 42
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy modal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3310,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:57:10.285Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-1f0488ec986be7de4820",
+     "file": "overlays.browser.mjs",
+     "line": 256,
+     "column": 42
+    },
+    {
+     "title": "Orbit dialog and nested confirmation work inside a legacy drawer",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3686,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:57:13.600Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "orbit-inside-legacy",
+           "contentType": "image/png"
+          },
+          {
+           "name": "legacy-parent",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-80dc589662ef7d867676",
+     "file": "overlays.browser.mjs",
+     "line": 256,
+     "column": 42
+    },
+    {
+     "title": "async confirmation prevents duplicate submits, retains failures and permits retry or cancellation",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1765,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:57:17.292Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirm-pending",
+           "contentType": "image/png"
+          },
+          {
+           "name": "confirm-error",
+           "contentType": "image/png"
+          },
+          {
+           "name": "async-confirm",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-3cf53c8f407ee3a2e0b3",
+     "file": "overlays.browser.mjs",
+     "line": 292,
+     "column": 1
+    },
+    {
+     "title": "dismissal controls, retained form values, long content and bottom sheet remain usable",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2581,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:57:19.064Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "bottom-sheet",
+           "contentType": "image/png"
+          },
+          {
+           "name": "sizing-and-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-060a201c986253fd8d04",
+     "file": "overlays.browser.mjs",
+     "line": 337,
+     "column": 1
+    },
+    {
+     "title": "open portals inherit live theme changes and composing Escape preserves the dialog",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2005,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:57:21.657Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "theme-and-composition",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-f73a253006583e4f9779",
+     "file": "overlays.browser.mjs",
+     "line": 375,
+     "column": 1
+    },
+    {
+     "title": "confirmation owner unmount and immediate sequential prompts do not reuse stale state",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2706,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:57:23.671Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirmation-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-d396d9f5e9dfc074d0a3",
+     "file": "overlays.browser.mjs",
+     "line": 404,
+     "column": 1
+    },
+    {
+     "title": "explicit focus, native form validation, motion and document scroll restore correctly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2884,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T22:57:26.386Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "focus-form-motion-scroll",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "ceb177d5fb06db38dcef-7557d1ca37d8a2585fee",
+     "file": "overlays.browser.mjs",
+     "line": 437,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-06T22:52:18.794Z",
+  "duration": 310816.09,
+  "expected": 96,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

@@ -49,8 +49,9 @@ describe('Settings → Access tokens', () => {
       );
     });
 
-    const card = [...container.querySelectorAll<HTMLElement>('.ant-card')].find(
-      (c) => c.querySelector('.ant-card-head-title')?.textContent === 'Access tokens',
+    // The card is a region named by its title.
+    const card = [...container.querySelectorAll<HTMLElement>('section[aria-labelledby]')].find(
+      (c) => document.getElementById(c.getAttribute('aria-labelledby')!)?.textContent === 'Access tokens',
     );
     expect(card).toBeTruthy();
     expect(card!.textContent).toContain('Personal access tokens');

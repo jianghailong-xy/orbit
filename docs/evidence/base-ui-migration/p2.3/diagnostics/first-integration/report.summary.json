@@ -1,0 +1,1177 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/toasts.config.mjs",
+   "--project=chromium-light-desktop",
+   "--project=webkit-dark-phone"
+  ],
+  "configFile": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+   "cwd": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/",
+   "url": "http://127.0.0.1:4177",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "toasts.browser.mjs",
+   "file": "toasts.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "existing notifications remain accessible in Dialog with unchanged appearance",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 1138,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 2\u001b[39m\n\u001b[31m+ Received  + 2\u001b[39m\n\n\u001b[33m@@ -6,16 +6,16 @@\u001b[39m\n\u001b[2m      \"boxShadow\": \"none\",\u001b[22m\n\u001b[2m      \"color\": \"rgb(31, 35, 41)\",\u001b[22m\n\u001b[2m      \"focusVisible\": false,\u001b[22m\n\u001b[2m      \"focused\": false,\u001b[22m\n\u001b[2m      \"fontFamily\": \"-apple-system, BlinkMacSystemFont, \\\"PingFang SC\\\", \\\"Hiragino Sans GB\\\", \\\"Microsoft YaHei\\\", \\\"Segoe UI\\\", Roboto, Helvetica, Arial, sans-serif\",\u001b[22m\n\u001b[32m-     \"fontSize\": \"16px\",\u001b[39m\n\u001b[31m+     \"fontSize\": \"14px\",\u001b[39m\n\u001b[2m      \"fontWeight\": \"400\",\u001b[22m\n\u001b[2m      \"gap\": \"8px\",\u001b[22m\n\u001b[2m      \"height\": 128,\u001b[22m\n\u001b[2m      \"hovered\": false,\u001b[22m\n\u001b[32m-     \"lineHeight\": \"18.4px\",\u001b[39m\n\u001b[31m+     \"lineHeight\": \"22px\",\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"none\",\u001b[22m\n\u001b[2m      \"tag\": \"SECTION\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[2m      \"width\": 360,\u001b[22m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 2\u001b[39m\n\u001b[31m+ Received  + 2\u001b[39m\n\n\u001b[33m@@ -6,16 +6,16 @@\u001b[39m\n\u001b[2m      \"boxShadow\": \"none\",\u001b[22m\n\u001b[2m      \"color\": \"rgb(31, 35, 41)\",\u001b[22m\n\u001b[2m      \"focusVisible\": false,\u001b[22m\n\u001b[2m      \"focused\": false,\u001b[22m\n\u001b[2m      \"fontFamily\": \"-apple-system, BlinkMacSystemFont, \\\"PingFang SC\\\", \\\"Hiragino Sans GB\\\", \\\"Microsoft YaHei\\\", \\\"Segoe UI\\\", Roboto, Helvetica, Arial, sans-serif\",\u001b[22m\n\u001b[32m-     \"fontSize\": \"16px\",\u001b[39m\n\u001b[31m+     \"fontSize\": \"14px\",\u001b[39m\n\u001b[2m      \"fontWeight\": \"400\",\u001b[22m\n\u001b[2m      \"gap\": \"8px\",\u001b[22m\n\u001b[2m      \"height\": 128,\u001b[22m\n\u001b[2m      \"hovered\": false,\u001b[22m\n\u001b[32m-     \"lineHeight\": \"18.4px\",\u001b[39m\n\u001b[31m+     \"lineHeight\": \"22px\",\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"none\",\u001b[22m\n\u001b[2m      \"tag\": \"SECTION\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[2m      \"width\": 360,\u001b[22m\n    at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:56:19",
+          "location": {
+           "file": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs",
+           "column": 19,
+           "line": 56
+          },
+          "snippet": "  54 |     const after = await measure(region);\n  55 |     await attach(info, 'appearance', { before, after });\n> 56 |     expect(after).toEqual(before);\n     |                   ^\n  57 |     await shot(info, 'with-overlay', region);\n  58 |     await shot(info, 'notification-and-overlay', page);\n  59 |     const dismiss = region.getByRole('button', { name: 'Dismiss', exact: true });"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs",
+            "column": 19,
+            "line": 56
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 2\u001b[39m\n\u001b[31m+ Received  + 2\u001b[39m\n\n\u001b[33m@@ -6,16 +6,16 @@\u001b[39m\n\u001b[2m      \"boxShadow\": \"none\",\u001b[22m\n\u001b[2m      \"color\": \"rgb(31, 35, 41)\",\u001b[22m\n\u001b[2m      \"focusVisible\": false,\u001b[22m\n\u001b[2m      \"focused\": false,\u001b[22m\n\u001b[2m      \"fontFamily\": \"-apple-system, BlinkMacSystemFont, \\\"PingFang SC\\\", \\\"Hiragino Sans GB\\\", \\\"Microsoft YaHei\\\", \\\"Segoe UI\\\", Roboto, Helvetica, Arial, sans-serif\",\u001b[22m\n\u001b[32m-     \"fontSize\": \"16px\",\u001b[39m\n\u001b[31m+     \"fontSize\": \"14px\",\u001b[39m\n\u001b[2m      \"fontWeight\": \"400\",\u001b[22m\n\u001b[2m      \"gap\": \"8px\",\u001b[22m\n\u001b[2m      \"height\": 128,\u001b[22m\n\u001b[2m      \"hovered\": false,\u001b[22m\n\u001b[32m-     \"lineHeight\": \"18.4px\",\u001b[39m\n\u001b[31m+     \"lineHeight\": \"22px\",\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"none\",\u001b[22m\n\u001b[2m      \"tag\": \"SECTION\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[2m      \"width\": 360,\u001b[22m\n\n  54 |     const after = await measure(region);\n  55 |     await attach(info, 'appearance', { before, after });\n> 56 |     expect(after).toEqual(before);\n     |                   ^\n  57 |     await shot(info, 'with-overlay', region);\n  58 |     await shot(info, 'notification-and-overlay', page);\n  59 |     const dismiss = region.getByRole('button', { name: 'Dismiss', exact: true });\n    at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:56:19"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:15:51.830Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results/toasts.browser.mjs-existin-678e1-g-with-unchanged-appearance-chromium-light-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results/toasts.browser.mjs-existin-678e1-g-with-unchanged-appearance-chromium-light-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs",
+          "column": 19,
+          "line": 56
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "906d842aa9563290f899-db7e842be124a87d6f90",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Drawer with unchanged appearance",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 1095,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 2\u001b[39m\n\u001b[31m+ Received  + 2\u001b[39m\n\n\u001b[33m@@ -6,16 +6,16 @@\u001b[39m\n\u001b[2m      \"boxShadow\": \"none\",\u001b[22m\n\u001b[2m      \"color\": \"rgb(31, 35, 41)\",\u001b[22m\n\u001b[2m      \"focusVisible\": false,\u001b[22m\n\u001b[2m      \"focused\": false,\u001b[22m\n\u001b[2m      \"fontFamily\": \"-apple-system, BlinkMacSystemFont, \\\"PingFang SC\\\", \\\"Hiragino Sans GB\\\", \\\"Microsoft YaHei\\\", \\\"Segoe UI\\\", Roboto, Helvetica, Arial, sans-serif\",\u001b[22m\n\u001b[32m-     \"fontSize\": \"16px\",\u001b[39m\n\u001b[31m+     \"fontSize\": \"14px\",\u001b[39m\n\u001b[2m      \"fontWeight\": \"400\",\u001b[22m\n\u001b[2m      \"gap\": \"8px\",\u001b[22m\n\u001b[2m      \"height\": 128,\u001b[22m\n\u001b[2m      \"hovered\": false,\u001b[22m\n\u001b[32m-     \"lineHeight\": \"18.4px\",\u001b[39m\n\u001b[31m+     \"lineHeight\": \"16.1px\",\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"none\",\u001b[22m\n\u001b[2m      \"tag\": \"SECTION\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[2m      \"width\": 360,\u001b[22m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 2\u001b[39m\n\u001b[31m+ Received  + 2\u001b[39m\n\n\u001b[33m@@ -6,16 +6,16 @@\u001b[39m\n\u001b[2m      \"boxShadow\": \"none\",\u001b[22m\n\u001b[2m      \"color\": \"rgb(31, 35, 41)\",\u001b[22m\n\u001b[2m      \"focusVisible\": false,\u001b[22m\n\u001b[2m      \"focused\": false,\u001b[22m\n\u001b[2m      \"fontFamily\": \"-apple-system, BlinkMacSystemFont, \\\"PingFang SC\\\", \\\"Hiragino Sans GB\\\", \\\"Microsoft YaHei\\\", \\\"Segoe UI\\\", Roboto, Helvetica, Arial, sans-serif\",\u001b[22m\n\u001b[32m-     \"fontSize\": \"16px\",\u001b[39m\n\u001b[31m+     \"fontSize\": \"14px\",\u001b[39m\n\u001b[2m      \"fontWeight\": \"400\",\u001b[22m\n\u001b[2m      \"gap\": \"8px\",\u001b[22m\n\u001b[2m      \"height\": 128,\u001b[22m\n\u001b[2m      \"hovered\": false,\u001b[22m\n\u001b[32m-     \"lineHeight\": \"18.4px\",\u001b[39m\n\u001b[31m+     \"lineHeight\": \"16.1px\",\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"none\",\u001b[22m\n\u001b[2m      \"tag\": \"SECTION\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[2m      \"width\": 360,\u001b[22m\n    at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:56:19",
+          "location": {
+           "file": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs",
+           "column": 19,
+           "line": 56
+          },
+          "snippet": "  54 |     const after = await measure(region);\n  55 |     await attach(info, 'appearance', { before, after });\n> 56 |     expect(after).toEqual(before);\n     |                   ^\n  57 |     await shot(info, 'with-overlay', region);\n  58 |     await shot(info, 'notification-and-overlay', page);\n  59 |     const dismiss = region.getByRole('button', { name: 'Dismiss', exact: true });"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs",
+            "column": 19,
+            "line": 56
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 2\u001b[39m\n\u001b[31m+ Received  + 2\u001b[39m\n\n\u001b[33m@@ -6,16 +6,16 @@\u001b[39m\n\u001b[2m      \"boxShadow\": \"none\",\u001b[22m\n\u001b[2m      \"color\": \"rgb(31, 35, 41)\",\u001b[22m\n\u001b[2m      \"focusVisible\": false,\u001b[22m\n\u001b[2m      \"focused\": false,\u001b[22m\n\u001b[2m      \"fontFamily\": \"-apple-system, BlinkMacSystemFont, \\\"PingFang SC\\\", \\\"Hiragino Sans GB\\\", \\\"Microsoft YaHei\\\", \\\"Segoe UI\\\", Roboto, Helvetica, Arial, sans-serif\",\u001b[22m\n\u001b[32m-     \"fontSize\": \"16px\",\u001b[39m\n\u001b[31m+     \"fontSize\": \"14px\",\u001b[39m\n\u001b[2m      \"fontWeight\": \"400\",\u001b[22m\n\u001b[2m      \"gap\": \"8px\",\u001b[22m\n\u001b[2m      \"height\": 128,\u001b[22m\n\u001b[2m      \"hovered\": false,\u001b[22m\n\u001b[32m-     \"lineHeight\": \"18.4px\",\u001b[39m\n\u001b[31m+     \"lineHeight\": \"16.1px\",\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"none\",\u001b[22m\n\u001b[2m      \"tag\": \"SECTION\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[2m      \"width\": 360,\u001b[22m\n\n  54 |     const after = await measure(region);\n  55 |     await attach(info, 'appearance', { before, after });\n> 56 |     expect(after).toEqual(before);\n     |                   ^\n  57 |     await shot(info, 'with-overlay', region);\n  58 |     await shot(info, 'notification-and-overlay', page);\n  59 |     const dismiss = region.getByRole('button', { name: 'Dismiss', exact: true });\n    at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:56:19"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:15:53.390Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results/toasts.browser.mjs-existin-02f2d-r-with-unchanged-appearance-chromium-light-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results/toasts.browser.mjs-existin-02f2d-r-with-unchanged-appearance-chromium-light-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs",
+          "column": 19,
+          "line": 56
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "906d842aa9563290f899-93099fa8924816978aca",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Bottom drawer with unchanged appearance",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 979,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 2\u001b[39m\n\u001b[31m+ Received  + 2\u001b[39m\n\n\u001b[33m@@ -6,16 +6,16 @@\u001b[39m\n\u001b[2m      \"boxShadow\": \"none\",\u001b[22m\n\u001b[2m      \"color\": \"rgb(31, 35, 41)\",\u001b[22m\n\u001b[2m      \"focusVisible\": false,\u001b[22m\n\u001b[2m      \"focused\": false,\u001b[22m\n\u001b[2m      \"fontFamily\": \"-apple-system, BlinkMacSystemFont, \\\"PingFang SC\\\", \\\"Hiragino Sans GB\\\", \\\"Microsoft YaHei\\\", \\\"Segoe UI\\\", Roboto, Helvetica, Arial, sans-serif\",\u001b[22m\n\u001b[32m-     \"fontSize\": \"16px\",\u001b[39m\n\u001b[31m+     \"fontSize\": \"14px\",\u001b[39m\n\u001b[2m      \"fontWeight\": \"400\",\u001b[22m\n\u001b[2m      \"gap\": \"8px\",\u001b[22m\n\u001b[2m      \"height\": 128,\u001b[22m\n\u001b[2m      \"hovered\": false,\u001b[22m\n\u001b[32m-     \"lineHeight\": \"18.4px\",\u001b[39m\n\u001b[31m+     \"lineHeight\": \"16.1px\",\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"none\",\u001b[22m\n\u001b[2m      \"tag\": \"SECTION\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[2m      \"width\": 360,\u001b[22m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 2\u001b[39m\n\u001b[31m+ Received  + 2\u001b[39m\n\n\u001b[33m@@ -6,16 +6,16 @@\u001b[39m\n\u001b[2m      \"boxShadow\": \"none\",\u001b[22m\n\u001b[2m      \"color\": \"rgb(31, 35, 41)\",\u001b[22m\n\u001b[2m      \"focusVisible\": false,\u001b[22m\n\u001b[2m      \"focused\": false,\u001b[22m\n\u001b[2m      \"fontFamily\": \"-apple-system, BlinkMacSystemFont, \\\"PingFang SC\\\", \\\"Hiragino Sans GB\\\", \\\"Microsoft YaHei\\\", \\\"Segoe UI\\\", Roboto, Helvetica, Arial, sans-serif\",\u001b[22m\n\u001b[32m-     \"fontSize\": \"16px\",\u001b[39m\n\u001b[31m+     \"fontSize\": \"14px\",\u001b[39m\n\u001b[2m      \"fontWeight\": \"400\",\u001b[22m\n\u001b[2m      \"gap\": \"8px\",\u001b[22m\n\u001b[2m      \"height\": 128,\u001b[22m\n\u001b[2m      \"hovered\": false,\u001b[22m\n\u001b[32m-     \"lineHeight\": \"18.4px\",\u001b[39m\n\u001b[31m+     \"lineHeight\": \"16.1px\",\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"none\",\u001b[22m\n\u001b[2m      \"tag\": \"SECTION\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[2m      \"width\": 360,\u001b[22m\n    at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:56:19",
+          "location": {
+           "file": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs",
+           "column": 19,
+           "line": 56
+          },
+          "snippet": "  54 |     const after = await measure(region);\n  55 |     await attach(info, 'appearance', { before, after });\n> 56 |     expect(after).toEqual(before);\n     |                   ^\n  57 |     await shot(info, 'with-overlay', region);\n  58 |     await shot(info, 'notification-and-overlay', page);\n  59 |     const dismiss = region.getByRole('button', { name: 'Dismiss', exact: true });"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs",
+            "column": 19,
+            "line": 56
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 2\u001b[39m\n\u001b[31m+ Received  + 2\u001b[39m\n\n\u001b[33m@@ -6,16 +6,16 @@\u001b[39m\n\u001b[2m      \"boxShadow\": \"none\",\u001b[22m\n\u001b[2m      \"color\": \"rgb(31, 35, 41)\",\u001b[22m\n\u001b[2m      \"focusVisible\": false,\u001b[22m\n\u001b[2m      \"focused\": false,\u001b[22m\n\u001b[2m      \"fontFamily\": \"-apple-system, BlinkMacSystemFont, \\\"PingFang SC\\\", \\\"Hiragino Sans GB\\\", \\\"Microsoft YaHei\\\", \\\"Segoe UI\\\", Roboto, Helvetica, Arial, sans-serif\",\u001b[22m\n\u001b[32m-     \"fontSize\": \"16px\",\u001b[39m\n\u001b[31m+     \"fontSize\": \"14px\",\u001b[39m\n\u001b[2m      \"fontWeight\": \"400\",\u001b[22m\n\u001b[2m      \"gap\": \"8px\",\u001b[22m\n\u001b[2m      \"height\": 128,\u001b[22m\n\u001b[2m      \"hovered\": false,\u001b[22m\n\u001b[32m-     \"lineHeight\": \"18.4px\",\u001b[39m\n\u001b[31m+     \"lineHeight\": \"16.1px\",\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"none\",\u001b[22m\n\u001b[2m      \"tag\": \"SECTION\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[2m      \"width\": 360,\u001b[22m\n\n  54 |     const after = await measure(region);\n  55 |     await attach(info, 'appearance', { before, after });\n> 56 |     expect(after).toEqual(before);\n     |                   ^\n  57 |     await shot(info, 'with-overlay', region);\n  58 |     await shot(info, 'notification-and-overlay', page);\n  59 |     const dismiss = region.getByRole('button', { name: 'Dismiss', exact: true });\n    at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:56:19"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:15:54.808Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results/toasts.browser.mjs-existin-33673-r-with-unchanged-appearance-chromium-light-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results/toasts.browser.mjs-existin-33673-r-with-unchanged-appearance-chromium-light-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs",
+          "column": 19,
+          "line": 56
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "906d842aa9563290f899-e97e4142af6504d3659b",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "mixed pinned and passing notifications stack without overlap and retain all pinned errors",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1106,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:15:56.095Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "mixed-stack",
+           "contentType": "image/png"
+          },
+          {
+           "name": "stack-geometry",
+           "contentType": "application/json"
+          },
+          {
+           "name": "expanded-pinned-stack",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-e70faf37e08e7c678e82",
+     "file": "toasts.browser.mjs",
+     "line": 71,
+     "column": 1
+    },
+    {
+     "title": "short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 943,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:15:57.251Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "timers",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-405fec2c70dfb1ba4862",
+     "file": "toasts.browser.mjs",
+     "line": 98,
+     "column": 1
+    },
+    {
+     "title": "event and entity deduplication, Undo and session navigation retain the business boundary",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1131,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:15:58.199Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "actions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-e6cf2ddf938ba380485d",
+     "file": "toasts.browser.mjs",
+     "line": 134,
+     "column": 1
+    },
+    {
+     "title": "copyable diagnostics and live announcements survive nested overlays and theme changes",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1401,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:15:59.335Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-toast-opposite-theme",
+           "contentType": "image/png"
+          },
+          {
+           "name": "accessibility",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-3463f762efceeb871138",
+     "file": "toasts.browser.mjs",
+     "line": 164,
+     "column": 1
+    },
+    {
+     "title": "async confirmation keeps pending locks, accessible failure feedback and successful retry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1014,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:16:00.741Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirm-pending",
+           "contentType": "image/png"
+          },
+          {
+           "name": "confirm-failure-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "confirmation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-33e1ff3b06a15be115d6",
+     "file": "toasts.browser.mjs",
+     "line": 208,
+     "column": 1
+    },
+    {
+     "title": "legacy AntApp confirmation still works with the same notification service",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1094,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:16:01.761Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-confirmed",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-4172104743db1ac447d6",
+     "file": "toasts.browser.mjs",
+     "line": 241,
+     "column": 1
+    },
+    {
+     "title": "existing notifications remain accessible in Dialog with unchanged appearance",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 949,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 2\u001b[39m\n\u001b[31m+ Received  + 2\u001b[39m\n\n\u001b[33m@@ -6,16 +6,16 @@\u001b[39m\n\u001b[2m      \"boxShadow\": \"none\",\u001b[22m\n\u001b[2m      \"color\": \"rgb(201, 206, 213)\",\u001b[22m\n\u001b[2m      \"focusVisible\": false,\u001b[22m\n\u001b[2m      \"focused\": false,\u001b[22m\n\u001b[2m      \"fontFamily\": \"-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif\",\u001b[22m\n\u001b[32m-     \"fontSize\": \"16px\",\u001b[39m\n\u001b[31m+     \"fontSize\": \"14px\",\u001b[39m\n\u001b[2m      \"fontWeight\": \"400\",\u001b[22m\n\u001b[2m      \"gap\": \"8px\",\u001b[22m\n\u001b[2m      \"height\": 144,\u001b[22m\n\u001b[2m      \"hovered\": false,\u001b[22m\n\u001b[32m-     \"lineHeight\": \"18.4px\",\u001b[39m\n\u001b[31m+     \"lineHeight\": \"22px\",\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"none\",\u001b[22m\n\u001b[2m      \"tag\": \"SECTION\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[2m      \"width\": 350,\u001b[22m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 2\u001b[39m\n\u001b[31m+ Received  + 2\u001b[39m\n\n\u001b[33m@@ -6,16 +6,16 @@\u001b[39m\n\u001b[2m      \"boxShadow\": \"none\",\u001b[22m\n\u001b[2m      \"color\": \"rgb(201, 206, 213)\",\u001b[22m\n\u001b[2m      \"focusVisible\": false,\u001b[22m\n\u001b[2m      \"focused\": false,\u001b[22m\n\u001b[2m      \"fontFamily\": \"-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif\",\u001b[22m\n\u001b[32m-     \"fontSize\": \"16px\",\u001b[39m\n\u001b[31m+     \"fontSize\": \"14px\",\u001b[39m\n\u001b[2m      \"fontWeight\": \"400\",\u001b[22m\n\u001b[2m      \"gap\": \"8px\",\u001b[22m\n\u001b[2m      \"height\": 144,\u001b[22m\n\u001b[2m      \"hovered\": false,\u001b[22m\n\u001b[32m-     \"lineHeight\": \"18.4px\",\u001b[39m\n\u001b[31m+     \"lineHeight\": \"22px\",\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"none\",\u001b[22m\n\u001b[2m      \"tag\": \"SECTION\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[2m      \"width\": 350,\u001b[22m\n    at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:56:19",
+          "location": {
+           "file": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs",
+           "column": 19,
+           "line": 56
+          },
+          "snippet": "  54 |     const after = await measure(region);\n  55 |     await attach(info, 'appearance', { before, after });\n> 56 |     expect(after).toEqual(before);\n     |                   ^\n  57 |     await shot(info, 'with-overlay', region);\n  58 |     await shot(info, 'notification-and-overlay', page);\n  59 |     const dismiss = region.getByRole('button', { name: 'Dismiss', exact: true });"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs",
+            "column": 19,
+            "line": 56
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 2\u001b[39m\n\u001b[31m+ Received  + 2\u001b[39m\n\n\u001b[33m@@ -6,16 +6,16 @@\u001b[39m\n\u001b[2m      \"boxShadow\": \"none\",\u001b[22m\n\u001b[2m      \"color\": \"rgb(201, 206, 213)\",\u001b[22m\n\u001b[2m      \"focusVisible\": false,\u001b[22m\n\u001b[2m      \"focused\": false,\u001b[22m\n\u001b[2m      \"fontFamily\": \"-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif\",\u001b[22m\n\u001b[32m-     \"fontSize\": \"16px\",\u001b[39m\n\u001b[31m+     \"fontSize\": \"14px\",\u001b[39m\n\u001b[2m      \"fontWeight\": \"400\",\u001b[22m\n\u001b[2m      \"gap\": \"8px\",\u001b[22m\n\u001b[2m      \"height\": 144,\u001b[22m\n\u001b[2m      \"hovered\": false,\u001b[22m\n\u001b[32m-     \"lineHeight\": \"18.4px\",\u001b[39m\n\u001b[31m+     \"lineHeight\": \"22px\",\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"none\",\u001b[22m\n\u001b[2m      \"tag\": \"SECTION\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[2m      \"width\": 350,\u001b[22m\n\n  54 |     const after = await measure(region);\n  55 |     await attach(info, 'appearance', { before, after });\n> 56 |     expect(after).toEqual(before);\n     |                   ^\n  57 |     await shot(info, 'with-overlay', region);\n  58 |     await shot(info, 'notification-and-overlay', page);\n  59 |     const dismiss = region.getByRole('button', { name: 'Dismiss', exact: true });\n    at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:56:19"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:16:03.091Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results/toasts.browser.mjs-existin-678e1-g-with-unchanged-appearance-webkit-dark-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results/toasts.browser.mjs-existin-678e1-g-with-unchanged-appearance-webkit-dark-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs",
+          "column": 19,
+          "line": 56
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "906d842aa9563290f899-e62c9baec909c11c65f4",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Drawer with unchanged appearance",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 852,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 8\u001b[39m\n\u001b[31m+ Received  + 8\u001b[39m\n\n\u001b[33m@@ -6,21 +6,21 @@\u001b[39m\n\u001b[2m      \"boxShadow\": \"none\",\u001b[22m\n\u001b[2m      \"color\": \"rgb(201, 206, 213)\",\u001b[22m\n\u001b[2m      \"focusVisible\": false,\u001b[22m\n\u001b[2m      \"focused\": false,\u001b[22m\n\u001b[2m      \"fontFamily\": \"-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif\",\u001b[22m\n\u001b[32m-     \"fontSize\": \"16px\",\u001b[39m\n\u001b[31m+     \"fontSize\": \"14px\",\u001b[39m\n\u001b[2m      \"fontWeight\": \"400\",\u001b[22m\n\u001b[2m      \"gap\": \"8px\",\u001b[22m\n\u001b[2m      \"height\": 144,\u001b[22m\n\u001b[2m      \"hovered\": false,\u001b[22m\n\u001b[32m-     \"lineHeight\": \"18.4px\",\u001b[39m\n\u001b[31m+     \"lineHeight\": \"16.1px\",\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"none\",\u001b[22m\n\u001b[2m      \"tag\": \"SECTION\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[32m-     \"width\": 350,\u001b[39m\n\u001b[31m+     \"width\": 358,\u001b[39m\n\u001b[2m      \"x\": 16,\u001b[22m\n\u001b[2m      \"y\": 56,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"linear-gradient(rgba(245, 74, 69, 0.16), rgba(245, 74, 69, 0.16)) repeat scroll 0% 0% / auto padding-box border-box, rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -39,11 +39,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"20px\",\u001b[22m\n\u001b[2m      \"padding\": \"12px 12px 12px 14px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"DIV\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[32m-     \"width\": 350,\u001b[39m\n\u001b[31m+     \"width\": 358,\u001b[39m\n\u001b[2m      \"x\": 16,\u001b[22m\n\u001b[2m      \"y\": 56,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -62,11 +62,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"20px\",\u001b[22m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"DIV\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedule\",\u001b[22m\n\u001b[32m-     \"width\": 322,\u001b[39m\n\u001b[31m+     \"width\": 330,\u001b[39m\n\u001b[2m      \"x\": 31,\u001b[22m\n\u001b[2m      \"y\": 69,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -85,11 +85,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"20px\",\u001b[22m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"SPAN\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedule\",\u001b[22m\n\u001b[32m-     \"width\": 256,\u001b[39m\n\u001b[31m+     \"width\": 264,\u001b[39m\n\u001b[2m      \"x\": 63,\u001b[22m\n\u001b[2m      \"y\": 69,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -109,11 +109,11 @@\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"BUTTON\",\u001b[22m\n\u001b[2m      \"text\": \"\",\u001b[22m\n\u001b[2m      \"width\": 22,\u001b[22m\n\u001b[32m-     \"x\": 331,\u001b[39m\n\u001b[31m+     \"x\": 339,\u001b[39m\n\u001b[2m      \"y\": 69,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[2m      \"border\": \"1px solid rgb(52, 52, 55)\",\u001b[22m\n\u001b[33m@@ -131,11 +131,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"18px\",\u001b[22m\n\u001b[2m      \"padding\": \"7px 10px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"DIV\",\u001b[22m\n\u001b[2m      \"text\": \"revision 12 is stale\",\u001b[22m\n\u001b[32m-     \"width\": 290,\u001b[39m\n\u001b[31m+     \"width\": 298,\u001b[39m\n\u001b[2m      \"x\": 63,\u001b[22m\n\u001b[2m      \"y\": 99,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 8\u001b[39m\n\u001b[31m+ Received  + 8\u001b[39m\n\n\u001b[33m@@ -6,21 +6,21 @@\u001b[39m\n\u001b[2m      \"boxShadow\": \"none\",\u001b[22m\n\u001b[2m      \"color\": \"rgb(201, 206, 213)\",\u001b[22m\n\u001b[2m      \"focusVisible\": false,\u001b[22m\n\u001b[2m      \"focused\": false,\u001b[22m\n\u001b[2m      \"fontFamily\": \"-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif\",\u001b[22m\n\u001b[32m-     \"fontSize\": \"16px\",\u001b[39m\n\u001b[31m+     \"fontSize\": \"14px\",\u001b[39m\n\u001b[2m      \"fontWeight\": \"400\",\u001b[22m\n\u001b[2m      \"gap\": \"8px\",\u001b[22m\n\u001b[2m      \"height\": 144,\u001b[22m\n\u001b[2m      \"hovered\": false,\u001b[22m\n\u001b[32m-     \"lineHeight\": \"18.4px\",\u001b[39m\n\u001b[31m+     \"lineHeight\": \"16.1px\",\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"none\",\u001b[22m\n\u001b[2m      \"tag\": \"SECTION\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[32m-     \"width\": 350,\u001b[39m\n\u001b[31m+     \"width\": 358,\u001b[39m\n\u001b[2m      \"x\": 16,\u001b[22m\n\u001b[2m      \"y\": 56,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"linear-gradient(rgba(245, 74, 69, 0.16), rgba(245, 74, 69, 0.16)) repeat scroll 0% 0% / auto padding-box border-box, rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -39,11 +39,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"20px\",\u001b[22m\n\u001b[2m      \"padding\": \"12px 12px 12px 14px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"DIV\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[32m-     \"width\": 350,\u001b[39m\n\u001b[31m+     \"width\": 358,\u001b[39m\n\u001b[2m      \"x\": 16,\u001b[22m\n\u001b[2m      \"y\": 56,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -62,11 +62,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"20px\",\u001b[22m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"DIV\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedule\",\u001b[22m\n\u001b[32m-     \"width\": 322,\u001b[39m\n\u001b[31m+     \"width\": 330,\u001b[39m\n\u001b[2m      \"x\": 31,\u001b[22m\n\u001b[2m      \"y\": 69,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -85,11 +85,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"20px\",\u001b[22m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"SPAN\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedule\",\u001b[22m\n\u001b[32m-     \"width\": 256,\u001b[39m\n\u001b[31m+     \"width\": 264,\u001b[39m\n\u001b[2m      \"x\": 63,\u001b[22m\n\u001b[2m      \"y\": 69,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -109,11 +109,11 @@\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"BUTTON\",\u001b[22m\n\u001b[2m      \"text\": \"\",\u001b[22m\n\u001b[2m      \"width\": 22,\u001b[22m\n\u001b[32m-     \"x\": 331,\u001b[39m\n\u001b[31m+     \"x\": 339,\u001b[39m\n\u001b[2m      \"y\": 69,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[2m      \"border\": \"1px solid rgb(52, 52, 55)\",\u001b[22m\n\u001b[33m@@ -131,11 +131,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"18px\",\u001b[22m\n\u001b[2m      \"padding\": \"7px 10px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"DIV\",\u001b[22m\n\u001b[2m      \"text\": \"revision 12 is stale\",\u001b[22m\n\u001b[32m-     \"width\": 290,\u001b[39m\n\u001b[31m+     \"width\": 298,\u001b[39m\n\u001b[2m      \"x\": 63,\u001b[22m\n\u001b[2m      \"y\": 99,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n    at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:56:19",
+          "location": {
+           "file": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs",
+           "column": 19,
+           "line": 56
+          },
+          "snippet": "  54 |     const after = await measure(region);\n  55 |     await attach(info, 'appearance', { before, after });\n> 56 |     expect(after).toEqual(before);\n     |                   ^\n  57 |     await shot(info, 'with-overlay', region);\n  58 |     await shot(info, 'notification-and-overlay', page);\n  59 |     const dismiss = region.getByRole('button', { name: 'Dismiss', exact: true });"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs",
+            "column": 19,
+            "line": 56
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 8\u001b[39m\n\u001b[31m+ Received  + 8\u001b[39m\n\n\u001b[33m@@ -6,21 +6,21 @@\u001b[39m\n\u001b[2m      \"boxShadow\": \"none\",\u001b[22m\n\u001b[2m      \"color\": \"rgb(201, 206, 213)\",\u001b[22m\n\u001b[2m      \"focusVisible\": false,\u001b[22m\n\u001b[2m      \"focused\": false,\u001b[22m\n\u001b[2m      \"fontFamily\": \"-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif\",\u001b[22m\n\u001b[32m-     \"fontSize\": \"16px\",\u001b[39m\n\u001b[31m+     \"fontSize\": \"14px\",\u001b[39m\n\u001b[2m      \"fontWeight\": \"400\",\u001b[22m\n\u001b[2m      \"gap\": \"8px\",\u001b[22m\n\u001b[2m      \"height\": 144,\u001b[22m\n\u001b[2m      \"hovered\": false,\u001b[22m\n\u001b[32m-     \"lineHeight\": \"18.4px\",\u001b[39m\n\u001b[31m+     \"lineHeight\": \"16.1px\",\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"none\",\u001b[22m\n\u001b[2m      \"tag\": \"SECTION\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[32m-     \"width\": 350,\u001b[39m\n\u001b[31m+     \"width\": 358,\u001b[39m\n\u001b[2m      \"x\": 16,\u001b[22m\n\u001b[2m      \"y\": 56,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"linear-gradient(rgba(245, 74, 69, 0.16), rgba(245, 74, 69, 0.16)) repeat scroll 0% 0% / auto padding-box border-box, rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -39,11 +39,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"20px\",\u001b[22m\n\u001b[2m      \"padding\": \"12px 12px 12px 14px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"DIV\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[32m-     \"width\": 350,\u001b[39m\n\u001b[31m+     \"width\": 358,\u001b[39m\n\u001b[2m      \"x\": 16,\u001b[22m\n\u001b[2m      \"y\": 56,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -62,11 +62,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"20px\",\u001b[22m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"DIV\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedule\",\u001b[22m\n\u001b[32m-     \"width\": 322,\u001b[39m\n\u001b[31m+     \"width\": 330,\u001b[39m\n\u001b[2m      \"x\": 31,\u001b[22m\n\u001b[2m      \"y\": 69,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -85,11 +85,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"20px\",\u001b[22m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"SPAN\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedule\",\u001b[22m\n\u001b[32m-     \"width\": 256,\u001b[39m\n\u001b[31m+     \"width\": 264,\u001b[39m\n\u001b[2m      \"x\": 63,\u001b[22m\n\u001b[2m      \"y\": 69,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -109,11 +109,11 @@\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"BUTTON\",\u001b[22m\n\u001b[2m      \"text\": \"\",\u001b[22m\n\u001b[2m      \"width\": 22,\u001b[22m\n\u001b[32m-     \"x\": 331,\u001b[39m\n\u001b[31m+     \"x\": 339,\u001b[39m\n\u001b[2m      \"y\": 69,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[2m      \"border\": \"1px solid rgb(52, 52, 55)\",\u001b[22m\n\u001b[33m@@ -131,11 +131,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"18px\",\u001b[22m\n\u001b[2m      \"padding\": \"7px 10px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"DIV\",\u001b[22m\n\u001b[2m      \"text\": \"revision 12 is stale\",\u001b[22m\n\u001b[32m-     \"width\": 290,\u001b[39m\n\u001b[31m+     \"width\": 298,\u001b[39m\n\u001b[2m      \"x\": 63,\u001b[22m\n\u001b[2m      \"y\": 99,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\n  54 |     const after = await measure(region);\n  55 |     await attach(info, 'appearance', { before, after });\n> 56 |     expect(after).toEqual(before);\n     |                   ^\n  57 |     await shot(info, 'with-overlay', region);\n  58 |     await shot(info, 'notification-and-overlay', page);\n  59 |     const dismiss = region.getByRole('button', { name: 'Dismiss', exact: true });\n    at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:56:19"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:16:04.427Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results/toasts.browser.mjs-existin-02f2d-r-with-unchanged-appearance-webkit-dark-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results/toasts.browser.mjs-existin-02f2d-r-with-unchanged-appearance-webkit-dark-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs",
+          "column": 19,
+          "line": 56
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "906d842aa9563290f899-68f11b073576c92aa9ae",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Bottom drawer with unchanged appearance",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 923,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 8\u001b[39m\n\u001b[31m+ Received  + 8\u001b[39m\n\n\u001b[33m@@ -6,21 +6,21 @@\u001b[39m\n\u001b[2m      \"boxShadow\": \"none\",\u001b[22m\n\u001b[2m      \"color\": \"rgb(201, 206, 213)\",\u001b[22m\n\u001b[2m      \"focusVisible\": false,\u001b[22m\n\u001b[2m      \"focused\": false,\u001b[22m\n\u001b[2m      \"fontFamily\": \"-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif\",\u001b[22m\n\u001b[32m-     \"fontSize\": \"16px\",\u001b[39m\n\u001b[31m+     \"fontSize\": \"14px\",\u001b[39m\n\u001b[2m      \"fontWeight\": \"400\",\u001b[22m\n\u001b[2m      \"gap\": \"8px\",\u001b[22m\n\u001b[2m      \"height\": 144,\u001b[22m\n\u001b[2m      \"hovered\": false,\u001b[22m\n\u001b[32m-     \"lineHeight\": \"18.4px\",\u001b[39m\n\u001b[31m+     \"lineHeight\": \"16.1px\",\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"none\",\u001b[22m\n\u001b[2m      \"tag\": \"SECTION\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[32m-     \"width\": 350,\u001b[39m\n\u001b[31m+     \"width\": 358,\u001b[39m\n\u001b[2m      \"x\": 16,\u001b[22m\n\u001b[2m      \"y\": 56,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"linear-gradient(rgba(245, 74, 69, 0.16), rgba(245, 74, 69, 0.16)) repeat scroll 0% 0% / auto padding-box border-box, rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -39,11 +39,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"20px\",\u001b[22m\n\u001b[2m      \"padding\": \"12px 12px 12px 14px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"DIV\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[32m-     \"width\": 350,\u001b[39m\n\u001b[31m+     \"width\": 358,\u001b[39m\n\u001b[2m      \"x\": 16,\u001b[22m\n\u001b[2m      \"y\": 56,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -62,11 +62,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"20px\",\u001b[22m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"DIV\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedule\",\u001b[22m\n\u001b[32m-     \"width\": 322,\u001b[39m\n\u001b[31m+     \"width\": 330,\u001b[39m\n\u001b[2m      \"x\": 31,\u001b[22m\n\u001b[2m      \"y\": 69,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -85,11 +85,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"20px\",\u001b[22m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"SPAN\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedule\",\u001b[22m\n\u001b[32m-     \"width\": 256,\u001b[39m\n\u001b[31m+     \"width\": 264,\u001b[39m\n\u001b[2m      \"x\": 63,\u001b[22m\n\u001b[2m      \"y\": 69,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -109,11 +109,11 @@\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"BUTTON\",\u001b[22m\n\u001b[2m      \"text\": \"\",\u001b[22m\n\u001b[2m      \"width\": 22,\u001b[22m\n\u001b[32m-     \"x\": 331,\u001b[39m\n\u001b[31m+     \"x\": 339,\u001b[39m\n\u001b[2m      \"y\": 69,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[2m      \"border\": \"1px solid rgb(52, 52, 55)\",\u001b[22m\n\u001b[33m@@ -131,11 +131,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"18px\",\u001b[22m\n\u001b[2m      \"padding\": \"7px 10px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"DIV\",\u001b[22m\n\u001b[2m      \"text\": \"revision 12 is stale\",\u001b[22m\n\u001b[32m-     \"width\": 290,\u001b[39m\n\u001b[31m+     \"width\": 298,\u001b[39m\n\u001b[2m      \"x\": 63,\u001b[22m\n\u001b[2m      \"y\": 99,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 8\u001b[39m\n\u001b[31m+ Received  + 8\u001b[39m\n\n\u001b[33m@@ -6,21 +6,21 @@\u001b[39m\n\u001b[2m      \"boxShadow\": \"none\",\u001b[22m\n\u001b[2m      \"color\": \"rgb(201, 206, 213)\",\u001b[22m\n\u001b[2m      \"focusVisible\": false,\u001b[22m\n\u001b[2m      \"focused\": false,\u001b[22m\n\u001b[2m      \"fontFamily\": \"-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif\",\u001b[22m\n\u001b[32m-     \"fontSize\": \"16px\",\u001b[39m\n\u001b[31m+     \"fontSize\": \"14px\",\u001b[39m\n\u001b[2m      \"fontWeight\": \"400\",\u001b[22m\n\u001b[2m      \"gap\": \"8px\",\u001b[22m\n\u001b[2m      \"height\": 144,\u001b[22m\n\u001b[2m      \"hovered\": false,\u001b[22m\n\u001b[32m-     \"lineHeight\": \"18.4px\",\u001b[39m\n\u001b[31m+     \"lineHeight\": \"16.1px\",\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"none\",\u001b[22m\n\u001b[2m      \"tag\": \"SECTION\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[32m-     \"width\": 350,\u001b[39m\n\u001b[31m+     \"width\": 358,\u001b[39m\n\u001b[2m      \"x\": 16,\u001b[22m\n\u001b[2m      \"y\": 56,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"linear-gradient(rgba(245, 74, 69, 0.16), rgba(245, 74, 69, 0.16)) repeat scroll 0% 0% / auto padding-box border-box, rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -39,11 +39,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"20px\",\u001b[22m\n\u001b[2m      \"padding\": \"12px 12px 12px 14px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"DIV\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[32m-     \"width\": 350,\u001b[39m\n\u001b[31m+     \"width\": 358,\u001b[39m\n\u001b[2m      \"x\": 16,\u001b[22m\n\u001b[2m      \"y\": 56,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -62,11 +62,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"20px\",\u001b[22m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"DIV\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedule\",\u001b[22m\n\u001b[32m-     \"width\": 322,\u001b[39m\n\u001b[31m+     \"width\": 330,\u001b[39m\n\u001b[2m      \"x\": 31,\u001b[22m\n\u001b[2m      \"y\": 69,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -85,11 +85,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"20px\",\u001b[22m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"SPAN\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedule\",\u001b[22m\n\u001b[32m-     \"width\": 256,\u001b[39m\n\u001b[31m+     \"width\": 264,\u001b[39m\n\u001b[2m      \"x\": 63,\u001b[22m\n\u001b[2m      \"y\": 69,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -109,11 +109,11 @@\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"BUTTON\",\u001b[22m\n\u001b[2m      \"text\": \"\",\u001b[22m\n\u001b[2m      \"width\": 22,\u001b[22m\n\u001b[32m-     \"x\": 331,\u001b[39m\n\u001b[31m+     \"x\": 339,\u001b[39m\n\u001b[2m      \"y\": 69,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[2m      \"border\": \"1px solid rgb(52, 52, 55)\",\u001b[22m\n\u001b[33m@@ -131,11 +131,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"18px\",\u001b[22m\n\u001b[2m      \"padding\": \"7px 10px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"DIV\",\u001b[22m\n\u001b[2m      \"text\": \"revision 12 is stale\",\u001b[22m\n\u001b[32m-     \"width\": 290,\u001b[39m\n\u001b[31m+     \"width\": 298,\u001b[39m\n\u001b[2m      \"x\": 63,\u001b[22m\n\u001b[2m      \"y\": 99,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n    at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:56:19",
+          "location": {
+           "file": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs",
+           "column": 19,
+           "line": 56
+          },
+          "snippet": "  54 |     const after = await measure(region);\n  55 |     await attach(info, 'appearance', { before, after });\n> 56 |     expect(after).toEqual(before);\n     |                   ^\n  57 |     await shot(info, 'with-overlay', region);\n  58 |     await shot(info, 'notification-and-overlay', page);\n  59 |     const dismiss = region.getByRole('button', { name: 'Dismiss', exact: true });"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs",
+            "column": 19,
+            "line": 56
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 8\u001b[39m\n\u001b[31m+ Received  + 8\u001b[39m\n\n\u001b[33m@@ -6,21 +6,21 @@\u001b[39m\n\u001b[2m      \"boxShadow\": \"none\",\u001b[22m\n\u001b[2m      \"color\": \"rgb(201, 206, 213)\",\u001b[22m\n\u001b[2m      \"focusVisible\": false,\u001b[22m\n\u001b[2m      \"focused\": false,\u001b[22m\n\u001b[2m      \"fontFamily\": \"-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif\",\u001b[22m\n\u001b[32m-     \"fontSize\": \"16px\",\u001b[39m\n\u001b[31m+     \"fontSize\": \"14px\",\u001b[39m\n\u001b[2m      \"fontWeight\": \"400\",\u001b[22m\n\u001b[2m      \"gap\": \"8px\",\u001b[22m\n\u001b[2m      \"height\": 144,\u001b[22m\n\u001b[2m      \"hovered\": false,\u001b[22m\n\u001b[32m-     \"lineHeight\": \"18.4px\",\u001b[39m\n\u001b[31m+     \"lineHeight\": \"16.1px\",\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"none\",\u001b[22m\n\u001b[2m      \"tag\": \"SECTION\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[32m-     \"width\": 350,\u001b[39m\n\u001b[31m+     \"width\": 358,\u001b[39m\n\u001b[2m      \"x\": 16,\u001b[22m\n\u001b[2m      \"y\": 56,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"linear-gradient(rgba(245, 74, 69, 0.16), rgba(245, 74, 69, 0.16)) repeat scroll 0% 0% / auto padding-box border-box, rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -39,11 +39,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"20px\",\u001b[22m\n\u001b[2m      \"padding\": \"12px 12px 12px 14px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"DIV\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedulerevision 12 is staleCopy error\",\u001b[22m\n\u001b[32m-     \"width\": 350,\u001b[39m\n\u001b[31m+     \"width\": 358,\u001b[39m\n\u001b[2m      \"x\": 16,\u001b[22m\n\u001b[2m      \"y\": 56,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -62,11 +62,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"20px\",\u001b[22m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"DIV\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedule\",\u001b[22m\n\u001b[32m-     \"width\": 322,\u001b[39m\n\u001b[31m+     \"width\": 330,\u001b[39m\n\u001b[2m      \"x\": 31,\u001b[22m\n\u001b[2m      \"y\": 69,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -85,11 +85,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"20px\",\u001b[22m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"SPAN\",\u001b[22m\n\u001b[2m      \"text\": \"Couldn't save the schedule\",\u001b[22m\n\u001b[32m-     \"width\": 256,\u001b[39m\n\u001b[31m+     \"width\": 264,\u001b[39m\n\u001b[2m      \"x\": 63,\u001b[22m\n\u001b[2m      \"y\": 69,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[33m@@ -109,11 +109,11 @@\u001b[39m\n\u001b[2m      \"padding\": \"0px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"BUTTON\",\u001b[22m\n\u001b[2m      \"text\": \"\",\u001b[22m\n\u001b[2m      \"width\": 22,\u001b[22m\n\u001b[32m-     \"x\": 331,\u001b[39m\n\u001b[31m+     \"x\": 339,\u001b[39m\n\u001b[2m      \"y\": 69,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\u001b[2m      \"border\": \"1px solid rgb(52, 52, 55)\",\u001b[22m\n\u001b[33m@@ -131,11 +131,11 @@\u001b[39m\n\u001b[2m      \"lineHeight\": \"18px\",\u001b[22m\n\u001b[2m      \"padding\": \"7px 10px\",\u001b[22m\n\u001b[2m      \"pointerEvents\": \"auto\",\u001b[22m\n\u001b[2m      \"tag\": \"DIV\",\u001b[22m\n\u001b[2m      \"text\": \"revision 12 is stale\",\u001b[22m\n\u001b[32m-     \"width\": 290,\u001b[39m\n\u001b[31m+     \"width\": 298,\u001b[39m\n\u001b[2m      \"x\": 63,\u001b[22m\n\u001b[2m      \"y\": 99,\u001b[22m\n\u001b[2m    },\u001b[22m\n\u001b[2m    Object {\u001b[22m\n\u001b[2m      \"background\": \"rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box\",\u001b[22m\n\n  54 |     const after = await measure(region);\n  55 |     await attach(info, 'appearance', { before, after });\n> 56 |     expect(after).toEqual(before);\n     |                   ^\n  57 |     await shot(info, 'with-overlay', region);\n  58 |     await shot(info, 'notification-and-overlay', page);\n  59 |     const dismiss = region.getByRole('button', { name: 'Dismiss', exact: true });\n    at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:56:19"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:16:05.607Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results/toasts.browser.mjs-existin-33673-r-with-unchanged-appearance-webkit-dark-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/.toasts-results/toasts.browser.mjs-existin-33673-r-with-unchanged-appearance-webkit-dark-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs",
+          "column": 19,
+          "line": 56
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "906d842aa9563290f899-9667f9e0b8394e61706e",
+     "file": "toasts.browser.mjs",
+     "line": 42,
+     "column": 3
+    },
+    {
+     "title": "mixed pinned and passing notifications stack without overlap and retain all pinned errors",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1207,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:16:06.878Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "mixed-stack",
+           "contentType": "image/png"
+          },
+          {
+           "name": "stack-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-7e144956681cfc72e8a3",
+     "file": "toasts.browser.mjs",
+     "line": 71,
+     "column": 1
+    },
+    {
+     "title": "short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1083,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:16:08.206Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "folded-warning",
+           "contentType": "image/png"
+          },
+          {
+           "name": "timers",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-4e4c2f3d68791a8ad3ec",
+     "file": "toasts.browser.mjs",
+     "line": 98,
+     "column": 1
+    },
+    {
+     "title": "event and entity deduplication, Undo and session navigation retain the business boundary",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2667,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:16:09.296Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "actions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-d3d05fb63e75195ad2fe",
+     "file": "toasts.browser.mjs",
+     "line": 134,
+     "column": 1
+    },
+    {
+     "title": "copyable diagnostics and live announcements survive nested overlays and theme changes",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4391,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:16:11.979Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-toast-opposite-theme",
+           "contentType": "image/png"
+          },
+          {
+           "name": "accessibility",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-05dd2eab78e7694541f5",
+     "file": "toasts.browser.mjs",
+     "line": 164,
+     "column": 1
+    },
+    {
+     "title": "async confirmation keeps pending locks, accessible failure feedback and successful retry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2525,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:16:16.385Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirm-pending",
+           "contentType": "image/png"
+          },
+          {
+           "name": "confirm-failure-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "confirmation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-6f2a106347fcef27fe89",
+     "file": "toasts.browser.mjs",
+     "line": 208,
+     "column": 1
+    },
+    {
+     "title": "legacy AntApp confirmation still works with the same notification service",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1482,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T06:16:18.921Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-confirmed",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-7b45be96a75b529ca1d1",
+     "file": "toasts.browser.mjs",
+     "line": 241,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T06:15:50.608Z",
+  "duration": 29934.778,
+  "expected": 12,
+  "skipped": 0,
+  "unexpected": 6,
+  "flaky": 0
+ }
+}

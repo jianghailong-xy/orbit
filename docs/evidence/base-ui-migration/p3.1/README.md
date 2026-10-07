@@ -1,5 +1,11 @@
 # P3.1 自动增高 Textarea 与会话输入兼容
 
+> **证据瘦身（2026-10-07）**：完整原件见提交 `7732f14f82d4e6b4406d7d164c4b672f63aa0f56`（瘦身前最后一个含完整文件的提交）。取回单个文件用 `git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p3.1/<路径> > <文件>`，整个目录用 `git archive 7732f14f82d4e6b4406d7d164c4b672f63aa0f56 docs/evidence/base-ui-migration/p3.1 | tar -x -C <空目录>`。
+>
+> 本目录在瘦身中：9 份 Playwright 报告换成同目录的 `report.summary.json`，都只删附件正文；161 个逐用例 JSON（含打包的 attachments.tar.gz）换成所在目录的 `attachments.summary.json`（文件名、字节数、SHA-256 和顶层标量字段）；删除 381 张与本任务目录里保留副本逐字节相同的重复截图。下文链接若指向这些文件，按上面的命令从该提交取回；读取它们的脚本要在取回的目录里运行。
+>
+> 目录里的 SHA256SUMS 类清单（`*.sha256`、`artifact-index*.json`、`manifest.json`、各运行 `summary.json` 里的附件哈希等）保留原文件，核验的是提交 `7732f14f8` 里的文件。做法、保留理由和逐文件删除清单见 [evidence-slimming](../evidence-slimming/README.md)。
+
 服务于 [P3.1 实现自动增高输入框并验证会话兼容](orbit-task:34Za398jkGI2ymxpFlbf2)，起点为项目分支 tip `8ef6b60d1c18976cfca0c1bd98081bd381703c6e`（含 P0–P2 已验收交付及 P2.2 第8版吸收的 main）。开工读取了任务完整信息与历史评论（协调者追加的 P2 晋升冲突前置说明）、项目目标/作业指导/8项验收、P0.1 清单（component-contracts、ownership、css-ownership）、P0.2 基线与 P1.2/P2.x 交付。项目验收条目 key `3ojnKuvd3dQLuwsFV8g7Ll`，原文：**P3：任务详情与分享试点及会话输入代表场景达到既有外观和操作要求，并形成成本对照。** 本任务只承担其中自动增高输入框与会话输入代表场景子范围。
 
 范围依据 P0.1 的归属：`TaskDetailPanel.tsx` 的 textarea 内部访问由 P3.2 用本任务的原生 ref 替代，`WorkspaceView.tsx` 的两处访问在本任务验证兼容、由 P5.3 完整切换；composer 输入 CSS 区段归 “P3.1 → P5.3”。因此本次**没有切换任何业务页面**，也没有改动发送/队列/菜单/粘贴等业务逻辑、路由、REST/SSE、依赖或锁文件；真实页面切换以下文的验证补丁交给 P3.2/P5.3。

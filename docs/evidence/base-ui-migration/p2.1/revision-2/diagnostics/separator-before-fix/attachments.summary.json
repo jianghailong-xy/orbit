@@ -1,0 +1,17 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2.1/revision-2/diagnostics/separator-before-fix/<name>",
+ "files": [
+  {
+   "name": "chromium-light-phone--appearance.json",
+   "bytes": 13496,
+   "sha256": "d5ffdc31f63f9c1904cf2c6ec7e5494de2ae1dea20fddc92b9d172b703c8d55b"
+  },
+  {
+   "name": "webkit-dark-desktop--appearance.json",
+   "bytes": 13440,
+   "sha256": "9b602c353c6da4f45dfdbe85fe97b35d694f2a01c655eeb0556129b65ec8c2fe"
+  }
+ ]
+}

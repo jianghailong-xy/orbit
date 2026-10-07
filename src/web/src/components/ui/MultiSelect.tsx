@@ -1,6 +1,6 @@
 import { useRef, useState, type Ref } from 'react';
 import { Combobox as BaseCombobox } from '@base-ui/react/combobox';
-import { CheckOutlined, CloseCircleFilled, CloseOutlined, DownOutlined } from '@ant-design/icons';
+import { CheckOutlined, CloseCircleFilled, CloseOutlined, DownOutlined, SearchOutlined } from '@ant-design/icons';
 import { flattenOptions, type SelectOption, type SelectProps } from './Select';
 import { SelectEmpty } from './SelectEmpty';
 import { ComboboxOption } from './ComboboxOption';
@@ -58,7 +58,8 @@ export function MultiSelect({ options, value, onValueChange, mode = 'multiple', 
     }} inputValue={query} onInputValueChange={(next, details) => {
       if (details.reason === 'input-change' || details.reason === 'input-clear') inputQuery(next);
     }} filter={(option: SelectOption, search) => option.label.toLocaleLowerCase().includes(search.toLocaleLowerCase())}
-    autoHighlight name={name} disabled={disabled} open={layer.open} onOpenChange={(next, details) => {
+    // As the replaced multiple select: opening highlights the first option (Enter picks it); free tags don't.
+    autoHighlight={(mode === 'tags' ? true : 'always') as boolean} name={name} disabled={disabled} open={layer.open} onOpenChange={(next, details) => {
       // AntD keeps a multiple picker open after selecting a search result.
       if (!next && details.reason === 'item-press') { details.cancel(); return; }
       layer.setOpen(next);
@@ -87,7 +88,8 @@ export function MultiSelect({ options, value, onValueChange, mode = 'multiple', 
         </span>
         {value.length === 0 && !query && <span className="orbit-multi-placeholder">{placeholder}</span>}
       </BaseCombobox.Chips>
-      {loading ? <Spinner size="small" aria-hidden /> : showArrow && <BaseCombobox.Trigger className="orbit-combobox-toggle" tabIndex={-1} aria-label="Show options"><DownOutlined aria-hidden /></BaseCombobox.Trigger>}
+      {/* As the replaced searchable select: a magnifier while open. */}
+      {loading ? <Spinner size="small" aria-hidden /> : showArrow && <BaseCombobox.Trigger className="orbit-combobox-toggle" tabIndex={-1} aria-label="Show options">{layer.open && mode === 'multiple' ? <SearchOutlined aria-hidden /> : <DownOutlined aria-hidden />}</BaseCombobox.Trigger>}
       {clearable && value.length > 0 && !disabled && <BaseCombobox.Clear className="orbit-choice-clear" tabIndex={0} aria-label={clearLabel}><CloseCircleFilled aria-hidden /></BaseCombobox.Clear>}
     </div>
     <BaseCombobox.Portal container={layer.container()}>

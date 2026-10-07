@@ -1,0 +1,22 @@
+label=audit-antd
+head=d6a764624659bfad274e67fce4a8b6dfd15004ad
+branch=orbit/p2-p3-select-menu-tab-3336b7
+status_begin
+  ?? docs/evidence/base-ui-migration/p2-p3-hardening/
+status_end
+command=node src/web/scripts/audit-antd.mjs && node src/web/scripts/audit-antd.mjs --json > /var/tmp/p2p3-hardening/audit-antd.json && python3 -I -c "
+import json
+a=json.load(open('/root/.orbit/uploads/78dc8fb5-504a-5f2a-96c9-cacb3f1fc63e/p33/runs/audit-antd-tip-json/audit.json')); b=json.load(open('/var/tmp/p2p3-hardening/audit-antd.json'))
+print('top-level keys differing:', sorted(k for k in set(a)|set(b) if a.get(k)!=b.get(k)))
+fa={f['path']:f for f in a['files']}; fb={f['path']:f for f in b['files']}
+print('files only in base 7732f14f8:', sorted(set(fa)-set(fb)))
+print('files only at this tip:', sorted(set(fb)-set(fa)), [ (fb[p].get('kind'), len(fb[p].get('imports',[])), len(fb[p].get('hits',[]))) for p in sorted(set(fb)-set(fa)) ])
+print('files changed:', sorted(p for p in set(fa)&set(fb) if fa[p]!=fb[p]))
+for k in ('counts',):
+    print(k, 'base', json.dumps(a.get(k)), '| tip', json.dumps(b.get(k)))
+"
+start=2026-10-07T12:15:41Z
+load_start=14.68 18.02 20.36
+end=2026-10-07T12:15:42Z
+load_end=14.68 18.02 20.36
+exit=0

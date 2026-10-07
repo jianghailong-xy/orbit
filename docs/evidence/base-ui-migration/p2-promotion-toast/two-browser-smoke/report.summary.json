@@ -1,0 +1,3261 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/toasts.config.mjs",
+   "--project",
+   "chromium-light-desktop",
+   "--project",
+   "webkit-dark-phone"
+  ],
+  "configFile": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration/toasts.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/.toasts-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 14377 --strictPort",
+   "cwd": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/",
+   "url": "http://127.0.0.1:14377",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "toasts-hover.browser.mjs",
+   "file": "toasts-hover.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "native stationary arrival pauses beyond six seconds and moving away resumes dismissal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 14032,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:50:17.781Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "native-stationary-arrival",
+           "contentType": "application/json"
+          },
+          {
+           "name": "stationary-arrival",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-stationary-release",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f5fc4a7ac1904f50d4a2-4bdd3121a4ba3a791ad6",
+     "file": "toasts-hover.browser.mjs",
+     "line": 41,
+     "column": 1
+    },
+    {
+     "title": "stationary arrival stays paused across modal owners and clearing then replacing the feed",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1340,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:50:31.863Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "stationary-replacement",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f5fc4a7ac1904f50d4a2-99658c0c29793c6e8854",
+     "file": "toasts-hover.browser.mjs",
+     "line": 57,
+     "column": 1
+    },
+    {
+     "title": "layout moving a result under and away from a stationary pointer pauses and resumes dwell",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1207,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:50:33.208Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "stationary-layout",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f5fc4a7ac1904f50d4a2-b9069b3b9cf5bda91408",
+     "file": "toasts-hover.browser.mjs",
+     "line": 90,
+     "column": 1
+    },
+    {
+     "title": "native stationary arrival pauses beyond six seconds and moving away resumes dismissal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 14351,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:28.147Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "native-stationary-arrival",
+           "contentType": "application/json"
+          },
+          {
+           "name": "stationary-arrival",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-stationary-release",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f5fc4a7ac1904f50d4a2-480d36629ad11f607516",
+     "file": "toasts-hover.browser.mjs",
+     "line": 41,
+     "column": 1
+    },
+    {
+     "title": "stationary arrival stays paused across modal owners and clearing then replacing the feed",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1694,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:42.568Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "stationary-replacement",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f5fc4a7ac1904f50d4a2-624d00351e39c1ddebec",
+     "file": "toasts-hover.browser.mjs",
+     "line": 57,
+     "column": 1
+    },
+    {
+     "title": "layout moving a result under and away from a stationary pointer pauses and resumes dwell",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1748,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:44.268Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "stationary-layout",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f5fc4a7ac1904f50d4a2-cd4c6c022547ffe3ca56",
+     "file": "toasts-hover.browser.mjs",
+     "line": 90,
+     "column": 1
+    }
+   ]
+  },
+  {
+   "title": "toasts-lifecycle.browser.mjs",
+   "file": "toasts-lifecycle.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "existing notification stays at viewport origin during Dialog entry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1774,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:50:34.427Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "entry-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-0793c7863ebc4819448a",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 11,
+     "column": 3
+    },
+    {
+     "title": "existing notification stays at viewport origin during Drawer entry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1693,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:50:36.206Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "entry-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-bdcaf9fd342d16e1ddc4",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 11,
+     "column": 3
+    },
+    {
+     "title": "existing notification stays at viewport origin during Bottom drawer entry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1828,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:50:37.904Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "entry-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-232c5fc60e81f4f57ecb",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 11,
+     "column": 3
+    },
+    {
+     "title": "hover pause releases after a keyboard opened and closed overlay changes portal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 773,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:50:39.736Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "timer-after-portal",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-d330c825eb66289d47da",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 47,
+     "column": 1
+    },
+    {
+     "title": "native hover deadline resumes after portal changes",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7141,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:50:40.513Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "native-timer",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-15e7ac47bb9d28647337",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 71,
+     "column": 1
+    },
+    {
+     "title": "notification card stays fixed through Dialog entry, nested layers and exit",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2399,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:50:47.659Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "continuous-card-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-5f21872d1726707f69ae",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 96,
+     "column": 3
+    },
+    {
+     "title": "notification card stays fixed through Drawer entry, nested layers and exit",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2634,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:50:50.063Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "continuous-card-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-af0069056a7c66651d6f",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 96,
+     "column": 3
+    },
+    {
+     "title": "notification card stays fixed through Bottom drawer entry, nested layers and exit",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2713,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:50:52.702Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "continuous-card-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-5fc6e9bb9e434d759057",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 96,
+     "column": 3
+    },
+    {
+     "title": "stationary hover stays paused across nested modal owners then resumes for exactly six seconds",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 910,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:50:55.420Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "stationary-hover",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-735e22f9296d29fa7892",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 148,
+     "column": 1
+    },
+    {
+     "title": "unhovered notifications retain their original deadline through modal owner changes",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 769,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:50:56.338Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "unchanged-deadline",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-1eb8a88b1a5bb002a0a2",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 174,
+     "column": 1
+    },
+    {
+     "title": "notification pixels stay intact through Dialog opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1796,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:50:57.110Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-550154aad865140bdc4d",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 192,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Drawer opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1929,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:50:58.911Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-a2efea4f8701325da774",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 192,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Bottom drawer opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1913,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:00.844Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-26f819be311678268685",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 192,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Confirmation opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1531,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:02.761Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-ba33b421bc3627175f86",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 192,
+     "column": 3
+    },
+    {
+     "title": "a newly posted notification still plays its original entrance animation once",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1500,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:04.296Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "fresh-notification-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-80c37bb522a69a28d6a1",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 240,
+     "column": 1
+    },
+    {
+     "title": "existing notification stays at viewport origin during Dialog entry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1828,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:46.028Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "entry-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-3482ceafb6381c588bf3",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 11,
+     "column": 3
+    },
+    {
+     "title": "existing notification stays at viewport origin during Drawer entry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1650,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:47.861Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "entry-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-4ed8c910143d4f5cbf0b",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 11,
+     "column": 3
+    },
+    {
+     "title": "existing notification stays at viewport origin during Bottom drawer entry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1656,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:49.516Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "entry-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-20d87f98dcf3d01852df",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 11,
+     "column": 3
+    },
+    {
+     "title": "hover pause releases after a keyboard opened and closed overlay changes portal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 790,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:51.177Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "timer-after-portal",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-8e9008c4dbc029df94cf",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 47,
+     "column": 1
+    },
+    {
+     "title": "native hover deadline resumes after portal changes",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7019,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:51.971Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "native-timer",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-7f17845f07e0651ff550",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 71,
+     "column": 1
+    },
+    {
+     "title": "notification card stays fixed through Dialog entry, nested layers and exit",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2425,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:58.995Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "continuous-card-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-40c24069e69a8a747149",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 96,
+     "column": 3
+    },
+    {
+     "title": "notification card stays fixed through Drawer entry, nested layers and exit",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2686,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:01.425Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "continuous-card-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-3ac7271e58bcbb1e36f8",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 96,
+     "column": 3
+    },
+    {
+     "title": "notification card stays fixed through Bottom drawer entry, nested layers and exit",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2822,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:04.116Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "continuous-card-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-2fa771750f2854af5d38",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 96,
+     "column": 3
+    },
+    {
+     "title": "stationary hover stays paused across nested modal owners then resumes for exactly six seconds",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1026,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:06.942Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "stationary-hover",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-ae726d6fa3d75fa0c5e4",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 148,
+     "column": 1
+    },
+    {
+     "title": "unhovered notifications retain their original deadline through modal owner changes",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 905,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:07.973Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "unchanged-deadline",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-1073e2523cb068c9f4e5",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 174,
+     "column": 1
+    },
+    {
+     "title": "notification pixels stay intact through Dialog opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1508,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:08.882Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-0c35e48ef56b93295bc5",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 192,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Drawer opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1571,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:10.394Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-edb5b9f6d3b726e9f925",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 192,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Bottom drawer opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1430,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:11.970Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-8dfd3949aae1a01ca7d4",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 192,
+     "column": 3
+    },
+    {
+     "title": "notification pixels stay intact through Confirmation opening and closing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1323,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:13.405Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "opening-animation",
+           "contentType": "application/json"
+          },
+          {
+           "name": "closing-page",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "closing-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-b2373017759953b4a58a",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 192,
+     "column": 3
+    },
+    {
+     "title": "a newly posted notification still plays its original entrance animation once",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1644,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:14.733Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "fresh-notification-animation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d73c95ea03d4e2ef4caf-10ee17fe43e714ffb901",
+     "file": "toasts-lifecycle.browser.mjs",
+     "line": 240,
+     "column": 1
+    }
+   ]
+  },
+  {
+   "title": "toasts-promotion.browser.mjs",
+   "file": "toasts-promotion.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1831,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:05.806Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-20c25e4693be43ff1d9c",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1301,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:07.642Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-c5e705e33f9cb90c6afd",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "clear retains the last shape for exactly 250ms but immediately blocks focus and actions",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 839,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:08.948Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "clear-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-5e60340ee24893d02ff1",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 71,
+     "column": 1
+    },
+    {
+     "title": "keyed transient and pinned transitions retain one slot without replaying entrance inside nested modals",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1459,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:09.792Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyed-attention",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyed-stages",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-eda9fb1de902aa7fb6b8",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 112,
+     "column": 1
+    },
+    {
+     "title": "entrance progress survives a modal transfer before its first 180ms completes",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1136,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:11.255Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "native-entrance-transfer",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-5f5c32e699e0f94c6f25",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 150,
+     "column": 1
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1710,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:16.391Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-72b9710b2c36a10e185a",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1227,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:18.106Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-3de60df6c39c1bb1b1d2",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "clear retains the last shape for exactly 250ms but immediately blocks focus and actions",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 884,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:19.337Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "clear-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-327a58e76e70456904f8",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 71,
+     "column": 1
+    },
+    {
+     "title": "keyed transient and pinned transitions retain one slot without replaying entrance inside nested modals",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1366,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:20.225Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyed-attention",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyed-stages",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-346b2f68e2387d1de3ce",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 112,
+     "column": 1
+    },
+    {
+     "title": "entrance progress survives a modal transfer before its first 180ms completes",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 948,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:21.595Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "native-entrance-transfer",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-06cc219719e4e5810770",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 150,
+     "column": 1
+    }
+   ]
+  },
+  {
+   "title": "toasts.browser.mjs",
+   "file": "toasts.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "existing notifications remain accessible in Dialog with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1444,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:12.413Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-db7e842be124a87d6f90",
+     "file": "toasts.browser.mjs",
+     "line": 43,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1329,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:13.862Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-93099fa8924816978aca",
+     "file": "toasts.browser.mjs",
+     "line": 43,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Bottom drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1414,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:15.194Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-e97e4142af6504d3659b",
+     "file": "toasts.browser.mjs",
+     "line": 43,
+     "column": 3
+    },
+    {
+     "title": "mixed pinned and passing notifications stack without overlap and retain all pinned errors",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1246,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:16.612Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "mixed-stack",
+           "contentType": "image/png"
+          },
+          {
+           "name": "stack-geometry",
+           "contentType": "application/json"
+          },
+          {
+           "name": "expanded-pinned-stack",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-e70faf37e08e7c678e82",
+     "file": "toasts.browser.mjs",
+     "line": 72,
+     "column": 1
+    },
+    {
+     "title": "short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1060,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:17.863Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "timers",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-405fec2c70dfb1ba4862",
+     "file": "toasts.browser.mjs",
+     "line": 99,
+     "column": 1
+    },
+    {
+     "title": "event and entity deduplication, Undo and session navigation retain the business boundary",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1815,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:18.927Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "actions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-e6cf2ddf938ba380485d",
+     "file": "toasts.browser.mjs",
+     "line": 135,
+     "column": 1
+    },
+    {
+     "title": "copyable diagnostics and live announcements survive nested overlays and theme changes",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1426,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:20.747Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-toast-opposite-theme",
+           "contentType": "image/png"
+          },
+          {
+           "name": "accessibility",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-3463f762efceeb871138",
+     "file": "toasts.browser.mjs",
+     "line": 165,
+     "column": 1
+    },
+    {
+     "title": "async confirmation keeps pending locks, accessible failure feedback and successful retry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1011,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:22.177Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirm-pending",
+           "contentType": "image/png"
+          },
+          {
+           "name": "confirm-failure-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "confirmation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-33e1ff3b06a15be115d6",
+     "file": "toasts.browser.mjs",
+     "line": 209,
+     "column": 1
+    },
+    {
+     "title": "legacy AntApp confirmation still works with the same notification service",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1094,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:23.193Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-confirmed",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-4172104743db1ac447d6",
+     "file": "toasts.browser.mjs",
+     "line": 242,
+     "column": 1
+    },
+    {
+     "title": "retained closed overlays release notifications and normal motion settles at the original origin",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2511,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:24.291Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "retained-reopened-with-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "retained-and-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-6f7e994d1fdc67f210e9",
+     "file": "toasts.browser.mjs",
+     "line": 252,
+     "column": 1
+    },
+    {
+     "title": "notification origin follows viewport resize across the phone breakpoint",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1101,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:51:26.806Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "responsive-origin",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-19d4a8e49576a793ddbc",
+     "file": "toasts.browser.mjs",
+     "line": 286,
+     "column": 1
+    },
+    {
+     "title": "existing notifications remain accessible in Dialog with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1293,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:22.571Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-e62c9baec909c11c65f4",
+     "file": "toasts.browser.mjs",
+     "line": 43,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1285,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:23.868Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-68f11b073576c92aa9ae",
+     "file": "toasts.browser.mjs",
+     "line": 43,
+     "column": 3
+    },
+    {
+     "title": "existing notifications remain accessible in Bottom drawer with unchanged appearance",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1328,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:25.157Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "with-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "notification-and-overlay",
+           "contentType": "image/png"
+          },
+          {
+           "name": "keyboard",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-9667f9e0b8394e61706e",
+     "file": "toasts.browser.mjs",
+     "line": 43,
+     "column": 3
+    },
+    {
+     "title": "mixed pinned and passing notifications stack without overlap and retain all pinned errors",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1373,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:26.490Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "mixed-stack",
+           "contentType": "image/png"
+          },
+          {
+           "name": "stack-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-7e144956681cfc72e8a3",
+     "file": "toasts.browser.mjs",
+     "line": 72,
+     "column": 1
+    },
+    {
+     "title": "short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1017,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:27.867Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "folded-warning",
+           "contentType": "image/png"
+          },
+          {
+           "name": "timers",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-4e4c2f3d68791a8ad3ec",
+     "file": "toasts.browser.mjs",
+     "line": 99,
+     "column": 1
+    },
+    {
+     "title": "event and entity deduplication, Undo and session navigation retain the business boundary",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1737,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:28.889Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "actions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-d3d05fb63e75195ad2fe",
+     "file": "toasts.browser.mjs",
+     "line": 135,
+     "column": 1
+    },
+    {
+     "title": "copyable diagnostics and live announcements survive nested overlays and theme changes",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1263,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:30.630Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-toast-opposite-theme",
+           "contentType": "image/png"
+          },
+          {
+           "name": "accessibility",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-05dd2eab78e7694541f5",
+     "file": "toasts.browser.mjs",
+     "line": 165,
+     "column": 1
+    },
+    {
+     "title": "async confirmation keeps pending locks, accessible failure feedback and successful retry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 951,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:31.897Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "confirm-pending",
+           "contentType": "image/png"
+          },
+          {
+           "name": "confirm-failure-notification",
+           "contentType": "image/png"
+          },
+          {
+           "name": "confirmation",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-6f2a106347fcef27fe89",
+     "file": "toasts.browser.mjs",
+     "line": 209,
+     "column": 1
+    },
+    {
+     "title": "legacy AntApp confirmation still works with the same notification service",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1064,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:32.851Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-confirmed",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-7b45be96a75b529ca1d1",
+     "file": "toasts.browser.mjs",
+     "line": 242,
+     "column": 1
+    },
+    {
+     "title": "retained closed overlays release notifications and normal motion settles at the original origin",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2500,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:33.919Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "retained-reopened-with-motion",
+           "contentType": "image/png"
+          },
+          {
+           "name": "retained-and-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-d08ef23cf0ce618d2cdb",
+     "file": "toasts.browser.mjs",
+     "line": 252,
+     "column": 1
+    },
+    {
+     "title": "notification origin follows viewport resize across the phone breakpoint",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 937,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:52:36.423Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "responsive-origin",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "906d842aa9563290f899-2befbb3ab6b7e0524d05",
+     "file": "toasts.browser.mjs",
+     "line": 286,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T11:50:16.807Z",
+  "duration": 140700.714,
+  "expected": 68,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

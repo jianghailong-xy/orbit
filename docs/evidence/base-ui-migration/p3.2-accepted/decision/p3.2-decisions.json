@@ -1,0 +1,71 @@
+{
+ "about": "The coordinator decisions on the evidence of P3.2 (34Za39ACSBoCkYKc80Md8) that this registration cites, copied verbatim from Orbit records. evidenceRevisions: task_evidence_list(34Za39ACSBoCkYKc80Md8) as read by the registration sessions on 2026-10-07 (7IIIZcAIxI7nb7wR89bC7 and 21dqAAdZx8gyKlTjQTu6Te read the same two revisions). decisionCalls: the coordinator session 34b245G3NiwgVVUj2JFJw called task_evidence_decide on both revisions; each call input and the server response are copied from that session transcript (path in transcript). Revision 1: the SEND_BACK of 2026-10-06T21:36:35Z was refused with EVIDENCE_JUDGMENT_ALREADY_DECIDED because revision 1 was already decided CONFIRM. Revision 2: decision record 2K8fF73HxxWRPnthmP77Pz, CONFIRM; its note says it also covers the P0 task-scene differences and that this registration task may cite revision 1 or this one. The registry cites revision 2, the latest.",
+ "task": "34Za39ACSBoCkYKc80Md8",
+ "evidenceRevisions": [
+  {
+   "revision": 1,
+   "id": "5ot53Jc3WTTzIbOcCOyc8",
+   "evidenceDigest": "bc1cab9f058dfaf30185c088ef35abb690fb862316c5bc2d3ef95de54a3653fe",
+   "submittedAt": "2026-10-06T21:03:25.288Z",
+   "sourceSessionId": "527Iy8ugQ9RnlCGcEUkrTE"
+  },
+  {
+   "revision": 2,
+   "id": "1N9eeTbvv56v8XU0wF0ZAb",
+   "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+   "submittedAt": "2026-10-07T01:14:32.843Z",
+   "sourceSessionId": "mpyFSp6lRp27doNzSkI5k"
+  }
+ ],
+ "transcript": "/root/.orbit/claude-accounts/44bf2acd/projects/-root--orbit-worktrees-01a10f8f-a15b-7306-96d0-11c294fab7f8/9c787a99-55d7-4401-bc23-0a0df17502ad.jsonl",
+ "decisionCalls": [
+  {
+   "toolUseId": "toolu_016ekYPkDtMWp6KYW4PFjMBB",
+   "evidenceRevision": 1,
+   "call": {
+    "timestamp": "2026-10-06T21:36:35.824Z",
+    "tool": "mcp__orbit__task_evidence_decide",
+    "input": {
+     "taskId": "34Za39ACSBoCkYKc80Md8",
+     "evidenceRevision": "1",
+     "decision": "SEND_BACK",
+     "note": "退回第 1 版，只为一件事：交付分支和当前 main 有冲突，照原样落地一定会卡在冲突上。试点本身的证据是成立的，下一版沿用，不用重做。\n\n冲突：orbit/p3-2-2b837b（tip b24209077）和 origin/main（f33589b4c）用 merge-tree 合并时，src/web/src/components/AccountSelect.tsx 冲突。main 在 712d324a8（10-06 13:27 UTC，feat(antigravity): keep several Google accounts per runner）里给 AccountSelect 加了 Antigravity 多账号支持：runsOnEnvKey 下的「env key · runs on your Gemini key」状态、withEnginePlanUsage、剩余额度的「… % left」格式，以及 ENGINE_COPY 里 antigravity 一项。项目分支本身和 main 不冲突，冲突只在本交付里。\n\n下一版要证明：\n1. 本分支合入了执行时最新的 origin/main（合并提交以 b24209077 和 main tip 为父）。AccountSelect.tsx 两边都保留：main 的 Antigravity、额度、env key 逻辑和文案一字不丢，同时保留本批的 Orbit Select 替换。除了冲突和必要的直接联动，不做其他改动。提交前再核对一次 main，前进了就再合一次。\n2. 合并后的树上，项目合并检查 npm run build -w @orbit/web && npm run test -w @orbit/web 通过，包括 main 新增或改动的 AccountSelect、engineAccounts、planUsage 相关单测；OrbitKit 的 parity 测试若读到这些文件也要通过。\n3. 账号和模型选择这条路径重新做同提交对照：在「合并后的基点（不含本批）」上重新生成 AntD 参照，因为 main 改了状态文案，旧参照不再适用；再对照合并后的交付。至少覆盖试点里账号/模型选择相关用例的 8 环境截图、计算样式和逐步 trace（请求逐步相同），并加上一个 Antigravity 账号（env key 和剩余额度两种状态）在 Orbit Select 里的呈现。\n4. 证据写清合并的父提交、冲突处置、复验结果和边界。没受这次合并影响的部分（ShareModal、TaskInputs/附件、TaskDetailPanel 其余部分、组件矩阵、P0 对照、成本测量）沿用第 1 版，并说明为何不受影响。\n\n已经核对、下一版不必重证的：试点 64/64；240 张截图的分级；56 条 trace；FOCUS-1/2 的预期失败标记按作业指导撤掉、期望断言保留；Swift parity 只改了读取源码的锚点（okText→confirmText，type→variant）；Select 的快速按键修复（preventBaseUIHandler）仍在；13 行 .ant-* 覆盖已迁移；包体积和耗时对照。choices 里「multiple choices in Dialog…」的偶发失败属于 Menu 打开窗口问题，由 34b7qz5n4yA7s4fJmHNDn 处理，不算本批缺口。"
+    }
+   },
+   "response": {
+    "timestamp": "2026-10-06T21:36:36.046Z",
+    "isError": true,
+    "text": "decide task evidence failed: POST /runner/tasks/34Za39ACSBoCkYKc80Md8/evidence/decision -> 409\n  refused: EVIDENCE_JUDGMENT_ALREADY_DECIDED\n  what:    revision 1 of this task's evidence was already decided CONFIRM; nothing was written. A version is answered once, and the way to raise a different answer is to decide the next revision\n  do:      DECIDE_THE_NEXT_EVIDENCE_REVISION\n{\"code\":\"EVIDENCE_JUDGMENT_ALREADY_DECIDED\",\"message\":\"revision 1 of this task's evidence was already decided CONFIRM; nothing was written. A version is answered once, and the way to raise a different answer is to decide the next revision\",\"requiredAction\":\"DECIDE_THE_NEXT_EVIDENCE_REVISION\"}"
+   }
+  },
+  {
+   "toolUseId": "toolu_01K2133e7RnUq2XAXUVuN2YH",
+   "evidenceRevision": 2,
+   "call": {
+    "timestamp": "2026-10-07T01:16:01.364Z",
+    "tool": "mcp__orbit__task_evidence_decide",
+    "input": {
+     "taskId": "34Za39ACSBoCkYKc80Md8",
+     "evidenceRevision": "2",
+     "decision": "CONFIRM",
+     "note": "CONFIRM 第 2 版：落地冲突返工完成，可以落地。试点本身的结论沿用第 1 版。\n\n协调者核对（2026-10-07 01:1x UTC）：\n- 分支 orbit/p3-2-590579 的 tip 是 1877de918，包含第 1 版交付 b24209077、main 712d324a8 和 86203ffb0、项目 tip 77233e226，以及最终代码 6bd41335a（其中已合入 main db69d833b）。6bd41335a 之后只改了 docs/evidence。和当前项目 tip、当前 main，以及尚未落地的 B1 分支 orbit/p2-3-b1-8be26d 合并都没有冲突。\n- AccountSelect.tsx：下拉框从 ./ui/Select 引入，不再用 antd；main 的 runsOnEnvKey 状态、withEnginePlanUsage、「… % left」格式和 ENGINE_COPY.antigravity 都在。联动提交 7145f084f 只把 main 新增测试 RunnerDetailPage.antigravityAccount 里读 antd 内部类的地方改成按角色读取，期望值不变；联动前 2 个红有作业原件。\n- 复验：\n  - 在最终基点（项目 tip 加 main，不含本批）上重新生成 AntD 参照，试点 9 个用例 × 8 环境两树 72/72；账号和模型选择的截图全部相同或只差抗锯齿；64 条 trace 请求逐步相同，包括新加的 Antigravity 用例（env key、剩余额度、新建工作区 POST）。\n  - merge-scope 16 项成立；合并检查两次通过（340 个文件 / 4327 项）；OrbitKit 两树 0 失败。\n  - 组件矩阵沿用 3c1b24f02 上的结果，依据是之后基点没改 components/ui 和矩阵文件；composer/toasts 的动效采样失败经两树重复判为负载造成，这个结论成立。\n\n关于 P0 task 场景按设计的差异：本版 P0 结果中 task 场景的分类与第 1 版运行 6 相同（More 菜单和分享对话框的焦点约定，以及 WebKit 下 Share… 图标的行高精度差）。本 CONFIRM 同样覆盖这些差异，登记任务 34bSHg8V2p0zaRMKy7tUQ 可以引用第 1 版或本版判定。wiki 场景失败是 main 漂移，由「P0 漂移登记（第 2 批）」34bTKzXFSRGjnDevEBJlh 处理。\n\n证据边界照记录保留：没有真机和读屏；截图对照在减少动态效果下进行；成本、包体积和耗时沿用第 1 版。"
+    }
+   },
+   "response": {
+    "timestamp": "2026-10-07T01:16:02.107Z",
+    "isError": false,
+    "text": "{\n  \"id\": \"2K8fF73HxxWRPnthmP77Pz\",\n  \"taskId\": \"34Za39ACSBoCkYKc80Md8\",\n  \"evidenceId\": \"1N9eeTbvv56v8XU0wF0ZAb\",\n  \"evidenceRevision\": \"2\",\n  \"criterionRevision\": \"66477bc3f7200a5777a3d68ee2d635bc98cdd0569e69d67e48ea123c21bd7f6f\",\n  \"evidenceDigest\": \"302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc\",\n  \"decision\": \"CONFIRM\",\n  \"note\": \"CONFIRM 第 2 版：落地冲突返工完成，可以落地。试点本身的结论沿用第 1 版。\\n\\n协调者核对（2026-10-07 01:1x UTC）：\\n- 分支 orbit/p3-2-590579 的 tip 是 1877de918，包含第 1 版交付 b24209077、main 712d324a8 和 86203ffb0、项目 tip 77233e226，以及最终代码 6bd41335a（其中已合入 main db69d833b）。6bd41335a 之后只改了 docs/evidence。和当前项目 tip、当前 main，以及尚未落地的 B1 分支 orbit/p2-3-b1-8be26d 合并都没有冲突。\\n- AccountSelect.tsx：下拉框从 ./ui/Select 引入，不再用 antd；main 的 runsOnEnvKey 状态、withEnginePlanUsage、「… % left」格式和 ENGINE_COPY.antigravity 都在。联动提交 7145f084f 只把 main 新增测试 RunnerDetailPage.antigravityAccount 里读 antd 内部类的地方改成按角色读取，期望值不变；联动前 2 个红有作业原件。\\n- 复验：\\n  - 在最终基点（项目 tip 加 main，不含本批）上重新生成 AntD 参照，试点 9 个用例 × 8 环境两树 72/72；账号和模型选择的截图全部相同或只差抗锯齿；64 条 trace 请求逐步相同，包括新加的 Antigravity 用例（env key、剩余额度、新建工作区 POST）。\\n  - merge-scope 16 项成立；合并检查两次通过（340 个文件 / 4327 项）；OrbitKit 两树 0 失败。\\n  - 组件矩阵沿用 3c1b24f02 上的结果，依据是之后基点没改 components/ui 和矩阵文件；composer/toasts 的动效采样失败经两树重复判为负载造成，这个结论成立。\\n\\n关于 P0 task 场景按设计的差异：本版 P0 结果中 task 场景的分类与第 1 版运行 6 相同（More 菜单和分享对话框的焦点约定，以及 WebKit 下 Share… 图标的行高精度差）。本 CONFIRM 同样覆盖这些差异，登记任务 34bSHg8V2p0zaRMKy7tUQ 可以引用第 1 版或本版判定。wiki 场景失败是 main 漂移，由「P0 漂移登记（第 2 批）」34bTKzXFSRGjnDevEBJlh 处理。\\n\\n证据边界照记录保留：没有真机和读屏；截图对照在减少动态效果下进行；成本、包体积和耗时沿用第 1 版。\",\n  \"decidedAt\": \"2026-10-07T01:16:01.425Z\",\n  \"decidedByType\": \"AGENT\",\n  \"decidedById\": \"34ZHGcIxwsZUxkgh2z65V\",\n  \"decidingSessionId\": \"34b245G3NiwgVVUj2JFJw\",\n  \"publicId\": \"2K8fF73HxxWRPnthmP77Pz\",\n  \"taskPublicId\": \"34Za39ACSBoCkYKc80Md8\",\n  \"decidedByPublicId\": \"34ZHGcIxwsZUxkgh2z65V\",\n  \"evidencePublicId\": \"1N9eeTbvv56v8XU0wF0ZAb\",\n  \"decidingSessionPublicId\": \"34b245G3NiwgVVUj2JFJw\"\n}"
+   }
+  }
+ ],
+ "cited": {
+  "taskId": "34Za39ACSBoCkYKc80Md8",
+  "evidenceRevision": 2,
+  "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+  "verdict": "CONFIRM",
+  "decisionRecord": "2K8fF73HxxWRPnthmP77Pz",
+  "decidedAt": "2026-10-07T01:16:01.425Z",
+  "decidingSessionId": "34b245G3NiwgVVUj2JFJw",
+  "document": "p3.2/README.md"
+ }
+}

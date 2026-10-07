@@ -1,0 +1,12 @@
+label=select-test-fix-reverted
+head=61472ff07f807d85c6061d457599347eee5338d8
+branch=tmp/p2p3-hardening-revert-632b7950e
+status_begin
+  ?? docs/evidence/base-ui-migration/p2-p3-hardening/
+status_end
+command=cd src/web && NO_COLOR=1 npx vitest run src/components/ui/Select.test.tsx --reporter=verbose --reporter=json --outputFile.json=../../docs/evidence/base-ui-migration/p2-p3-hardening/runs/select-test-fix-reverted/vitest.json
+start=2026-10-07T12:05:29Z
+load_start=12.54 21.06 22.74
+end=2026-10-07T12:05:32Z
+load_end=12.54 21.06 22.74
+exit=1

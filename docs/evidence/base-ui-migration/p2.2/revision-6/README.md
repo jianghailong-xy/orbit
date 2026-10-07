@@ -1,5 +1,13 @@
 # P2.2 第6版：吸收 upstream，解除 MAIN_SYNC 冲突
 
+> **证据瘦身（2026-10-07）**：完整原件见提交 `7732f14f82d4e6b4406d7d164c4b672f63aa0f56`（瘦身前最后一个含完整文件的提交）。取回单个文件用 `git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2.2/revision-6/<路径> > <文件>`，整个目录用 `git archive 7732f14f82d4e6b4406d7d164c4b672f63aa0f56 docs/evidence/base-ui-migration/p2.2/revision-6 | tar -x -C <空目录>`。
+>
+> 本目录在瘦身中：4 份 Playwright 报告换成同目录的 `report.summary.json`，都只删附件正文；删除被取代修订的 368 个原始运行文件（截图、逐用例 JSON、运行压缩包）。下文链接若指向这些文件，按上面的命令从该提交取回；读取它们的脚本要在取回的目录里运行。
+>
+> 第 6 版（判定 SEND_BACK）已被后续修订取代，被采用的是[第 8 版](../revision-8/README.md)。本版运行的截图、逐用例 JSON 已删除。
+>
+> 目录里的 SHA256SUMS 类清单（`*.sha256`、`artifact-index*.json`、`manifest.json`、各运行 `summary.json` 里的附件哈希等）保留原文件，核验的是提交 `7732f14f8` 里的文件。做法、保留理由和逐文件删除清单见 [evidence-slimming](../../evidence-slimming/README.md)。
+
 本版服务于 [P2.2 菜单、浮层与选择控件](orbit-task:34Za394q2ZEgr7TKprjkF)，按任务评论 `34a53QxXhvLwZosgGvcaD` 及后续会话交接完成集成。项目验收 key `1BvO6hYrlFnU60JqxQPUHt`，原文：**P2：Orbit 自有弹层、选择及反馈组件保持现有键盘、焦点、通知和确认行为。**
 
 第5版功能证据已由独立会话 CONFIRM（决定 `2NaUXLkFqDaKclaHoNTyMk`）。本轮完整保留该交付，合入[通知晋升冲突修复](orbit-task:34a3I43L28Ca0NpMy6Fe8)的现成实现及最终证据，再吸收执行期间推进的 main。没有重新实现菜单或通知，没有修改已有断言、超时、重试、基线或历史证据。任务由新的 Automatic 会话承接，没有恢复旧会话或创建并行执行。[交接来源](handoff.json)保留证据、决定、评论和会话标识；通知业务修复也已由其原任务独立CONFIRM（决定 `6JwsO3z6CPm66tiYVZUrWd`），完整272项浏览器及48组双侧静态对照保留原归属。
