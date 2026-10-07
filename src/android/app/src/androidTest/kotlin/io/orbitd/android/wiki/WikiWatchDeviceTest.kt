@@ -53,6 +53,9 @@ class WikiWatchDeviceTest {
     }
     private fun press(tag: String) {
         compose.waitUntil(15_000) { compose.onAllNodes(hasTestTag(tag) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        // At a large font a control can sit below its page's fold: it is scrolled into view first, as a person would.
+        if (compose.onAllNodes(hasTestTag(tag) and hasAnyAncestor(hasScrollAction())).fetchSemanticsNodes().isNotEmpty())
+            compose.onNodeWithTag(tag).performScrollTo()
         compose.onNodeWithTag(tag).performClick()
     }
     /** A row of a lazy list: scrolled into view first, then pressed. */

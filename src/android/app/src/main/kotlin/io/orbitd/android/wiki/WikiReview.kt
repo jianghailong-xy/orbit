@@ -210,7 +210,7 @@ internal fun WikiReviewPage(cards: List<WikiLogic.ReviewCard>, entry: (String) -
                 SegmentedButton(selected = tab == each, onClick = { tab = each },
                     shape = SegmentedButtonDefaults.itemShape(i, WikiLogic.ReviewTab.entries.size),
                     modifier = Modifier.testTag("wiki-review-tab:${each.name.lowercase()}"), icon = {}) {
-                    Text(WikiLogic.tabLabel(each, cards), maxLines = 1)
+                    Text(WikiLogic.tabLabel(each, cards), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
             }
         }
@@ -356,11 +356,12 @@ private fun CardHead(card: WikiLogic.ReviewCard, entry: WikiEntry?, now: Instant
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(WikiCopy.proposedBy, style = WikiType.label, color = WikiPalette.secondary)
             val session = card.changeset.sessionId
+            // The name takes what the label and the time leave, and is the one cut short (iOS's `.lineLimit(1)`).
             if (session != null) TextButton(onClick = { actions.openSession(session) }, contentPadding = PaddingValues(horizontal = 4.dp),
-                modifier = Modifier.heightIn(min = 48.dp).testTag("wiki-review-proposer")) {
+                modifier = Modifier.weight(1f, fill = false).heightIn(min = 48.dp).testTag("wiki-review-proposer")) {
                 Text(WikiLogic.proposedBy(card.changeset), style = WikiType.label, maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-            } else Text(WikiLogic.proposedBy(card.changeset), style = WikiType.label, color = WikiPalette.secondary)
+            } else Text(WikiLogic.proposedBy(card.changeset), Modifier.weight(1f, fill = false), style = WikiType.label, color = WikiPalette.secondary)
             `when`?.let { Text("· $it", style = WikiType.label, color = WikiPalette.secondary) }
         }
     }

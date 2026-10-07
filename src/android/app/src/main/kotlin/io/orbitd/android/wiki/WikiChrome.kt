@@ -52,7 +52,8 @@ object PageBar {
     fun Title(route: OrbitRoute, fallback: @Composable () -> Unit) {
         val text = title(route) ?: return fallback()
         val second = subtitle
-        if (second == null) Text(text, maxLines = 2, style = MaterialTheme.typography.titleMedium)
+        // One line, cut with an ellipsis when the bar's buttons leave too little, as iOS's navigation title is.
+        if (second == null) Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
         else Column(Modifier.semantics(mergeDescendants = true) {}) {
             Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
             Text(second, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall,
