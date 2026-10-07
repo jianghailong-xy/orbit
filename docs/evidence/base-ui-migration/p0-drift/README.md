@@ -474,7 +474,7 @@ main 删掉了 P0 场景依赖的元素，使场景在截图前的等待或定�
 
 ```sh
 bash scripts/worktree-overlay.sh
-NO_COLOR=1 npm run test:ui-migration -w @orbit/web     # 现在：失败只有 B1 的 8 个
+NO_COLOR=1 npm run test:ui-migration -w @orbit/web     # 第 2 批之后：只剩 P3.2 待登记的 8 个 task 用例（见 p0-drift-2）
 npm run build -w @orbit/web && npm run test -w @orbit/web
 node docs/evidence/base-ui-migration/p0-drift/tools/validator-checks.mjs "$PWD" /tmp/p0-validator-checks
 ```
