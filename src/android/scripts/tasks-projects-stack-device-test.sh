@@ -182,7 +182,13 @@ pid="$(sed -n 's/.*a11_pid=\([0-9]*\).*/\1/p' "$output/instrumentation.txt" | he
 "$adb" -s "$serial" exec-out run-as "$package" cat files/a11-captures.tar > "$output/captures.tar"
 tar --no-same-owner -xf "$output/captures.tar" -C "$output"
 chmod -R a+rX "$output/a11-tasks-projects"
-if grep -E 'a11-owner-pass|eyJhbGciOi' "$output/logcat.txt"; then
+# The test accounts' passwords are generated when the stack is seeded: look for the ones this run was given, and for any JWT.
+leaked=0
+for key in ownerPassword memberPassword; do
+  secret="$(sed -n "s/^$key=//p" "$args_file" | base64 -d 2>/dev/null || true)"
+  [[ -n "$secret" ]] && grep -F -q -- "$secret" "$output/logcat.txt" && leaked=1
+done
+if (( leaked )) || grep -E 'eyJhbGciOi' "$output/logcat.txt"; then
   echo 'Stack credential or token found in logcat' >&2
   exit 1
 fi

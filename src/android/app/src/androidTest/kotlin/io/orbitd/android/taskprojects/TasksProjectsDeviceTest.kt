@@ -486,18 +486,19 @@ class TasksProjectsDeviceTest {
     // MARK: regressions from the coordinator's review of v2 (decision 1EWmKFuYkFgqyK5hzUzNoA)
     // As before, only tags and words both the reviewed build (65bb8884f) and its fix carry: red there, green on the fix.
 
-    /** N2: a Delete answered after its page was left does not pop the page shown now. */
+    /** N2: a Delete answered after its page was left does not pop the page shown now (a page that has one under it). */
     @Test fun regressionN2_aDeleteAnsweredAfterLeavingPopsNothing() = journey("n2-delete-after-leaving") {
         login(); http("/__control", """{"delays":{"DELETE /api/tasks/$taskId":4000}}""")
-        drawer("Tasks"); awaitTag("tasks-list"); awaitText("A11 task checklist")
-        tap("task:$taskId", "tasks-list"); awaitIn("task-detail", "A11 task checklist")
+        open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch")
+        open("orbit-task:$taskId"); awaitIn("task-detail", "A11 task checklist")
+        val mark = journal().size
         tap("task-menu"); compose.onNodeWithText(TaskDetailCopy.deleteTask).performClick()
         awaitTag("task-confirm"); tap("task-confirm")
-        back(); awaitTag("tasks-list")
-        compose.waitUntil(20_000) { journal().any { it.text("method") == "DELETE" && it.text("path") == "/api/tasks/$taskId" && it["status"]?.toString() == "200" } }
+        back(); awaitIn("project-detail", "A11 Android launch")
+        compose.waitUntil(20_000) { journal().drop(mark).any { it.text("method") == "DELETE" && it.text("path") == "/api/tasks/$taskId" && it["status"]?.toString() == "200" } }
         SystemClock.sleep(1_500)
-        capture("n2-list-after-late-delete")
-        compose.onAllNodesWithTag("tasks-list").assertCountEquals(1)
+        capture("n2-project-after-late-delete")
+        compose.onAllNodesWithTag("project-detail").assertCountEquals(1)
     }
 
     /** N2: while the owner's start is out, View tasks cannot take the sheet away and lose the server's answer. */
@@ -511,14 +512,14 @@ class TasksProjectsDeviceTest {
         compose.waitUntil(20_000) { http("/__stats").obj("project")?.text("startedAt") != null }
     }
 
-    /** P2-5: the project index keeps up through a steady stream of events. */
+    /** P2-5: the project index keeps up through a steady stream of events, its read taking longer than they come. */
     @Test fun regressionP25_theProjectIndexKeepsUpThroughAStreamOfEvents() = journey("p2-5-project-index-storm") {
         login(); drawer("Projects"); awaitTag("projects-list"); awaitText("A11 Android launch")
-        http("/__control", """{"eventStorm":true}""")
+        http("/__control", """{"eventStorm":true,"delays":{"GET /api/projects":1500}}""")
         http("/__control", """{"project":{"title":"A11 Android launch, renamed elsewhere"}}""")
         val renamed = hasText("A11 Android launch, renamed elsewhere", substring = true) and hasAnyAncestor(hasTestTag("projects-list"))
-        try { compose.waitUntil(10_000) { compose.onAllNodes(renamed).fetchSemanticsNodes().isNotEmpty() } }
-        finally { capture("p2-5-project-index-during-storm"); http("/__control", """{"eventStorm":false}""") }
+        try { compose.waitUntil(12_000) { compose.onAllNodes(renamed).fetchSemanticsNodes().isNotEmpty() } }
+        finally { capture("p2-5-project-index-during-storm"); http("/__control", """{"eventStorm":false,"delays":{}}""") }
     }
 
     /** P2-5: a list read slower than the coalescing still lands through a steady stream of events. */
@@ -534,8 +535,9 @@ class TasksProjectsDeviceTest {
     @Test fun regressionN1_loadMoreEndsWhenTheListIsReadAgain() = journey("n1-load-more") {
         login(); http("/__control", """{"pageLimit":1}""")
         drawer("Tasks"); awaitTag("tasks-list"); awaitScrollTo("tasks-list", hasTestTag("tasks-load-more"))
-        http("/__control", """{"delays":{"GET /api/tasks/page":3000}}""")
+        http("/__control", """{"delays":{"GET /api/tasks/page?cursor":4000}}""")
         tap("tasks-load-more", "tasks-list")
+        // The list is read again while the next page is out (the options menu's Refresh; a write's re-read is the same read).
         tap("tasks-options"); compose.onNodeWithText("Refresh").performClick()
         val stuck = hasTestTag("tasks-load-more") and hasText(TaskListCopy.loading)
         try { compose.waitUntil(20_000) { compose.onAllNodes(stuck).fetchSemanticsNodes().isEmpty() } }
@@ -570,31 +572,34 @@ class TasksProjectsDeviceTest {
         compose.onNode(share).assertIsNotEnabled()
     }
 
-    /** P3: a comment the server took is not offered again when the task is reopened (answered after the page was left). */
+    /** P3: a comment the server took is not offered again on its page, returned to after another page covered it. */
     @Test fun regressionP3_aSentCommentIsNotOfferedAgain() = journey("p3-comment-sent-after-leaving") {
         login(); http("/__control", """{"delays":{"POST /api/tasks/$taskId/comments":3000}}""")
         open("orbit-session:$sessionId"); awaitTag("composer-input")
         open("orbit-task:$taskId"); awaitIn("task-detail", "A11 task checklist")
+        val mark = journal().size
         compose.onNodeWithTag("task-comment").performTextInput("Sent once only")
-        tap("task-post-comment"); back(); awaitTag("composer-input")
-        compose.waitUntil(20_000) { journal().any { it.text("path") == "/api/tasks/$taskId/comments" && it["status"]?.toString() == "200" } }
+        tap("task-post-comment")
+        open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch")
+        compose.waitUntil(20_000) { journal().drop(mark).any { it.text("path") == "/api/tasks/$taskId/comments" && it["status"]?.toString() == "200" } }
         SystemClock.sleep(1_000)
-        open("orbit-task:$taskId"); awaitIn("task-detail", "A11 task checklist"); capture("p3-comment-box-after-reopen")
+        back(); awaitIn("task-detail", "A11 task checklist"); capture("p3-comment-box-after-return")
         compose.onNodeWithTag("task-comment").assert(hasText("Sent once only", substring = true).not())
     }
 
-    /** P3: a bulk action leaves no selection behind for the page to offer the same action again. */
+    /** P3: a bulk action leaves no selection behind on its page, returned to after another page covered it. */
     @Test fun regressionP3_aBulkActionLeavesNoSelectionBehind() = journey("p3-bulk-selection") {
         login(); http("/__control", """{"delays":{"POST /api/tasks/batch-delete":3000}}""")
         drawer("Tasks"); awaitTag("tasks-list"); awaitText("A11 task checklist")
+        val mark = journal().size
         tap("tasks-options"); compose.onNodeWithText(TaskListCopy.selectTasks).performClick()
         tap("task:$taskId", "tasks-list")
         compose.onNode(hasText(TaskListCopy.delete) and hasAnyAncestor(hasTestTag("tasks-bulk-bar"))).performClick()
         awaitTag("tasks-bulk-confirm"); tap("tasks-bulk-confirm")
-        drawer("Projects"); awaitTag("projects-list")
-        compose.waitUntil(20_000) { journal().any { it.text("path") == "/api/tasks/batch-delete" && it["status"]?.toString() == "200" } }
+        open("orbit-task:$prerequisiteId"); awaitIn("task-detail", "A11 prerequisite")
+        compose.waitUntil(20_000) { journal().drop(mark).any { it.text("path") == "/api/tasks/batch-delete" && it["status"]?.toString() == "200" } }
         SystemClock.sleep(1_000)
-        drawer("Tasks"); awaitTag("tasks-list"); capture("p3-tasks-after-bulk")
+        back(); awaitTag("tasks-list"); capture("p3-tasks-after-bulk")
         compose.onAllNodesWithTag("tasks-bulk-bar").assertCountEquals(0)
     }
 

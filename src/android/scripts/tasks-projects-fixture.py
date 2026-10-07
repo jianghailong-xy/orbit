@@ -214,7 +214,9 @@ class Handler(cards.Handler):
         if path == '/api/events':
             if state.get('streamDown'): return self.reply(dict(message='Controlled stream outage'), 503)
             return self.control_stream()
-        if state['delays'].get('GET ' + path): time.sleep(state['delays']['GET ' + path] / 1000)
+        # "GET <path>?cursor" delays only the next pages of a paged read, "GET <path>" every read of the path.
+        wait = (state['delays'].get('GET ' + path + '?cursor') if 'cursor' in query else None) or state['delays'].get('GET ' + path)
+        if wait: time.sleep(wait / 1000)
         with LOCK:
             self.journal(path, query)
             if state['readError'] and (path.startswith('/api/tasks') or path.startswith('/api/projects')):
