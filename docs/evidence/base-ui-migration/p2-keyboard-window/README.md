@@ -133,6 +133,20 @@ Base UI 1.8.0 的 Menu 与 Select 都是非 virtual 列表导航：键盘打开�
 1. **Tab 的语义不同，与窗口无关。** 旧 Dropdown 用 Tab 进入打开的菜单；Orbit Menu 用 Enter/↓ 打开时已把焦点移入菜单，此时 Tab 离开菜单并关闭它：paced 下焦点移到触发器之后的下一个可聚焦元素（字段页为 Open context，随后的 ⏎ 打开了它的 Popover；样例页触发器之后没有可聚焦元素，回到页首的 Switch theme），40/40。所以 `⏎ Tab ↓ ⏎` 在 paced 下旧 Dropdown 执行 Image，Orbit 不执行任何菜单项。burst 下，Tab 在窗口内落在触发器上，随后的 ↓ 已落在菜单项 File 上（40/40），Orbit 反而执行 Image；本次没有追查这一焦点移动来自哪段代码。这是 P2.2 起就存在的键盘模型差异，Tab 不在本任务按键内，P2.2 证据也没有对照过；是否需要处理，由协调者决定。
 2. **Orbit Select 的 End 停在禁用的最后一项**，⏎ 不选择、列表保持打开（见上）。旧 Select 没有 End 功能，这是 Base UI 自身语义，本任务不改。
 
+## Menu 窗口在现有用例中的自然时序表现（交协调者判定）
+
+P2.2 的原用例「multiple choices in Dialog keep their owner and menus do not activate a clickable row」（`choices.browser.mjs:592`）在 `:621-623` 聚焦 Orbit「Row actions」菜单按钮，连按 ↓、⏎，中间不等待，在 `:624` 期望 Row actions 为 2。这是 Orbit 自有的键盘行为：旧 Dropdown 的触发器不响应 ↓，没有对应的旧行为。如果 ⏎ 在 ↓ 之后一帧之内到达，就落进上文的窗口：⏎ 落在触发器上，按切换关闭菜单，Row actions 停在 1。这个用例是窗口在自然时序下的可见症状：
+
+- [P3.2 任务](orbit-task:34Za39ACSBoCkYKc80Md8)的证据（分支 `orbit/p3-2-590579`，`p3.2/README.md` 第 208、273 行）在 chromium-light-phone 上把该用例单独重复 40 次：项目 tip 失败 6 次，P3.2 交付失败 9 次。P3.2 的完整 choices 矩阵因此没有一轮全绿，那份证据写明交由本任务处理。
+- 本任务在交付树上同样重复 40 次：失败 1 次（[regression-row-actions-repeat](regression-row-actions-repeat/summary.json)，第 22 次）。trace 中没有网络错误：↓ 从 +0ms 开始、+13.7ms 结束，⏎ 在 +15.7ms 开始，落在一帧之内。本任务的四次完整矩阵（基线树两次、交付树两次）里，这个用例在八个环境都通过。
+
+按本任务规则，`menu-down-enter` 属于「旧 AntD 自己也不处理」的组合，所以本交付只记录，没有改 Menu。但这意味着作为验收项的完整 choices 矩阵，会因 Orbit Menu 的窗口而偶发失败，与环境无关。两种处理与验收原文冲突，已请协调者判定（会话请求 `34bUNOhiTQGErfRAAwIwR`）：
+
+- (A) 维持规则，不改 Menu，完整矩阵按实际结果报告；
+- (B) 授权在 Orbit Menu 包装层按 632b7950e 的做法修这个窗口。
+
+COORDINATOR_DECISION
+
 ## 其他已验收行为（无产品改动）
 
 本任务没有改任何产品代码、CSS、DOM 属性、fixture 或用例，所以没有「修复后」可对照；下面是对已验收行为的重跑。前一会话在基线树上跑了第一轮；交付树多了 P3.1，本会话在交付树上把全部检查重跑了一轮，两轮的原件都保留。
@@ -153,7 +167,7 @@ Base UI 1.8.0 的 Menu 与 Select 都是非 virtual 列表导航：键盘打开�
 | overlays 矩阵，第二次 | **96/96**，八个环境全部通过 | [regression-overlays-delivered-second](regression-overlays-delivered-second/summary.json) |
 | choices / overlays / toasts / toasts-tests 四套 fixture 类型检查 | 通过（退出码 0，无输出） | [checks/fixture-types-delivered.json](checks/fixture-types-delivered.json) |
 | 相关单测（`theme.test.tsx`、`boundary.test.ts`、`ShareModal.test.tsx`、`WorkspaceView.composerMenu.test.tsx`，即 P2.2 的单测集合；最后一个文件 P3.1 改过） | 4 个文件 / 22 个测试通过；boundary 确认 Base UI 仍只在 Orbit 组件内、公共组件不依赖 AntD | [checks/unit-tests-delivered.json](checks/unit-tests-delivered.json) |
-| 项目合并检查 `npm run build -w @orbit/web && npm run test -w @orbit/web` | MERGE_DELIVERED | [checks/merge-check.json](checks/merge-check.json) |
+| 项目合并检查 `npm run build -w @orbit/web && npm run test -w @orbit/web` | 通过：构建（`tsc -b && vite build`，4236 个模块，保留既有的大 chunk 提示）后 323 个测试文件 / 4065 个测试全部通过 | [checks/merge-check.json](checks/merge-check.json) |
 
 ### 基线树 `1780d071a6…`（前一会话）
 

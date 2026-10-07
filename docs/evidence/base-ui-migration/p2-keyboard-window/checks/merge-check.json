@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec && npm run build -w @orbit/web && npm run test -w @orbit/web",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_43de05b79d92",
+ "cwd": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec",
+ "commit": "590c3b7c0784b5f1562a5e4cd57aba39612cb7bd",
+ "webTree": "7709bb72da4dd0ddb22b6563a62715821318a913",
+ "outputLastWritten": "2026-10-07T00:03:52.175856+00:00",
+ "exitCode": 0,
+ "outputSha256": "58f617043e209b29d4ad5e86f92b7e0845a924a55fde6625dc9d87aa43a71da0",
+ "outputBytes": 1051257,
+ "note": "Delivered tree. Build passes (tsc -b && vite build: 4236 modules transformed, built in 7.15s, with the existing larger-than-500kB chunk notice); vitest: 323 test files / 4065 tests passed (589s under host load)."
+}
