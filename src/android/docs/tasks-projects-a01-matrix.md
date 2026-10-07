@@ -97,3 +97,38 @@ drew its fields over each other — found on the light set's screenshot, fixed r
 | --- | --- | --- |
 | TalkBack running on the main pages | `TalkBackCheckTest` (labels as TalkBack composes them; TalkBack's focus put on the icon-only presses) | TB, TB2 |
 | 200 % font: Run now scrolls clear of the comment box | `screensTour` asserts Run now's bounds end above the comment box | D200, Final |
+
+## Decision 1EWmKFuYkFgqyK5hzUzNoA (v2 review) — the fixes' follow-ups
+
+The only app change after 65bb8884f is 715343fa9. Red ran the fix's test APK on the reviewed app code (the 3c9ff9aa8
+build — the same app code as 65bb8884f), green on the fix:
+bgj_7cfeae25a1d7 (test APK ea8bd178b: red, green API 36, green API 29 — the API 29 run lost its first journey to a
+cold-start sign-in and a Compose crash while the Activity was torn down), bgj_d6eb9e4e92c8 (test APK 022751ffd: the
+reworked P3 journeys red and green on API 36, all nine green on API 29).
+
+| Point | Android change | Journey | Red on the reviewed app | Green API 36 / API 29 |
+| --- | --- | --- | --- | --- |
+| N2 Delete | `TaskDetail`: Back only while the page is shown | `regressionN2_aDeleteAnsweredAfterLeavingPopsNothing` | the late Delete popped the project page under the task | PASS / PASS |
+| N2 View tasks | `ProjectSettings` StartCard: off while the start is out | `regressionN2_viewTasksWaitsForTheStartThatIsOut` | View tasks enabled while the start was out | PASS / PASS |
+| P2-5 index | `ProjectsScreen` index: 2 s coalescing + 15 s poll (iOS `ProjectsModel`) | `regressionP25_theProjectIndexKeepsUpThroughAStreamOfEvents` | index still on the old title after 12 s of events | PASS / PASS |
+| P2-5 slow read | `TaskBrowser`: a refresh waits for the read of the same query | `regressionP25_aSlowListReadStillLandsThroughAStreamOfEvents` | rename never shown (every read replaced) | PASS / PASS |
+| N1 Load more | `TaskBrowser`: the press always ends; its page joins while query and cursor hold | `regressionN1_loadMoreEndsWhenTheListIsReadAgain` | button stuck on "Loading…" | PASS / PASS |
+| N3 sheets | `TaskEditor`/`TaskDetail`: no cancel while sending; answers stay with their sheet, else the banner | `regressionN3_aSheetStaysUntilItsWriteIsAnswered` | Cancel enabled while the write was out | PASS / PASS |
+| N3 Share | `TaskDetail`: Share off while a write is out | `regressionN3_shareWaitsForAWriteThatIsOut` | Share enabled while a Run was out | PASS / PASS |
+| P3 comment | `TaskCommentDrafts`: cleared when the server takes the comment | `regressionP3_aSentCommentIsNotOfferedAgain` | not reproduced (see below) | PASS / PASS |
+| P3 bulk | `TaskBrowser`: the selection ends when the action is pressed | `regressionP3_aBulkActionLeavesNoSelectionBehind` | not reproduced (see below) | PASS / PASS |
+
+P3 could not be shown red on the reviewed build. Three ways of leaving and returning were tried while the write was out:
+reopening the task through its link, going Back to the page after another page covered it, and recreating the
+Activity. In none did the reviewed build bring the sent text or the selection back. Within one Activity the route's
+holder keeps the very state object the late write clears, and after a recreation the field and the selection came
+back empty. The fixes stay (an app-level draft cleared on success; the selection ended on the press) and the two
+journeys guard them.
+
+Before the journeys above were reworked to reach these paths, the whole device class ran on the fix at 4d0b1e87b
+(bgj_075f41e381df): API 36 28/29 and API 29 28/29. The one failure on each was the P3 comment journey reading an
+earlier journey's comment in the fixture's shared journal, a test fault since fixed.
+
+The isolated stack's scripts are in `src/android/scripts/a11-stack/` (README there). They were rebuilt from the
+run's transcript and run once from scratch (bgj_b678e24f86a6): build, reset seeded through the API only, verify
+24/24, clean. The endpoints and bodies these fixes send are unchanged, so the stack journeys were not rerun.
