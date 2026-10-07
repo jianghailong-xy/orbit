@@ -5,10 +5,15 @@ import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.serialization.json.*
 
-/** Management uses the same account generation and rotating credentials as the rest of Orbit. */
-class ManagementApi(val session: OrbitApi, val handle: SessionHandle) {
+/** Management uses the same account generation and rotating credentials as the rest of Orbit.
+ *  `background` outlives a page, for a save made as the page goes (the runner's name). */
+class ManagementApi(val session: OrbitApi, val handle: SessionHandle,
+                    val background: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)) {
     suspend fun get(path: String, query: List<Pair<String, String>> = emptyList()): JsonElement =
         send(path, HttpMethod.GET, query = query)
     suspend fun post(path: String, body: JsonObject = JsonObject(emptyMap())) = send(path, HttpMethod.POST, body)

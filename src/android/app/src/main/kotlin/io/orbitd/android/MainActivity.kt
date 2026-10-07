@@ -114,7 +114,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
     // Saved UI keys must survive a process restart; request ownership still uses the live handle.
     key(accountKey) {
         val api = remember(signedIn.handle) { DirectoryApi(app.session, signedIn.handle) }
-        val management = remember(signedIn.handle) { ManagementApi(app.session, signedIn.handle) }
+        val management = remember(signedIn.handle) { ManagementApi(app.session, signedIn.handle, app.processScope) }
         val data by rememberDirectoryData(app, signedIn.handle)
         val live by remember(app) { app.realtime.state.map { it.handle to it.invalidationRevision }.distinctUntilChanged() }
             .collectAsState(null to 0L)
@@ -195,11 +195,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open)
                                 Destination.SETTINGS -> SettingsScreen(management, route, revision, ::open, { navigation = navigation.back() }, auth::logout,
                                     changed = { app.realtime.refreshDirectory() },
+                                    workspaceDeleted = { select("workspaces", OrbitRoute(Destination.WORKSPACES)) },
                                     deviceAlerts = { if (app.push.configured) app.push.notifications.allowed() else null },
                                     notifications = { NotificationSettings(app.push) })
-                                Destination.RUNNER -> RunnerManagement(management, route.id, revision,
-                                    onChanged = { app.realtime.refreshDirectory() },
-                                    onWorkspace = { open(OrbitRoute(Destination.SETTINGS, id = "workspace", workspaceId = it)) })
+                                Destination.RUNNER -> RunnerScreen(management, route.id, route.recordId, revision, ::open, { navigation = navigation.back() }) {
+                                    select(it, OrbitRoute(Destination.WORKSPACE, it, it))
+                                }
                                 Destination.BUILD -> BuildInformation { navigation = navigation.back() }
                                 else -> ObjectDestination(route, api, data, revision, ::open) { app.realtime.refreshDirectory() }
                             }
@@ -219,7 +220,9 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.SEARCH -> "Search sessions"
     Destination.DRAFT -> "New session"
     Destination.WIKI_ENTRY -> "Wiki"
-    Destination.SETTINGS -> settingsTitle(route.id)
+    Destination.SETTINGS -> if (route.id == "workspace") data.workspaces.firstOrNull { ObjectId.same(it.id, route.workspaceId) }?.name
+        ?.let { "$it settings" } ?: settingsTitle(route.id) else settingsTitle(route.id)
+    Destination.RUNNER -> runnerTitle(route.recordId, data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.name)
     else -> route.destination.name.lowercase().replaceFirstChar(Char::uppercase)
 }
 

@@ -33,15 +33,15 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 /** Settings' own pages; "workspace" is the workspace list's gear and "runners" the Runners row. */
 @Composable
 fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: (OrbitRoute) -> Unit, back: () -> Unit,
-    logout: () -> Unit, changed: () -> Unit, deviceAlerts: () -> Boolean?, notifications: @Composable () -> Unit) {
+    logout: () -> Unit, changed: () -> Unit, workspaceDeleted: () -> Unit, deviceAlerts: () -> Boolean?,
+    notifications: @Composable () -> Unit) {
     val runner: (String) -> Unit = { open(OrbitRoute(Destination.RUNNER, it)) }
     when (route.id) {
         "profile" -> EditProfile(api, revision, back)
         "password" -> ChangePassword(api)
         "providers" -> ProviderManagement(api, revision, runner)
-        "workspace" -> WorkspaceManagement(api, route.workspaceId, revision, changed, runner)
-        "runners" -> RunnerManagement(api, null, revision, changed,
-            onWorkspace = { open(OrbitRoute(Destination.SETTINGS, id = "workspace", workspaceId = it)) })
+        "workspace" -> WorkspaceSettings(api, route.workspaceId, revision, back, workspaceDeleted, changed)
+        "runners" -> RunnersList(api, revision, runner)
         "sharing" -> SharingSettings(api, revision)
         "admin" -> AdminSettings(api, revision)
         "notifications" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
