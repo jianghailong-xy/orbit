@@ -1,0 +1,300 @@
+    t =    13.38s Find the "alex.ops@example.com" StaticText
+    t =    13.59s Checking existence of `"alex.ops@example.com" StaticText`
+    t =    13.84s Find the "alex.ops@example.com" StaticText
+    t =    14.06s Press Window (First Match)[0.03, 0.62] for 0.1 seconds, then drag to Window (First Match)[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    14.06s     Wait for io.orbitd.acctprobe to idle
+    t =    14.07s     Find the Window (First Match)
+    t =    14.08s     Check for interrupting elements affecting Window
+    t =    14.18s     Synthesize event
+    t =    14.18s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    14.19s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    14.21s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    14.22s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    14.24s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    15.70s     Wait for io.orbitd.acctprobe to idle
+    t =    16.72s Checking existence of `"alex.ops@example.com" StaticText`
+    t =    16.92s Find the "alex.ops@example.com" StaticText
+    t =    17.19s Find the "alex.ops@example.com" StaticText
+    t =    17.45s Checking existence of `"alex.ops@example.com" StaticText`
+    t =    17.64s Find the "alex.ops@example.com" StaticText
+    t =    17.85s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    17.85s     Wait for io.orbitd.acctprobe to idle
+    t =    17.85s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.86s     Check for interrupting elements affecting Window
+    t =    17.95s     Synthesize event
+    t =    17.95s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.97s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.98s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.99s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    18.02s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    19.49s     Wait for io.orbitd.acctprobe to idle
+    t =    20.52s Checking existence of `"alex.ops@example.com" StaticText`
+    t =    20.71s Find the "alex.ops@example.com" StaticText
+    t =    20.90s Find the "alex.ops@example.com" StaticText
+    t =    21.09s Checking existence of `"alex.ops@example.com" StaticText`
+    t =    21.29s Find the "alex.ops@example.com" StaticText
+    t =    21.51s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    21.51s     Wait for io.orbitd.acctprobe to idle
+    t =    21.51s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    21.52s     Check for interrupting elements affecting Window
+    t =    21.62s     Synthesize event
+    t =    21.62s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    21.64s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    21.65s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    21.66s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    21.68s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    23.14s     Wait for io.orbitd.acctprobe to idle
+    t =    24.45s Checking existence of `"alex.ops@example.com" StaticText`
+    t =    24.68s Find the "alex.ops@example.com" StaticText
+    t =    24.89s Find the "alex.ops@example.com" StaticText
+    t =    25.14s Find the "alex.ops@example.com" StaticText
+    t =    25.36s Swipe left "alex.ops@example.com" StaticText
+    t =    25.37s     Wait for io.orbitd.acctprobe to idle
+    t =    25.37s     Find the "alex.ops@example.com" StaticText
+    t =    25.59s     Check for interrupting elements affecting "alex.ops@example.com" StaticText
+    t =    25.73s     Synthesize event
+    t =    26.20s     Wait for io.orbitd.acctprobe to idle
+    t =    27.72s Checking existence of `Button (First Match)`
+    t =    27.92s Find the Button (First Match)
+    t =    28.28s Find the "Resume" Button
+    t =    28.51s Find the "Resume" Button
+    t =    28.69s Find the "Resume" Button
+    t =    28.88s Find the "Resume" Button
+    t =    29.08s Checking existence of `"Resume" Button`
+    t =    29.42s Added attachment named 'ios-05-swipe-resume'
+    t =    29.42s Checking existence of `"Resume" Button`
+    t =    29.61s Tap "Resume" Button
+    t =    29.61s     Wait for io.orbitd.acctprobe to idle
+    t =    29.62s     Find the "Resume" Button
+    t =    29.81s     Check for interrupting elements affecting "Resume" Button
+    t =    29.91s     Synthesize event
+    t =    30.21s     Wait for io.orbitd.acctprobe to idle
+    t =    34.74s Checking existence of `Any (First Match)`
+    t =    35.12s Added attachment named 'ios-06-resumed'
+    t =    35.12s Tear Down
+Test Case '-[AcctProbeUITests.AccountShotTests test3APausedRowSwipesToResumeAndResumesAtOnce]' passed (35.383 seconds).
+Test Case '-[AcctProbeUITests.AccountShotTests test4TheLongPressMenuHoldsEverything]' started.
+    t =     0.00s Start Test at 2026-10-07 17:03:51.498
+    t =     0.03s Set Up
+    t =     0.05s Open io.orbitd.acctprobe
+    t =     0.05s     Launch io.orbitd.acctprobe
+    t =     0.05s         Terminate io.orbitd.acctprobe:18510
+2026-10-07 17:03:52.610 xcodebuild[3209:15165] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-07 17:03:52.611 xcodebuild[3209:15165] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     2.85s         Setting up automation session
+    t =     5.13s         Wait for io.orbitd.acctprobe to idle
+    t =     7.02s Checking existence of `Any (First Match)`
+    t =     8.84s Checking existence of `Any (First Match)`
+    t =    12.05s Checking existence of `Any (First Match)`
+    t =    12.22s Find the Any (First Match)
+    t =    12.41s Find the "alex.rd@example.com" StaticText
+    t =    12.60s Find the "alex.rd@example.com" StaticText
+    t =    12.78s Press "alex.rd@example.com" StaticText for 1.3 seconds
+    t =    12.78s     Wait for io.orbitd.acctprobe to idle
+    t =    12.79s     Find the "alex.rd@example.com" StaticText
+    t =    12.96s     Check for interrupting elements affecting "alex.rd@example.com" StaticText
+    t =    13.09s     Synthesize event
+    t =    14.69s     Wait for io.orbitd.acctprobe to idle
+    t =    16.86s Checking existence of `Button (First Match)`
+    t =    16.97s Checking existence of `Button (First Match)`
+    t =    17.08s Checking existence of `Button (First Match)`
+    t =    17.17s Checking existence of `Button (First Match)`
+    t =    17.46s Added attachment named 'ios-07-menu'
+    t =    17.46s Requesting snapshot of accessibility hierarchy for app with pid 20388
+    t =    18.57s Requesting snapshot of accessibility hierarchy for app with pid 20388
+    t =    18.83s Tear Down
+Test Case '-[AcctProbeUITests.AccountShotTests test4TheLongPressMenuHoldsEverything]' passed (19.113 seconds).
+Test Case '-[AcctProbeUITests.AccountShotTests test5SignInStartsAtOncePastesInOneTapAndFolds]' started.
+    t =     0.00s Start Test at 2026-10-07 17:04:10.611
+    t =     0.03s Set Up
+    t =     0.05s Open io.orbitd.acctprobe
+    t =     0.05s     Launch io.orbitd.acctprobe
+    t =     0.05s         Terminate io.orbitd.acctprobe:20388
+2026-10-07 17:04:11.717 xcodebuild[3209:15165] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-07 17:04:11.717 xcodebuild[3209:15165] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.84s         Setting up automation session
+    t =     4.22s         Wait for io.orbitd.acctprobe to idle
+    t =     6.46s Checking existence of `Any (First Match)`
+    t =     9.26s Checking existence of `Any (First Match)`
+    t =    12.98s Checking existence of `Any (First Match)`
+    t =    13.22s Find the Any (First Match)
+    t =    13.55s Find the "alex.lab@example.com" StaticText
+    t =    13.85s Checking existence of `"alex.lab@example.com" StaticText`
+    t =    14.08s Find the "alex.lab@example.com" StaticText
+    t =    14.35s Press Window (First Match)[0.03, 0.62] for 0.1 seconds, then drag to Window (First Match)[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    14.35s     Wait for io.orbitd.acctprobe to idle
+    t =    14.35s     Find the Window (First Match)
+    t =    14.37s     Check for interrupting elements affecting Window
+    t =    14.57s     Synthesize event
+    t =    14.57s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    14.59s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    14.61s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    14.63s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    14.67s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    16.16s     Wait for io.orbitd.acctprobe to idle
+    t =    17.18s Checking existence of `"alex.lab@example.com" StaticText`
+    t =    17.48s Find the "alex.lab@example.com" StaticText
+    t =    17.80s Find the "alex.lab@example.com" StaticText
+    t =    18.13s Checking existence of `"alex.lab@example.com" StaticText`
+    t =    18.45s Find the "alex.lab@example.com" StaticText
+    t =    18.96s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    18.96s     Wait for io.orbitd.acctprobe to idle
+    t =    18.97s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    18.99s     Check for interrupting elements affecting Window
+    t =    19.18s     Synthesize event
+    t =    19.19s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    19.24s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    19.31s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    19.33s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    19.34s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    20.81s     Wait for io.orbitd.acctprobe to idle
+    t =    21.83s Checking existence of `"alex.lab@example.com" StaticText`
+    t =    22.24s Find the "alex.lab@example.com" StaticText
+    t =    22.50s Find the "alex.lab@example.com" StaticText
+    t =    22.77s Find the "alex.lab@example.com" StaticText
+    t =    23.17s Checking existence of `Button (First Match)`
+    t =    23.72s Tap Button (First Match)
+    t =    23.72s     Wait for io.orbitd.acctprobe to idle
+    t =    23.73s     Find the Button (First Match)
+    t =    24.31s     Check for interrupting elements affecting "Sign In" Button
+    t =    24.48s     Synthesize event
+    t =    24.80s     Wait for io.orbitd.acctprobe to idle
+    t =    24.81s Checking existence of `Any (First Match)`
+    t =    26.86s Checking existence of `Any (First Match)`
+    t =    27.51s Checking existence of `Button (First Match)`
+    t =    28.32s Added attachment named 'ios-08-starting'
+    t =    28.32s Checking existence of `Any (First Match)`
+    t =    29.77s Checking existence of `Any (First Match)`
+    t =    31.48s Checking existence of `Any (First Match)`
+    t =    33.35s Checking existence of `Button (First Match)`
+    t =    33.78s Added attachment named 'ios-09-paste-form'
+    t =    33.78s Requesting snapshot of accessibility hierarchy for app with pid 21115
+    t =    34.54s Requesting snapshot of accessibility hierarchy for app with pid 21115
+    t =    34.76s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Open the sign-in page"'
+    t =    34.87s Checking existence of `Button (Element at index 0)`
+    t =    35.03s Find the Button (Element at index 0)
+    t =    35.16s Checking existence of `"Open the sign-in page" Button`
+    t =    35.27s Tap "Open the sign-in page" Button
+    t =    35.28s     Wait for io.orbitd.acctprobe to idle
+    t =    35.28s     Find the "Open the sign-in page" Button
+    t =    35.40s     Check for interrupting elements affecting "Open the sign-in page" Button
+    t =    35.54s     Synthesize event
+    t =    35.96s     Wait for io.orbitd.acctprobe to idle
+    t =    40.03s Open io.orbitd.acctprobe
+    t =    40.03s     Activate io.orbitd.acctprobe
+    t =    42.35s         Wait for io.orbitd.acctprobe to idle
+    t =    46.13s Added attachment named 'ios-10-back-paste-first'
+    t =    46.23s Checking existence of `Button (First Match)`
+    t =    49.91s Find the Button (First Match)
+    t =    50.69s Find the "Paste" Button
+    t =    51.16s Find the "Paste" Button
+    t =    52.02s Find the "Paste" Button
+    t =    52.46s Find the "Paste" Button
+    t =    53.37s Checking existence of `"Paste" Button`
+    t =    53.93s Tap "Paste" Button
+    t =    53.93s     Wait for io.orbitd.acctprobe to idle
+    t =    53.93s     Find the "Paste" Button
+    t =    54.29s     Check for interrupting elements affecting "Paste" Button
+    t =    54.53s     Synthesize event
+    t =    54.90s     Wait for io.orbitd.acctprobe to idle
+    t =    55.98s Waiting 2.0s for "Allow Paste" Button to exist
+    t =    57.04s     Checking `Expect predicate `existsNoRetry == 1` for object "Allow Paste" Button`
+    t =    57.05s         Checking existence of `"Allow Paste" Button`
+    t =    57.74s Ignoring failure to get hierarchy for remote element in process 21079 (Error getting main window kAXErrorServerNotFound)
+    t =    57.74s Ignoring failure to get hierarchy for remote element in process 21079 (Error getting main window kAXErrorServerNotFound)
+    t =    57.75s         Capturing element debug description
+    t =    57.99s     Checking `Expect predicate `existsNoRetry == 1` for object "Allow Paste" Button`
+    t =    58.00s         Checking existence of `"Allow Paste" Button`
+    t =    58.06s Ignoring failure to get hierarchy for remote element in process 21079 (Error getting main window kAXErrorServerNotFound)
+    t =    58.07s Ignoring failure to get hierarchy for remote element in process 21079 (Error getting main window kAXErrorServerNotFound)
+    t =    58.07s         Capturing element debug description
+    t =    58.07s     Checking existence of `"Allow Paste" Button`
+    t =    58.13s Ignoring failure to get hierarchy for remote element in process 21079 (Error getting main window kAXErrorServerNotFound)
+    t =    58.14s Ignoring failure to get hierarchy for remote element in process 21079 (Error getting main window kAXErrorServerNotFound)
+    t =    58.14s Collecting debug information to assist test failure triage
+    t =    58.15s     Requesting snapshot of accessibility hierarchy for app with pid 2026
+    t =    58.36s Checking existence of `Any (First Match)`
+    t =    60.17s Checking existence of `Any (First Match)`
+    t =    60.96s Added attachment named 'ios-11-signed-in'
+    t =    60.96s Checking existence of `Any (First Match)`
+    t =    62.34s Checking existence of `Any (First Match)`
+    t =    62.61s Checking existence of `Any (First Match)`
+    t =    62.89s Checking existence of `Any (First Match)`
+    t =    64.45s Added attachment named 'ios-12-folded'
+    t =    64.48s Tear Down
+Test Case '-[AcctProbeUITests.AccountShotTests test5SignInStartsAtOncePastesInOneTapAndFolds]' passed (65.043 seconds).
+Test Case '-[AcctProbeUITests.AccountShotTests test6CodexShowsItsCodeFirstUnderOnePress]' started.
+    t =     0.00s Start Test at 2026-10-07 17:05:15.656
+    t =     0.10s Set Up
+    t =     0.15s Open io.orbitd.acctprobe
+    t =     0.15s     Launch io.orbitd.acctprobe
+    t =     0.15s         Terminate io.orbitd.acctprobe:21115
+2026-10-07 17:05:17.948 xcodebuild[3209:15165] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-07 17:05:17.948 xcodebuild[3209:15165] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     5.34s         Setting up automation session
+    t =     8.31s         Wait for io.orbitd.acctprobe to idle
+    t =    11.13s Checking existence of `Any (First Match)`
+    t =    12.68s Checking existence of `Any (First Match)`
+    t =    15.83s Checking existence of `Any (First Match)`
+    t =    19.53s Checking existence of `Any (First Match)`
+    t =    20.02s Added attachment named 'ios-13-codex-signed-out'
+    t =    20.02s Checking existence of `Button (First Match)`
+    t =    20.26s Tap Button (First Match)
+    t =    20.26s     Wait for io.orbitd.acctprobe to idle
+    t =    20.27s     Find the Button (First Match)
+    t =    20.47s     Check for interrupting elements affecting "Sign In" Button
+    t =    20.60s     Synthesize event
+    t =    20.94s     Wait for io.orbitd.acctprobe to idle
+    t =    20.95s Checking existence of `Any (First Match)`
+    t =    22.26s Checking existence of `Any (First Match)`
+    t =    23.61s Checking existence of `Any (First Match)`
+    t =    24.86s Checking existence of `Any (First Match)`
+    t =    26.18s Checking existence of `Any (First Match)`
+    t =    28.07s Checking existence of `Any (First Match)`
+    t =    28.41s Checking existence of `Any (First Match)`
+    t =    28.63s Checking existence of `Any (First Match)`
+    t =    29.25s Added attachment named 'ios-14-codex-device-code'
+    t =    29.25s Tear Down
+Test Case '-[AcctProbeUITests.AccountShotTests test6CodexShowsItsCodeFirstUnderOnePress]' passed (29.491 seconds).
+Test Case '-[AcctProbeUITests.AccountShotTests test7DarkPage]' started.
+    t =     0.00s Start Test at 2026-10-07 17:05:45.147
+    t =     0.05s Set Up
+    t =     0.07s Open io.orbitd.acctprobe
+    t =     0.07s     Launch io.orbitd.acctprobe
+    t =     0.07s         Terminate io.orbitd.acctprobe:23692
+2026-10-07 17:05:46.237 xcodebuild[3209:15165] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-07 17:05:46.238 xcodebuild[3209:15165] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     3.39s         Setting up automation session
+    t =     5.45s         Wait for io.orbitd.acctprobe to idle
+    t =     7.60s Checking existence of `Any (First Match)`
+    t =    12.51s Checking existence of `Any (First Match)`
+    t =    16.64s Added attachment named 'ios-15-page-dark'
+    t =    16.64s Checking existence of `Any (First Match)`
+    t =    16.91s Find the Any (First Match)
+    t =    17.25s Find the "alex.rd@example.com" StaticText
+    t =    17.54s Find the "alex.rd@example.com" StaticText
+    t =    17.82s Swipe left "alex.rd@example.com" StaticText
+    t =    17.82s     Wait for io.orbitd.acctprobe to idle
+    t =    17.83s     Find the "alex.rd@example.com" StaticText
+    t =    18.18s     Check for interrupting elements affecting "alex.rd@example.com" StaticText
+    t =    18.43s     Synthesize event
+    t =    18.92s     Wait for io.orbitd.acctprobe to idle
+    t =    20.64s Added attachment named 'ios-16-swipe-dark'
+    t =    20.65s Tear Down
+Test Case '-[AcctProbeUITests.AccountShotTests test7DarkPage]' passed (20.909 seconds).
+Test Suite 'AccountShotTests' passed at 2026-10-07 17:06:06.057.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 274.288 (274.294) seconds
+Test Suite 'AcctProbeUITests.xctest' passed at 2026-10-07 17:06:06.059.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 274.288 (274.297) seconds
+Test Suite 'All tests' passed at 2026-10-07 17:06:06.060.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 274.288 (274.299) seconds
+2026-10-07 17:06:44.656 xcodebuild[3209:15165] [MT] IDETestOperationsObserverDebug: 364.514 elapsed -- Testing started completed.
+2026-10-07 17:06:44.657 xcodebuild[3209:15165] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-07 17:06:44.657 xcodebuild[3209:15165] [MT] IDETestOperationsObserverDebug: 364.514 sec, +364.514 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.acct-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

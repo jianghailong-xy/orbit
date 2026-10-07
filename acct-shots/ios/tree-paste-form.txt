@@ -1,0 +1,237 @@
+Attributes: Application, 0x114c0f840, pid: 21115, label: 'AcctProbe'
+Element subtree:
+ →Application, 0x114c0f840, pid: 21115, label: 'AcctProbe'
+    Window (Main), 0x114c0d180, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x114c0c640, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x114c0f980, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x114c0ee40, {{-402.0, -874.0}, {1206.0, 2622.0}}
+          Other, 0x114c0c000, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x114c0c140, {{0.0, 0.0}, {402.0, 874.0}}
+              StaticText, 0x114c0c280, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x114c0c3c0, {{251.7, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              CollectionView, 0x114c0c500, {{0.0, 128.0}, {305.7, 746.0}}
+                Other, 0x114c0cdc0, {{0.0, -1364.0}, {305.7, 3206.0}}
+                Cell, 0x114c0cc80, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x114c0d040, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x114c0cf00, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x114c0fd40, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x114c0ea80, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x114c0fac0, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x114c0f5c0, {{0.0, 128.0}, {305.3, 44.3}}
+                        Button, 0x1151f6440, {{0.0, 128.0}, {305.3, 44.3}}, label: 'Projects'
+                          Image, 0x1151f6580, {{26.3, 142.3}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x1151f6e40, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                Cell, 0x1151f7700, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x1151f7840, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x1151f7980, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x1151f7ac0, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x1151f7c00, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x1151f7d40, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x1151f75c0, {{0.0, 172.3}, {305.3, 44.3}}
+                        Button, 0x1151f5cc0, {{0.0, 172.3}, {305.3, 44.3}}, label: 'Tasks'
+                          Image, 0x1151f5e00, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x1151f5f40, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x1151f6080, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x1151f61c0, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x114b36e40, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x1151fc000, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x1151fc140, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x1151fc280, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x1151fc3c0, {{0.0, 216.7}, {305.3, 44.3}}
+                        Button, 0x1151fc500, {{0.0, 216.7}, {305.3, 44.3}}, label: 'Wiki'
+                          Image, 0x1151fc640, {{27.0, 230.0}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x1151fc780, {{58.0, 228.7}, {32.7, 20.3}}, label: 'Wiki'
+                Cell, 0x1151fc8c0, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x1151fca00, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x1151fcb40, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x1151fcc80, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x1151fcdc0, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x1151fcf00, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x1151fd040, {{0.0, 261.0}, {305.3, 44.7}}
+                        StaticText, 0x1151fd180, {{0.0, 261.0}, {305.3, 44.7}}, label: 'Workspaces'
+                Cell, 0x1151fd2c0, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x1151fd400, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x1151fd540, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x1151fd680, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x1151fd7c0, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x1151fd900, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x1151fda40, {{0.0, 305.7}, {305.3, 44.3}}
+                        Button, 0x1151fdb80, {{0.0, 305.7}, {305.3, 44.3}}, label: 'orbit,  · Mac Studio'
+                          Other, 0x1151fdcc0, {{24.7, 320.0}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x1151fde00, {{24.7, 320.0}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x1151fdf40, {{58.0, 317.7}, {35.3, 20.3}}, label: 'orbit'
+                          StaticText, 0x1151fe080, {{93.3, 317.7}, {99.3, 20.3}}, label: ' · Mac Studio'
+                Other, 0x1151fe1c0, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x1151fe300, {{299.3, 649.7}, {3.0, 221.3}}
+                Other, 0x1151fe440, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x1151fe580, {{299.3, 649.7}, {3.0, 221.3}}
+              Button, 0x1151fe6c0, {{10.0, 788.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x1151fe800, {{31.0, 801.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x1151fe940, {{57.0, 799.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x1151fea80, {{251.7, 788.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x1151febc0, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x1151fed00, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI29PresentationHosting'
+                  Other, 0x1151fee40, {{20.0, 66.0}, {36.0, 36.0}}, identifier: 'line.3.horizontal', label: 'Open navigation'
+                    Other, 0x1151fef80, {{20.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x1151ff0c0, {{22.3, 66.0}, {31.3, 36.0}}, identifier: 'line.3.horizontal', label: 'Open navigation'
+                  Other, 0x1151ff200, {{76.0, 73.7}, {37.7, 20.7}}, label: 'Workspace: orbit'
+                    Other, 0x1151ff340, {{76.0, 73.7}, {37.7, 20.7}}
+                      StaticText, 0x1151ff480, {{76.0, 74.0}, {37.7, 20.3}}, label: 'Workspace: orbit'
+                  Other, 0x1151ff5c0, {{283.7, 66.0}, {41.7, 36.0}}, label: 'Session scope, Open'
+                    Other, 0x1151ff700, {{283.7, 66.0}, {41.7, 36.0}}
+                      Button, 0x1151ff840, {{283.7, 66.0}, {41.7, 36.0}}, label: 'Session scope, Open'
+                        Button, 0x1151ff980, {{283.7, 66.0}, {41.7, 36.0}}
+                          Image, 0x1151ffac0, {{293.3, 77.7}, {22.0, 13.0}}, identifier: 'line.3.horizontal.decrease', label: 'Filter'
+                  Button, 0x1151ffc00, {{341.3, 66.0}, {40.7, 36.0}}, label: 'Start a new session with orbit'
+                Other, 0x1151ffd40, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x1151ffe80, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x115200000, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x115200140, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x115200280, {{0.0, 116.0}, {402.0, 672.0}}
+                        CollectionView, 0x1152003c0, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x115200500, {{0.0, 0.0}, {402.0, 874.0}}
+                            Other, 0x115200640, {{0.0, 0.0}, {402.0, 170.8}}
+                            Other, 0x115200780, {{0.0, 733.2}, {402.0, 140.8}}
+                          Other, 0x1152008c0, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x115200a00, {{369.0, 116.0}, {30.0, 672.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x115200b40, {{396.0, 778.0}, {3.0, 7.0}}
+                          Other, 0x115200c80, {{369.0, 116.0}, {30.0, 672.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x115200dc0, {{396.0, 778.0}, {3.0, 7.0}}
+                        Image, 0x115200f00, {{167.3, 403.0}, {67.3, 53.7}}, identifier: 'bubble.left.and.bubble.right', label: 'Conversation'
+                        StaticText, 0x115201040, {{111.0, 403.0}, {180.0, 98.3}}, label: 'No open sessions'
+                Other, 0x115201180, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x1152012c0, {{0.0, 0.0}, {402.0, 874.0}}
+                    Toolbar, 0x115201400, {{0.0, 788.0}, {402.0, 86.0}}, identifier: 'Toolbar', label: 'Toolbar'
+                      Other, 0x115201540, {{28.0, 798.0}, {346.0, 48.0}}
+                        Other, 0x115201680, {{28.0, 798.0}, {346.0, 48.0}}
+                          Other, 0x1152017c0, {{28.0, 798.0}, {0.0, 0.0}}
+                            Other, 0x115201900, {{28.0, 798.0}, {346.0, 48.0}}
+                              Other, 0x115201a40, {{28.0, 798.0}, {346.0, 48.0}}
+                                Other, 0x115201b80, {{33.0, 803.0}, {336.0, 38.0}}
+                                  SearchField, 0x115201cc0, {{33.0, 803.0}, {336.0, 38.0}}, label: 'Search sessions', placeholderValue: 'Search sessions'
+                                    Image, 0x115201e00, {{46.0, 812.3}, {20.3, 18.7}}, identifier: 'magnifyingglass', label: 'Search'
+      Other, 0x115201f40, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x115202080, {{-402.0, -874.0}, {1206.0, 2622.0}}
+        Other, 0x1152021c0, {{0.0, 62.0}, {402.0, 812.0}}
+          Other, 0x115202300, {{0.0, 62.0}, {402.0, 812.0}}
+            Other, 0x115202440, {{0.0, 62.0}, {402.0, 812.0}}
+              Other, 0x115202580, {{0.0, 62.0}, {402.0, 812.0}}
+                Other, 0x1152026c0, {{0.0, 62.0}, {402.0, 812.0}}
+                  Other, 0x115202800, {{0.0, 62.0}, {402.0, 812.0}}
+                    NavigationBar, 0x115202940, {{0.0, 78.0}, {402.0, 54.0}}, identifier: 'Claude Code'
+                      Button, 0x115202a80, {{16.0, 78.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Mac Studio'
+                      StaticText, 0x115202bc0, {{150.0, 89.7}, {102.0, 20.7}}, label: 'Claude Code'
+                      Other, 0x115202d00, {{346.0, 82.0}, {36.0, 36.0}}, identifier: 'xmark', label: 'Close'
+                        Other, 0x115202e40, {{346.0, 82.0}, {36.0, 36.0}}
+                          Button, 0x115202f80, {{350.7, 82.0}, {26.7, 36.0}}, identifier: 'xmark', label: 'Close'
+                    Other, 0x1152030c0, {{0.0, 62.0}, {402.0, 812.0}}
+                      Other, 0x115203200, {{0.0, 62.0}, {402.0, 812.0}}
+                        Other, 0x115203340, {{0.0, 62.0}, {402.0, 812.0}}
+                          Other, 0x115203480, {{0.0, 62.0}, {402.0, 812.0}}
+                            CollectionView, 0x1152035c0, {{0.0, 62.0}, {402.0, 812.0}}
+                              Other, 0x115203700, {{-16.0, -23.3}, {434.0, 931.0}}
+                              Cell, 0x115203840, {{16.0, 12.3}, {370.0, 180.0}}
+                                Other, 0x115203980, {{16.0, 12.3}, {370.0, 180.0}}
+                                  Other, 0x115203ac0, {{16.0, 12.3}, {370.0, 180.0}}
+                                Other, 0x115203c00, {{16.0, 12.3}, {370.0, 180.0}}
+                                  Other, 0x115203d40, {{16.0, 12.3}, {370.0, 180.0}}
+                                    Other, 0x115203e80, {{16.0, 12.3}, {370.0, 180.0}}
+                                      Other, 0x115204000, {{16.0, 102.3}, {20.0, 0.0}}
+                                      Other, 0x115204140, {{306.0, 69.0}, {80.0, 66.7}}
+                                      StaticText, 0x115204280, {{32.0, 31.3}, {153.3, 20.3}}, label: 'alex@example.com'
+                                      StaticText, 0x1152043c0, {{32.0, 53.7}, {110.0, 15.7}}, label: '~/.claude · Default'
+                                      StaticText, 0x115204500, {{306.3, 33.3}, {63.7, 18.0}}, label: 'Signed in'
+                                      StaticText, 0x115204640, {{32.0, 79.3}, {74.3, 15.7}}, label: '5-hour limit'
+                                      StaticText, 0x115204780, {{349.7, 79.3}, {20.3, 15.7}}, label: '0%'
+                                      StaticText, 0x1152048c0, {{32.0, 108.0}, {82.7, 13.3}}, label: 'Resets 8:32 PM'
+                                      StaticText, 0x115204a00, {{32.0, 131.3}, {121.0, 15.7}}, label: 'Weekly · all models'
+                                      StaticText, 0x115204b40, {{341.7, 131.3}, {28.3, 15.7}}, label: '96%'
+                                      StaticText, 0x115204c80, {{32.0, 160.0}, {148.7, 13.3}}, label: 'Resets Fri, Oct 9 at 3:04 PM'
+                              Other, 0x115204dc0, {{0.0, 62.0}, {402.0, 812.0}}
+                              Other, 0x115204f00, {{0.0, 62.0}, {402.0, 812.0}}
+                                Other, 0x115205040, {{0.0, 62.0}, {402.0, 124.8}}
+                                  Image, 0x115205180, {{-120.0, -58.0}, {642.0, 240.0}}, identifier: 'AdditionalDimmingOverlay'
+                                  Other, 0x1152052c0, {{0.0, 62.0}, {402.0, 60.0}}
+                                  Other, 0x115205400, {{0.0, 62.0}, {402.0, 124.8}}
+                                    Other, 0x115205540, {{0.0, 62.0}, {402.0, 124.8}}
+                                  Other, 0x115205680, {{0.0, 62.0}, {402.0, 124.8}}
+                                    Other, 0x1152057c0, {{0.0, 62.0}, {402.0, 124.8}}
+                                  Other, 0x115205900, {{0.0, 62.0}, {402.0, 124.8}}
+                                    Other, 0x115205a40, {{0.0, 62.0}, {402.0, 124.8}}
+                                    Other, 0x115205b80, {{0.0, 62.0}, {402.0, 124.8}}
+                              Cell, 0x115205cc0, {{16.0, 192.0}, {370.0, 218.0}}
+                                Other, 0x115205e00, {{16.0, 192.0}, {370.0, 218.0}}
+                                  Other, 0x115205f40, {{16.0, 192.0}, {370.0, 218.0}}
+                                Other, 0x115206080, {{16.0, 192.0}, {370.0, 218.0}}
+                                  Other, 0x1152061c0, {{16.0, 192.0}, {370.0, 218.0}}
+                                    Other, 0x115206300, {{16.0, 192.0}, {370.0, 218.0}}
+                                      Other, 0x115206440, {{16.0, 301.0}, {20.0, 0.0}}
+                                      Other, 0x115206580, {{236.0, 267.7}, {150.0, 66.7}}
+                                      StaticText, 0x1152066c0, {{32.0, 211.0}, {175.3, 20.3}}, label: 'alex.rd@example.com'
+                                      StaticText, 0x115206800, {{32.0, 233.3}, {212.0, 15.7}}, label: '~/.orbit/claude-accounts/7c41e0b2'
+                                      StaticText, 0x115206940, {{306.3, 213.0}, {63.7, 18.0}}, label: 'Signed in'
+                                      StaticText, 0x115206a80, {{32.0, 259.0}, {74.3, 15.7}}, label: '5-hour limit'
+                                      StaticText, 0x115206bc0, {{333.7, 259.0}, {36.3, 15.7}}, label: '100%'
+                                      StaticText, 0x115206d00, {{32.0, 287.7}, {80.0, 13.3}}, label: 'Resets 7:12 PM'
+                                      StaticText, 0x115206e40, {{32.0, 311.0}, {121.0, 15.7}}, label: 'Weekly · all models'
+                                      StaticText, 0x115206f80, {{341.7, 311.0}, {28.3, 15.7}}, label: '74%'
+                                      StaticText, 0x1152070c0, {{32.0, 339.7}, {162.7, 13.3}}, label: 'Resets Mon, Oct 12 at 5:04 PM'
+                                      Image, 0x115207200, {{35.3, 370.0}, {17.3, 16.0}}, identifier: 'exclamationmark.triangle.fill', label: 'Warning'
+                                      StaticText, 0x115207340, {{35.3, 370.0}, {180.0, 16.0}}, label: 'Login expires in 2 days'
+                                      Button, 0x115207480, {{304.0, 363.0}, {66.0, 28.0}}, label: 'Renew'
+                              Cell, 0x1152075c0, {{16.0, 410.3}, {370.0, 222.0}}
+                                Other, 0x115207700, {{16.0, 410.3}, {370.0, 222.0}}
+                                  Other, 0x115207840, {{16.0, 410.3}, {370.0, 222.0}}
+                                Other, 0x115207980, {{16.0, 410.3}, {370.0, 222.0}}
+                                  Other, 0x115207ac0, {{16.0, 410.3}, {370.0, 222.0}}
+                                    Other, 0x115207c00, {{16.0, 410.3}, {370.0, 222.0}}
+                                      StaticText, 0x115207d40, {{32.0, 429.3}, {182.7, 20.3}}, label: 'alex.lab@example.com'
+                                      StaticText, 0x115207e80, {{32.0, 451.7}, {212.7, 15.7}}, label: '~/.orbit/claude-accounts/b93d5a17'
+                                      StaticText, 0x115208000, {{296.0, 431.3}, {74.0, 18.0}}, label: 'Signed out'
+                                      Button, 0x115208140, {{32.0, 477.3}, {233.7, 34.3}}, label: 'Open the sign-in page'
+                                        Image, 0x115208280, {{46.3, 484.7}, {19.7, 19.7}}, identifier: 'arrow.up.forward.square', label: 'arrow.up.forward.square'
+                                        StaticText, 0x1152083c0, {{32.0, 477.3}, {233.7, 34.3}}, label: 'Open the sign-in page'
+                                      StaticText, 0x115208500, {{32.0, 517.7}, {286.0, 33.7}}, label: 'Approve it there, then paste the code the page gives you:'
+                                      TextField, 0x115208640, {{32.0, 557.3}, {244.7, 34.3}}, placeholderValue: 'Paste the code'
+                                      Button, 0x115208780, {{282.7, 557.3}, {87.3, 34.3}}, label: 'Paste'
+                                      Button, 0x1152088c0, {{32.0, 597.7}, {41.7, 15.7}}, label: 'Cancel'
+                              Cell, 0x115208a00, {{16.0, 632.3}, {370.0, 205.7}}
+                                Other, 0x115208b40, {{16.0, 632.3}, {370.0, 205.7}}
+                                  Other, 0x115208c80, {{16.0, 632.3}, {370.0, 205.7}}
+                                Other, 0x115208dc0, {{16.0, 632.3}, {370.0, 205.7}}
+                                  Other, 0x115208f00, {{16.0, 632.3}, {370.0, 205.7}}
+                                    Other, 0x115209040, {{16.0, 632.3}, {370.0, 205.7}}
+                                      Other, 0x115209180, {{16.0, 735.2}, {20.0, 0.0}}
+                                      Other, 0x1152092c0, {{236.0, 701.8}, {150.0, 66.7}}
+                                      StaticText, 0x115209400, {{32.0, 651.3}, {187.7, 20.3}}, label: 'alex.ops@example.com'
+                                      StaticText, 0x115209540, {{32.0, 673.7}, {209.0, 15.7}}, label: '~/.orbit/claude-accounts/3fa91c2e'
+                                      StaticText, 0x115209680, {{306.3, 653.3}, {63.7, 18.0}}, label: 'Signed in'
+                                      StaticText, 0x1152097c0, {{32.0, 699.3}, {74.3, 15.7}}, label: '5-hour limit'
+                                      StaticText, 0x115209900, {{341.7, 699.3}, {28.3, 15.7}}, label: '48%'
+                                      StaticText, 0x115209a40, {{32.0, 728.0}, {82.3, 13.3}}, label: 'Resets 9:22 PM'
+                                      StaticText, 0x115209b80, {{32.0, 751.3}, {121.0, 15.7}}, label: 'Weekly · all models'
+                                      StaticText, 0x115209cc0, {{341.7, 751.3}, {28.3, 15.7}}, label: '25%'
+                                      StaticText, 0x115209e00, {{32.0, 780.0}, {159.3, 13.3}}, label: 'Resets Tue, Oct 13 at 5:04 PM'
+                                      Image, 0x115209f40, {{38.7, 804.0}, {10.7, 14.3}}, identifier: 'pause.fill', label: 'Pause'
+                                      StaticText, 0x11520a080, {{38.7, 803.3}, {80.0, 15.7}}, label: 'Paused'
+                                      StaticText, 0x11520a1c0, {{222.7, 805.3}, {147.3, 13.3}}, label: 'Until Oct 7, 2026 at 7:04 PM'
+                              Cell, 0x11520a300, {{16.0, 838.0}, {370.0, 52.0}}
+                                Other, 0x11520a440, {{16.0, 838.0}, {370.0, 52.0}}
+                                  Other, 0x11520a580, {{16.0, 838.0}, {370.0, 52.0}}
+                                Other, 0x11520a6c0, {{16.0, 838.0}, {370.0, 52.0}}
+                                  Other, 0x11520a800, {{16.0, 838.0}, {370.0, 52.0}}
+                                    Other, 0x11520a940, {{16.0, 838.0}, {370.0, 52.0}}
+                                      Button, 0x11520aa80, {{16.0, 838.0}, {370.0, 52.0}}, label: 'Add Account'
+                              Other, 0x11520abc0, {{369.0, 132.0}, {30.0, 680.0}}, label: 'Vertical scroll bar, 2 pages', value: 57%
+                                Other, 0x11520ad00, {{396.0, 616.0}, {3.0, 193.0}}
+                              Other, 0x11520ae40, {{369.0, 132.0}, {30.0, 680.0}}, label: 'Vertical scroll bar, 2 pages', value: 57%
+                                Other, 0x11520af80, {{396.0, 616.0}, {3.0, 193.0}}
+                    Other, 0x11520b0c0, {{0.0, 62.0}, {402.0, 812.0}}
+                      Other, 0x11520b200, {{0.0, 62.0}, {402.0, 812.0}}
+Path to element:
+ →Application, 0x114c0f840, pid: 21115, label: 'AcctProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.acctprobe'
+  Output: {
+    Application, 0x11520b340, pid: 21115, label: 'AcctProbe'
+  }

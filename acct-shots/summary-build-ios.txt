@@ -1,0 +1,18 @@
+Test Case '-[AcctProbeUITests.AccountShotTests test1TheRowsSayWhereEachAccountStandsWithNoButtonsOnASignedInOne]' started.
+Test Case '-[AcctProbeUITests.AccountShotTests test1TheRowsSayWhereEachAccountStandsWithNoButtonsOnASignedInOne]' passed (79.494 seconds).
+Test Case '-[AcctProbeUITests.AccountShotTests test2SwipingARowShowsPauseInsideRemove]' started.
+Test Case '-[AcctProbeUITests.AccountShotTests test2SwipingARowShowsPauseInsideRemove]' passed (24.856 seconds).
+Test Case '-[AcctProbeUITests.AccountShotTests test3APausedRowSwipesToResumeAndResumesAtOnce]' started.
+Test Case '-[AcctProbeUITests.AccountShotTests test3APausedRowSwipesToResumeAndResumesAtOnce]' passed (35.383 seconds).
+Test Case '-[AcctProbeUITests.AccountShotTests test4TheLongPressMenuHoldsEverything]' started.
+Test Case '-[AcctProbeUITests.AccountShotTests test4TheLongPressMenuHoldsEverything]' passed (19.113 seconds).
+Test Case '-[AcctProbeUITests.AccountShotTests test5SignInStartsAtOncePastesInOneTapAndFolds]' started.
+Test Case '-[AcctProbeUITests.AccountShotTests test5SignInStartsAtOncePastesInOneTapAndFolds]' passed (65.043 seconds).
+Test Case '-[AcctProbeUITests.AccountShotTests test6CodexShowsItsCodeFirstUnderOnePress]' started.
+Test Case '-[AcctProbeUITests.AccountShotTests test6CodexShowsItsCodeFirstUnderOnePress]' passed (29.491 seconds).
+Test Case '-[AcctProbeUITests.AccountShotTests test7DarkPage]' started.
+Test Case '-[AcctProbeUITests.AccountShotTests test7DarkPage]' passed (20.909 seconds).
+	 Executed 7 tests, with 0 failures (0 unexpected) in 274.288 (274.294) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 274.288 (274.297) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 274.288 (274.299) seconds
+** TEST SUCCEEDED **

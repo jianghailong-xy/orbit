@@ -1,0 +1,56 @@
+==> stub ready after 2s
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+Test Case '-[AcctProbeUITests.AccountShotTests test1TheRowsSayWhereEachAccountStandsWithNoButtonsOnASignedInOne]' started.
+Test Case '-[AcctProbeUITests.AccountShotTests test1TheRowsSayWhereEachAccountStandsWithNoButtonsOnASignedInOne]' passed (79.494 seconds).
+Test Case '-[AcctProbeUITests.AccountShotTests test2SwipingARowShowsPauseInsideRemove]' started.
+Test Case '-[AcctProbeUITests.AccountShotTests test2SwipingARowShowsPauseInsideRemove]' passed (24.856 seconds).
+Test Case '-[AcctProbeUITests.AccountShotTests test3APausedRowSwipesToResumeAndResumesAtOnce]' started.
+Test Case '-[AcctProbeUITests.AccountShotTests test3APausedRowSwipesToResumeAndResumesAtOnce]' passed (35.383 seconds).
+Test Case '-[AcctProbeUITests.AccountShotTests test4TheLongPressMenuHoldsEverything]' started.
+Test Case '-[AcctProbeUITests.AccountShotTests test4TheLongPressMenuHoldsEverything]' passed (19.113 seconds).
+Test Case '-[AcctProbeUITests.AccountShotTests test5SignInStartsAtOncePastesInOneTapAndFolds]' started.
+Test Case '-[AcctProbeUITests.AccountShotTests test5SignInStartsAtOncePastesInOneTapAndFolds]' passed (65.043 seconds).
+Test Case '-[AcctProbeUITests.AccountShotTests test6CodexShowsItsCodeFirstUnderOnePress]' started.
+Test Case '-[AcctProbeUITests.AccountShotTests test6CodexShowsItsCodeFirstUnderOnePress]' passed (29.491 seconds).
+Test Case '-[AcctProbeUITests.AccountShotTests test7DarkPage]' started.
+Test Case '-[AcctProbeUITests.AccountShotTests test7DarkPage]' passed (20.909 seconds).
+	 Executed 7 tests, with 0 failures (0 unexpected) in 274.288 (274.294) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 274.288 (274.297) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 274.288 (274.299) seconds
+** TEST SUCCEEDED **
+.acct-probe/run.sh: line 53:  1825 Terminated: 15          python3 -u stub.py 8765 "$OUT/ios/requests.log" > "$OUT/ios/stub.out" 2>&1
+total 12344
+drwxr-xr-x  34 runner  staff    1088 Oct  7 17:06 .
+drwxr-xr-x   3 runner  staff      96 Oct  7 16:53 ..
+-rw-r--r--@  1 runner  staff     104 Oct  7 17:02 AccountShotTeststest1TheRowsSayWhereEachAccountStandsWithNoButtonsOnASignedInOne-notes.txt
+-rw-r--r--@  1 runner  staff     354 Oct  7 17:03 AccountShotTeststest2SwipingARowShowsPauseInsideRemove-notes.txt
+-rw-r--r--@  1 runner  staff     231 Oct  7 17:03 AccountShotTeststest3APausedRowSwipesToResumeAndResumesAtOnce-notes.txt
+-rw-r--r--@  1 runner  staff      86 Oct  7 17:04 AccountShotTeststest4TheLongPressMenuHoldsEverything-notes.txt
+-rw-r--r--@  1 runner  staff     238 Oct  7 17:05 AccountShotTeststest5SignInStartsAtOncePastesInOneTapAndFolds-notes.txt
+-rw-r--r--@  1 runner  staff       0 Oct  7 17:05 AccountShotTeststest6CodexShowsItsCodeFirstUnderOnePress-notes.txt
+-rw-r--r--@  1 runner  staff      92 Oct  7 17:06 AccountShotTeststest7DarkPage-notes.txt
+drwxr-xr-x  26 runner  staff     832 Oct  7 17:06 attachments
+-rw-r--r--   1 runner  staff  286917 Oct  7 17:02 ios-01-page-top.png
+-rw-r--r--   1 runner  staff  385721 Oct  7 17:02 ios-02-page-lower.png
+-rw-r--r--   1 runner  staff  264671 Oct  7 17:03 ios-03-swipe-pause-remove.png
+-rw-r--r--   1 runner  staff  515784 Oct  7 17:03 ios-04-pause-sheet.png
+-rw-r--r--   1 runner  staff  368320 Oct  7 17:03 ios-05-swipe-resume.png
+-rw-r--r--   1 runner  staff  383038 Oct  7 17:03 ios-06-resumed.png
+-rw-r--r--   1 runner  staff  424941 Oct  7 17:04 ios-07-menu.png
+-rw-r--r--   1 runner  staff  370745 Oct  7 17:04 ios-08-starting.png
+-rw-r--r--   1 runner  staff  389456 Oct  7 17:04 ios-09-paste-form.png
+-rw-r--r--   1 runner  staff  389492 Oct  7 17:04 ios-10-back-paste-first.png
+-rw-r--r--   1 runner  staff  370357 Oct  7 17:05 ios-11-signed-in.png
+-rw-r--r--   1 runner  staff  374976 Oct  7 17:05 ios-12-folded.png
+-rw-r--r--   1 runner  staff  190176 Oct  7 17:05 ios-13-codex-signed-out.png
+-rw-r--r--   1 runner  staff  212483 Oct  7 17:05 ios-14-codex-device-code.png
+-rw-r--r--   1 runner  staff  276840 Oct  7 17:06 ios-15-page-dark.png
+-rw-r--r--   1 runner  staff  253052 Oct  7 17:06 ios-16-swipe-dark.png
+-rw-r--r--   1 runner  staff     394 Oct  7 17:06 not-served.txt
+-rw-r--r--   1 runner  staff   19571 Oct  7 17:06 requests.log
+-rw-r--r--   1 runner  staff      49 Oct  7 16:53 stub.out
+-rw-r--r--@  1 runner  staff   25616 Oct  7 17:04 tree-menu.txt
+-rw-r--r--@  1 runner  staff   20745 Oct  7 17:02 tree-page-top.txt
+-rw-r--r--@  1 runner  staff   21275 Oct  7 17:04 tree-paste-form.txt
+-rw-r--r--@  1 runner  staff   21455 Oct  7 17:03 tree-swipe.txt
+-rw-r--r--   1 runner  staff  674071 Oct  7 17:06 xcodebuild-ios.log
