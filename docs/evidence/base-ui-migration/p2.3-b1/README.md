@@ -219,6 +219,8 @@ B1 由 [P0 基线漂移归因与参考维护](orbit-task:34b8BRQ7HHDwl44Qp0MoC) 
 
 输出见 [checks/merge-check/](checks/merge-check/)：`output-filtered.txt` 去掉了用例运行中的控制台告警，`output-full.txt.gz` 是完整输出。
 
+加入本目录后，又在证据提交 `bc6d7078f` 上原样跑了一次，结果相同：构建成功，Vitest 340 个文件、4326 个用例全部通过，用时 281 秒，退出码 0（[checks/merge-check-final/](checks/merge-check-final/)）。
+
 ## 缺口
 
 ### 项目分支吸收的 main 改动（新漂移，未处理）
