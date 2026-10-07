@@ -244,7 +244,8 @@ private fun SpacePicker(content: WikiHomeContent, pickSpace: (String) -> Unit) {
     Box {
         Row(Modifier.background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f), CircleShape).clickable(role = Role.Button) { expanded = true }
             .heightIn(min = 36.dp).padding(horizontal = 12.dp, vertical = 6.dp).testTag("wiki-space-picker")
-            .semantics(mergeDescendants = true) { contentDescription = WikiCopy.spacePickerHint; stateDescription = content.space.slug },
+            // The slug is its own text: as a state as well, TalkBack read it twice.
+            .semantics(mergeDescendants = true) { contentDescription = WikiCopy.spacePickerHint },
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(content.space.slug, style = WikiType.label.copy(fontWeight = FontWeight.SemiBold), maxLines = 1)
             Icon(painterResource(R.drawable.ic_chevron_updown), null, Modifier.size(14.dp))
@@ -290,9 +291,9 @@ private fun SearchField(query: String, change: (String) -> Unit) {
 @Composable
 private fun HomeBanner(text: String, amber: Boolean, tag: String, onClick: () -> Unit) {
     val dot = if (amber) Color(0xFFFF9500) else MaterialTheme.colorScheme.primary
+    // Its words are its own text: a label repeating them made TalkBack read the bar twice.
     Row(Modifier.fillMaxWidth().background(if (amber) WikiPalette.amberWash else MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
-        .clickable(role = Role.Button, onClick = onClick).heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 10.dp).testTag(tag)
-        .semantics(mergeDescendants = true) { contentDescription = text },
+        .clickable(role = Role.Button, onClick = onClick).heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 10.dp).testTag(tag),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
         Box(Modifier.size(7.dp).background(dot, CircleShape))
         Text(text, Modifier.weight(1f), style = WikiType.prose, maxLines = 1, overflow = TextOverflow.Ellipsis)

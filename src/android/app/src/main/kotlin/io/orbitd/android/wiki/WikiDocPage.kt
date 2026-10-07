@@ -461,8 +461,9 @@ private fun DocFootnoteRow(note: WikiDocFootnote, entry: WikiDocViaEntry?, open:
                     modifier = Modifier.background(tint.copy(alpha = 0.12f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 1.dp))
                 Text(WikiDocLogic.footnoteWhere(note), Modifier.weight(1f), style = if (WikiDocLogic.isRepo(note)) WikiType.mono else WikiType.subtext,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
-                // The tick and the cross in words, as the card says them: a verified row would otherwise read a bare "✓".
-                Text(WikiDocCopy.verdictList(note.verdict), Modifier.semantics { contentDescription = WikiDocCopy.verdictCard(note.verdict).filter { it != '✓' && it != '✗' }.trim() },
+                // The row's words without the tick or the cross; the bare tick in the card's words ("quote verified").
+                Text(WikiDocCopy.verdictList(note.verdict), Modifier.semantics { contentDescription = listOf(WikiDocCopy.verdictList(note.verdict),
+                    WikiDocCopy.verdictCard(note.verdict)).map { words -> words.filter { it != '✓' && it != '✗' }.trim() }.first { it.isNotEmpty() } },
                     style = WikiType.label, maxLines = 1,
                     color = if (checked) LocalOrbitColors.current.success else MaterialTheme.colorScheme.error)
             }

@@ -26,8 +26,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /** What TalkBack found on the emulator (WikiWatchTalkBackTest), held on the JVM: no word TalkBack reads is a bare symbol
- * ("ⓘ", "💬", "◎", "⚠", "•", "✓", "—"), every heading has words of its own to be announced with, and the parts TalkBack
- * spoke apart or with their glyph ("✓ Confirm", "· Draft", "“…”") carry plain words. A node's label is what TalkBack
+ * ("ⓘ", "💬", "◎", "⚠", "•", "✓", "—"), every heading has words of its own to be announced with, no press says its words
+ * twice, and the parts TalkBack spoke apart or with their glyph ("✓ Confirm", "· Draft", "“…”") carry plain words. A node's label is what TalkBack
  * reads in place of its text. Pages over the shared fixtures; the screen reader itself is the device check's. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = TestOrbitApplication::class, qualifiers = "w411dp-h3000dp")
@@ -46,12 +46,42 @@ class WikiTalkBackWordsTest {
     private val silentHeading = SemanticsMatcher("a heading without words of its own") { node ->
         node.config.contains(SemanticsProperties.Heading) && read(node).isEmpty() }
 
+    /** A press whose label or state repeats the words under it: TalkBack says them twice. */
+    private val repeated = SemanticsMatcher("a press that says its words twice") { node ->
+        node.config.contains(SemanticsActions.OnClick) && (node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() +
+            listOfNotNull(node.config.getOrNull(SemanticsProperties.StateDescription)) + node.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text })
+            .filter { words -> words.any(Char::isLetter) }.groupingBy { it.lowercase() }.eachCount().any { it.value > 1 } }
+
     private fun assertTalkBackReadsWords(where: String) {
         compose.waitForIdle()
         val bare = compose.onAllNodes(bareSymbol, useUnmergedTree = true).fetchSemanticsNodes().map(::read)
         assertTrue("$where: TalkBack reads these on their own: $bare", bare.isEmpty())
         val silent = compose.onAllNodes(silentHeading).fetchSemanticsNodes().map { heading -> heading.children.flatMap(::read) }
         assertTrue("$where: headings TalkBack never announces: $silent", silent.isEmpty())
+        val twice = compose.onAllNodes(repeated).fetchSemanticsNodes().map { it.config }
+        assertTrue("$where: presses TalkBack reads twice: $twice", twice.isEmpty())
+    }
+
+    /** The home: the review banner and the space picker say each of their words once (TalkBack read the banner twice,
+     * and the space's slug as a state and again as its text). */
+    @Test fun theHomesPressesSayTheirWordsOnce() {
+        val space = WikiFixtures.spaceID
+        val rig = WikiTestRig { api ->
+            when (api.path.joinToString("/")) {
+                "wiki/spaces" -> 200 to WikiFixtures.spaces
+                "wiki/spaces/$space" -> 200 to WikiFixtures.space
+                "wiki/spaces/$space/entries" -> 200 to WikiFixtures.entries
+                "wiki/spaces/$space/timeline" -> 200 to WikiFixtures.timeline
+                "wiki/review" -> 200 to WikiFixtures.review
+                else -> null
+            }
+        }
+        val route = OrbitRoute(Destination.WIKI)
+        show(route) { WikiHomeScreen(rig.store(), route, DirectoryData(), WikiNavRecord().nav) }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-review-banner").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("wiki-review-banner").assertTextContains("proposals to review", substring = true)
+        compose.onNodeWithTag("wiki-space-picker").assert(hasContentDescription(WikiCopy.spacePickerHint)).assertTextContains("orbit")
+        assertTalkBackReadsWords("home")
     }
     private fun labelled(tag: String, label: String) = compose.onNodeWithTag(tag).assert(hasContentDescription(label))
 

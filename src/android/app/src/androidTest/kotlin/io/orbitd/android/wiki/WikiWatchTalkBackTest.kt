@@ -363,6 +363,8 @@ class WikiWatchTalkBackTest {
         val parts = spokenParts(node)
         if ((node.isClickable || node.isCheckable) && parts.isEmpty()) problem("$page: TalkBack has no words for a ${kind(node)}", "at ${bounds(node)}")
         (parts + said).filter(::bare).forEach { problem("$page: TalkBack reads \"$it\" on its own", describe(node)) }
+        // A label or a state repeating the words under it: TalkBack says them twice.
+        (twice(parts) + twice(said.filter { it in parts })).forEach { problem("$page: TalkBack reads \"$it\" twice", describe(node)) }
         parts.forEach { part -> symbols(part).takeIf { it.isNotEmpty() }?.let { notes += "$page: \"$part\" carries ${it.joinToString(" ")}" } }
     }
 
@@ -449,6 +451,8 @@ class WikiWatchTalkBackTest {
     /** What TalkBack reads of a node itself: its label in place of its text, and its state. */
     private fun own(node: AccessibilityNodeInfo) = listOf((node.contentDescription?.takeIf { it.isNotBlank() } ?: node.text)?.toString()?.trim().orEmpty(),
         node.stateDescription?.toString()?.trim().orEmpty()).filter { it.isNotEmpty() }
+    private fun twice(parts: List<String>) = parts.filter { part -> part.any(Char::isLetter) }.groupingBy { it.lowercase() }.eachCount()
+        .filterValues { it > 1 }.keys
     /** A part TalkBack says as a symbol's name ("bullet", "single right-pointing angle quotation mark"). */
     private fun bare(part: String) = part.none(Char::isLetterOrDigit)
     /** The symbols inside words that a voice may name aloud: arrows, ticks, triangles, bullets, emoji. */
