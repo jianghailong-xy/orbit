@@ -27,6 +27,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
 RAW = Path('/var/tmp/kw2-246921c8/runs')
 sys.path.insert(0, str(HERE))
+sys.dont_write_bytecode = True  # no __pycache__ in the evidence directory
 from slim import slim_run  # noqa: E402
 
 args = sys.argv[1:]

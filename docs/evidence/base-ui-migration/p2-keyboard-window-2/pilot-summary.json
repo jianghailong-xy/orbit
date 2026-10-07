@@ -1,0 +1,82 @@
+{
+ "noise-before": {
+  "scope": "before-fix run 1 vs before-fix run 2 (same tree)",
+  "screenshots": {
+   "total": 256,
+   "identical": 223,
+   "antialias": 32,
+   "beyond": {
+    "chromium-dark-desktop/pilot-delete-confirm.png": {
+     "pixels": 27,
+     "pixelsAtMost2": 22,
+     "maxChannelDiff": 15
+    }
+   }
+  },
+  "traces": {
+   "traces": 64,
+   "identical": 57,
+   "requestsDiffer": [],
+   "snapshotOnly": [
+    {
+     "step": "chromium-dark-desktop :: task detail pilot › fields, pickers and the panel header :: suggested pick L",
+     "fields": [
+      "focus"
+     ]
+    },
+    {
+     "step": "chromium-dark-phone :: task detail pilot › fields, pickers and the panel header :: model pick Sonnet",
+     "fields": [
+      "focus",
+      "listbox"
+     ]
+    },
+    {
+     "step": "chromium-light-desktop :: task detail pilot › fields, pickers and the panel header :: suggested pick L",
+     "fields": [
+      "focus"
+     ]
+    },
+    {
+     "step": "chromium-light-desktop :: task detail pilot › fields, pickers and the panel header :: model pick Sonnet",
+     "fields": [
+      "focus",
+      "listbox"
+     ]
+    },
+    {
+     "step": "chromium-light-phone :: task detail pilot › dependencies, inputs and comments :: input removed",
+     "fields": [
+      "dialogs",
+      "focus"
+     ]
+    },
+    {
+     "step": "chromium-light-phone :: task detail pilot › fields, pickers and the panel header :: model pick Sonnet",
+     "fields": [
+      "listbox"
+     ]
+    },
+    {
+     "step": "webkit-light-desktop :: share dialog pilot › from Only you to a public link and back :: expiry 30 days",
+     "fields": [
+      "focus"
+     ]
+    },
+    {
+     "step": "webkit-light-desktop :: share dialog pilot › from Only you to a public link and back :: turned off",
+     "fields": [
+      "focus"
+     ]
+    },
+    {
+     "step": "webkit-light-phone :: task detail pilot › fields, pickers and the panel header :: list pick Later",
+     "fields": [
+      "focus"
+     ]
+    }
+   ]
+  },
+  "capturesWithStyleDeltas": 0
+ }
+}

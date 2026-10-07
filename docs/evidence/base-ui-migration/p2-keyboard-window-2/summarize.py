@@ -1,16 +1,17 @@
 """Per-combination verdicts of keyboard-window-2 datasets (samples.csv files under this directory).
 
-usage: summarize.py <dataset>=<dir>[,<dir>...] [<dataset>=...] [--json <file>] [--table <dataset>]
+usage: summarize.py <dataset>=<dir>[,<dir>...] [<dataset>=...] [--run <name>=<dir>[,<dir>...]] [--json <file>] [--table <name>]
 
 For every target × sequence of a dataset: the paced reference (the majority paced result), how many burst samples
 differ from it (and with what), window hits and hand-offs, as in ../p2-keyboard-window/summarize-keyboard-window.py.
 A result is `outcome | shown popups | @focus`; `outcome` alone (what ran, was chosen or answered) is compared too.
 
 Per sequence, the rule of the two earlier tasks, old AntD first:
-1. the old component gives the key under test a function: its paced outcome differs from the control sequence's
-   (for menus and submenus, as before: its paced reference runs an item);
-2. its burst samples keep its paced reference;
-and only then is an Orbit target whose burst differs from its own paced reference to be fixed."""
+1. the old component gives the key under test a function: its paced result differs from the control sequence's (for
+   menus and submenus, as before, its paced reference runs an item; for Popconfirm, it answers the question);
+2. its burst samples keep its paced reference (the whole result, focus included);
+and only then is an Orbit target whose burst differs from its own paced reference to be fixed.
+`--run` summarises a run per test and project instead (the held-frames probe, the earlier tasks' probes)."""
 import collections
 import csv
 import json
@@ -76,17 +77,20 @@ def verdicts(table):
             if old is None:
                 entry['verdict'] = 'no old sample'
             else:
-                old_ref = outcome(old['paced']['reference'])
-                old_control = outcome(table.get((control, antd), {}).get('paced', {}).get('reference')) if control else None
-                if kind in ('menu', 'submenu'):
-                    function = bool(old_ref and old_ref.startswith('ran '))
+                old_ref = old['paced']['reference']
+                old_control = table.get((control, antd), {}).get('paced', {}).get('reference') if control else None
+                if kind in ('menu', 'submenu', 'popconfirm'):
+                    # As in the earlier tasks' menu rule: the key counts when the old component runs an item or
+                    # answers the question; re-pressing its trigger to close it does not.
+                    function = old_ref.split(' | ')[0] != 'none'
                 else:
                     function = control is not None and old_control is not None and old_ref != old_control
-                stable = old['burst']['differOutcome'] == 0
-                orbit_stable = new['burst']['differOutcome'] == 0
+                stable = old['burst']['differ'] == 0
+                orbit_stable = new['burst']['differ'] == 0
                 entry.update({'antdFunction': function, 'antdStable': stable, 'orbitStable': orbit_stable,
-                              'antdPaced': old_ref, 'antdControlPaced': old_control, 'orbitPaced': outcome(new['paced']['reference']),
-                              'orbitBurstDiffer': new['burst']['differOutcome'], 'orbitBurstSamples': new['burst']['samples']})
+                              'antdPaced': old_ref, 'antdControlPaced': old_control, 'orbitPaced': new['paced']['reference'],
+                              'antdBurstDiffer': old['burst']['differ'], 'orbitBurstDiffer': new['burst']['differ'],
+                              'orbitBurstDifferOutcome': new['burst']['differOutcome'], 'orbitBurstSamples': new['burst']['samples']})
                 if control is None:
                     entry['verdict'] = 'control'
                 elif function and stable and not orbit_stable:
@@ -101,14 +105,27 @@ def verdicts(table):
     return out
 
 
+def tests_by_case(dirs):
+    """A run's tests from report.summary.json: {title: {project: status}}, for the held-frames and earlier probes."""
+    out = collections.defaultdict(dict)
+    for name in dirs:
+        for test in json.loads((HERE / name / 'report.summary.json').read_text())['tests']:
+            out[test['title']][test['project']] = test['status']
+    return out
+
+
 def main(argv):
-    datasets, json_out, show = {}, None, []
+    datasets, runs, json_out, show = {}, {}, None, []
     while argv:
         item = argv.pop(0)
         if item == '--json':
             json_out = argv.pop(0)
         elif item == '--table':
             show.append(argv.pop(0))
+        elif item == '--run':
+            # A run summarised per test and project (held frames, the earlier tasks' probes).
+            name, dirs = argv.pop(0).split('=', 1)
+            runs[name] = dirs.split(',')
         else:
             name, dirs = item.split('=', 1)
             datasets[name] = dirs.split(',')
@@ -117,10 +134,23 @@ def main(argv):
         table = cells(load(dirs))
         summary[name] = {'dirs': dirs, 'cells': {f'{seq} / {target}': cell for (seq, target), cell in sorted(table.items())},
                          'verdicts': verdicts(table)}
+    for name, dirs in runs.items():
+        cases = tests_by_case(dirs)
+        summary[name] = {'dirs': dirs, 'passed': sum(status == 'expected' for projects in cases.values() for status in projects.values()),
+                         'tests': sum(len(projects) for projects in cases.values()),
+                         'cases': {title: {'passedProjects': sum(status == 'expected' for status in projects.values()), 'projects': len(projects),
+                                           'failed': sorted(project for project, status in projects.items() if status != 'expected')}
+                                   for title, projects in sorted(cases.items())}}
     if json_out:
         Path(json_out).write_text(json.dumps(summary, indent=1, ensure_ascii=False) + '\n')
     for name in show:
         print(f'## {name}')
+        if 'cases' in summary[name]:
+            print(f"{summary[name]['passed']}/{summary[name]['tests']} passed")
+            for title, case in summary[name]['cases'].items():
+                print(f"{title:<70} {case['passedProjects']}/{case['projects']}{' failed: ' + ', '.join(case['failed']) if case['failed'] else ''}")
+            print()
+            continue
         for key, cell in summary[name]['cells'].items():
             burst = cell['burst']
             print(f"{key:<58} paced {cell['paced']['count']}/{cell['paced']['samples']} [{cell['paced']['reference']}]"

@@ -5,7 +5,8 @@ slim_run(raw, dest) writes into dest:
   and per result the status, duration, retry, error messages and attachment names, content types and the SHA-256 of
   each body; no bodies and no traces (those stay in the raw run);
 - environment.json, copied;
-- samples.csv when the run carries keyboard-window-2 or held-frames-2 records: one line per sample (columns below).
+- samples.csv when the run carries keyboard-window-2, held-frames-2 or (p2-select-keys) select-keys records: one line
+  per sample (columns below).
 
 `python3 slim.py <raw> <dest>` does the same from the command line."""
 import base64
@@ -38,7 +39,9 @@ def window_hit(log):
     if len(trusted) < 2:
         return 0
     opener, following = trusted[0], trusted[1]
-    return int(following['target'] == opener['target'] and following.get('count', 0) > opener.get('count', 0))
+    if 'count' not in following:  # the earlier probes log only whether a list was shown
+        return int(following['target'] == opener['target'] and bool(following.get('listbox')))
+    return int(following['target'] == opener['target'] and following['count'] > opener.get('count', 0))
 
 
 def slim_run(raw, dest):
@@ -64,9 +67,13 @@ def slim_run(raw, dest):
                         entry = {'name': attachment['name'], 'contentType': attachment['contentType'],
                                  'path': attachment.get('path'), 'sha256': hashlib.sha256(body).hexdigest() if body is not None else None}
                         attachments.append(entry)
-                        if attachment['name'] in ('keyboard-window-2', 'held-frames-2') and body is not None:
+                        if attachment['name'] in ('keyboard-window-2', 'held-frames-2', 'select-keys') and body is not None:
                             record = json.loads(body)
                             log = record.get('keyLog', [])
+                            if attachment['name'] == 'select-keys':
+                                # The Select fix's probe (p2-select-keys): value shown, whether a list is still open.
+                                record = {**record, 'kind': 'select-keys',
+                                          'result': f"{record['after']} | list {'open' if record.get('listboxOpen') else 'closed'} | @{record.get('active')}"}
                             if attachment['name'] == 'held-frames-2':
                                 # A held-frames case: its name is the sequence, its result the state after the frames ran.
                                 before, after = record['before'], record['after']
