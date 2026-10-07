@@ -20,7 +20,9 @@ class WikiWatchNavigationTest {
         assertEquals(uuid, entry.id)
         val restored = Wire.json.decodeFromString<OrbitNavigation>(Wire.json.encodeToString(OrbitNavigation().receive(space)))
             .bindAccount("server|reader")
-        assertEquals(space, restored.current)
+        // The link's arrival is a frame of its own (OrbitRoute.entry), kept across recreation.
+        assertEquals(space, restored.current.copy(entry = 0))
+        assertNotEquals(0L, restored.current.entry)
         assertNull(restored.pending)
         assertEquals(Destination.WORKSPACES, restored.back().current.destination)
     }
@@ -66,13 +68,16 @@ class WikiWatchNavigationTest {
     @Test fun aLinkedWatchHasFollowingUnderItAndBackStillReachesTheSource() {
         val session = OrbitRoute(Destination.SESSION, uuid)
         val watch = OrbitLinks.parse("orbit://watch/$publicId", origin = Origin.EXTERNAL)!!
-        val linked = OrbitNavigation().bindAccount("server|reader").push(session).receive(watch).withFollowingUnder(watch)
+        val received = OrbitNavigation().bindAccount("server|reader").push(session).receive(watch)
+        val arrived = received.current
+        assertEquals(watch, arrived.copy(entry = 0))
+        val linked = received.withFollowingUnder(arrived)
         assertEquals(listOf(Destination.WORKSPACES, Destination.SESSION, Destination.WATCH, Destination.WATCH), linked.frames.map { it.destination })
-        assertEquals(watch, linked.current)
+        assertEquals(arrived, linked.current)
         assertEquals(OrbitRoute(Destination.WATCH, origin = Origin.LINK), linked.back().current)
         assertEquals(session, linked.back().back().current)
         // Opened from Following, or applied twice, the stack is left as it is.
-        assertEquals(linked, linked.withFollowingUnder(watch))
+        assertEquals(linked, linked.withFollowingUnder(arrived))
         val fromList = OrbitNavigation().bindAccount("server|reader").push(OrbitRoute(Destination.WATCH)).push(OrbitRoute(Destination.WATCH, uuid))
         assertEquals(fromList, fromList.withFollowingUnder(OrbitRoute(Destination.WATCH, uuid)))
     }

@@ -119,6 +119,16 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             .collectAsState(null to 0L)
         val revision = if (live.first === signedIn.handle) live.second else 0L
         val holder = rememberSaveableStateHolder()
+        // A12's Wiki and Watch pages start afresh each time they are pushed, as on iOS: once such a route has left every
+        // stack its saved state goes too, so a document opened again at a section scrolls there and an old refusal is
+        // not shown on the next visit. (A link's arrival is a route of its own: OrbitRoute.entry.)
+        val wikiHeld = remember { mutableSetOf<OrbitRoute>() }
+        LaunchedEffect(navigation.stacks) {
+            val kept = navigation.stacks.values.flatten().toSet()
+            wikiHeld.filterNot(kept::contains).forEach { holder.removeState(Wire.json.encodeToString(it)) }
+            wikiHeld.retainAll(kept)
+            wikiHeld += kept.filter { it.isWikiOrWatch }
+        }
         val route = navigation.current
         fun open(next: OrbitRoute) { keyboard?.hide(); focus.clearFocus(); navigation = navigation.push(next) }
         fun select(key: String, root: OrbitRoute) {
@@ -194,8 +204,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.WIKI, Destination.WIKI_ENTRY, Destination.WIKI_BROWSE, Destination.WIKI_INDEX,
                                 Destination.WIKI_ARTICLE, Destination.WIKI_DOC, Destination.WIKI_REVIEW, Destination.WIKI_SETTINGS,
                                 Destination.WIKI_RUN, Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION ->
-                                    WikiDestination(app, signedIn.handle, route, data, revision, ::open) { change -> navigation = change(navigation) }
-                                Destination.WATCH -> WatchDestination(app, signedIn.handle, route, revision,
+                                    WikiDestination(app, signedIn.handle, route, data, ::open) { change -> navigation = change(navigation) }
+                                Destination.WATCH -> WatchDestination(app, signedIn.handle, route,
                                     navigate = { change -> navigation = change(navigation) }, open = ::open)
                                 Destination.SETTINGS -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     AuthScreen(authState, authMessage, auth::login, auth::logout)

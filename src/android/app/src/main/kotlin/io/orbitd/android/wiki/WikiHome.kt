@@ -69,15 +69,26 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
     var contentsShown by rememberSaveable { mutableStateOf(false) }
     var refreshing by remember { mutableStateOf(false) }
     // A space a link named (`orbit://wiki/<spaceId>`) is picked once its row is known; the route keeps only the id.
+    // A space the account does not have — deleted, or another account's — is said to be unavailable, and no other
+    // space's home stands in for it; until the link is settled, nothing is drawn.
     var linkedSpaceApplied by rememberSaveable(route.id) { mutableStateOf(route.id == null) }
+    var linkedSpaceMissing by rememberSaveable(route.id) { mutableStateOf(false) }
     LaunchedEffect(store) { store.loadHome(); store.loadPlan(); store.loadDocsDirectory() }
     LaunchedEffect(state.spaces, route.id) {
         if (linkedSpaceApplied || !state.spacesState.hasLoaded) return@LaunchedEffect
         val linked = state.spaces.firstOrNull { sameWikiId(it.id, route.id) }
         linkedSpaceApplied = true
-        if (linked != null && linked.slug != state.currentSpace?.slug) {
+        if (linked == null) linkedSpaceMissing = true
+        else if (linked.slug != state.currentSpace?.slug) {
             store.select(linked.slug); store.loadHome(); store.loadPlan(); store.loadDocsDirectory()
         }
+    }
+    if (linkedSpaceMissing || !linkedSpaceApplied) {
+        PageBar.Bind(route, title = "")
+        Box(Modifier.fillMaxSize().testTag(if (linkedSpaceMissing) "wiki-space-unavailable" else "wiki-home-loading"), contentAlignment = Alignment.Center) {
+            if (linkedSpaceMissing) StatusMessage(WikiCopy.spaceUnavailable, WikiCopy.spaceUnavailableNote) else LoadingMessage("Loading…")
+        }
+        return
     }
     // The page's own header carries the title; the bar takes it once the header scrolls away (iOS's large title).
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()

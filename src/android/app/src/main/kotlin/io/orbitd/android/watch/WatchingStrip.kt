@@ -35,7 +35,7 @@ import java.time.Instant
 fun SessionWatches(app: OrbitApplication, handle: SessionHandle, sessionId: String, open: (OrbitRoute) -> Unit) {
     val store = remember(handle) { WatchStore.of(app.session, handle, app.processScope) }
     if (!store.live()) return
-    WatchFeed(app, handle, store, rememberWatchRevision(app, handle))
+    WatchFeed(app, handle, store)
     WatchingCardStack(store, sessionId, rememberSessionTitles(app, handle), open)
 }
 

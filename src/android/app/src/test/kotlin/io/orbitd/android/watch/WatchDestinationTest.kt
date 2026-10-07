@@ -33,7 +33,7 @@ class WatchTestApplication : OrbitApplication() {
     override fun createSession(): AuthSession = server.auth
 }
 
-/** `WatchDestination` as MainActivity hands it a route and the account's revision. */
+/** `WatchDestination` as MainActivity hands it a route, over the account stream's typed events. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = WatchTestApplication::class, qualifiers = "w411dp-h891dp")
 class WatchDestinationTest {
@@ -42,27 +42,34 @@ class WatchDestinationTest {
 
     private fun iso(secondsFromNow: Long) = Instant.now().plusSeconds(secondsFromNow).toString()
 
-    @Test fun openingFollowingReadsOnceAndAnAccountEventNudgesItShortlyAfter() {
+    @Test fun openingFollowingReadsOnceAndAnEventThatMovesTargetsNudgesItShortlyAfter() {
         val app = compose.activity.application as WatchTestApplication
         compose.waitUntil(5_000) { app.session.state.value is AuthState.SignedOut }
         val rows = listOf(WatchFixture.json(id = "A1", lastEvaluatedAt = iso(-20), createdAt = iso(-600), expiresAt = iso(3_600)))
         app.server.serve({ rows })
         val handle = runBlocking { app.server.signIn() }
+        app.realtime.setNetwork(true, "fixture")
         fun listReads() = app.server.lines.count { it.startsWith("GET /api/watches") && !it.startsWith("GET /api/watches/") }
-        var revision by mutableLongStateOf(1L)
         var route by mutableStateOf(OrbitRoute(Destination.WATCH))
         compose.activityRule.scenario.onActivity { activity ->
-            activity.setContent { OrbitTheme { WatchDestination(app, handle, route, revision) { opened += it } } }
+            activity.setContent { OrbitTheme { WatchDestination(app, handle, route) { opened += it } } }
         }
         compose.waitUntil(5_000) { compose.onAllNodesWithTag("following-row:A1").fetchSemanticsNodes().isNotEmpty() }
         compose.waitForIdle()
         assertEquals("opening Following reads the list once, and the floor counts from that read", 4, listReads())
         assertEquals("Following", PageBar.title(route))
 
-        // An account event: a target may have moved, so the list is read again — once, two seconds on.
-        compose.runOnIdle { revision = 2L }
+        compose.waitUntil(5_000) { app.realtime.state.value.controlConnects > 0 }
+        // A wiki event moves no target: nothing is read.
+        app.server.event("wiki.changed")
         compose.waitForIdle()
-        compose.runOnIdle { revision = 3L }
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(2_100))
+        compose.waitForIdle()
+        assertEquals(4, listReads())
+        // Two task events: a target may have moved, so the list is read again — once, two seconds on.
+        app.server.event("task.changed")
+        compose.waitForIdle()
+        app.server.event("task.changed")
         compose.waitForIdle()
         assertEquals(4, listReads())
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(2_100))

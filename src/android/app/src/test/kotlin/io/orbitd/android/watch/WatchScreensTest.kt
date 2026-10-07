@@ -91,7 +91,7 @@ class WatchScreensTest {
         var route by mutableStateOf(OrbitRoute(Destination.WATCH))
         show {
             Column {
-                Box(Modifier.weight(1f)) { WatchDestination(app, handle, route, 0L) { opened += it } }
+                Box(Modifier.weight(1f)) { WatchDestination(app, handle, route) { opened += it } }
                 SessionWatches(app, handle, "S1") { opened += it }
             }
         }

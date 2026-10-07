@@ -42,7 +42,8 @@ class WikiShellTest {
     val compose = createAndroidComposeRule<MainActivity>()
     private val shell = WikiShell
 
-    @Before fun start() { shell.reset() }
+    /** WikiToast is one per process, and Robolectric restarts the clock for every test: an earlier test's toast is cleared. */
+    @Before fun start() { shell.reset(); WikiToast.text = null }
 
     // MARK: P1-1 — a write runs to its end, whatever happens to the page that asked for it
 
@@ -57,7 +58,8 @@ class WikiShellTest {
         compose.onNodeWithTag("wiki-entry-form-save").performClick()
         compose.waitForIdle()
         compose.onNodeWithTag("wiki-entry-form-save-cancel").assertIsNotEnabled()
-        back()
+        // Swiped down, the sheet holds while its write is on its way (Back, in the sheet's own window, likewise).
+        compose.onNodeWithTag("wiki-entry-form").performTouchInput { swipeDown() }
         compose.waitForIdle()
         compose.onNodeWithTag("wiki-entry-form").assertExists()
         gate.complete(Unit)
@@ -101,7 +103,7 @@ class WikiShellTest {
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Nothing was applied", substring = true).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Nothing was applied: the entry changed after this was proposed.").assertExists()
         assertTrue("no Accepted toast for an op that changed nothing",
-            compose.onAllNodesWithTag("wiki-toast").fetchSemanticsNodes().isEmpty())
+            compose.onAllNodesWithText(WikiCopy.decidedAccepted).fetchSemanticsNodes().isEmpty())
     }
 
     // MARK: P2 — a page opened again starts afresh
