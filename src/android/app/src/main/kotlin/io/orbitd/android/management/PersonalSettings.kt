@@ -35,9 +35,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -477,7 +478,7 @@ internal fun personalCropPhoto(source: Bitmap, square: Rect): Bitmap {
  * sent. TalkBack, which cannot pinch, gets Zoom in / Zoom out on the photo.
  */
 @Composable
-private fun PersonalPhotoDialog(source: Bitmap, onDismiss: () -> Unit, onSave: (ByteArray) -> Unit) {
+internal fun PersonalPhotoDialog(source: Bitmap, onDismiss: () -> Unit, onSave: (ByteArray) -> Unit) {
     val image = remember(source) { source.asImageBitmap() }
     var zoom by remember(source) { mutableFloatStateOf(1f) }
     var offset by remember(source) { mutableStateOf(Offset.Zero) }
@@ -498,9 +499,12 @@ private fun PersonalPhotoDialog(source: Bitmap, onDismiss: () -> Unit, onSave: (
                 customActions = listOf(CustomAccessibilityAction("Zoom in") { zoomTo(zoom * 1.25f); true },
                     CustomAccessibilityAction("Zoom out") { zoomTo(zoom / 1.25f); true })
             }) {
-                with(density) {
-                    Image(image, null, Modifier.align(Alignment.Center).requiredSize((fitted.width * zoom).toDp(), (fitted.height * zoom).toDp())
-                        .graphicsLayer { translationX = offset.x; translationY = offset.y }, contentScale = ContentScale.FillBounds)
+                // Drawn, not laid out: a long photo at full zoom is wider than any layout size can be.
+                Canvas(Modifier.fillMaxSize()) {
+                    val width = fitted.width * zoom; val height = fitted.height * zoom
+                    translate((size.width - width) / 2 + offset.x, (size.height - height) / 2 + offset.y) {
+                        scale(width / image.width, height / image.height, pivot = Offset.Zero) { drawImage(image) }
+                    }
                 }
                 // Everything outside the circle dimmed, and the circle's edge drawn.
                 Canvas(Modifier.fillMaxSize().graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)) {

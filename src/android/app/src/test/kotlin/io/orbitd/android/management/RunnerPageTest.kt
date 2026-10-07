@@ -129,4 +129,11 @@ class RunnerPageTest {
         start.moved(160f, heights).let { assertEquals(listOf("b", "c", "a"), it.order); assertEquals(-40f, it.offset) }
         RunnerDrag("c", listOf("a", "b", "c"), 0f).moved(-260f, heights).let { assertEquals(listOf("c", "a", "b"), it.order); assertEquals(-60f, it.offset) }
     }
+
+    /** A drag on a row no longer in the order (removed meanwhile) moves nothing: it ran removeAt(-1) once past half a row. */
+    @Test fun aDragOnARowNotInTheOrderMovesNothing() {
+        val heights = mapOf("gone" to 100, "b" to 100, "c" to 100)
+        assertEquals(listOf("b", "c"), RunnerDrag("gone", listOf("b", "c"), 0f).moved(160f, heights).order)
+        assertEquals(listOf("b", "c"), RunnerDrag("gone", listOf("b", "c"), 0f).moved(-160f, heights).order)
+    }
 }

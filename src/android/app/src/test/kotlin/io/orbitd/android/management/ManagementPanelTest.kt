@@ -4,6 +4,7 @@ import android.content.ComponentName
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -119,8 +120,9 @@ class ManagementPanelTest {
             repeat(30) { moveBy(androidx.compose.ui.geometry.Offset(0f, 20f)) }
             up()
         }
-        compose.waitUntil(10_000) { fixture.calls.contains("POST runners/reorder") }
-        assertEquals(listOf(fixture.RUNNER_TWO, fixture.RUNNER), fixture.runnerOrder)
+        // The fixture notes the call before it takes the new order: wait for the order itself.
+        compose.waitUntil(10_000) { fixture.runnerOrder == listOf(fixture.RUNNER_TWO, fixture.RUNNER) }
+        compose.waitForIdle()
         assertEquals("One order goes out per drag", 1, fixture.calls.count { it == "POST runners/reorder" })
     }
 
@@ -177,5 +179,49 @@ class ManagementPanelTest {
             node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(layout)
             layout.firstOrNull()?.lineCount?.takeIf { it > 1 }?.let { "$text: $it lines" }
         }
+    }
+
+    /**
+     * A row removed in Edit mode leaves no handle behind. The next row moves into its place, and a drag on that row's
+     * handle moves that row. The handles were kept by id and never dropped: the removed row's handle lay over the next
+     * row's, a drag could start on the removed id, and moving it past half a row ran removeAt(-1). Which of two
+     * overlapping handles was found first followed hash order, so both orders are run.
+     */
+    @Test fun aRemovedRowLeavesNoHandleBehindForTheNextRowsDrag() {
+        fixture.secondRunner = true
+        val api = api()
+        var round by mutableStateOf(0)
+        compose.setContent { key(round) { RunnersList(api, revision) {} } }
+        for ((order, next) in listOf(listOf(fixture.RUNNER, fixture.RUNNER_TWO) to "Spare box", listOf(fixture.RUNNER_TWO, fixture.RUNNER) to "Old alias")) {
+            fixture.runnerOrder = order; fixture.removedRunners = emptySet()
+            round++
+            await(next); compose.waitForIdle()
+            compose.onNode(hasText("Edit") and hasClickAction()).performClick()
+            compose.onAllNodes(hasText("Remove") and hasClickAction()).onFirst().performClick()
+            compose.onNode(hasText(RunnerCopy.REMOVE) and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
+            compose.waitUntil(10_000) { fixture.removedRunners.size == 1 && compose.onAllNodes(hasContentDescription("Reorder", substring = true)).fetchSemanticsNodes().size == 1 }
+            compose.waitForIdle()
+            compose.onNodeWithContentDescription("Reorder $next").performTouchInput {
+                down(centerRight - androidx.compose.ui.geometry.Offset(8f, 0f))
+                repeat(30) { moveBy(androidx.compose.ui.geometry.Offset(0f, 20f)) }
+                up()
+            }
+            compose.waitForIdle()
+            compose.onNodeWithContentDescription("Reorder $next").assertExists()
+        }
+        assertEquals("A list of one sends no order", 0, fixture.calls.count { it == "POST runners/reorder" })
+    }
+
+    /** A photo far longer than it is high, zoomed in all the way, still draws (it is no layout size). */
+    @Test fun aVeryLongPhotoZoomedInAllTheWayStillDraws() {
+        val photo = android.graphics.Bitmap.createBitmap(30_000, 100, android.graphics.Bitmap.Config.ARGB_8888)
+        compose.setContent { PersonalPhotoDialog(photo, {}, {}) }
+        val preview = compose.onNodeWithContentDescription("Photo crop preview")
+        repeat(10) {
+            val zoomIn = preview.fetchSemanticsNode().config[SemanticsActions.CustomActions].first { it.label == "Zoom in" }
+            compose.runOnUiThread { zoomIn.action() }
+            compose.waitForIdle()
+        }
+        compose.onNodeWithText("Save").assertExists()
     }
 }

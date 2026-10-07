@@ -57,7 +57,6 @@ internal object WorkspaceEffort {
 @Composable
 fun WorkspaceSettings(api: ManagementApi, workspaceId: String?, revision: Long, done: () -> Unit, deleted: () -> Unit, changed: () -> Unit) {
     val id = workspaceId ?: return
-    var workspace by remember(id) { mutableStateOf<JsonObject?>(null) }
     // The record as this opening of the form found it (iOS prefill): the fields start from it and Done compares with it,
     // so a change made elsewhere meanwhile is neither shown as an edit here nor written back over.
     var prefill by rememberSaveable(id) { mutableStateOf<String?>(null) }
@@ -69,7 +68,6 @@ fun WorkspaceSettings(api: ManagementApi, workspaceId: String?, revision: Long, 
     LaunchedEffect(id, revision) {
         try {
             val loaded = api.get("workspaces/$id").jsonObject
-            workspace = loaded
             if (prefill == null) prefill = loaded.toString()
             runner = try { providerObjects(api.get("runners")).firstOrNull { ObjectId.same(it.text("id"), loaded.text("runnerId")) } }
                 catch (e: CancellationException) { throw e } catch (_: Exception) { null }

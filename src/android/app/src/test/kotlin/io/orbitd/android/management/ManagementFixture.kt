@@ -38,6 +38,7 @@ object ManagementFixture {
     @Volatile var loginState = "ACTIVE"
     @Volatile var secondRunner = false
     @Volatile var runnerOrder = listOf(RUNNER, RUNNER_TWO)
+    @Volatile var removedRunners = emptySet<String>()
     /** Completing it drops the control stream; a reconnect then never opens. */
     @Volatile var drop = CompletableDeferred<Unit>()
     @Volatile private var opened = 0
@@ -45,7 +46,7 @@ object ManagementFixture {
     fun reset() {
         calls.clear(); workspaceName = "Alpha"; runnerAlias = "Old alias"; runnerCapacity = 2; poolLabel = "Team Codex"; theme = "system"; shareFails = false; accessFails = false
         viewerRole = "ADMIN"; viewerCreates = true; membersCanAdd = false; membersCanAddAccounts = false; loginState = "ACTIVE"
-        secondRunner = false; runnerOrder = listOf(RUNNER, RUNNER_TWO)
+        secondRunner = false; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet()
         drop = CompletableDeferred(); opened = 0
     }
 
@@ -72,7 +73,7 @@ object ManagementFixture {
         "preferences":{"theme":"$theme","defaultPermissionMode":"auto","enableOrchestration":true}}"""
     private fun workspace() = """{"id":"$WORKSPACE","name":"$workspaceName","runnerId":"$RUNNER","enabled":true,"workDir":"/srv/alpha",
         "lastProvider":"claude","effort":"","modelRouting":false,"env":{},"position":0,"createdAt":"2026-09-01T00:00:00Z"}"""
-    private fun runners() = runnerOrder.filter { it == RUNNER || secondRunner }.joinToString(",", "[", "]") { if (it == RUNNER) runner() else runnerTwo() }
+    private fun runners() = runnerOrder.filter { (it == RUNNER || secondRunner) && it !in removedRunners }.joinToString(",", "[", "]") { if (it == RUNNER) runner() else runnerTwo() }
     private fun runnerTwo() = """{"id":"$RUNNER_TWO","name":"spare","displayName":"Spare box","hostname":"spare-01","version":"0.1.200","online":true,
         "status":"ONLINE","lastHeartbeatAt":"$now","maxConcurrent":1,"activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,"engines":[],"enrolledAt":"2026-09-02T00:00:00Z"}"""
     private fun runner() = """{"id":"$RUNNER","name":"box","displayName":"$runnerAlias","hostname":"box-01","version":"0.1.200","online":true,
@@ -109,7 +110,9 @@ object ManagementFixture {
             "workspaces/$WORKSPACE" -> { if (api.method == HttpMethod.PATCH) workspaceName = body()["name"]!!.jsonPrimitive.content; ok(workspace()) }
             "runners" -> ok(runners())
             "runners/reorder" -> { runnerOrder = body()["ids"]!!.jsonArray.map { it.jsonPrimitive.content }; ok(runners()) }
+            "runners/$RUNNER_TWO" -> if (api.method == HttpMethod.DELETE) { removedRunners = removedRunners + RUNNER_TWO; ok("{}") } else ok(runnerTwo())
             "runners/$RUNNER" -> {
+                if (api.method == HttpMethod.DELETE) { removedRunners = removedRunners + RUNNER; return@HttpTransport ok("{}") }
                 if (api.method == HttpMethod.PATCH) body().let { patch ->
                     patch["displayName"]?.let { runnerAlias = it.jsonPrimitive.content }
                     patch["maxConcurrent"]?.let { runnerCapacity = it.jsonPrimitive.int }

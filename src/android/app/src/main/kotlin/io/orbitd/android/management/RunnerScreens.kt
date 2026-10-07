@@ -215,18 +215,24 @@ fun RunnersList(api: ManagementApi, revision: Long, openRunner: (String) -> Unit
                             Column(Modifier.onPlaced { list = it }.pointerInput(editing) {
                                 if (editing) awaitEachGesture {
                                     val down = awaitFirstDown(requireUnconsumed = false)
-                                    val id = handles.entries.firstOrNull { it.value.contains(down.position) }?.key ?: return@awaitEachGesture
-                                    drag = RunnerDrag(id, model.runners.map { it.text("id") }, 0f)
-                                    val ended = verticalDrag(down.id) { change -> drag = drag?.moved(change.positionChange().y, heights); change.consume() }
-                                    val order = drag?.order
-                                    drag = null
-                                    if (ended && order != null && order != model.runners.map { it.text("id") }) scope.launch { model.reorder(order) }
+                                    // Only the handle of a row shown now: a removed row's handle lay where the next row moved to.
+                                    val current = model.runners.map { it.text("id") }
+                                    val id = handles.entries.firstOrNull { it.key in current && it.value.contains(down.position) }?.key ?: return@awaitEachGesture
+                                    drag = RunnerDrag(id, current, 0f)
+                                    // Let go, cancelled, or cut short by Edit turning off: the rows stand in order again.
+                                    try {
+                                        val ended = verticalDrag(down.id) { change -> drag = drag?.moved(change.positionChange().y, heights); change.consume() }
+                                        val order = drag?.order
+                                        if (ended && order != null && order != current) scope.launch { model.reorder(order) }
+                                    } finally { drag = null }
                                 }
                             }) {
                                 shown.forEachIndexed { index, runner ->
                                     val id = runner.text("id")
                                     if (index > 0) HorizontalDivider()
                                     key(id) {
+                                        // A row that goes takes its handle with it.
+                                        DisposableEffect(id) { onDispose { handles.remove(id); heights.remove(id) } }
                                         val dragged = drag?.id == id
                                         Box(Modifier.onSizeChanged { heights[id] = it.height }.zIndex(if (dragged) 1f else 0f)
                                             .graphicsLayer { translationY = if (dragged) drag?.offset ?: 0f else 0f }) {
@@ -269,6 +275,7 @@ internal data class RunnerDrag(val id: String, val order: List<String>, val offs
         var order = order; var offset = offset + dy
         while (true) {
             val at = order.indexOf(id)
+            if (at < 0) return this // not a row of this order: nothing moves
             val next = order.getOrNull(at + 1)?.let { heights[it] }
             val previous = order.getOrNull(at - 1)?.let { heights[it] }
             if (next != null && offset > next / 2f) { order = order.toMutableList().apply { add(at + 1, removeAt(at)) }; offset -= next }
