@@ -30,8 +30,9 @@ enum class AuthMessage {
 }
 
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
-    private val session = (application as OrbitApplication).session
-    private val google = (application as OrbitApplication).googleSignIn
+    private val app = application as OrbitApplication
+    private val session = app.session
+    private val google = app.googleSignIn
     val state = session.state
     private val mutableMessage = MutableStateFlow<AuthMessage?>(null)
     val message = mutableMessage.asStateFlow()
@@ -55,10 +56,13 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun logout() {
-        ++attempt
+        val mine = ++attempt
         mutableMessage.value = null
         viewModelScope.launch {
-            try { session.logout() } catch (error: Exception) { mutableMessage.value = messageFor(error) }
+            try {
+                app.push.beforeSignOut()
+                if (mine == attempt) session.logout()
+            } catch (error: Exception) { if (mine == attempt) mutableMessage.value = messageFor(error) }
         }
     }
 
@@ -106,7 +110,12 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         val mine = ++attempt
         mutableMessage.value = null
         viewModelScope.launch {
-            try { block() }
+            try {
+                // A login switches accounts: the previous login's push binding goes first, and a newer attempt
+                // that started while it went owns the screen.
+                app.push.beforeSignOut()
+                if (mine == attempt) block()
+            }
             catch (_: CancellationException) { /* Superseded or cancelled. */ }
             catch (error: Exception) { if (mine == attempt) mutableMessage.value = describe(error) }
         }
