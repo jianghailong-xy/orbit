@@ -172,7 +172,8 @@ private fun WikiEntryPage(detail: WikiEntryDetail, now: Instant, busy: Boolean, 
         // Details
         val rows = WikiLogic.fieldRows(entry.kind, entry.fields)
         sectionHeader(WikiCopy.details)
-        item(key = "details") {
+        // A section with no rows is its header alone, as an empty inset-grouped section is on iOS.
+        if (rows.isNotEmpty()) item(key = "details") {
             WikiCard {
                 rows.forEach { row ->
                     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
