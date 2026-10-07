@@ -28,6 +28,8 @@ import java.util.concurrent.TimeUnit
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TestWatcher
+import org.junit.runner.Description
 import org.junit.runner.RunWith
 
 /**
@@ -37,7 +39,16 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class ManagementDeviceTest {
-    @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+    /** On a failure, every thread's stack: an error raised on the main thread names another thread only by number. */
+    @get:Rule(order = 0) val threads = object : TestWatcher() {
+        override fun failed(e: Throwable, description: Description) {
+            val dump = Thread.getAllStackTraces().entries.sortedBy { it.key.id }.joinToString("\n\n") { (thread, stack) ->
+                "#${thread.id} ${thread.name} ${thread.state}\n" + stack.joinToString("\n") { "    at $it" }
+            }
+            File(app.filesDir, "a13-management").apply { mkdirs() }.resolve("threads-${description.methodName}.txt").writeText(dump)
+        }
+    }
+    @get:Rule(order = 1) val compose = createAndroidComposeRule<MainActivity>()
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val app get() = instrumentation.targetContext.applicationContext as OrbitApplication
     private val calls = CopyOnWriteArrayList<String>()
@@ -222,32 +233,52 @@ class ManagementDeviceTest {
         }
     }
 
-    /** The module's main pages in the account's dark appearance, then at twice the font size. */
-    @Test fun mainPagesInDarkAndAtTwiceTheFontSize() {
+    /** The module's main pages in the account's dark appearance. Each pass starts from its own fresh activity. */
+    @Test fun mainPagesInTheAccountsDarkAppearance() {
         start()
         MockWebServer().use { server ->
             server.dispatcher = dispatcher()
-            val fontScale = shell("settings get system font_scale").trim().ifEmpty { "1.0" }
             try {
-                role = "ADMIN"; runnerOnline = true
-                for (pass in listOf("dark", "font200")) {
-                    theme = if (pass == "dark") "dark" else "light"
-                    if (pass == "font200") shell("settings put system font_scale 2.0")
-                    signIn(server)
-                    if (pass == "font200") { compose.activityRule.scenario.recreate(); compose.waitUntil(15_000) { app.realtime.state.value.directoryFresh } }
-                    tour(pass)
-                    runBlocking { app.session.logout() }
-                    compose.waitUntil(10_000) { app.session.state.value is AuthState.SignedOut }
-                }
+                role = "ADMIN"; runnerOnline = true; theme = "dark"
+                signIn(server)
+                tour("dark")
             } finally {
-                shell("settings put system font_scale $fontScale")
                 theme = "system"
-                if (app.session.state.value is AuthState.SignedIn) runBlocking { app.session.logout() }
+                runBlocking { app.session.logout() }
             }
         }
     }
 
-    private fun tour(pass: String) {
+    /** The same pages at twice the system font size, in the light appearance. */
+    @Test fun mainPagesAtTwiceTheFontSize() {
+        start()
+        MockWebServer().use { server ->
+            server.dispatcher = dispatcher()
+            val fontScale = shell("settings get system font_scale").trim().takeIf { it.toFloatOrNull() != null } ?: "1.0"
+            try {
+                role = "ADMIN"; runnerOnline = true; theme = "light"
+                fontScale("2.0")
+                signIn(server)
+                tour("font200")
+            } finally {
+                fontScale(fontScale)
+                theme = "system"
+                runBlocking { app.session.logout() }
+            }
+        }
+    }
+
+    /** The system relaunches the activity for a new font scale: go on once the relaunched one has it. */
+    private fun fontScale(value: String) {
+        shell("settings put system font_scale $value")
+        compose.waitUntil(15_000) { compose.activity.resources.configuration.fontScale == value.toFloat() }
+        compose.waitForIdle()
+    }
+
+    private fun tour(pass: String) = try { visit(pass) } catch (e: Throwable) { capture("$pass-failed"); throw e }
+
+    private fun visit(pass: String) {
+        compose.waitUntil(15_000) { compose.onAllNodesWithTag("workspace:$workspaceId").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("workspace:$workspaceId").performClick()
         await("Fixture session")
         compose.onNodeWithContentDescription("Options for Fixture session").performClick()
@@ -284,15 +315,17 @@ class ManagementDeviceTest {
             val savedServices = shell("settings get secure enabled_accessibility_services").trim()
             val savedEnabled = shell("settings get secure accessibility_enabled").trim()
             val report = StringBuilder(); val problems = mutableListOf<String>()
+            val manager = app.getSystemService(AccessibilityManager::class.java)
             try {
+                report.appendLine("talkback_package=${shell("pm path ${talkBack.substringBefore('/')}").trim().ifEmpty { "not installed" }}")
                 role = "ADMIN"; runnerOnline = true
                 signIn(server)
                 shell("settings put secure enabled_accessibility_services $talkBack")
                 shell("settings put secure accessibility_enabled 1")
-                val manager = app.getSystemService(AccessibilityManager::class.java)
-                val deadline = SystemClock.uptimeMillis() + 15_000
+                val deadline = SystemClock.uptimeMillis() + 30_000
                 while (!manager.isTouchExplorationEnabled && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(250)
-                report.appendLine("talkback_enabled=${manager.isEnabled} touch_exploration=${manager.isTouchExplorationEnabled}")
+                report.appendLine("talkback_enabled=${manager.isEnabled} touch_exploration=${manager.isTouchExplorationEnabled} " +
+                    "services=${manager.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK).map { it.id }}")
                 assertTrue("TalkBack must be running for this check", manager.isTouchExplorationEnabled)
                 // With TalkBack on, an injected touch explores rather than presses: navigation is by semantics actions.
                 compose.onAllNodesWithContentDescription("Open navigation").onFirst().performSemanticsAction(SemanticsActions.OnClick)
@@ -332,7 +365,11 @@ class ManagementDeviceTest {
                 else shell("settings put secure enabled_accessibility_services $savedServices")
                 if (savedEnabled == "null" || savedEnabled.isBlank()) shell("settings delete secure accessibility_enabled")
                 else shell("settings put secure accessibility_enabled $savedEnabled")
-                report.appendLine("restored services=${shell("settings get secure enabled_accessibility_services").trim()} enabled=${shell("settings get secure accessibility_enabled").trim()}")
+                // TalkBack stops a moment after its setting goes: the next holder of the emulator gets plain touch back.
+                val off = SystemClock.uptimeMillis() + 15_000
+                while (manager.isTouchExplorationEnabled && SystemClock.uptimeMillis() < off) SystemClock.sleep(250)
+                report.appendLine("restored services=${shell("settings get secure enabled_accessibility_services").trim()} enabled=${shell("settings get secure accessibility_enabled").trim()} " +
+                    "touch_exploration=${manager.isTouchExplorationEnabled}")
                 File(app.filesDir, "a13-management").apply { mkdirs() }.resolve("talkback-report.txt").writeText(report.toString())
                 runBlocking { app.session.logout() }
             }

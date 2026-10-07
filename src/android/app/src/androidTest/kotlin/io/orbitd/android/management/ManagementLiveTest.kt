@@ -28,7 +28,7 @@ import java.io.File
 import java.time.Instant
 
 /**
- * A13 on a real Orbit stack (scripts/management-live-test.sh): an isolated server of a fixed commit with real
+ * A13 on a real Orbit stack (the host scripts are described in docs/a13-management.md): an isolated server of a fixed commit with real
  * accounts — a MEMBER, the bootstrap ADMIN, a second ADMIN, and a key pool's owner, admin and member — and a real
  * remote runner. Every write made through the UI is read back from the server with the acting account's own
  * token, and each check is logged. Skipped unless the run passes the stack (instrumentation argument a13Server);
@@ -83,6 +83,8 @@ class ManagementLiveTest {
     private fun prefs(account: Account) = read(account, "users/me").jsonObject["preferences"]!!.jsonObject
     private fun runners(account: Account) = read(account, "runners").jsonArray.map { it.jsonObject }
     private fun runner(account: Account) = runners(account).first { it.s("name") == "a13-box" }
+    private fun claudeDefault(account: Account) = runner(account)["engines"]?.jsonArray?.map { it.jsonObject }
+        ?.firstOrNull { it.s("engine") == "claude" }?.get("accounts")?.jsonArray?.map { it.jsonObject }?.firstOrNull { it.s("id") == "default" }
 
     private fun note(line: String) = log.appendText("${Instant.now()} $line\n")
     private fun ok(what: String, holds: Boolean) { note((if (holds) "PASS " else "FAIL ") + what); assertTrue(what, holds) }
@@ -92,7 +94,9 @@ class ManagementLiveTest {
         var last: Throwable? = null
         while (System.currentTimeMillis() < until) {
             try { if (holds()) { note("PASS $what"); return } } catch (e: Throwable) { last = e }
-            compose.waitForIdle(); Thread.sleep(500)
+            // The pages' own timers (a Max Concurrent press settling) run on the test's clock, which a plain sleep
+            // never moves: move it with real time.
+            compose.mainClock.advanceTimeBy(500); compose.waitForIdle(); Thread.sleep(500)
         }
         note("FAIL $what${last?.let { " ($it)" }.orEmpty()}")
         throw AssertionError(what, last)
@@ -262,6 +266,33 @@ class ManagementLiveTest {
         click(hasText("Claude Code") and hasClickAction()); await("Accounts")
         capture("live-runner-engine")
         val runnerId = runner(owner).s("id")!!
+        // The account the runner reports: Default, signed out (no credentials on this machine). A pause is the server's
+        // routing flag; the page offers Pause… only on a signed-in account, so it is set here through the API, and
+        // Change Duration… and Resume Now go through the page.
+        ok("server: the runner reports Claude's Default account", claudeDefault(owner) != null)
+        ok("server: Default paused for an hour (API, as setup)", call("POST", "runners/$runnerId/accounts/claude/default/pause", owner.token,
+            buildJsonObject { put("durationMinutes", 60) }).first in 200..299)
+        await("Resume Now", timeoutMs = 40_000)
+        click(hasText("Change Duration…") and hasClickAction())
+        click(hasText("4h") and hasClickAction(), scroll = false)
+        click(hasText("Pause for 4 Hours") and hasClickAction(), scroll = false)
+        eventually("server: Default paused for 4 hours") {
+            claudeDefault(owner)?.s("pausedUntil")?.let { java.time.Duration.between(Instant.now(), Instant.parse(it)).toMinutes() in 230..240 } == true
+        }
+        capture("live-runner-account-paused")
+        click(hasText("Resume Now") and hasClickAction())
+        eventually("server: Default resumed") { claudeDefault(owner)?.get("pausedUntil").let { it == null || it is JsonNull } }
+        // Rename is Orbit's own label, kept beside the runner's report.
+        compose.onNodeWithContentDescription("More for Default").performScrollTo().performClick()
+        click(hasText("Rename…") and hasClickAction(), scroll = false)
+        compose.onNode(hasSetTextAction() and hasAnyAncestor(isDialog())).performTextReplacement("Stack default")
+        click(hasText("Save") and hasClickAction() and hasAnyAncestor(isDialog()), scroll = false)
+        eventually("server: Default is named Stack default") { claudeDefault(owner)?.s("name") == "Stack default" }
+        compose.onNodeWithContentDescription("More for Stack default").performScrollTo().performClick()
+        click(hasText("Rename…") and hasClickAction(), scroll = false)
+        compose.onNode(hasSetTextAction() and hasAnyAncestor(isDialog())).performTextReplacement("Default")
+        click(hasText("Save") and hasClickAction() and hasAnyAncestor(isDialog()), scroll = false)
+        eventually("server: Default carries its own name again") { claudeDefault(owner)?.s("name").let { it == null || it == "Default" } }
         click(hasText("Add Account") and hasClickAction())
         eventually("server: the runner was asked to sign a new Claude account in", timeoutMs = 60_000) {
             read(owner, "runners/$runnerId/login").jsonObject.s("status") != null

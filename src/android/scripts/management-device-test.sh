@@ -50,12 +50,20 @@ sha256sum "$apk" "$tests" > "$output/apks.sha256"
 "$adb" -s "$serial" install -r "$tests" > "$output/install-test.txt"
 # A signed-out, empty debug installation: no earlier session or cache is carried into the fixture.
 "$adb" -s "$serial" shell pm clear "$package" > "$output/pm-clear.txt"
-"$adb" -s "$serial" shell am instrument -w -r -e class io.orbitd.android.management.ManagementDeviceTest \
+test=io.orbitd.android.management.ManagementDeviceTest
+"$adb" -s "$serial" shell am instrument -w -r -e class "$test#settingsProfileSharingNotificationsAndRolesUseTheRealRoutes,$test#workspaceRunnerProvidersAndSessionShareUseTheRealRoutes,$test#mainPagesInTheAccountsDarkAppearance,$test#mainPagesAtTwiceTheFontSize" \
   io.orbitd.android.debug.test/androidx.test.runner.AndroidJUnitRunner > "$output/instrumentation.txt" 2>&1 || true
 "$adb" -s "$serial" exec-out run-as "$package" tar -cf - -C files a13-management > "$output/captures.tar" || true
 tar --no-same-owner -xf "$output/captures.tar" -C "$output" || true
+# TalkBack last and in its own process, from a fresh installation state: whatever it leaves behind reaches no other check.
+"$adb" -s "$serial" shell pm clear "$package" >> "$output/pm-clear.txt"
+"$adb" -s "$serial" shell am instrument -w -r -e class "$test#talkBackReachesReadsAndActivatesTheMainPages" \
+  io.orbitd.android.debug.test/androidx.test.runner.AndroidJUnitRunner > "$output/instrumentation-talkback.txt" 2>&1 || true
+"$adb" -s "$serial" exec-out run-as "$package" tar -cf - -C files a13-management > "$output/captures-talkback.tar" || true
+tar --no-same-owner -xf "$output/captures-talkback.tar" -C "$output" || true
 grep -F 'OK (4 tests)' "$output/instrumentation.txt"
-if grep -E 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed|INSTRUMENTATION_STATUS_CODE: -[234]' "$output/instrumentation.txt"; then exit 1; fi
+grep -F 'OK (1 test)' "$output/instrumentation-talkback.txt"
+if grep -E 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed|INSTRUMENTATION_STATUS_CODE: -[234]' "$output/instrumentation.txt" "$output/instrumentation-talkback.txt"; then exit 1; fi
 for screenshot in settings-home settings-home-dark edit-profile change-password notifications shared-links permission-revoked sign-out-confirm \
   admin-users admin-user admin-demoted settings-home-font200 session-share workspace-settings runners-list runner-offline runner-online \
   runner-engine runner-deep-link providers codex-pool \
