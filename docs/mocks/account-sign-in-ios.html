@@ -112,7 +112,7 @@
           <div class="sk-note">Some account services will not be available until you sign in again.</div>
         </div>
         <p class="rf-p zh">问题顶在设置页最上面，带红色角标。用一句话说后果：重新登录之前，有些服务用不了。点进去就开始登录。</p>
-        <p class="rf-us zh">→ 我们：掉线的账号也用一句话说后果：新会话会跳过它（②）。</p>
+        <p class="rf-us zh">→ 我们：掉线的账号也用一句话说后果：会话用不了这个账号（②）。</p>
       </div>
       <div class="rf">
         <div class="rf-h">Zapier<span>App Connections</span></div>
@@ -173,7 +173,7 @@
       <div>
         <ul class="m-notes zh" style="margin-top:38px">
           <li><span class="m-n">1</span><span><b>快过期先提醒</b>：登录剩 3 天以内，这一行多一行橙字「Login expires in 3 days」，右边一个 Renew。点了走和 Sign In 一样的登录，登回同一个账号，到期时间续上。不点也照常能用，和 Claude Code 自己的提醒一样。Orbit 上的会话大多没人盯着，等它过期再发现，会话已经停了。</span></li>
-          <li><span class="m-n">2</span><span><b>掉线时说后果</b>：Signed out 下面一句「New sessions skip this account until you sign in again.」。如果这个引擎只有这一个账号，就改成「Sessions on this runner can't use Claude Code until you sign in again.」。</span></li>
+          <li><span class="m-n">2</span><span><b>掉线时说后果</b>：Signed out 下面一句「Sessions can’t use this account until you sign in again.」。如果这个引擎只有这一个账号，就改成「Sessions on this runner can’t use Claude Code until you sign in again.」。</span></li>
           <li><span class="m-n">3</span><span><b>按钮挨着状态</b>：Renew 和 Sign In 只在要处理时出现，平时的账号行没有按钮，和上一版去掉按钮的方向一致。</span></li>
           <li><span class="m-n" style="background:#5b6270">i</span><span><b>只有 Claude Code 有到期时间</b>：runner 已经在读每个账号的 <code>.credentials.json</code>，里面的 <code>refreshTokenExpiresAt</code> 就是 Claude Code 自己用来提醒的那个字段。这台机器上三个登录都有这个字段，还剩 23 到 24 天。Codex 和 Antigravity 没有这个日期，只做 ②③。</span></li>
         </ul>
@@ -250,7 +250,7 @@
   const A3 = { id: 'a3', name: 'alex.lab@example.com', sub: '~/.orbit/claude-accounts/b93d5a17' };
 
   const expiring = `<div class="ex-line" id="exp"><span class="ex-l">${WARN}Login expires in 3 days</span><span class="bb" id="renew">Renew</span></div>`;
-  const conseq = '<div class="conseq" id="conseq">New sessions skip this account until you sign in again.</div>';
+  const conseq = '<div class="conseq" id="conseq">Sessions can’t use this account until you sign in again.</div>';
   const signIn = '<span class="bb" id="signin">Sign In</span>';
 
   const head = `<div class="hd">${mark('claude', 30)}<div><div class="n">Claude Code</div><div class="s">2.1.292 · checked 3m ago</div></div></div>`;
