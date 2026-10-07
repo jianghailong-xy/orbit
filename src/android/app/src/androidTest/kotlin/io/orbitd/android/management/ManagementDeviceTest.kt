@@ -61,6 +61,8 @@ class ManagementDeviceTest {
     @Volatile private var permission = "auto"
     @Volatile private var forbidden = false
     @Volatile private var runnerOnline = false
+    /** Runners served instead of the one controlled remote, for the Edit case; DELETE and reorder change it. */
+    @Volatile private var fleet: List<String>? = null
     @Volatile private var workspaceName = "Fixture workspace"
     @Volatile private var sharingActive = true
     @Volatile private var shareTools = false
@@ -302,6 +304,47 @@ class ManagementDeviceTest {
         click(hasText("Providers") and hasClickAction()); await("Team Codex"); capture("$pass-providers")
         click(hasText("Team Codex") and hasClickAction()); await("Who can use it"); capture("$pass-codex-pool")
         back(); back()
+    }
+
+    /**
+     * Edit on the runners list with three runners: the first row (not the last) is removed and Edit stays on; the row
+     * that moved into its place is dragged by its handle below the next one. One order goes out and the rows stand in
+     * it. Before the handles were dropped with their rows, the removed row's handle lay over this one and the drag
+     * could start on the removed id and crash.
+     */
+    @Test fun runnersListRemovesARowThenReordersTheNextByDragging() {
+        start()
+        MockWebServer().use { server ->
+            server.dispatcher = dispatcher()
+            val (alpha, bravo, charlie) = fleetNames.keys.toList()
+            try {
+                role = "ADMIN"; runnerOnline = true; fleet = listOf(alpha, bravo, charlie)
+                signIn(server); settings()
+                click(hasText("Runners") and hasClickAction()); await("Charlie box")
+                click(hasText("Edit") and hasClickAction())
+                capture("runners-edit")
+                compose.onAllNodes(hasText("Remove") and hasClickAction()).onFirst().performClick()
+                click(hasText("Remove Runner") and hasClickAction() and hasAnyAncestor(isDialog()), scroll = false)
+                compose.waitUntil(10_000) { calls.contains("DELETE /api/runners/$alpha") && compose.onAllNodesWithText("Alpha box", substring = true).fetchSemanticsNodes().isEmpty() }
+                compose.waitForIdle()
+                capture("runners-edit-removed")
+                compose.onNodeWithContentDescription("Reorder Bravo box").performTouchInput {
+                    down(centerRight - androidx.compose.ui.geometry.Offset(8f, 0f))
+                    repeat(30) { moveBy(androidx.compose.ui.geometry.Offset(0f, height / 10f)) }
+                    up()
+                }
+                compose.waitUntil(10_000) { calls.contains("POST /api/runners/reorder") }
+                compose.waitForIdle()
+                capture("runners-edit-dragged")
+                assertEquals(listOf(charlie, bravo), fleet)
+                assertEquals("One order per drag", 1, calls.count { it == "POST /api/runners/reorder" })
+                fun top(name: String) = compose.onAllNodesWithText(name, substring = true).onFirst().fetchSemanticsNode().boundsInRoot.top
+                assertTrue("The rows stand in the new order", top("Charlie box") < top("Bravo box"))
+            } finally {
+                fleet = null
+                runBlocking { app.session.logout() }
+            }
+        }
     }
 
     /**
@@ -627,6 +670,13 @@ class ManagementDeviceTest {
 
     private fun user() = """{"id":"fixture-user","name":"$name","email":"a13@example.test","role":"$role","avatarUpdatedAt":null,"preferences":{"theme":"$theme","defaultPermissionMode":"$permission","notifySessionFinished":false,"notifyAgentMessage":true}}"""
     private fun heartbeat() = if (runnerOnline) now.toString() else now.minusSeconds(5 * 3600).toString()
+    private val fleetNames = mapOf("0198f3a2-aaaa-7000-8000-00000000000a" to "Alpha box", "0198f3a2-bbbb-7000-8000-00000000000b" to "Bravo box",
+        "0198f3a2-cccc-7000-8000-00000000000c" to "Charlie box")
+    private fun fleetList(ids: List<String>) = ids.joinToString(",", "[", "]") { id ->
+        """{"id":"$id","name":"${fleetNames[id]!!.lowercase().replace(' ', '-')}","displayName":"${fleetNames[id]}","hostname":"host-${id.takeLast(1)}",
+        "version":"0.1.200","online":true,"status":"ONLINE","lastHeartbeatAt":"$now","maxConcurrent":2,"activeSessions":0,"runsAsRoot":false,
+        "minFreeDiskMb":null,"engines":[],"enrolledAt":"2026-09-01T00:00:00Z"}"""
+    }
     private fun runner() = """{"id":"$runnerId","name":"controlled-remote","displayName":"Controlled remote","hostname":"ci-runner-01","version":"0.1.199",
         "online":$runnerOnline,"status":"${if (runnerOnline) "ONLINE" else "OFFLINE"}","lastHeartbeatAt":"${heartbeat()}","maxConcurrent":4,"activeSessions":1,
         "runsAsRoot":false,"minFreeDiskMb":null,"reposRoot":"/home/ci/orbit-repos","enrolledAt":"2026-09-01T10:00:00Z","capabilities":["claude-account-remove/v1"],
@@ -667,6 +717,16 @@ class ManagementDeviceTest {
             if (path !in listOf("/api/auth/login", "/api/auth/logout")) assertEquals("Bearer fixture-access", request.getHeader("Authorization"))
             if (path == "/api/users/me" && forbidden) return MockResponse().setResponseCode(403).setBody("{}")
             fun bodyOf() = Json.parseToJsonElement(request.body.readUtf8()).jsonObject
+            fleet?.let { ids ->
+                fun json(body: String) = MockResponse().setHeader("Content-Type", "application/json").setBody(body)
+                val one = path.removePrefix("/api/runners/")
+                when {
+                    path == "/api/runners" -> return json(fleetList(ids))
+                    path == "/api/runners/reorder" -> { fleet = bodyOf()["ids"]!!.jsonArray.map { it.jsonPrimitive.content }; return json(fleetList(fleet!!)) }
+                    request.method == "DELETE" && one in ids -> { fleet = ids - one; return json("{}") }
+                    else -> Unit
+                }
+            }
             val body = when (path) {
                 "/api/auth/login" -> """{"accessToken":"fixture-access","refreshToken":"fixture-refresh","user":${user()}}"""
                 "/api/auth/logout" -> "{}"
