@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
+import { uuidToBase62 } from '@orbit/shared';
 import { RunnerStatus, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
@@ -41,6 +42,12 @@ import {
  * the owner DECLINED, and a card filed for one change being used to write another. All three are
  * refusals that write nothing — including the rest of the fields the same request carried — which
  * is a claim about the transaction's position rather than about the guard's arithmetic.
+ *
+ * Every card here is filed the way a REAL one is — `projectId` as the caller wrote it, which is
+ * the public id in the project's web UI URL (see `asTheCallerWritesIt`). A spec that files them
+ * with the uuid instead passes with a comparison held to the two ids as-written, and that
+ * comparison refuses every card the runner actually files, so the spelling is part of what has to
+ * be proved rather than an incidental detail of the fixture.
  *
  * Not destructive: every case owns freshly generated ids.
  */
@@ -143,23 +150,38 @@ function door(stack: Stack): RunnerProjectsController {
   );
 }
 
+/**
+ * The id the CALLER writes, which is the one the card carries.
+ *
+ * `project_update` tells the agent its `projectId` is "the project as shown in its web UI URL
+ * (/projects/<id>)", `runner-go/mcp.go`'s `projectMergeCheckCard` puts that string on the card
+ * unchanged, and the route that performs the write has already decoded it to the uuid. So this —
+ * not the uuid — is the spelling on the card in every real call, and a comparison held to the two
+ * as-written strings would never match one.
+ */
+const asTheCallerWritesIt = (projectId: string) => uuidToBase62(projectId);
+
 /** The card the runner files: this project, what the check is now, and what it would become. */
 function cardInput(projectId: string, proposed: Record<string, unknown>) {
   return { projectId, projectTitle: '项目', currentMergeCheckCommand: OLD_CHECK, ...proposed };
 }
 
-/** File a card, and answer it as the account owner (or leave it unanswered). */
+/** File a card, and answer it as the account owner (or leave it unanswered).
+ *
+ *  `projectId` is the spelling the card carries: the public id a runner files by default, and the
+ *  uuid for the card an internal caller would have written. */
 async function filedCard(
   stack: Stack,
   f: Fixture,
   proposed: Record<string, unknown>,
   answer?: 'allow' | 'deny',
+  projectId: string = asTheCallerWritesIt(f.projectId),
 ): Promise<string> {
   const card = await stack.db.approval.create({
     data: {
       sessionId: f.coordinatorSessionId,
       toolName: PROJECT_INTEGRATION_APPROVAL_TOOL_NAME,
-      input: cardInput(f.projectId, proposed),
+      input: cardInput(projectId, proposed),
     },
   });
   if (answer) {
@@ -209,26 +231,54 @@ test('a merge check change needs postgres; every case below is a skip without it
   t.after(() => stack.sql.end().catch(() => undefined));
 
   await t.test('the owner’s card, on this exact change, is what lets a session write it', async () => {
-    const f = await project(stack, 'approved');
-    const cardId = await filedCard(stack, f, { mergeCheckCommand: NEW_CHECK }, 'allow');
+    // Both spellings of the project, and the first is the load-bearing one: it is what a REAL card
+    // carries. The owner can answer the question and the write still be refused for a reason that
+    // has nothing to do with what they were asked — which is exactly what happened while the
+    // comparison was held to the two ids as WRITTEN, since the card carries the public id the
+    // caller passed and the request carries the uuid the route resolved it to. The second spelling
+    // is what an internal caller has, and it has to keep working: the fix is that the comparison
+    // lands on WHICH project the card is about, not on one spelling winning over the other.
+    for (const asUuid of [false, true] as const) {
+      const spelling = asUuid ? 'the uuid on the card' : 'the caller’s public id on the card';
+      const f = await project(stack, asUuid ? 'approved-uuid' : 'approved-public-id');
+      const projectId = asUuid ? f.projectId : asTheCallerWritesIt(f.projectId);
+      const cardId = await filedCard(stack, f, { mergeCheckCommand: NEW_CHECK }, 'allow', projectId);
 
-    assert.deepEqual(await writeAsSession(stack, f, { mergeCheckCommand: NEW_CHECK }), { refused: false });
-    assert.equal(await mergeCheckOf(stack, f), NEW_CHECK);
+      assert.deepEqual(await writeAsSession(stack, f, { mergeCheckCommand: NEW_CHECK }),
+        { refused: false }, `${spelling} on the card`);
+      assert.equal(await mergeCheckOf(stack, f), NEW_CHECK, spelling);
 
-    // Provenance: which card, whose click, whose session, and the change it authorised. The row is
-    // the whole answer to "why did this field move", which is what makes the card auditable after
-    // the fact rather than only enforceable at the moment it is read.
-    const rows = await provenanceOf(stack, f);
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0].actorId, f.ownerId);
-    assert.equal(rows[0].type, 'project.merge_check.changed');
-    assert.deepEqual(rows[0].payload, {
-      projectId: f.projectId,
-      approvalId: cardId,
-      approvedByUserId: f.ownerId,
-      requestedBySessionId: f.coordinatorSessionId,
-      mergeCheckCommand: NEW_CHECK,
-    });
+      // Provenance: which card, whose click, whose session, and the change it authorised. The row is
+      // the whole answer to "why did this field move", which is what makes the card auditable after
+      // the fact rather than only enforceable at the moment it is read. The project on it is the
+      // RESOLVED uuid either way — the ledger names the project, not how the card spelled it.
+      const rows = await provenanceOf(stack, f);
+      assert.equal(rows.length, 1, spelling);
+      assert.equal(rows[0].actorId, f.ownerId, spelling);
+      assert.equal(rows[0].type, 'project.merge_check.changed', spelling);
+      assert.deepEqual(rows[0].payload, {
+        projectId: f.projectId,
+        approvalId: cardId,
+        approvedByUserId: f.ownerId,
+        requestedBySessionId: f.coordinatorSessionId,
+        mergeCheckCommand: NEW_CHECK,
+      }, spelling);
+    }
+  });
+
+  await t.test('resolving the id does not make another project’s card this project’s', async () => {
+    // The one refusal the cases below do not reach: they file the card against THIS project in
+    // every spelling, so none of them holds the fix to the property it could plausibly break. A
+    // card naming a different project — spelled the way a caller spells ids, which is the spelling
+    // that now gets resolved — is that other project's card, and authorises nothing here.
+    const f = await project(stack, 'other-projects-card');
+    const elsewhere = await project(stack, 'elsewhere');
+    await filedCard(stack, f, { mergeCheckCommand: NEW_CHECK }, 'allow',
+      asTheCallerWritesIt(elsewhere.projectId));
+
+    assert.deepEqual(await writeAsSession(stack, f, { mergeCheckCommand: NEW_CHECK }), { refused: true });
+    assert.equal(await mergeCheckOf(stack, f), OLD_CHECK);
+    assert.deepEqual(await provenanceOf(stack, f), []);
   });
 
   await t.test('a card the owner DECLINED, or never answered, leaves the check where it was', async () => {
