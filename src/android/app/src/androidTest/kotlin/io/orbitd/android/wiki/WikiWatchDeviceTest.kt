@@ -231,6 +231,46 @@ class WikiWatchDeviceTest {
         capture("doc-returned")
     }
 
+    /** The plan from Contents: the draft waiting for the owner is confirmed once, the version in force becomes it,
+     * and one of its documents opens as its own page. */
+    @Test fun thePlanConfirmsItsDraftAndOpensOneOfItsDocuments() = journey("plan", { "orbit://wiki/${it.string("space")}" }) { _, _ ->
+        // A draft (v2) waits on the owner, over the version in force (v1).
+        http("/__control", """{"draft":"v2"}""")
+        press("wiki-bar-contents")
+        awaitTag("wiki-contents-sheet")
+        press("wiki-contents-plan")
+        awaitTag("wiki-plan-confirm")
+        capture("plan-draft")
+        press("wiki-plan-confirm")
+        compose.waitUntil(15_000) { requests("POST", "/plan/versions/2/confirm").size == 1 }
+        compose.waitUntil(15_000) { http("/__stats").getValue("plan").jsonObject.getValue("confirmed").jsonObject.getValue("version").jsonPrimitive.int == 2 }
+        await("Plan v2 confirmed")
+        capture("plan-confirmed")
+        pressIn("wiki-plan-page", "wiki-plan-doc:session-runtime")
+        awaitTag("wiki-plan-doc-page")
+        capture("plan-doc")
+        compose.onNodeWithContentDescription("Back").performClick()
+        awaitTag("wiki-plan-page")
+        assertEquals("one confirmation, not two", 1, requests("POST", "/confirm").size)
+    }
+
+    /** Wiki settings from the home's gear: the review mode is written as the owner picks it, and spot checks — greyed
+     * outside Automatic — become available once the mode is Automatic. */
+    @Test fun settingsWriteTheReviewModeAndSpotChecksAsPicked() = journey("settings", { "orbit://wiki/${it.string("space")}" }) { _, _ ->
+        press("wiki-bar-settings")
+        awaitTag("wiki-settings-page")
+        compose.onNodeWithTag("wiki-settings-spot-checks").assertIsNotEnabled()
+        capture("settings-tiered")
+        press("wiki-settings-mode:automatic")
+        compose.waitUntil(15_000) { http("/__stats").getValue("space").jsonObject.getValue("settings").jsonObject.string("reviewMode") == "automatic" }
+        val patch = requests("PATCH", "/api/wiki/spaces/${http("/__ids").string("space")}").single().getValue("body").jsonObject
+        assertEquals(setOf("reviewMode"), patch.keys)
+        compose.waitUntil(15_000) { compose.onAllNodes(hasTestTag("wiki-settings-spot-checks") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        press("wiki-settings-spot-checks")
+        compose.waitUntil(15_000) { http("/__stats").getValue("space").jsonObject.getValue("settings").jsonObject["automaticSpotChecks"]?.jsonPrimitive?.boolean == true }
+        capture("settings-automatic")
+    }
+
     /** An entry the server cannot be reached for says so, with Retry, and reads once the connection is back. */
     @Test fun anUnreachableEntrySaysSoAndRetryReadsIt() = journey("offline", { "orbit://wiki/${it.string("space")}" }) { _, ids ->
         awaitTag("wiki-search")
