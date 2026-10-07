@@ -131,6 +131,11 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     return container;
   };
 
+  /** Renders the route and waits for `ready`. A draft's `ready` is the hero card *enabled*
+   *  (`.np-card:not([disabled])`), not merely painted: the card is drawn disabled until the
+   *  workspace has landed, and the workspace is where the engine, its account and the composer's
+   *  gauge all come from — reading any of them off a card that is only painted is reading a page
+   *  that has not been told what it is yet. */
   const mount = async (entry: string, ready: string): Promise<void> => {
     client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
     container = document.createElement('div');
@@ -285,7 +290,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
   const draftRow = async (name: string) => (await providerMenuRows())!.find((row) => row.textContent?.startsWith(name));
 
   it('with no account picked, a new session starts on the one Automatic picks, and says which', async () => {
-    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
+    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card:not([disabled])');
     // Default's 5-hour window is spent, so Automatic would start it on Work, whose quota the gauge shows.
     expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 0%');
     expect(await gaugeAccount()).toEqual({ name: 'Work', note: 'Automatic — the account whose quota resets soonest' });
@@ -305,7 +310,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
   });
 
   it('starts the new session on an account picked under Codex, and Automatic takes the pick back', async () => {
-    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
+    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card:not([disabled])');
     await click(await draftRow('Default'));
     expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 100%');
     // Picked, so no note: it starts where the pick says.
@@ -321,7 +326,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
 
   it("on a workspace that picked an account, offers no Automatic, starts there, and sends nothing", async () => {
     workspaceAccount = WORK;
-    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
+    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card:not([disabled])');
     expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 0%');
     expect((await providerMenuRows())!.map(rowText)).toEqual(['Codex', 'Default5h 100%', 'WorkWeekly 0% ✓']);
 
@@ -395,7 +400,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
         ...(RUNNER.engines ?? []).filter((engine) => engine.engine !== 'claude'),
       ],
     } as unknown as Runner;
-    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
+    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card:not([disabled])');
     // The engine on the hero — no accounts there — then the account in the composer.
     await click(mounted().querySelector('.np-card'));
     await render(() => document.querySelector('.np-list'));
@@ -423,7 +428,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
             { slug: 'orbitd', label: 'orbitd@Claude', runtime: 'claude', models: [{ value: 'claude-opus-5', label: 'Opus 5' }] },
           ]) as Promise<never>)
         : (served as (...args: unknown[]) => Promise<never>)(p, ...rest)) as never);
-    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
+    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card:not([disabled])');
     await click(mounted().querySelector('.np-card'));
     await render(() => document.querySelector('.np-list'));
     await click([...document.querySelectorAll('.np-list .np-row')].find((row) => row.textContent?.startsWith('Claude')));
@@ -453,7 +458,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
             },
           ]) as Promise<never>)
         : (served as (...args: unknown[]) => Promise<never>)(p, ...rest)) as never);
-    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
+    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card:not([disabled])');
     await click(mounted().querySelector('.np-card'));
     await render(() => document.querySelector('.np-list'));
     await click(
@@ -688,7 +693,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
 
   it('starts a new Antigravity session on the Google account picked under Antigravity, its gauge saying what is left', async () => {
     runner = withGoogleAccounts();
-    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
+    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card:not([disabled])');
     await click(mounted().querySelector('.np-card'));
     await render(() => document.querySelector('.np-list'));
     await click(
