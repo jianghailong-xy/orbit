@@ -1,0 +1,15 @@
+{
+ "normalPassed": 85,
+ "expectedFailures": 16,
+ "skipped": 11,
+ "unexpected": [],
+ "flaky": 0,
+ "stats": {
+  "startTime": "2026-10-06T12:36:58.792Z",
+  "duration": 294780.025,
+  "expected": 101,
+  "skipped": 11,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

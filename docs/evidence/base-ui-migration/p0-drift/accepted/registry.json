@@ -1,0 +1,4 @@
+{
+  "rule": "Accepted migration differences for the P0 regression. Only a P0 screenshot whose difference from its current expectation (the P0.2 original or its main drift reference) the coordinator CONFIRMed in a migration batch's evidence may be registered, after that batch landed, with the before and after originals of the batch's same-commit comparison in the P0.2 environment. Nothing else is registered here. Maintenance rules: ../README.md.",
+  "screenshots": []
+}

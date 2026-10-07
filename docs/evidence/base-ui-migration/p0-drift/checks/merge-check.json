@@ -1,0 +1,18 @@
+{
+ "job": "bgj_6a6561432c05",
+ "command": "npm run build -w @orbit/web && npm run test -w @orbit/web",
+ "exitCode": 0,
+ "commit": "edb3259aff91d15086649d572ff602d1fe55d764",
+ "worktreeChangesAtRun": "only untracked files under docs/evidence/base-ui-migration/p0-drift/",
+ "build": [
+  "> tsc -b && vite build",
+  "\u2713 built in 5.24s"
+ ],
+ "vitest": [
+  "Test Files  323 passed (323)",
+  "Tests  4065 passed (4065)",
+  "Start at  20:50:25",
+  "Duration  500.20s (import 43%, tests 35%, environment 12%, transform 9%)"
+ ],
+ "passingFiles": 323
+}
