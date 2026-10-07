@@ -18,16 +18,34 @@ public struct ProjectBlocker: Codable, Equatable, Sendable, Identifiable {
         public let reason: String?
         /// The files it names.
         public let paths: [String]
+        /// A `SOURCE_UNRESOLVED` blocker's own payload (§10.3 SR50): the exact refusal code and
+        /// the `fixAction` §10.1 pairs with it, since the kind is a routing word and the precise
+        /// code lives here. Absent for every other kind.
+        public let code: String?
+        public let fixAction: String?
+        /// The ref a refused run could not resolve (`refs/heads/project/…`), when one was named.
+        public let ref: String?
+        /// The tasks whose runs are refused while this stands.
+        public let taskIds: [String]
 
-        public init(reason: String? = nil, paths: [String] = []) {
+        public init(reason: String? = nil, paths: [String] = [], code: String? = nil,
+                    fixAction: String? = nil, ref: String? = nil, taskIds: [String] = []) {
             self.reason = reason
             self.paths = paths
+            self.code = code
+            self.fixAction = fixAction
+            self.ref = ref
+            self.taskIds = taskIds
         }
 
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             reason = try? c.decodeIfPresent(String.self, forKey: .reason)
             paths = (try? c.decodeIfPresent([String].self, forKey: .paths)) ?? []
+            code = try? c.decodeIfPresent(String.self, forKey: .code)
+            fixAction = try? c.decodeIfPresent(String.self, forKey: .fixAction)
+            ref = try? c.decodeIfPresent(String.self, forKey: .ref)
+            taskIds = (try? c.decodeIfPresent([String].self, forKey: .taskIds)) ?? []
         }
     }
 

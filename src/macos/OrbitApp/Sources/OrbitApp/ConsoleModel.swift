@@ -145,6 +145,12 @@ final class ConsoleModel {
     private(set) var runnerAntigravity: RunnerAntigravityState?
     private(set) var runnerVersion: String?
     private(set) var sessionError: String?
+    /// The SOURCE refusal this session's row carries, adopted by name like `sessionError` — the
+    /// three columns the "never started" card reads to say WHY a run that produced no transcript
+    /// never began. Nil on a session that was not refused.
+    private(set) var sessionSourceState: String?
+    private(set) var sessionSourceRefusalCode: String?
+    private(set) var sessionSourceRefusalDetail: SourceRefusalDetail?
     private(set) var antigravityInstalling = false
     private(set) var runnerInstall: RunnerInstallState?
 
@@ -180,6 +186,37 @@ final class ConsoleModel {
     var queuedDshRepair: DshRuntime.Repair? {
         guard executesDsh, sessionStatus == .pending else { return nil }
         return DshRuntime.repair(sessionError)
+    }
+
+    /// The card this session's page draws when no engine ever ran on it — a refused SOURCE, or a
+    /// machine-side reason with nothing behind it. Nil when this console has nothing to say (see
+    /// `SessionRunStart`), which is also how the two engine cards above stay the only card for the
+    /// engines they own.
+    var runStart: SessionRunStart.Card? {
+        SessionRunStart.card(error: sessionError, sourceState: sessionSourceState,
+                             sourceRefusalCode: sessionSourceRefusalCode,
+                             sourceRefusalDetail: sessionSourceRefusalDetail,
+                             status: sessionStatus, runnerName: runnerName, runnerVersion: runnerVersion)
+    }
+
+    /// "Start it again" for a refused run: SR34's recovery, which is a NEW run on the task — a
+    /// refused session never re-resolves. The same door the task page's Run press uses, with this
+    /// press's own trigger id (the server's idempotency name for one ask).
+    func startRefusedRunAgain() async {
+        guard let taskID, !startingRun else { return }
+        startingRun = true
+        defer { startingRun = false }
+        do {
+            try await api.executeTask(taskID, triggerId: PublicID.newToken())
+            showTransientStatus("Starting a new run…")
+        } catch {
+            statusMessage = "Couldn't start it again — \(APIClient.failureReason(error))."
+        }
+    }
+
+    /// Hand the composer a reply about this run, the way every other card's "Chat about this" does.
+    func chatAboutRunStart() {
+        composerText = "About this run: "
     }
 
     var canInstallDsh: Bool {
@@ -400,6 +437,8 @@ final class ConsoleModel {
     /// Keeps the composer's contents put and the send button spinning until the ids land.
     private(set) var waitingForUploads = false
     private(set) var sending = false
+    /// A "Start it again" on a refused run is in flight: one press, one new run.
+    private(set) var startingRun = false
     /// True from the moment the user sends a message until the agent's first output for that turn
     /// lands (or the send fails). Bridges the window where the POST has returned but the live
     /// `RUNNING` status hasn't arrived yet, so the tail "working" indicator doesn't blink off in
@@ -1847,6 +1886,9 @@ final class ConsoleModel {
         guard let session, session.id == sessionID else { return }
         serverStatus = session.effectiveRunStatus
         sessionError = session.error
+        sessionSourceState = session.sourceState
+        sessionSourceRefusalCode = session.sourceRefusalCode
+        sessionSourceRefusalDetail = session.sourceRefusalDetail
         if let keys = session.agent?.antigravityKeyAvailableByRunner { workspaceAntigravityKeys = keys }
         serverCapabilities = session.capabilities
         // What this row says it is waiting on the owner for moves before any card here does: a

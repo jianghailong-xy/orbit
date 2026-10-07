@@ -1492,6 +1492,15 @@ struct ProjectDetailView: View {
                     if let paths = ProjectPage.blockerPathsLine(blocker.detail.paths) {
                         Text(paths).font(.orbitMeta.monospaced()).foregroundStyle(.secondary).lineLimit(1)
                     }
+                    // A refused SOURCE names the code and the ref that could not be resolved, then
+                    // one line per task whose runs are refused while it stands — the tasks the
+                    // page already holds, named by title.
+                    ForEach(ProjectPage.blockerSourceLines(blocker, titleFor: { id in
+                        store.tasks.first { $0.id == id }?.title
+                    }), id: \.self) { line in
+                        Text(line).font(.orbitMeta).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 Spacer(minLength: 6)
                 Button(ProjectPage.resolveBlockerPress(blocker)) {

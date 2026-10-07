@@ -137,7 +137,14 @@ struct ConsoleView: View {
                         // Errors only, and sticky until the ✕ — this row is in flow, so anything that
                         // comes and goes on a timer here shoves the composer around while the user is
                         // typing in it. Confirmations belong in the toast host (see `showToast`).
-                        if let repair = console.queuedDshRepair {
+                        // Why this run produced nothing at all. Drawn first because it is about the
+                        // run itself rather than the message being sent, and drawn INSTEAD of the
+                        // two engine-repair cards below when it has something to say — one fact,
+                        // one card (an engine reason it does not claim is theirs, and the reverse).
+                        if let runStart = console.runStart {
+                            SessionRunStartCardView(console: console, card: runStart)
+                                .padding(.bottom, .composerBandGap)
+                        } else if let repair = console.queuedDshRepair {
                             DshRepairCardView(console: console, repair: repair)
                                 .padding(.bottom, .composerBandGap)
                         } else if let repair = console.queuedAntigravityRepair {
