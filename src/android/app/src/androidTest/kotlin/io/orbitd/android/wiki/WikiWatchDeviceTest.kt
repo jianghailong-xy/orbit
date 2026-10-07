@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.os.Process
+import android.util.Log
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
@@ -100,7 +101,12 @@ class WikiWatchDeviceTest {
                 compose.waitUntil(20_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
                 block(scenario, ids)
                 File(output, "$name-result.txt").writeText("PASS · controlled HTTP only\n")
-            } catch (error: Throwable) { capture("$name-failed"); throw error }
+            } catch (error: Throwable) {
+                // Written down first: a crash while the scenario closes would otherwise lose what failed.
+                File(output, "$name-failure.txt").writeText(error.stackTraceToString())
+                Log.e("A12", "journey $name failed", error)
+                capture("$name-failed"); throw error
+            }
             finally { File(output, "$name-journal.json").writeText(http("/__stats").toString()); runBlocking { app.session.logout() } }
         }
     }
