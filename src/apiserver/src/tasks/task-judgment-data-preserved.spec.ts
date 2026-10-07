@@ -2037,7 +2037,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // workspace_id_owner_id_key). No existing table, column, constraint, function, trigger or type
       // is altered or dropped; no task, project, acceptance or DONE fence object is named, and no
       // row is written.
-      '0399_managed_runner'],
+      '0399_managed_runner',
+      // The System model's state (0400): one new table, `wiki_model_status`, of exactly one row,
+      // with its primary key and four CHECKs (the single row, the closed set of states, a model
+      // named whenever one is configured, a reason exactly when the state is not up). Pure
+      // addition: no column, constraint, index, function, trigger or type of any table that
+      // exists is created, altered or dropped, so it is not another writer of the DONE fence and
+      // names none of the six preserved objects, neither 0177 relation, no `task`, `session` or
+      // `project` object and no `project_acceptance_*` one. No INSERT, UPDATE or DELETE: the
+      // wiki-worker writes the row on its first probe.
+      '0400_wiki_model_status'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

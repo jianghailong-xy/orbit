@@ -398,11 +398,14 @@ test('(i) this is subtraction: no new service, no new resident process, less ins
   const compose = read('docker-compose.yml');
   const services = [...(compose.match(/^services:\n([\s\S]*?)(?=^\S|\Z)/m)?.[1] ?? '')
     .matchAll(/^ {2}([a-z][a-z0-9_-]*):$/gm)].map((hit) => hit[1]).sort();
-  assert.deepEqual(services, ['apiserver', 'gateway', 'pgbackup', 'postgres', 'web'],
+  // wiki-worker and its start:wiki-worker are the wiki's server-side executor, which the account owner
+  // added on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), not this removal;
+  // test/compose-topology.test.mjs (l) pins its whole definition.
+  assert.deepEqual(services, ['apiserver', 'gateway', 'pgbackup', 'postgres', 'web', 'wiki-worker'],
     'the removal may not add a Compose service');
   const apiScripts = JSON.parse(read('src/apiserver/package.json')).scripts as Record<string, string>;
   assert.deepEqual(Object.keys(apiScripts).filter((name) => name.startsWith('start:')).sort(),
-    ['start:dev'], 'the removal may not add a resident process');
+    ['start:dev', 'start:wiki-worker'], 'the removal may not add a resident process');
 
   // The SQL arithmetic, stated rather than implied. 0207 stays on disk as history; what this
   // compares is how much schema is INSTALLED before and after.
