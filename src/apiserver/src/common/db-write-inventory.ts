@@ -1283,6 +1283,31 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'None inside.',
     answer: 'Typed 503 from the global boundary.',
   },
+  // ── Managed runners (migration 0394, docs/managed-runner-design.md). Only two units own a
+  //    transaction; every other managed write is a compare-and-set statement below. Kubernetes is
+  //    never called inside either closure: the manager calls it between them.
+  {
+    at: 'managed-runners/managed-runner.service.ts#createMapping',
+    shape: 'TX_RETRIED',
+    locks: 'INSERT runner, INSERT workspace, INSERT managed_runner — three new rows of this transaction. Their foreign keys take `user` (rank 10) FOR KEY SHARE, and the new runner row is the workspace\'s and the mapping\'s parent, so no other row is locked. Two ensures of one owner meet only on managed_runner_owner_id_key: the second waits for the first to end, then fails P2002 rather than forming a cycle.',
+    identity: 'The owner: managed_runner_owner_id_key admits one mapping per account. The idempotency key is only recorded.',
+    isolation: '',
+    attempts: 4,
+    replay: 'A rolled-back attempt leaves no runner, workspace or mapping; the re-run creates all three again with fresh ids. A loser of the owner key is rethrown at once (P2002 is permanent) and the caller reads the winner\'s mapping.',
+    effects: 'None inside. The reconcile kick and every Kubernetes object come after commit, from the manager.',
+    answer: 'Typed 503 from the global boundary after transient retry exhaustion; the client sends ensure again, which finds the mapping if one committed.',
+  },
+  {
+    at: 'managed-runners/managed-runner-manager.ts#adoptCredential',
+    shape: 'TX_RETRIED',
+    locks: 'managed_runner by id (a compare-and-set on revision and lease holder), then runner by id. Nothing writes runner and then managed_runner in one transaction, and neither UPDATE changes a key, so neither re-checks a foreign key.',
+    identity: 'The mapping revision and lease the pass read: a superseded pass matches no row and stops.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Re-running writes the same hash of the same Secret\'s credential; a revision moved by another writer ends the pass instead (Superseded).',
+    effects: 'None inside. The Secret was created or read before the closure; nothing is sent to Kubernetes inside it.',
+    answer: 'No request waits on it: the worker logs the exhausted conflict, and its next pass reads the Secret again and repeats the adoption.',
+  },
   // ── Orbit Wiki (migration 0307, docs/wiki-design.md §4). Every unit below locks wiki rows and
   //    nothing else: 0307's header works through why the wiki's children reach their owner through
   //    the space rather than the user row, so a propose or a decide takes no rank-10 key lock and
@@ -2165,6 +2190,12 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: 'wiki/wiki-plan-job.ts#progressWikiPlanBuild', class: 'ONE_ROW_CAS', statements: 1, note: 'How far a build\'s run has got (contract `plan.jobs.progress`): the documents it went through and the one it writes now, on its row by id while it is made and a build; a later report overwrites it. A job ended meanwhile is not matched, and the door answers WIKI_PLAN_NO_JOB.' },
   { at: 'wiki/wiki-plan-job.ts#finishWikiPlanJob', class: 'ONE_ROW_CAS', statements: 1, note: 'How a job\'s run ended (contract `plan.jobs.finish`): its row by id while it is made, ended with the outcome, the version or the gate\'s errors, the report and the last draft. A job ended already is not matched, so a second end keeps the first.' },
   { at: 'wiki/wiki-plan.ts#propose', class: 'INSERT', statements: 1, note: 'A maintenance run\'s proposed change to the plan (contracts/wiki.contract.json `plan.proposals`): one INSERT, pending, after the gate passed it against the confirmed version. Outside a transaction on purpose: it changes no version, and the owner\'s acceptance gates it again against the plan as it stands then.' },
+  // Managed runners (migration 0394): the lease and the compare-and-set every manager step commits
+  // with, and the owner's retry. One row each, by id, under a predicate; none is retried here.
+  { at: 'managed-runners/managed-runner-manager.ts#acquireLease', class: 'ONE_ROW_CAS', statements: 1, note: 'Take or keep the mapping\'s lease: its row by id, only while the lease is free, expired or already this replica\'s. Losing it is the answer LEASED_ELSEWHERE, not a conflict. The lease coordinates reconcilers; it never authorizes a writer of the volume.' },
+  { at: 'managed-runners/managed-runner-manager.ts#releaseLease', class: 'ONE_ROW_CAS', statements: 1, note: 'Give the lease back after a pass: its row by id, only while this replica holds it. A lease taken over meanwhile is not matched; one that is not released expires.' },
+  { at: 'managed-runners/managed-runner-manager.ts#commit', class: 'ONE_ROW_CAS', statements: 1, note: 'Every manager step: the mapping row by id, only at the revision the pass read and only under this replica\'s lease, bumping the revision. A miss ends the pass (Superseded); the next pass starts from what is stored and observed. Kubernetes calls happen between these statements, never inside one.' },
+  { at: 'managed-runners/managed-runner.service.ts#retry', class: 'ONE_ROW_CAS', statements: 1, note: 'An owner\'s explicit retry: the mapping by id and owner, only while it is FAILED at the revision the owner read, back to REQUESTED with a fresh attempt budget and the request\'s idempotency key. A miss is answered 409 with the current revision.' },
 ];
 
 export interface TriggerWriteSource {

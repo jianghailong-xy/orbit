@@ -348,6 +348,7 @@ import {
   sessionSourceSnapshot,
 } from '../projects/session-source';
 import { providerDispatchWhereOn, providerSlugsOn, sessionExecRuntime } from '../providers/custom-provider';
+import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -822,8 +823,9 @@ export class RunnerApiController {
       status: 'ONLINE' as const,
       lastHeartbeatAt: new Date(),
     };
+    // Never a managed runner: its identity and credential belong to its mapping, not to a name.
     const existing = await this.prisma.runner.findFirst({
-      where: { ownerId, name: runnerName },
+      where: { ownerId, name: runnerName, managedRunner: { is: null } },
       orderBy: { enrolledAt: 'desc' },
     });
     const runner = existing
@@ -970,6 +972,7 @@ export class RunnerApiController {
   @Post('deregister')
   @HttpCode(200)
   async deregister(@CurrentRunner() runner: { id: string }) {
+    await refuseManagedRunnerDeletion(this.prisma, runner.id);
     await this.prisma.runner.delete({ where: { id: runner.id } });
     return { ok: true };
   }

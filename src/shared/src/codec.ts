@@ -127,6 +127,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'credentialId',
   'foremanWorkspaceId',
   'coordinatorWorkspaceId',
+  // A managed runner's default workspace (migration 0394): the workspace a reader opens — an
+  // address, never a fence.
+  'defaultWorkspaceId',
   'runnerId',
   'assignedRunnerId',
   'targetRunnerId',
