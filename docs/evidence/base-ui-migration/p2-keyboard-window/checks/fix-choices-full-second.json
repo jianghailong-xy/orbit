@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6 && git log --oneline -1 && git rev-parse HEAD:src/web && unshare -n bash -c 'ip link set lo up && nice -n -10 npm run test:ui-choices -w @orbit/web'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_fd26180830f4",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "761ddffa4",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "outputLastWritten": "2026-10-07T06:37:20.327827+00:00",
+ "exitCode": 1,
+ "outputSha256": "a4408853e6d5f86498e63c237631937cbef254b00066c40b82c3cca0150e4137",
+ "outputBytes": 84341,
+ "note": "Fixed tree (761ddffa4, web tree df7414507c6f...), the second full choices run: 519 passed / 1 failed (25.2 min), with the chunked select-sequence probe running beside it; no page failed to mount and no request failed. Not the first run's failure: webkit-light-desktop 'no-preference Dialog Popover Select exits restore one layer at a time' (choices-lifecycle.browser.mjs:45 via :82). After Escape on the Select inside the Popover inside the Dialog, the frame sampler recorded only two frames of the 200 ms Select exit (opacity 1 visible, then opacity 1 no longer visible: from the trace's evaluate result), so no frame with an intermediate opacity: the same signature the first session recorded on the baseline tree (regression-choices-full-second). It is the Select popup's exit; the Menu fix is not on this path. Repeated alone 10 times on both trees: fix-repeat-exit-frames-*."
+}

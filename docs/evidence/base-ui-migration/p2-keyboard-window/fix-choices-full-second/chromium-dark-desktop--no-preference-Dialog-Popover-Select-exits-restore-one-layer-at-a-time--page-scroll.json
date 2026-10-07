@@ -1,0 +1,13 @@
+{
+  "limitMs": 250,
+  "before": 0,
+  "after": 240,
+  "scrollHeight": 1800,
+  "viewportHeight": 900,
+  "input": {
+    "kind": "wheel",
+    "trusted": true,
+    "afterStartMs": 106.60000002384186
+  },
+  "movedAfterMs": 106.80000001192093
+}
