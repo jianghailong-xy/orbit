@@ -118,8 +118,8 @@ func TestMergeToMainAlreadyMergedTargetIsSource(t *testing.T) {
 	if branchExists(repo, "orbit/_rebase-k5") {
 		t.Error("a rebase was staged; the whole point is that none is")
 	}
-	if _, err := os.Stat(filepath.Join(worktreesDir(), "_rebase-k5")); !os.IsNotExist(err) {
-		t.Error("a throwaway rebase worktree was created")
+	if _, err := os.Stat(rebaseScratchDir(repo)); !os.IsNotExist(err) {
+		t.Error("a rebase was staged; the whole point is that none is")
 	}
 }
 
